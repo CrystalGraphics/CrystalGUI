@@ -1,6 +1,5 @@
 package com.crystalgui.mc.v1710;
 
-import com.crystalgui.lifecycle.CgUiLifecycle;
 import com.crystalgui.mc.v1710.probe.CgUiAutoTest;
 import com.crystalgui.mc.v1710.client.CgUiHud;
 import com.crystalgui.mc.v1710.probe.CgUiConnectionProbe;
@@ -9,26 +8,17 @@ import com.crystalgui.mc.v1710.client.CgUiInput;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgui.mc.v1710.example.MachineExampleClient1710;
 
-/**
- * The client half: register the key binding and the input pump.
- *
- * <p>Registration itself does no GL work, but it can <em>cause</em> some, which is the non-obvious
- * part: {@link CgUiLifecycle#register()} delivers {@code onContextInit} immediately when a context is already
- * live, and that hook constructs and warms the paint context. The warm binds materials, so it writes
- * GL state on the host's context from inside what looks like a pure registration call. It is scoped
- * there — see the comment in {@code CgUiLifecycle.onContextInit} for what leaks and what it cost.</p>
- */
+/** The client half: the key binding, the input pump, the HUD and the probes. CrystalGraphics finds CrystalGUI's lifecycle. */
 public class ClientProxy extends CommonProxy {
 
     @Override
     public void preInit() {
         super.preInit();
-        
+
         // FIRST: the key binding, the probes and the example all reach the session, and a key pressed
         // before it exists would throw rather than open anything.
         CgUiScreen.install();
 
-        CgUiLifecycle.register();
         // THE POINTER IS THIS PLATFORM'S TO DRESS, and it is a property of the process rather than of
         CgUiInput.register();
         // W14: pinned windows paint over the running game. Costs one no-op branch per frame when

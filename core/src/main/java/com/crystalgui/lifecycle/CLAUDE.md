@@ -13,17 +13,15 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 
 | Moment | What CrystalGUI does |
 |---|---|
+| `onPreInit` | `CgUiStart.ahead()`: style properties, widget kinds, the user-agent sheet and the built-in themes on a worker, the load task `crystalgui:start` — half a second to two the first UI paid on the render thread. The harness also starts it through `HarnessExtension.start()` and holds a scene's `init` behind it |
 | `onContextInit` | The disposal GL gate, and makes `CgUiPaintContext.warm()` |
-| `onLoad` | The warm-up as the load task `crystalgui:paint`: a render part stepped in the frame tick's host section (which `onContextInit` from a late registrant is not: 26.x's GUI extraction is outside one), its compiles spread over frames within `CgWarmBudget`; tracked and named on the loading screen |
+| `onLoad` | The warm-up as the load task `crystalgui:paint`, held until `CgUiStart.done()`: a render part stepped in the frame tick's host section (which `onContextInit` from a late registrant is not: 26.x's GUI extraction is outside one), its compiles spread over frames within `CgWarmBudget`; tracked and named on the loading screen |
 | `onFrame` | Drains queued GL disposals, then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
 | `onContextDestroy` | `UiGpu.destroy()`, and nothing else |
 
-> **`onContextInit` reaches late registrants.** CrystalGUI registers from a class initializer on the *first
-> paint*, which is always after `CgEngineLifecycle.ensureGraphicsContext()` has run — so a fire-only-during-init
-> design would mean `onContextInit` never fires for CrystalGUI at all. `addListener` therefore delivers
-> `onContextInit` immediately when a context is already live. The guarantee is **exactly once per context,
-> regardless of registration time**. Without it the miss would be invisible while the hook is empty
-> and appear as silently-skipped setup the moment it isn't.
+> **`onContextInit` reaches late registrants.** A process the discovery missed registers at its first paint, after
+> the context started; `addListener` delivers every moment it missed, so each fires **exactly once per context,
+> regardless of registration time**.
 
 > **`destroyContext()` fires only at game shutdown.** There is no destroy-then-init cycle in a running
 > process, so there is no "next context" to protect, and **nothing needs invalidating merely because
@@ -39,11 +37,10 @@ layer FBO pool is built with `CgFrameBuffer.createOwned`, which bypasses `CgFram
 release its own FBOs/renderers while the context is whole. Listeners dispatch in *reverse*
 registration order.
 
-> **Registration is automatic** — a `static` initializer in `CgUiPaintContext` calls
-> `CgUiLifecycle.register()`, so CrystalGUI wires itself as soon as that class comes into play. Class
-> init runs once per classloader, so registration cannot repeat across a destroy/recreate cycle. A
-> process that never paints never touches the class, which keeps a dedicated server free of
-> CrystalGraphics. `register()` is idempotent and public for explicit use.
+> **Registration is CrystalGraphics' discovery**: `core/src/main/resources/META-INF/crystalgraphics/listeners`
+> declares `CgUiLifecycle` a `client` listener, so the engine registers it on every client before its graphics start
+> and no host names it; a dedicated server never loads it. `CgUiPaintContext`'s static initializer still calls the
+> idempotent `register()`, for a process the discovery did not reach.
 
 ---
 

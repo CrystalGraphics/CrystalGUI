@@ -65,12 +65,16 @@ public final class ThemeRegistry {
         return register(css, null, "<inline>");
     }
 
+    private static boolean builtinsRegistered;
+
     /**
-     * Registers the engine's shipped themes and schemes — idempotent, call from any host that
-     * offers a theme picker. Not automatic: a consumer embedding the engine with its own themes
-     * should not find ours in the dropdown uninvited.
+     * Registers the engine's shipped themes and schemes, once — call from any host that offers a theme
+     * picker; {@code CgUiStart} does, on a worker. Not automatic: a consumer embedding the engine with
+     * its own themes should not find ours in the dropdown uninvited. {@link #reloadAll} re-reads them.
      */
-    public static void registerBuiltins() {
+    public static synchronized void registerBuiltins() {
+        if (builtinsRegistered) return;
+        builtinsRegistered = true;
         registerTheme("crystalgui:crystal-dark");
         registerTheme("crystalgui:crystal-light");
         // Islands first, because registration order is what a picker lists in and these are the pair the
@@ -101,7 +105,8 @@ public final class ThemeRegistry {
         return byRole(UiTheme.Role.SCHEME);
     }
 
-    public static void resetForTesting() {
+    public static synchronized void resetForTesting() {
+        builtinsRegistered = false;
         REGISTRY.clear();
         ORIGINS.clear();
     }

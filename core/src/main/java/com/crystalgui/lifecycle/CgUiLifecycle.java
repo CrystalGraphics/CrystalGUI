@@ -38,50 +38,30 @@ import java.util.concurrent.ConcurrentLinkedQueue;
  * classes each register independently would make that order an accident of class-initialisation
  * timing. One listener, one explicit sequence.</p>
  *
- * <h3>Registration is automatic</h3>
- * <p>A static initializer in {@link CgUiPaintContext} calls {@link #register()}, so CrystalGUI wires
- * itself up as soon as that class comes into play — which is exactly when it is about to own
- * something that needs releasing. There is no integration step for a loader or a harness scene to
- * remember, and no way for the two to fall out of step. A process that never paints (a dedicated
- * server) never touches that class, so it never registers and stays free of CrystalGraphics
- * entirely.</p>
- *
- * <p>Class initialization runs once per classloader, so this cannot re-register across a
- * destroy/recreate cycle.</p>
- *
- * <p>{@link #register()} remains public for explicit control and for tests; it is idempotent.</p>
- *
- * <p>The platform adapter already calls
- * {@code CgEngineLifecycle.ensureGraphicsContext/tickFrame/destroyContext}; this rides along with those, so
- * no loader module needs to know CrystalGUI has a lifecycle at all.</p>
+ * <h3>Registration is CrystalGraphics' discovery</h3>
+ * <p>Declared {@code client} in {@code META-INF/crystalgraphics/listeners}, so the engine registers it on every client
+ * before its graphics start, and no host names it. A dedicated server never loads it. {@link CgUiPaintContext}'s
+ * static initializer still calls {@link #register()} for a process the engine's discovery did not reach (a test
+ * painting on its own); it is idempotent.</p>
  */
 public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListener {
 
-    private static final CgUiLifecycle INSTANCE = new CgUiLifecycle();
+    /** The one listener; what the engine's discovery registers. */
+    public static final CgUiLifecycle INSTANCE = new CgUiLifecycle();
 
     private CgUiLifecycle() {
     }
 
     /**
-     * Registers CrystalGUI with the engine lifecycle. Idempotent — {@code CgGraphicsLifecycle}
-     * ignores a duplicate registration, which matters because a double {@code onContextDestroy} would be a
-     * double free.
-     *
-     * <p>Called automatically from {@link CgUiPaintContext}'s static initializer — see the class
-     * javadoc. Calling it yourself is harmless, and only useful if you want CrystalGUI registered
-     * before anything has touched the paint context.</p>
-     *
-     * <p>Safe to call before a GL context exists or after one is already live. In the latter case —
-     * which is the <em>normal</em> case here, since the paint context's class initializer runs on the
-     * first paint, long after {@code CgEngineLifecycle.ensureGraphicsContext} — {@code CgEngineLifecycle.addListener} delivers
-     * {@link #onContextInit} immediately, so the callback is not silently skipped.</p>
+     * Registers CrystalGUI with the engine lifecycle by hand, where the engine's discovery did not. Idempotent: a
+     * double {@code onContextDestroy} would be a double free. Before or after a context exists; a late one hears
+     * {@link #onContextInit} at once.
      */
     public static void register() {
         CgEngineLifecycle.addListener(INSTANCE);
         CgAssetReloader.addListener(INSTANCE);
     }
 
-    /** Unregisters CrystalGUI from the engine lifecycle. Rarely needed outside tests. */
     /**
      * Does what a resource reload does, without one -- a dev host's reload key.
      *
@@ -96,6 +76,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         INSTANCE.onReload();
     }
 
+    /** Unregisters CrystalGUI from the engine lifecycle. Rarely needed outside tests. */
     public static void unregister() {
         CgEngineLifecycle.removeListener(INSTANCE);
         CgAssetReloader.removeListener(INSTANCE);
@@ -130,20 +111,29 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     /**
-     * Installs the GL gate for disposals and starts the paint context's warm-up, which each {@link #onFrame}
-     * steps.
-     *
-     * <p>Only a process that paints gets here: registration is the paint context's first use, so a
-     * dedicated server never warms anything.</p>
-     *
-     * <p><b>This does fire.</b> Because registration happens from a class initializer on the first
-     * paint — after the context has already started — this arrives via
-     * {@code CgEngineLifecycle.addListener}'s immediate delivery for late registrants rather than
-     * during the context's start itself. Anything added here will run; it does not need the
-     * registration to have been early.</p>
+     * CrystalGUI's start on a worker ({@link CgUiStart}), behind the rest of mod loading, and every UI shader named to the
+     * precache so the loading screen builds them. A client only.
      */
     @Override
+    public void onPreInit() {
+        startOnce();
+    }
+
+    private boolean started;
+
+    /** Once, at whichever comes first: a host that never runs pre-init (the harness) reaches only the context's start. */
+    private synchronized void startOnce() {
+        if (started) return;
+        started = true;
+        CgUiStart.ahead();
+        CgUiPaintContext.precache();
+    }
+
+    /** Installs the GL gate for disposals and makes the paint context's warm-up, which {@link #onLoad} steps. */
+    @Override
     public void onContextInit(int width, int height) {
+        startOnce();
+
         // The GL gate, installed the moment a context exists.
         //
         // Until now Disposer has been running every disposal immediately, which is correct while there
@@ -170,6 +160,8 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     @Override
     public void onLoad(CgLoadPlan plan) {
         plan.task("crystalgui:paint").render(task -> {
+            // Behind the start: a paint class initialising beside its style classes could wait on one it holds.
+            if (!CgUiStart.done()) return false;
             if (warm != null) stepWarm();
             return warm == null;
         }).start();

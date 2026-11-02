@@ -254,7 +254,7 @@ public final class CgUiPaintContext {
      * the desktop's first frame compiles nothing. Once, at client init; any thread.
      *
      * <pre>{@code
-     * CgUiPaintContext.precache();   // HostSession.install does it
+     * CgUiPaintContext.precache();   // CgUiLifecycle.onPreInit does it
      * }</pre>
      */
     public static void precache() {

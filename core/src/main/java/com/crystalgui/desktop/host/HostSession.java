@@ -4,7 +4,6 @@ import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
-import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.HostThread;
@@ -200,7 +199,6 @@ public final class HostSession {
      */
     public static HostSession install(HostServices services, ApplicationKind primaryKind) {
         if (current != null) return current;
-        CgUiPaintContext.precache();
         current = new HostSession(services, primaryKind);
         return current;
     }

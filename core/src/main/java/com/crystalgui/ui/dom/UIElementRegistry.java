@@ -88,18 +88,28 @@ public final class UIElementRegistry {
     public static void bootstrap() {
         if (bootstrapped) return;
         synchronized (UIElementRegistry.class) {
-            if (bootstrapped) return;
-            bootstrapped = true;
-            Providers.forEach(NodeKinds.class, UIElementRegistry.class.getClassLoader(), kinds -> {
-                try {
-                    kinds.register();
-                } catch (RuntimeException | LinkageError e) {
-                    CrystalGuiCore.LOGGER.error("A NodeKinds service failed to register its kinds: {}",
-                            kinds.getClass().getName(), e);
-                }
-            }, broken -> CrystalGuiCore.LOGGER.error("A NodeKinds service could not be loaded", broken));
+            // Marked done only once every kind is in: CrystalGUI's start runs this on a worker, and a thread arriving
+            // meanwhile waits here rather than reading half a registry. A service registering re-enters on this thread.
+            if (bootstrapped || bootstrapping) return;
+            bootstrapping = true;
+            try {
+                Providers.forEach(NodeKinds.class, UIElementRegistry.class.getClassLoader(), kinds -> {
+                    try {
+                        kinds.register();
+                    } catch (RuntimeException | LinkageError e) {
+                        CrystalGuiCore.LOGGER.error("A NodeKinds service failed to register its kinds: {}",
+                                kinds.getClass().getName(), e);
+                    }
+                }, broken -> CrystalGuiCore.LOGGER.error("A NodeKinds service could not be loaded", broken));
+            } finally {
+                bootstrapping = false;
+                bootstrapped = true;
+            }
         }
     }
+
+    /** Guarded by the class: the registering thread is inside {@link #bootstrap}. */
+    private static boolean bootstrapping;
 
     private UIElementRegistry() {
     }

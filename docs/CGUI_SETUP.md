@@ -16,6 +16,11 @@ once it compiles is [`CGUI_BUILDING_UIS.md`](CGUI_BUILDING_UIS.md); building Cry
 Either way the player installs CrystalGUI and CrystalGraphics as mods of their own; yours depends on them
 and bundles neither.
 
+**CrystalGUI starts itself**: CrystalGraphics finds its lifecycle listener in its jar, so your mod calls nothing to
+initialise it. Your own code that must run at the engine's moments (a context made, things to load behind the loading
+screen) is declared the same way, in `META-INF/crystalgraphics/listeners`: CrystalGraphics'
+[`SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Hearing the engine's lifecycle*.
+
 ## Requirements
 
 - One version from Maven: your MDK's JDK, nothing more.

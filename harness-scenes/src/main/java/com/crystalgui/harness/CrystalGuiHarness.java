@@ -18,9 +18,11 @@ import com.crystalgui.harness.scene.CgUiTimelineScene;
 import com.crystalgui.harness.scene.CgUiVisualLayersScene;
 import com.crystalgui.harness.scene.RpgConsoleScene;
 import com.crystalgui.harness.scene.VfxLabScene;
+import com.crystalgui.lifecycle.CgUiStart;
 import com.crystalgui.style.theme.UiThemeManager;
 
 import java.util.List;
+import java.util.concurrent.CompletableFuture;
 import java.util.logging.Logger;
 
 /**
@@ -227,5 +229,10 @@ public final class CrystalGuiHarness implements HarnessExtension {
     @Override
     public List<String> shaderNamespaces() {
         return List.of("crystalgui");
+    }
+
+    @Override
+    public CompletableFuture<?> start() {
+        return CgUiStart.ahead();
     }
 }
