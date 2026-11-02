@@ -54,8 +54,8 @@ import java.util.function.Supplier;
  * }</pre>
  *
  * <ul>
- *   <li>The mode comes from {@code -Dcrystalgui.ui.async=true} (records on its own) or {@code -Dcrystalgui.ui.sequence=true}
- *       (lockstep); neither runs it inline.</li>
+ *   <li>The mode comes from the flags: asynchronous by default, {@code -Dcrystalgui.ui.sequence=true} lockstep, and
+ *       {@code -Dcrystalgui.ui.async=false} inline.</li>
  *   <li>Attach after building the tree: from then on only the driver's own entries may touch it.</li>
  *   <li>Asynchronously an input event answers "taken" before it is dispatched; a key the document then leaves comes
  *       back from {@link #pollUnhandledKey} a frame later.</li>
@@ -81,10 +81,12 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         /** On a sequence that records frames while the render thread presents the last one. */
         ASYNC;
 
-        /** What the system properties ask for. */
+        /** What the system properties ask for: asynchronous unless {@code ui.async=false}, or {@code ui.sequence=true} alone. */
         public static Mode fromFlags() {
-            if (Boolean.getBoolean(DocumentDriver.ASYNC)) return ASYNC;
-            return Boolean.getBoolean(SEQUENCED) ? LOCKSTEP : INLINE;
+            String async = System.getProperty(DocumentDriver.ASYNC);
+            boolean sequenced = Boolean.getBoolean(SEQUENCED);
+            if (async == null ? !sequenced : Boolean.parseBoolean(async)) return ASYNC;
+            return sequenced ? LOCKSTEP : INLINE;
         }
     }
 
@@ -477,32 +479,35 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     /** The commit {@link #animate} last drew finished, so a settled flight is shown again rather than redrawn. */
     @Nullable
     private UiCommit<F> settled;
-    /** When the last host frame was presented, and how many slow ones a waiting flight has been held through. */
+    /** When the last host frame was presented. */
     private long lastPresentNanos;
-    private int heldPresents;
-    /** A gap longer than this is a stall, and a flight does not start its clock in one. */
-    private static final long STALL_NANOS = 100_000_000L;
-    private static final int MAX_HELD_PRESENTS = 60;
+    /** When a flight first waited to start, 0 when none waits; and the calm gaps since, in a row. */
+    private long waitingSince;
+    private int calmGaps;
+    /** A gap between presents within two frames at 60 Hz: the pipeline is holding its rate. */
+    private static final long CALM_NANOS = 34_000_000L;
+    private static final int CALM_GAPS = 3;
+    /** Chrome's paint holding has a timeout too: a flight never waits longer than this. */
+    private static final long REVEAL_TIMEOUT_NANOS = 500_000_000L;
     private final Matrix4f motionAt = new Matrix4f(), motionNode = new Matrix4f();
 
     /**
      * Plays the commit's compositor animations at this host frame: each box's node takes the animation's transform
-     * now, and its effect node the opacity. Their clocks start the first time a frame carrying them is presented.
-     * Render thread.
+     * now, and its effect node the opacity. A flight waiting to start holds its start value (an opening window unseen)
+     * until the frame carrying it has been presented and {@value #CALM_GAPS} calm presents followed, or
+     * {@link #REVEAL_TIMEOUT_NANOS} passed: a compositor maps a window on its first frame, so its first execution's
+     * stall is never inside the flight. Render thread.
      */
     private boolean animate(UiCommit<F> commit) {
         List<UiCommit.Motion> motions = commit.motions();
         if (motions.isEmpty() || commit.frame() == null || commit == settled) return false;
         long now = System.nanoTime();
-        // NOT IN A STALL: the first windows open while the editor builds, and a clock started in a 400 ms present has
-        // run out before a second frame is drawn. It waits, at its start value, for frames at an ordinary pace.
-        boolean ordinary = now - lastPresentNanos <= STALL_NANOS || heldPresents++ >= MAX_HELD_PRESENTS;
-        if (ordinary) heldPresents = 0;
+        boolean start = readyToStart(motions, now);
         boolean finished = true;
         for (int i = 0; i < motions.size(); i++) {
             UiCommit.Motion motion = motions.get(i);
             CompositorAnimation animation = motion.animation();
-            if (ordinary) animation.startAt(now);
+            if (start || !reveals(animation, now)) animation.startAt(now);
             finished &= animation.isFinished(now);
             if (motion.moved() == 0) continue;
             Transform at = animation.transformAt(now);
@@ -514,6 +519,31 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
             if (motion.faded() != 0) commit.frame().values().opacity(motion.faded(), animation.opacityAt(now));
         }
         if (finished) settled = commit;
+        return true;
+    }
+
+    /** A flight that has not started and starts unseen: an open or a restore, which a window already shown never waits for. */
+    private static boolean reveals(CompositorAnimation animation, long now) {
+        return animation.startNanos() == 0L && animation.opacityAt(now) == 0f;
+    }
+
+    /** Whether the revealing flights in {@code motions} start now; see {@link #animate}. */
+    private boolean readyToStart(List<UiCommit.Motion> motions, long now) {
+        boolean waiting = false;
+        for (int i = 0; i < motions.size() && !waiting; i++) waiting = reveals(motions.get(i).animation(), now);
+        if (!waiting) {
+            waitingSince = 0L;
+            return false;
+        }
+        if (waitingSince == 0L) {
+            // Its first present: what executing it costs lands in the next gap
+            waitingSince = now;
+            calmGaps = 0;
+            return false;
+        }
+        calmGaps = now - lastPresentNanos <= CALM_NANOS ? calmGaps + 1 : 0;
+        if (calmGaps < CALM_GAPS && now - waitingSince < REVEAL_TIMEOUT_NANOS) return false;
+        waitingSince = 0L;
         return true;
     }
 
