@@ -8,6 +8,7 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.mc.modern.client.CgUiScreen;
@@ -86,9 +87,12 @@ public final class CgUiAutoTest {
         return true;
     }
 
-    /** Mojang's loading overlay is up. 1.13 has none: its splash blocks the thread instead. */
+    /**
+     * Mojang's loading overlay is up, or CrystalGraphics' loading screen after it, which holds the title screen.
+     * 1.13 has no overlay: its splash blocks the thread instead.
+     */
     private static boolean loading(Minecraft mc) {
-        return ClientGame.overlayUp(mc);
+        return ClientGame.overlayUp(mc) || CgLoadingScreen.shown();
     }
 
     private static final AutoTest.Host HOST = new AutoTest.Host() {

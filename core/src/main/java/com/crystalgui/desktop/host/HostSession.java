@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
@@ -214,6 +215,23 @@ public final class HostSession {
 
     public static boolean isInstalled() {
         return current != null;
+    }
+
+    /**
+     * Whether a host may open the desktop now: never while CrystalGraphics' loading screen shows, which nothing opens
+     * over. Every host's open asks first.
+     *
+     * <pre>{@code
+     * public static void openDesktop() {
+     *     if (!HostSession.mayOpen()) return;
+     *     ...
+     * }
+     * }</pre>
+     */
+    public static boolean mayOpen() {
+        if (!CgLoadingScreen.shown()) return true;
+        CrystalGuiCore.LOGGER.info("[cgui] not opening the desktop: the loading screen shows");
+        return false;
     }
 
     // ── What a host asks for ────────────────────────────────────────────────────────────────────

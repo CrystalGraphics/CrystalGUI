@@ -78,13 +78,14 @@ public final class CgUiScreen extends Screen {
 
     /** Opens the desktop with the primary application brought forward. */
     public static void openEditor() {
+        if (!HostSession.mayOpen()) return;
         HostSession.session().requestApplication();
         open();
     }
 
     /** Opens the desktop and touches no window, so one left minimised comes back that way. */
     public static void openDesktop() {
-        open();
+        if (HostSession.mayOpen()) open();
     }
 
     private static void open() {

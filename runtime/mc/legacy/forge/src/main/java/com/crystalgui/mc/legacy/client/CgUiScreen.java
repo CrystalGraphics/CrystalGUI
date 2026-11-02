@@ -64,6 +64,7 @@ public final class CgUiScreen extends GuiScreen {
      * "Open the editor" has to mean that or the key is unreliable.</p>
      */
     public static void openEditor() {
+        if (!HostSession.mayOpen()) return;
         HostSession.session().requestApplication();
         open();
     }
@@ -75,7 +76,7 @@ public final class CgUiScreen extends GuiScreen {
      * to reach the desktop except by putting an application in front of it, which is not a desktop.</p>
      */
     public static void openDesktop() {
-        open();
+        if (HostSession.mayOpen()) open();
     }
 
     private static void open() {
