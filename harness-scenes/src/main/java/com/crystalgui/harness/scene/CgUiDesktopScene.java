@@ -1,5 +1,6 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.service.Animation;
@@ -249,7 +250,20 @@ public class CgUiDesktopScene
             }
             if (followBusy) sleepQuietly(FOLLOW_BUSY_MS);
         }, null);
-        driver.run(() -> build(ctx));
+        if (!driver.isAsync()) {
+            driver.run(() -> build(ctx));
+            return;
+        }
+        // Built on the document's own sequence, behind the loading screen: the first desktop and editor, cold, are
+        // over half a second the render thread would otherwise hold.
+        CgLoadPlan.Span building = CgLoadPlan.get().begin("cgui-desktop:build");
+        driver.post(() -> {
+            try {
+                build(ctx);
+            } finally {
+                building.close();
+            }
+        });
     }
 
     private void build(HarnessContext ctx) {
@@ -325,7 +339,7 @@ public class CgUiDesktopScene
         // anything launches onto the desktop, since that is what an application is given.
         desktop.useStorage(ctx.installation());
 
-        openEditorWindow();
+        if (EDITOR_AT <= 0) openEditorWindow();
 
         // WHERE THE ARRANGEMENT LIVES -- W12 -- and LAST, so it is applied over whatever the scene above
         // set up rather than under it. Every window this scene opens carries a key, which is what a
@@ -461,6 +475,14 @@ public class CgUiDesktopScene
 
         int w = ctx.getScreenWidth();
         int h = ctx.getScreenHeight();
+        if (EDITOR_AT > 0 && frame.getFrameNumber() == EDITOR_AT) {
+            // Posted, as a player's open arrives: on the document's thread when it has one
+            driver.post(() -> {
+                long at = System.nanoTime();
+                openEditorWindow();
+                System.out.println("[editor-open] launched in " + (System.nanoTime() - at) / 1_000_000L + " ms");
+            });
+        }
         // Nothing here reinjects a key the document left: the harness has no game to give it to.
         while (driver.pollUnhandledKey() != null) { }
 
@@ -625,6 +647,12 @@ public class CgUiDesktopScene
      * last frame again ({@link UiGpu#presentAgain}). {@code present-again} (frame 101) must match {@code presented}.
      */
     private static final boolean PRESENT_AGAIN = Boolean.getBoolean("crystalgui.harness.desktop.presentAgain");
+
+    /**
+     * {@code -Dcrystalgui.harness.desktop.editorAt=<frame>}: the editor launched at that frame rather than in the build,
+     * as a player opens it in game; logs {@code [editor-open]}. Pair with {@code hitchDumpMs} for the frames after.
+     */
+    private static final int EDITOR_AT = Integer.getInteger("crystalgui.harness.desktop.editorAt", 0);
 
     // ── -Dcrystalgui.harness.desktop.nodes=true: a scroll and a window move as property values ──
 
