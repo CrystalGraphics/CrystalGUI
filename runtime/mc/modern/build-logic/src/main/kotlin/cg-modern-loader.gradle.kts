@@ -777,6 +777,13 @@ tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach 
     }
 }
 
+// The garbage collector as Minecraft's launcher runs it: G1 with a 50 ms pause goal. With the JVM's own 200 ms a
+// young collection during a world's first seconds paused the dev client 100-280 ms, a hitch no player sees.
+tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
+    jvmArgs("-XX:+UnlockExperimentalVMOptions", "-XX:+UseG1GC", "-XX:G1NewSizePercent=20", "-XX:G1ReservePercent=20",
+        "-XX:MaxGCPauseMillis=50", "-XX:G1HeapRegionSize=32M")
+}
+
 // Which API a 26.2+ client renders through, whatever options.txt says -- Minecraft resets a Vulkan
 // preference after any unclean start -- and Minecraft's Vulkan validation layer, which checks our
 // commands along with its own. NeoForge's early window must be off for Vulkan (earlyWindowControl in
