@@ -49,9 +49,9 @@ import javax.annotation.Nullable;
  * <h3>Where it approximates, on purpose</h3>
  *
  * <p>A gradient is sampled per triangle rather than per pixel, so it is a fine staircase rather than a
- * ramp — cut fine enough that each band moves the colour by at most two levels, and it costs no shader. A <b>stroked</b>
- * gradient does collapse to one colour: a stroke is not subdivided, and a per-segment ramp along a
- * two-unit-wide outline is not a thing anyone can see. Patterns, filters, masks and clip paths are ignored
+ * ramp — cut fine enough that each band moves the colour by at most two levels, and it costs no shader. A
+ * stroke painted with a gradient is filled as its own outline ({@link SvgStroker}) and painted like any
+ * gradient fill. Patterns, filters, masks and clip paths are ignored
  * outright — a clipped shape draws unclipped rather than vanishing, on the reasoning that a visible
  * approximation beats a silent hole.</p>
  *

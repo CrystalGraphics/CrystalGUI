@@ -278,7 +278,8 @@ final class SvgResolver {
     }
 
     /**
-     * One shape becomes one {@link SvgScene.Node}.
+     * One shape becomes one {@link SvgScene.Node}, and a second when its stroke is a gradient: the stroke's
+     * outline, filled.
      *
      * <p><b>Paint is resolved before the points move, geometry after.</b> An {@code objectBoundingBox}
      * gradient resolves against the shape's box in the space the gradient was <em>stated</em> in — which
@@ -291,7 +292,15 @@ final class SvgResolver {
         List<SvgPath.Polyline> contours = SvgGeometry.of(tag, steps);
         if (contours.isEmpty()) return;
 
-        SvgScene.Fill fill = style.fills() ? resolveFill(contours, style, transform) : null;
+        SvgScene.Fill fill = null;
+        if (style.fills()) {
+            SvgScene.Gradient gradient = gradientOf(style.fill(), contours, transform,
+                    style.fillOpacity() * style.opacity(), style.fillArgb());
+            fill = new SvgScene.Fill(gradient != null ? gradient
+                    : new SvgScene.Solid(style.fillArgb(), style.fill().currentColor()), style.evenOdd());
+        }
+        SvgScene.Gradient strokeGradient = style.strokes() ? gradientOf(style.stroke(), contours, transform,
+                style.strokeOpacity() * style.opacity(), style.strokeArgb()) : null;
 
         for (SvgPath.Polyline contour : contours) {
             for (float[] point : contour.points()) {
@@ -302,34 +311,33 @@ final class SvgResolver {
             }
         }
 
+        float halfWidth = style.strokeHalfWidth() * transform.lengthScale();
         SvgScene.Stroke stroke = null;
-        if (style.strokes()) {
-            stroke = new SvgScene.Stroke(
-                    new SvgScene.Solid(style.strokeArgb(), style.stroke().currentColor()),
-                    style.strokeHalfWidth() * transform.lengthScale(), style.cap());
+        if (style.strokes() && strokeGradient == null) {
+            stroke = new SvgScene.Stroke(new SvgScene.Solid(style.strokeArgb(), style.stroke().currentColor()),
+                    halfWidth, style.cap());
         }
-        if (fill == null && stroke == null) return;
-        nodes.add(new SvgScene.Node(contours, fill, stroke));
+        if (fill != null || stroke != null) nodes.add(new SvgScene.Node(contours, fill, stroke));
+        if (strokeGradient != null) {
+            // Painted as a fill of its own outline, after the element's fill: SVG's order for one element.
+            List<SvgPath.Polyline> outline = SvgStroker.outline(contours, halfWidth, style.cap(), steps);
+            if (!outline.isEmpty()) {
+                nodes.add(new SvgScene.Node(outline, new SvgScene.Fill(strokeGradient, false), null));
+            }
+        }
     }
 
+    /**
+     * The gradient a paint names, resolved against the shape's local box; null for a colour, or for a
+     * one-stop ramp, which the style's flat colour already paints.
+     */
     @Nullable
-    private SvgScene.Fill resolveFill(List<SvgPath.Polyline> contours, SvgStyle style,
-                                      SvgTransform transform) {
-        SvgGradient gradient = style.fill().reference() == null
-                ? null : servers.get(style.fill().reference());
-        // A one-stop ramp is not a gradient, and treating it as one costs a subdivided mesh to paint a
-        // shape one colour. Falls through to the solid path, which is what the style already resolved.
-        if (gradient != null && gradient.colours().length < 2) gradient = null;
-
-        float alpha = style.fillOpacity() * style.opacity();
-        if (gradient == null) {
-            return new SvgScene.Fill(
-                    new SvgScene.Solid(style.fillArgb(), style.fill().currentColor()), style.evenOdd());
-        }
-        return new SvgScene.Fill(
-                new SvgScene.Gradient(gradient.resolvedAgainst(SvgGeometry.boundsOf(contours)),
-                        transform, alpha, style.fillArgb(), style.fill().currentColor()),
-                style.evenOdd());
+    private SvgScene.Gradient gradientOf(SvgColor.Paint paint, List<SvgPath.Polyline> contours,
+                                         SvgTransform transform, float alpha, int argb) {
+        SvgGradient gradient = paint.reference() == null ? null : servers.get(paint.reference());
+        if (gradient == null || gradient.colours().length < 2) return null;
+        return new SvgScene.Gradient(gradient.resolvedAgainst(SvgGeometry.boundsOf(contours)),
+                transform, alpha, argb, paint.currentColor());
     }
 
     // ── Tokens ──────────────────────────────────────────────────────────────────────────────────────
