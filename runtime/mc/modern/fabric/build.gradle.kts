@@ -3,6 +3,8 @@
 import cgbuildlogic.fabricRunsIntermediary
 import cgbuildlogic.loomPluginId
 import cgbuildlogic.registerThinRename
+import cgbuildlogic.renderDocDevRun
+import cgbuildlogic.renderDocEnvironment
 import cgbuildlogic.sameVersionNodeDir
 import cgbuildlogic.sameVersionNodePath
 import cgbuildlogic.stubMode
@@ -96,7 +98,11 @@ if (!stubMode) {
 
     // Per NODE: relative to versions/<version>/, so two versions never share a world.
     loom.runs {
-        named("client") { runDir("runs/client") }
+        named("client") {
+            runDir("runs/client")
+            renderDocDevRun().forEach(::vmArg)
+            renderDocEnvironment().forEach { (key, value) -> environmentVariable(key, value) }
+        }
         named("server") { runDir("runs/server") }
     }
 }
