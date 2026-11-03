@@ -55,6 +55,11 @@ import java.util.List;
  * The grid draws {@link SvgDocument} raw and at no device scale, which is a different picture: it cannot
  * show a small-size defect that the drawable or the pose introduces. {@code plan/svg-fix/} holds the
  * true-pixel crops this strip is judged against; {@code -Dcrystalgui.svgicon.uiScale} sets the scale.</p>
+ *
+ * <pre>{@code
+ * -Dcrystalgui.svgicon.study=crystalgui:logo        # the strip's icon, by icon name
+ * -Dcrystalgui.svgicon.extra=scratch/a,scratch/b    # more files under ui/icons/ on the grid
+ * }</pre>
  */
 public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInput.Mouse {
 
@@ -76,7 +81,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /** Feather (MIT) — the stroked, {@code currentColor} set, kept so both cases are on one screen. */
     private static final String[] CHROME = {"folder", "file-text", "image", "code", "package",
-            "general/search/search"};
+            "general/search/search", "logo"};
 
     /** The icon under study, and the sizes the workbench draws it at. See {@code plan/svg-fix/}. */
     private static final String STUDY_ICON = "crystalgui:nodes/java/package";
@@ -146,12 +151,15 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (profileFrames > 0 || profileInteractive) CgTrace.enable("crystalgraphics");
         for (String name : FILETYPES) load("filetypes/" + name, name);
         for (String name : CHROME) load(name, name + " (feather)");
+        for (String name : System.getProperty("crystalgui.svgicon.extra", "").split(",")) {
+            if (!name.isBlank()) load(name.trim(), name.trim());
+        }
         profileCtx = ctx;
         studyScale = Float.parseFloat(System.getProperty("crystalgui.svgicon.uiScale", "2"));
         String sizes = System.getProperty("crystalgui.svgicon.sizes");
         if (sizes != null) studySizes = java.util.Arrays.stream(sizes.split(",")).mapToInt(Integer::parseInt).toArray();
         // The dark drawing, pinned: the workbench shows that one and the crops in plan/svg-fix are of it.
-        study = CgUiSvg.ofIcon(STUDY_ICON);
+        study = CgUiSvg.ofIcon(System.getProperty("crystalgui.svgicon.study", STUDY_ICON));
         if (study != null) study.setVariantOverride(FileIconTheme.Variant.DARK);
         applyStartupOverrides(ctx.getScreenWidth(), ctx.getScreenHeight());
         panY += stripHeight();
