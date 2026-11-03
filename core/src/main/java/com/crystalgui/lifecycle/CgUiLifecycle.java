@@ -162,7 +162,10 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         plan.task("crystalgui:paint").render(task -> {
             // Behind the start: a paint class initialising beside its style classes could wait on one it holds.
             if (!CgUiStart.done()) return false;
-            if (warm != null) stepWarm();
+            if (warm != null) {
+                stepWarm();
+                if (warm != null) task.progress(warm.progress());
+            }
             return warm == null;
         }).start();
     }

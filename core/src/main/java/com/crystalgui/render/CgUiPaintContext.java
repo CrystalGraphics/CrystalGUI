@@ -179,6 +179,7 @@ public final class CgUiPaintContext {
         @Nullable
         private CgUiPaintContext context;
         private CgMaterial[] materials;
+        private int built;
 
         private Warm() {}
 
@@ -191,15 +192,15 @@ public final class CgUiPaintContext {
                 preloadIcons();
                 warmGlyphs(WARM_UI_SCALE);
             }
-            boolean ready = true;
+            built = 0;
             for (CgMaterial material : materials) {
                 try {
-                    ready &= material.precache();
+                    if (material.precache()) built++;
                 } catch (RuntimeException | LinkageError ignored) {
-                    // An optimisation that fails is silent.
+                    built++;   // An optimisation that fails is silent.
                 }
             }
-            if (!ready) return false;
+            if (built < materials.length) return false;
             try {
                 context.beginFrame(Math.max(1, width), Math.max(1, height));
                 context.endFrame();
@@ -211,6 +212,11 @@ public final class CgUiPaintContext {
                 cancel();
             }
             return true;
+        }
+
+        /** How far along, 0 to 1: the materials built, then the empty frame. */
+        public float progress() {
+            return materials == null ? 0f : built / (materials.length + 1f);
         }
 
         /** Releases what it holds, finished or not. */
