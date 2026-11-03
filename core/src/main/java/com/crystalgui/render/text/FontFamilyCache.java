@@ -1,7 +1,6 @@
 package com.crystalgui.render.text;
 
 import com.crystalgraphics.text.cache.CgFontRegistry;
-import com.crystalgraphics.api.font.CgDefaultFont;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
@@ -253,13 +252,10 @@ public final class FontFamilyCache {
     /**
      * A resource font at {@code targetPx}. A variable one is instanced at the style's weight (400, or 700 for bold), as an
      * installed variable face is, since its default instance may be its thinnest; a static one is its one face whatever
-     * the style. The engine's default font answers from {@link CgDefaultFont}, opened ahead.
+     * the style.
      */
     private static CgFont loadResource(String path, int targetPx, CgFontStyle style) {
         int weight = style == CgFontStyle.BOLD || style == CgFontStyle.BOLD_ITALIC ? 700 : 400;
-        if (CgDefaultFont.PATH.equals(path)) {
-            return CgDefaultFont.at(weight, targetPx);
-        }
         return RESOURCE_FONTS.computeIfAbsent(targetPx + "@" + weight + "@" + path,
                 ignored -> Optional.ofNullable(readResource(path, targetPx, weight))).orElse(null);
     }
