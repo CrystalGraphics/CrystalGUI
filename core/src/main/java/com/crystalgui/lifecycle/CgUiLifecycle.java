@@ -133,6 +133,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     @Override
     public void onContextInit(int width, int height) {
         startOnce();
+        CgUiPaintContext.parseAhead();
 
         // The GL gate, installed the moment a context exists.
         //

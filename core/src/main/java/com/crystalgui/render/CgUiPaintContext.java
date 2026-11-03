@@ -1,6 +1,8 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.render.CgFrameClock;
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
@@ -180,12 +182,17 @@ public final class CgUiPaintContext {
         private CgUiPaintContext context;
         private CgMaterial[] materials;
         private int built;
+        /** The default font loading on a worker: the context is made once it has. */
+        @Nullable
+        private CgJob<CgFont> font;
 
         private Warm() {}
 
         /** One frame of it; true once it has finished. Inside a host section, with the GL state saved. */
         public boolean step(int width, int height) {
             if (context == null) {
+                if (font == null) font = CgJob.lane(CgJobLane.BACKGROUND).named("cgui default font").run(() -> defaultFont());
+                if (!font.isDone()) return false;
                 context = create();
                 materials = new CgMaterial[] {context.boxModelMaterial, context.curveMaterial, context.layerBlitMaterial};
                 // The two asset caches, both off the render thread and neither needing GL.
@@ -270,6 +277,12 @@ public final class CgUiPaintContext {
             for (String quad : QUAD_SHADERS) pipelines.addPass(quad, CgInstanceKind.QUAD);
             for (String curve : CURVE_SHADERS) pipelines.addPass(curve, CgInstanceKind.CURVE);
         });
+    }
+
+    /** Parses those shaders on a worker, from the graphics start: the precache's first collect then parses none. */
+    public static void parseAhead() {
+        CgPipelinePrecache.parseAhead(QUAD_SHADERS);
+        CgPipelinePrecache.parseAhead(CURVE_SHADERS);
     }
 
     /** Every box the UI draws: fills, textures, shapes, icons, composites. @see CgShapeTable */
@@ -501,7 +514,7 @@ public final class CgUiPaintContext {
     private final Consumer<CgShaderBindings> layerOpacityBinder = b -> b.set1f("_LayerOpacity", layerOpacity);
 
     @Getter
-    private final CgFont font = loadDefaultFont();
+    private final CgFont font = defaultFont();
 
     @Getter @Setter
     private int color = 0xFFFFFFFF;
@@ -636,15 +649,34 @@ public final class CgUiPaintContext {
             int next = 0;
             for (int cssPx : cssSizes) effective[next++] = Math.round(cssPx * uiScale);
 
+            // Resolving a family reads its font files and opens them in FreeType: a worker's, not the frame's
             int anySize = cssSizes.iterator().next();
-            for (List<String> stack : families) {
-                CgFontFamily family = FontFamilyCache.resolve(stack, anySize);
-                if (family == null) continue;
-                CgFontRegistry.get().warmAscii(family.getPrimaryFont(), effective);
-            }
+            CgJob.lane(CgJobLane.BACKGROUND).named("cgui glyph warm").run(() -> {
+                try {
+                    for (List<String> stack : families) {
+                        CgFontFamily family = FontFamilyCache.resolve(stack, anySize);
+                        if (family != null) CgFontRegistry.get().warmAscii(family.getPrimaryFont(), effective);
+                    }
+                } catch (RuntimeException | LinkageError broken) {
+                    CrystalGuiCore.LOGGER.warn("CgUiPaintContext: glyph warm failed; glyphs rasterise on demand", broken);
+                }
+            });
         } catch (RuntimeException | LinkageError broken) {
             CrystalGuiCore.LOGGER.warn("CgUiPaintContext: glyph warm failed; glyphs rasterise on demand",
                     broken);
+        }
+    }
+
+    /** The default font, read once for every context: on a worker by the warm, else by the first context made. */
+    @Nullable
+    private static volatile CgFont defaultFont;
+
+    private static CgFont defaultFont() {
+        CgFont f = defaultFont;
+        if (f != null) return f;
+        synchronized (CgUiPaintContext.class) {
+            if (defaultFont == null) defaultFont = loadDefaultFont();
+            return defaultFont;
         }
     }
 
