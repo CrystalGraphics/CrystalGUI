@@ -228,6 +228,11 @@ public final class DesktopSession {
         return saved == null ? List.of() : saved.mru();
     }
 
+    /** The record's codecs made and the JSON reader loaded, by a read of an empty record: {@code CgUiStart}'s worker. */
+    public static void ahead() {
+        CgFormats.JSON.fromText(Saved.CODEC, "{}");
+    }
+
     /** The file, or null when there is none, it will not parse, or it is another version's. */
     @Nullable
     private Saved saved(String desktopId) {
