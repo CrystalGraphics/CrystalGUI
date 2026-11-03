@@ -368,6 +368,8 @@ abstract class ProdSmoke : DefaultTask() {
         val jvm = "-Dcrystalgui.autotest=true " +
             "-Dcrystalgui.autotest.out=${out.absolutePath.replace('\\', '/')}/$name.png " +
             "-Dcrystalgui.autotest.world=* " +
+            // A production client names no render-thread hold while loading; a smoke run should
+            "-Dcrystalgraphics.loading.logHolds=true " +
             "-Dcrystalgui.autotest.lateFrame=${lateFrame()}" +
             extraProperties.get().joinToString("") { " -D$it" }
         if (' ' in extraProperties.get().joinToString("")) {
