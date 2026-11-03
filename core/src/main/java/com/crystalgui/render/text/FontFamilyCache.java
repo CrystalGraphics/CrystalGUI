@@ -1,6 +1,7 @@
 package com.crystalgui.render.text;
 
 import com.crystalgraphics.text.cache.CgFontRegistry;
+import com.crystalgraphics.api.font.CgDefaultFont;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontFamilyGroup;
@@ -224,7 +225,7 @@ public final class FontFamilyCache {
 
     private static CgFont load(String entry, int targetPx, CgFontStyle style, @Nullable CgSystemFonts fonts) {
         if (isResourcePath(entry)) {
-            return loadResource(entry, targetPx);
+            return loadResource(entry, targetPx, style);
         }
         if (fonts == null) {
             return null;
@@ -249,19 +250,30 @@ public final class FontFamilyCache {
                 || lower.endsWith(".ttf") || lower.endsWith(".otf") || lower.endsWith(".ttc") || lower.endsWith(".otc");
     }
 
-    private static CgFont loadResource(String path, int targetPx) {
-        return RESOURCE_FONTS.computeIfAbsent(targetPx + "@" + path,
-                ignored -> Optional.ofNullable(readResource(path, targetPx))).orElse(null);
+    /**
+     * A resource font at {@code targetPx}. A variable one is instanced at the style's weight (400, or 700 for bold), as an
+     * installed variable face is, since its default instance may be its thinnest; a static one is its one face whatever
+     * the style. The engine's default font answers from {@link CgDefaultFont}, opened ahead.
+     */
+    private static CgFont loadResource(String path, int targetPx, CgFontStyle style) {
+        int weight = style == CgFontStyle.BOLD || style == CgFontStyle.BOLD_ITALIC ? 700 : 400;
+        if (CgDefaultFont.PATH.equals(path)) {
+            return CgDefaultFont.at(weight, targetPx);
+        }
+        return RESOURCE_FONTS.computeIfAbsent(targetPx + "@" + weight + "@" + path,
+                ignored -> Optional.ofNullable(readResource(path, targetPx, weight))).orElse(null);
     }
 
-    private static CgFont readResource(String path, int targetPx) {
+    private static CgFont readResource(String path, int targetPx, int weight) {
         InputStream in = CgIO.openStream(path);
         if (in == null) {
             CrystalGuiCore.LOGGER.warn("FontFamilyCache: font asset not found: {}", path);
             return null;
         }
         try {
-            return CgFont.load(readAllBytes(in), path, CgFontStyle.REGULAR, targetPx);
+            byte[] bytes = readAllBytes(in);
+            if (CgFont.hasWeightAxis(bytes)) return CgFont.loadAtWeight(bytes, path, weight).atSize(targetPx);
+            return CgFont.load(bytes, path, CgFontStyle.REGULAR, targetPx);
         } catch (IOException e) {
             CrystalGuiCore.LOGGER.warn("FontFamilyCache: failed to read font asset '{}': {}", path, e.getMessage());
             return null;
