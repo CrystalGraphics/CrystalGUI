@@ -51,6 +51,8 @@ import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgraphics.job.CgJob;
+import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.text.atlas.CgGlyphAtlas;
@@ -548,16 +550,19 @@ public final class CgUiPaintContext {
      * lazy.</p>
      */
     private static void preloadIcons() {
-        try {
-            Set<String> paths = new LinkedHashSet<>();
-            for (String name : FileIconTheme.getDefault().iconNames()) {
-                paths.add(FileIconTheme.toResourcePath(FileIconTheme.withVariant(name)));
+        // The paths too: picking each icon's variant reads whether its file exists, which is I/O.
+        CgJob.executor(CgJobLane.LATENCY).execute(() -> {
+            try {
+                Set<String> paths = new LinkedHashSet<>();
+                for (String name : FileIconTheme.getDefault().iconNames()) {
+                    paths.add(FileIconTheme.toResourcePath(FileIconTheme.withVariant(name)));
+                }
+                SvgDocument.preload(paths);
+            } catch (RuntimeException | LinkageError broken) {
+                CrystalGuiCore.LOGGER.warn("CgUiPaintContext: icon preload failed; icons parse on demand",
+                        broken);
             }
-            SvgDocument.preload(paths);
-        } catch (RuntimeException | LinkageError broken) {
-            CrystalGuiCore.LOGGER.warn("CgUiPaintContext: icon preload failed; icons parse on demand",
-                    broken);
-        }
+        });
     }
 
     /**
