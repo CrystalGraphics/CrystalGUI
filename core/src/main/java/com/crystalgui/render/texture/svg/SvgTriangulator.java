@@ -41,7 +41,8 @@ import java.util.Map;
  * <h3>Both fill rules, for free</h3>
  *
  * <p>Once the crossings in a band are sorted, {@code evenodd} is "every other span" and {@code nonzero}
- * is "spans where the accumulated winding is not zero". They differ only in that walk, so supporting SVG's
+ * is "spans where the accumulated winding is not zero", run together across a crossing that keeps it non-zero
+ * so a cell's walls are only ever the outline. They differ only in that walk, so supporting SVG's
  * actual default ({@code nonzero}) costs nothing — and getting it wrong inverts every hole in a file
  * authored with overlapping contours.</p>
  *
@@ -235,7 +236,7 @@ public final class SvgTriangulator {
 
     /**
      * The sweep alone: every wall soft, every cut hard, nothing split. What {@link Silhouettes#mark}
-     * refines, and what the equivalence test holds against its reference.
+     * refines.
      */
     static Fill cells(List<List<float[]>> contours, boolean evenOdd,
                       float stepX, float stepY, float[] extraCuts) {
@@ -367,8 +368,16 @@ public final class SvgTriangulator {
                     boolean inside = evenOdd ? (winding & 1) == 1 : winding != 0;
                     if (!inside) continue;
 
+                    // Under nonzero a crossing that leaves the winding non-zero is inside the shape (contours
+                    // overlapping, a stroke's outline at a joint), so the span runs on to the next crossing
+                    // that leaves it: a wall there would be antialiased from both sides into a hairline.
+                    int j = i + 1;
+                    if (!evenOdd) {
+                        while (j + 1 < found && winding + crossDir[j] != 0) winding += crossDir[j++];
+                    }
                     int left = crossEdge[i];
-                    int right = crossEdge[i + 1];
+                    int right = crossEdge[j];
+                    i = j - 1;
                     float lt = xAt(left, top), lb = xAt(left, bottom);
                     float rt = xAt(right, top), rb = xAt(right, bottom);
                     if (Math.abs(rt - lt) < EPSILON && Math.abs(rb - lb) < EPSILON) continue;
@@ -526,6 +535,11 @@ public final class SvgTriangulator {
             // Guarded even though horizontal edges never reach here: a denormal dy would otherwise produce
             // an infinity that propagates into the vertex buffer and takes the whole draw with it.
             if (Math.abs(dy) < 1e-9f) return x0[edge];
+            // The endpoint itself at a cut through it (to the cut merge's EPSILON): the cells either side
+            // reach it through different edges, and a seam whose two copies differ by an ulp drops every
+            // pixel centre lying on it, which a 45-degree seam at a whole scale does along its length.
+            if (Math.abs(y - y0[edge]) < EPSILON) return x0[edge];
+            if (Math.abs(y - y1[edge]) < EPSILON) return x1[edge];
             return x0[edge] + (x1[edge] - x0[edge]) * (y - y0[edge]) / dy;
         }
     }
