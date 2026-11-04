@@ -544,10 +544,6 @@ public class VfxLab extends UIElement {
             bloomIntensity = CgBloom.INTENSITY;
             if (bloom.intensity() > 0f) bloom.intensity(CgBloom.INTENSITY);
         });
-        post.prop(ConfigDescriptor.select("bloomBlend", "Blend", List.of("Display", "Linear"))
-                        .tooltip("Display: added in the target's encoding. Linear: in linear light"),
-                Property.derived(() -> bloom.linear() ? "Linear" : "Display",
-                        v -> pending.add(() -> bloom.linear("Linear".equals(v)))));
 
         ConfigForm impact = panel.form().group("Impact");
         impact.prop(ConfigDescriptor.select("flash", "Flash", List.of("Double", "Single", "Off"))
