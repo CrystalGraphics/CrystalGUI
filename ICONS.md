@@ -478,7 +478,8 @@ Not done, in rough order of how likely you are to hit them:
 | `stroke-linejoin`, and `stroke-linecap: butt` with it | Every segment is stroked independently, so joins are whatever cap the segment ends carry. `drawStroke` promotes `butt` to round for exactly that reason — most segment ends are interior joints, not real path ends. Correct for a round-join set and wrong for a `butt` + `miter` one, which comes out round everywhere |
 | `stroke-dasharray` | Ignored; a dashed stroke draws solid |
 | `<text>` | Not drawn. Icon sets convert text to paths; hand-written SVG often does not |
-| Clip paths, masks, filters | Ignored — a clipped shape draws unclipped, a blur draws sharp |
+| Clip paths, masks, and filters other than a drop shadow | Ignored — a clipped shape draws unclipped, a blur draws sharp |
+| A drop shadow above icon size | Drawn by `SvgRasterCache` up to 128 device px (`feDropShadow`, or the blur–offset–flood–`in`–merge chain tools export, which is what `crystalgui:logo` and `crystalgui:start` carry). A larger draw skips it and logs once per file |
 | Patterns | Draw flat grey |
 | Gradient on a *stroke* | Collapses to one colour; strokes are not subdivided |
 | Group `opacity` | Multiplied into children rather than compositing the group as a unit |

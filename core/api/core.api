@@ -8313,6 +8313,7 @@ com/crystalgui/render/UiFrame
 com/crystalgui/render/UiGpu
   access public,final
   extends java/lang/Object
+  method public drawShadow (Lcom/crystalgui/render/texture/svg/SvgDocument;IFFF)V
   method public,static destroy ()V
   method public,static hasInstance ()Z
   method public,static present (Lcom/crystalgui/render/UiFrame;)V
@@ -8836,9 +8837,10 @@ com/crystalgui/render/texture/svg/SvgDocument
   method public,static preload (Ljava/util/Collection;)Ljava/util/concurrent/CompletableFuture;
   method public,static revalidate ()I
 com/crystalgui/render/texture/svg/SvgDocument$DrawOp
+  method public shadowGroupEnd (I)I
   access public,final,record
   extends java/lang/Record
-  method public <init> (Z[F[I[I[F[IZIZFI[I)V
+  method public <init> (Z[F[I[I[F[IZIZFI[ILcom/crystalgui/render/texture/svg/SvgScene$DropShadow;)V
   method public argb ()I
   method public cap ()I
   method public colours ()[I
@@ -8861,6 +8863,7 @@ com/crystalgui/render/texture/svg/SvgDocument$LodBudget
 com/crystalgui/render/texture/svg/SvgGradient
   access public,final,record
   extends java/lang/Record
+  method public shadow ()Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;
   field public,static,final CELL_BUDGET I
   field public,static,final SPREAD_PAD I
   field public,static,final SPREAD_REFLECT I
@@ -8948,6 +8951,19 @@ com/crystalgui/render/texture/svg/SvgScene$Fill
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
 com/crystalgui/render/texture/svg/SvgScene$Gradient
+com/crystalgui/render/texture/svg/SvgScene$DropShadow
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (FFFFII)V
+  method public argb ()I
+  method public dx ()F
+  method public dy ()F
+  method public id ()I
+  method public sigmaX ()F
+  method public sigmaY ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
   access public,final,record
   extends java/lang/Record
   implements com/crystalgui/render/texture/svg/SvgScene$Paint
@@ -8963,7 +8979,7 @@ com/crystalgui/render/texture/svg/SvgScene$Gradient
 com/crystalgui/render/texture/svg/SvgScene$Node
   access public,final,record
   extends java/lang/Record
-  method public <init> (Ljava/util/List;Lcom/crystalgui/render/texture/svg/SvgScene$Fill;Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;)V
+  method public <init> (Ljava/util/List;Lcom/crystalgui/render/texture/svg/SvgScene$Fill;Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;)V
   method public contours ()Ljava/util/List;
   method public fill ()Lcom/crystalgui/render/texture/svg/SvgScene$Fill;
   method public stroke ()Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;
@@ -8976,6 +8992,7 @@ com/crystalgui/render/texture/svg/SvgScene$Paint
   method public,abstract currentColor ()Z
 com/crystalgui/render/texture/svg/SvgScene$Solid
   access public,final,record
+  method public shadow ()Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;
   extends java/lang/Record
   implements com/crystalgui/render/texture/svg/SvgScene$Paint
   method public <init> (IZ)V

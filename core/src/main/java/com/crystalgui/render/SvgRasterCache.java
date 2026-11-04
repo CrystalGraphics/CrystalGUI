@@ -9,8 +9,10 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.api.PoseStack;
 
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.texture.svg.SvgDocument;
+import com.crystalgui.render.texture.svg.SvgScene;
 
 import org.joml.Matrix4f;
 
@@ -52,6 +54,15 @@ import java.util.Map;
  * <p>One atlas, {@value #ATLAS_SIZE} square, filled shelf by shelf. When it is full everything is
  * dropped and rasterised again on demand — simpler than an eviction policy, and a working set that
  * fills it is thousands of icons.</p>
+ *
+ * <h3>Drop shadows</h3>
+ *
+ * <p>An element's {@code filter} drop shadow ({@link SvgScene.DropShadow}) is the union of what it draws,
+ * blurred, offset and flooded, painted under it: SVG's {@code feGaussianBlur} of {@code SourceAlpha}, as resvg
+ * renders it. {@link #drawShadow} rasterises the group's coverage into scratch, runs the backdrop's two
+ * separable passes over it ({@link CgUiBackdrop#blurPass}) into a texture of its own, and draws that as white
+ * coverage under the flood colour, like a plain icon. Each shadow is its own texture rather than an atlas
+ * slot, because a filter pass clears its whole target.</p>
  */
 public final class SvgRasterCache {
 
@@ -144,11 +155,26 @@ public final class SvgRasterCache {
         boolean baked;
     }
 
+    /** One blurred shadow raster, and where the document's origin sits inside it, in raster pixels. */
+    private static final class Shadow {
+        CgGraphTexture texture;
+        int width, height;
+        float originX, originY;
+    }
+
+    /** Shadows kept before they are all dropped: a canvas zooming builds one per scale, as the atlas does. */
+    private static final int MAX_SHADOWS = 256;
+
     /** {@code -Dcrystalgui.svg.raster=false} draws every icon through the direct path — for comparing the two. */
     private static final boolean ENABLED = !"false".equals(System.getProperty("crystalgui.svg.raster"));
 
     private final CgUiPaintContext ctx;
     private final Map<Key, Entry> entries = new HashMap<>();
+    private final Map<Key, Shadow> shadows = new HashMap<>();
+    /** A shadow's coverage, then its first axis; grown to the largest asked for. */
+    private CgGraphTexture shadowCoverage, shadowAxis;
+    private int shadowsCreated;
+    private boolean sigmaClampLogged;
     /** Made when the first frame that rasterises executes, and kept; cleared when it is full. */
     private CgGraphTexture atlas;
     private CgMaterial coverage;
@@ -261,6 +287,128 @@ public final class SvgRasterCache {
             ctx.quad().at(left, top).size(width, height).uv(u0, v0, u1, v1).color(tint).submit();
             ctx.flush();
         });
+    }
+
+    /**
+     * Draws the drop shadow of the ops from {@code first} to the end of its group ({@link
+     * SvgDocument#shadowGroupEnd}), under them: call it before drawing op {@code first}, with the same
+     * position and scale. Blurs it the first time it is asked for at this device scale.
+     */
+    public void drawShadow(SvgDocument document, int first, float x, float y, float scale) {
+        SvgScene.DropShadow shadow = document.ops().get(first).shadow();
+        if (shadow == null || (shadow.argb() >>> 24) == 0) return;
+        float device = ctx.deviceScale();
+        float span = Math.max(1f, Math.max(document.width(), document.height()));
+        float rasterScale = Math.max(scale * device, MIN_RASTER_PX / span);
+        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
+        // A negative op names the group starting at that op, so it never meets a fill or stroke's key
+        Key key = probe.set(document, -1 - first, Float.floatToIntBits(rasterScale), false, 0);
+        Shadow entry = shadows.get(key);
+        if (entry == null) {
+            if (shadows.size() >= MAX_SHADOWS) clearShadows();
+            entry = rasteriseShadow(document, first, shadow, rasterScale);
+            shadows.put(key.copy(), entry);
+        }
+
+        float perPx = 1f / atlasPerLogical;
+        // The offset is in document units, scaled as the artwork is
+        float left = x + entry.originX * perPx + shadow.dx() * scale;
+        float top = y + entry.originY * perPx + shadow.dy() * scale;
+        CgTrace.add(UiTrace.FRAME, "svg-shadow-draws", 1);
+        ctx.bindTexture(entry.texture);
+        // Its own texture, whole, and V flipped as every layer is
+        ctx.quad().at(left, top).size(entry.width * perPx, entry.height * perPx)
+                .uv(0f, 1f, 1f, 0f).color(shadow.argb()).submit();
+    }
+
+    private Shadow rasteriseShadow(SvgDocument document, int first, SvgScene.DropShadow shadow, float rasterScale) {
+        int end = document.shadowGroupEnd(first);
+        float sigmaX = clampSigma(shadow.sigmaX() * rasterScale), sigmaY = clampSigma(shadow.sigmaY() * rasterScale);
+        // The blur's reach is three sigma, the backdrop's rule
+        int tapsX = (int) Math.ceil(3f * sigmaX), tapsY = (int) Math.ceil(3f * sigmaY);
+        int strokeReach = 0;
+        for (int i = first; i < end; i++) {
+            SvgDocument.DrawOp op = document.ops().get(i);
+            if (op.fill()) continue;
+            strokeReach = Math.max(strokeReach,
+                    (int) Math.ceil(op.halfWidth() * rasterScale * CAP_REACH) + STROKE_FRINGE);
+        }
+        float[] bounds = document.bounds();
+        int padX = MARGIN + strokeReach + tapsX, padY = MARGIN + strokeReach + tapsY;
+        int width = Math.max(1, (int) Math.ceil((bounds[2] - bounds[0]) * rasterScale) + 2 * padX);
+        int height = Math.max(1, (int) Math.ceil((bounds[3] - bounds[1]) * rasterScale) + 2 * padY);
+        float cornerX = (float) Math.floor(bounds[0] * rasterScale), cornerY = (float) Math.floor(bounds[1] * rasterScale);
+        Shadow entry = new Shadow();
+        entry.width = width;
+        entry.height = height;
+        entry.originX = cornerX - padX;
+        entry.originY = cornerY - padY;
+        float originX = padX - cornerX, originY = padY - cornerY;
+
+        CgTrace.add(UiTrace.FRAME, "svg-shadow-builds", 1);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
+        ensureShadowScratch(width, height);
+        ctx.beginLayerFbo(shadowCoverage, true);
+        ScissorStack.Saved scissor = ctx.suspendScissor();
+        PoseStack pose = ctx.getPoseStack();
+        pose.pushPose();
+        pose.setIdentity();
+        ctx.pushScissor(0, 0, width, height);
+        try {
+            // Fills sum and strokes max, as for the icon itself; the union is the alpha the filter blurs
+            ctx.withCurveMaterial(coverage(), () -> {
+                for (int i = first; i < end; i++) {
+                    if (document.ops().get(i).fill()) document.accumulateFill(ctx, i, originX, originY, rasterScale, true);
+                }
+            });
+            ctx.withCurveMaterial(coverageMax(), () -> {
+                for (int i = first; i < end; i++) {
+                    if (!document.ops().get(i).fill()) document.accumulateStroke(ctx, i, originX, originY, rasterScale, 0f);
+                }
+            });
+        } finally {
+            ctx.popScissor();
+            pose.popPose();
+            ctx.resumeScissor(scissor);
+            ctx.endLayerFbo();
+        }
+
+        entry.texture = ctx.requestTexture("cgui_svg_shadow_" + shadowsCreated++, width, height, ATLAS_FORMAT);
+        float fracW = (float) width / shadowCoverage.getWidth(), fracH = (float) height / shadowCoverage.getHeight();
+        CgUiBackdrop blur = ctx.backdrop();
+        blur.blurPass(shadowCoverage, shadowAxis, 1f, 0f, sigmaX, tapsX, width, height, fracW, fracH);
+        blur.blurPass(shadowAxis, entry.texture, 0f, 1f, sigmaY, tapsY, width, height, fracW, fracH);
+        CgTrace.zoneDone(UiTrace.FRAME, "svg-shadow:build", timed);
+        return entry;
+    }
+
+    /** Within the blur pass's kernel, which is {@link CgUiBackdrop#MAX_KERNEL_RADIUS} taps either side. */
+    private float clampSigma(float sigma) {
+        float most = CgUiBackdrop.MAX_KERNEL_RADIUS / 3f;
+        if (sigma <= most) return sigma;
+        if (!sigmaClampLogged) {
+            sigmaClampLogged = true;
+            CrystalGuiCore.LOGGER.warn("SVG drop shadow of {} px deviation drawn at {} px, the blur's widest", sigma, most);
+        }
+        return most;
+    }
+
+    /** The two scratch targets, both at least {@code width x height}; the passes read only that corner. */
+    private void ensureShadowScratch(int width, int height) {
+        if (shadowCoverage != null && shadowCoverage.getWidth() >= width && shadowCoverage.getHeight() >= height) return;
+        int w = Math.max(width, shadowCoverage == null ? 0 : shadowCoverage.getWidth());
+        int h = Math.max(height, shadowCoverage == null ? 0 : shadowCoverage.getHeight());
+        if (shadowCoverage != null) {
+            ctx.releaseTexture(shadowCoverage);
+            ctx.releaseTexture(shadowAxis);
+        }
+        shadowCoverage = ctx.requestTexture("cgui_svg_shadow_coverage", w, h, ATLAS_FORMAT);
+        shadowAxis = ctx.requestTexture("cgui_svg_shadow_axis", w, h, ATLAS_FORMAT);
+    }
+
+    private void clearShadows() {
+        for (Shadow shadow : shadows.values()) ctx.releaseTexture(shadow.texture);
+        shadows.clear();
     }
 
     /**
@@ -378,11 +526,22 @@ public final class SvgRasterCache {
 
     void delete() {
         entries.clear();
+        for (Shadow shadow : shadows.values()) deleteNow(shadow.texture);
+        shadows.clear();
+        deleteNow(shadowCoverage);
+        deleteNow(shadowAxis);
+        shadowCoverage = shadowAxis = null;
         if (atlas != null) {
             CgFrameBuffer storage = atlas.framebuffer();
             if (storage != null) storage.delete();
             atlas = null;
         }
         shelfX = shelfY = shelfHeight = 0;
+    }
+
+    private static void deleteNow(CgGraphTexture texture) {
+        if (texture == null) return;
+        CgFrameBuffer storage = texture.framebuffer();
+        if (storage != null) storage.delete();
     }
 }

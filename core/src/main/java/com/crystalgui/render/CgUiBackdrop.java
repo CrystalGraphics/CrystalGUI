@@ -770,11 +770,13 @@ final class CgUiBackdrop {
      * SOURCE texels in UV, which is what "one texel apart" means whatever resolution the pass runs at.
      * {@code sigma} and {@code taps} are in the same texels. @see gui_blur.shader</p>
      */
-    private void blurPass(CgTexture source, CgGraphTexture target, float dirU, float dirV,
+    void blurPass(CgTexture source, CgGraphTexture target, float dirU, float dirV,
                           float sigma, int taps, int quadW, int quadH, float fracW, float fracH) {
         // PROPERTIES BEFORE THE BIND, and this is not style. withMaterial binds the material, and
         // binding VALIDATES the samplers it currently holds - which, on the frame after a resize, are
         // the textures the resize deleted. Maximising the window crashed with "CgTexture2D has been
+     *
+     * <p>Also an icon's drop shadow's ({@link SvgRasterCache}), over its coverage.</p>
         // deleted" from inside useMaterial, before a single line of this pass had run.
         //
         // applyProperties is buffered and replayed at bind time, so setting them first is both legal

@@ -1365,6 +1365,11 @@ public final class CgUiPaintContext {
         return svgRaster;
     }
 
+    /** The backdrop, whose blur passes {@link SvgRasterCache} also runs for an icon's drop shadow. */
+    CgUiBackdrop backdrop() {
+        return backdrop;
+    }
+
     /** The premultiplied composite material. @see #blitLayer */
     CgMaterial layerBlitMaterial() {
         return layerBlitMaterial;
