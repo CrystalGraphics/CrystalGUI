@@ -3389,6 +3389,7 @@ com/crystalgui/core/command/Command
   method public iconFor (Lcom/crystalgui/core/command/CommandContext;)Ljava/lang/String;
   method public isCheckable ()Z
   method public isEnabled (Lcom/crystalgui/core/command/CommandContext;)Z
+  method public isShown (Lcom/crystalgui/core/command/CommandContext;)Z
   method public isToggled (Lcom/crystalgui/core/command/CommandContext;)Z
   method public labelFor (Lcom/crystalgui/core/command/CommandContext;)Ljava/lang/String;
   method public menu (Lcom/crystalgui/core/command/MenuId;Ljava/lang/String;I)Lcom/crystalgui/core/command/Command;
@@ -3396,6 +3397,7 @@ com/crystalgui/core/command/Command
   method public run (Ljava/lang/Runnable;)Lcom/crystalgui/core/command/Command;
   method public run (Ljava/util/function/Consumer;)Lcom/crystalgui/core/command/Command;
   method public runWithData (Ljava/util/function/Consumer;)Lcom/crystalgui/core/command/Command;
+  method public shownWhen (Ljava/util/function/Predicate;)Lcom/crystalgui/core/command/Command;
   method public toString ()Ljava/lang/String;
   method public toggledWhen (Ljava/util/function/Predicate;)Lcom/crystalgui/core/command/Command;
   method public toggledWhenExpression (Ljava/lang/String;)Lcom/crystalgui/core/command/Command;
@@ -3471,6 +3473,7 @@ com/crystalgui/core/command/MenuEntry$Submenu
 com/crystalgui/core/command/MenuId
   access public,final
   extends java/lang/Object
+  field public,static,final APPLICATION Lcom/crystalgui/core/command/MenuId;
   field public,static,final BLACKBOARD_CONTEXT Lcom/crystalgui/core/command/MenuId;
   field public,static,final DESKTOP_CONTEXT Lcom/crystalgui/core/command/MenuId;
   field public,static,final EDITOR_CONTEXT Lcom/crystalgui/core/command/MenuId;
@@ -4721,6 +4724,7 @@ com/crystalgui/desktop/Desktop
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FII)V
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public persistTo (Lcom/crystalgui/core/storage/ConfigStorage;Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
+  method public pins ()Lcom/crystalgui/desktop/taskbar/TaskbarPins;
   method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public presentation (ZZ)Lcom/crystalgui/core/window/DesktopPresentation;
   method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
@@ -4740,9 +4744,11 @@ com/crystalgui/desktop/Desktop
   method public toggleShowDesktop ()V
   method public useLocalWorld (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public useStorage (Ljava/nio/file/Path;)Lcom/crystalgui/desktop/Desktop;
+  method public useWorkspace (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public visibleWindows ()Ljava/util/List;
   method public windowLayer ()Lcom/crystalgui/ui/dom/UIElement;
   method public windows ()Ljava/util/List;
+  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public workspaceStore (Ljava/lang/String;)Lcom/crystalgui/core/storage/ConfigStorage;
   method public,static animationsEnabled ()Z
   method public,static ifPresent (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/Desktop;
@@ -4755,10 +4761,13 @@ com/crystalgui/desktop/DesktopCommands
   extends java/lang/Object
   field public,static,final FRAME_STATS Ljava/lang/String;
   field public,static,final FRAME_STATS_DETAIL Ljava/lang/String;
+  field public,static,final OPEN_APPLICATION Ljava/lang/String;
+  field public,static,final PIN_TO_TASKBAR Ljava/lang/String;
   field public,static,final SHOW_DESKTOP Ljava/lang/String;
   field public,static,final SWITCH_WINDOW Ljava/lang/String;
   field public,static,final SWITCH_WINDOW_BACK Ljava/lang/String;
   field public,static,final TASKBAR_DESIGNER Ljava/lang/String;
+  method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;)V
   method public,static register ()V
   method public,static resetForTesting ()V
 com/crystalgui/desktop/DesktopKinds
@@ -4774,6 +4783,7 @@ com/crystalgui/desktop/DesktopSession
   method public <init> (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/core/storage/ConfigStorage;)V
   method public read (Ljava/lang/String;)Ljava/util/List;
   method public readMruOrder (Ljava/lang/String;)Ljava/util/List;
+  method public readPins (Ljava/lang/String;)Ljava/util/List;
   method public save (Ljava/lang/String;)V
   method public toJson ()Ljava/lang/String;
   method public,static ahead ()V
@@ -4811,11 +4821,13 @@ com/crystalgui/desktop/app/ApplicationKind
   method public icon ()Ljava/lang/String;
   method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public id ()Ljava/lang/String;
+  method public isPinnable ()Z
   method public isSingleInstance ()Z
   method public keywordList ()Ljava/util/List;
   method public keywords ([Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public launch (Ljava/util/function/Function;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public opens ([Lcom/crystalgui/document/DocumentKind$Matcher;)Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public preventPinning ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public requiresConnection ()Z
   method public singleInstance ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public standalone ()Lcom/crystalgui/desktop/app/ApplicationKind;
@@ -5063,6 +5075,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_PART Ljava/lang/String;
+  field public,static,final LAUNCH_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
   field public,static,final REORDERING_CLASS Ljava/lang/String;
@@ -5071,6 +5084,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   method public <init> ()V
   method public entries ()Lcom/crystalgui/ui/dom/UIElement;
   method public entryFor (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/widget/control/Button;
+  method public pinEntryFor (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/widget/control/Button;
   method public previewsSuppressedForTesting ()Z
   method public refresh ()V
   method public setBarVisible (Z)V
@@ -5082,6 +5096,17 @@ com/crystalgui/desktop/taskbar/TaskbarDesigner
   extends java/lang/Object
   field public,static,final WINDOW_CLASS Ljava/lang/String;
   method public,static open (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/window/WindowFrame;
+com/crystalgui/desktop/taskbar/TaskbarPins
+  access public,final
+  extends java/lang/Object
+  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  method public <init> ()V
+  method public ids ()Ljava/util/List;
+  method public isPinned (Lcom/crystalgui/desktop/app/ApplicationKind;)Z
+  method public move (Ljava/lang/String;Ljava/lang/String;)V
+  method public pin (Lcom/crystalgui/desktop/app/ApplicationKind;)V
+  method public restore (Ljava/util/List;)V
+  method public unpin (Lcom/crystalgui/desktop/app/ApplicationKind;)V
 com/crystalgui/desktop/taskbar/TaskbarPreviews
   access public,final
   extends java/lang/Object
@@ -5151,6 +5176,7 @@ com/crystalgui/desktop/window/SystemMenu
   field public,static,final JUMP_LIST_CLASS Ljava/lang/String;
   field public,static,final RISING_CLASS Ljava/lang/String;
   method public,static discardFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public,static dismissJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
   method public,static showFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static showJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
 com/crystalgui/desktop/window/WindowChrome
@@ -5163,6 +5189,7 @@ com/crystalgui/desktop/window/WindowCommands
   extends java/lang/Object
   field public,static,final CLOSE Ljava/lang/String;
   field public,static,final FULLSCREEN Ljava/lang/String;
+  field public,static,final GROUP_CLOSE Ljava/lang/String;
   field public,static,final MAXIMIZE Ljava/lang/String;
   field public,static,final MINIMIZE Ljava/lang/String;
   field public,static,final MOVE Ljava/lang/String;
@@ -13039,6 +13066,7 @@ com/crystalgui/ui/contract/WidgetContracts
 com/crystalgui/ui/data/UiDataKeys
   access public,final
   extends java/lang/Object
+  field public,static,final APPLICATION_KIND Lcom/crystalgui/core/data/DataKey;
   field public,static,final CLIPBOARD Lcom/crystalgui/core/data/DataKey;
   field public,static,final SELECTION Lcom/crystalgui/core/data/DataKey;
   field public,static,final SETTINGS_HOST Lcom/crystalgui/core/data/DataKey;

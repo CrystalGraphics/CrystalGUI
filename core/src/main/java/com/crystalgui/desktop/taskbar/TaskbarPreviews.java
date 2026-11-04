@@ -16,6 +16,8 @@ import com.crystalgui.widget.control.Button;
 
 import javax.annotation.Nullable;
 
+import java.util.function.Supplier;
+
 /**
  * The hover behaviour behind {@link WindowPreview} — when it appears, where, and how it gets there.
  *
@@ -170,11 +172,15 @@ public final class TaskbarPreviews {
         return showing;
     }
 
-    /** Wires one taskbar entry's hover. Called as each entry is built. */
-    void watch(Button entry, WindowFrame frame) {
+    /**
+     * Wires one taskbar entry's hover. Called as each entry is built; {@code frame} is asked on every hover,
+     * since a pin's entry has no window until its application runs and none again once it closes.
+     */
+    void watch(Button entry, Supplier<WindowFrame> frame) {
         entry.onMouseEnter.attachListener((element, event) -> {
-            if (suppressed) return;
-            hovered = frame;
+            WindowFrame window = frame.get();
+            if (suppressed || window == null) return;
+            hovered = window;
             hoveredEntry = entry;
             hoveredSince = System.nanoTime();
             wake();
@@ -185,7 +191,7 @@ public final class TaskbarPreviews {
         // the entry afterwards, so no mouseleave is coming to take it down.
         entry.onMouseDown.attachListener((element, event) -> dismiss(), false, false);
         entry.onMouseLeave.attachListener((element, event) -> {
-            if (hovered == frame) {
+            if (hoveredEntry == entry) {
                 hovered = null;
                 hoveredEntry = null;
             }

@@ -147,6 +147,7 @@ public final class CommandRegistry {
         for (Command command : all()) {
             for (MenuId.Placement placement : command.menus()) {
                 if (placement.menu() != menu) continue;
+                if (!command.isShown(context)) break;
                 entries.add(new MenuEntry.Item(command, placement.group(), placement.order(),
                         command.isEnabled(context), command.isCheckable(), command.isToggled(context)));
                 break;

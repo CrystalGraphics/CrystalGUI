@@ -112,6 +112,15 @@ public final class ApplicationRegistry {
     /**
      * Makes an application available on this desktop.
      *
+     * <pre>{@code
+     * // when the desktop appears, before anything is opened:
+     * desktop.applications().install(picker.kind());
+     * }</pre>
+     *
+     * <p><b>Install what you offer as the desktop appears, never on first open.</b> Start lists only what is
+     * installed, and a pin saved by an earlier run shows only once its application is: installed lazily, a
+     * pinned application has no button until something else opens it.</p>
+     *
      * @return a handle that withdraws it. Running instances are left alone: uninstalling is not quitting
      */
     public Disposable install(ApplicationKind kind) {

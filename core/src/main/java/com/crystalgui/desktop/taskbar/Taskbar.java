@@ -1,8 +1,11 @@
 package com.crystalgui.desktop.taskbar;
 
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.DesktopCommands;
+import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.launcher.LauncherButton;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.SystemMenu;
@@ -71,6 +74,8 @@ public class Taskbar extends UIElement {
     public static final String ENTRY_CLASS = "__entry__";
     /** On the entry whose window is active. A class, like every other state the compositor flips. */
     public static final String ACTIVE_CLASS = "__active__";
+    /** On a pinned application's entry while it has no window: a launch button, with no running pill. */
+    public static final String LAUNCH_CLASS = "__launch__";
     /** On the entry of a window that is currently hidden. */
     public static final String HIDDEN_CLASS = "__hidden__";
     /** The entry's icon slot, hidden until the window declares one. */
@@ -145,8 +150,8 @@ public class Taskbar extends UIElement {
     /** On the entries row while an entry is dragged along it: the sheet lets the dragged entry paint past the row. */
     public static final String REORDERING_CLASS = "__reordering__";
 
-    /** Window → its entry. Insertion-ordered so a rebuild of the child list keeps open order. */
-    private final Map<WindowFrame, Button> entryOf = new LinkedHashMap<>();
+    /** Slot → its entry: a window, or a {@link PinKey} for a pin with no window. Insertion-ordered. */
+    private final Map<Object, Entry> entryOf = new LinkedHashMap<>();
 
     /**
      * Entries mid-collapse, by the window they stood for, so a window that comes back can cancel one.
@@ -157,10 +162,10 @@ public class Taskbar extends UIElement {
      * on every activation and every title change, so getting it backwards kills every opening animation on
      * the next thing that happens.</p>
      */
-    private final Map<WindowFrame, TaskbarEntryMotion> exiting = new LinkedHashMap<>();
+    private final Map<Object, TaskbarEntryMotion> exiting = new LinkedHashMap<>();
 
     /** Entries mid-arrival. @see #exiting */
-    private final Map<WindowFrame, TaskbarEntryMotion> entering = new LinkedHashMap<>();
+    private final Map<Object, TaskbarEntryMotion> entering = new LinkedHashMap<>();
 
     /**
      * Built by {@link Desktop}; public because a tag needs a factory.
@@ -175,6 +180,9 @@ public class Taskbar extends UIElement {
         // `desktop()` walks parents, so it can only answer once this is in a tree -- which is exactly
         // when the supplier runs. @see UINode#whileConnected
         whileConnected(() -> desktop().registry().onDidChange.connect(this::refresh));
+        whileConnected(() -> desktop().pins().onDidChange.connect(this::refresh));
+        // An application installed late gives its pin a button
+        whileConnected(() -> desktop().applications().onDidChange.connect(this::refresh));
         onConnected(this::refresh);
         // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
         // below still centres its island as if the edge were not there.
@@ -224,10 +232,10 @@ public class Taskbar extends UIElement {
         return row;
     }
 
-    /** The window an entry in the row stands for, or null. */
+    /** The entry of a pinned application that has no window, or null. */
     @Nullable
-    WindowFrame frameOf(UIElement entry) {
-        return entry instanceof Entry known ? known.frame : null;
+    public Button pinEntryFor(ApplicationKind kind) {
+        return entryOf.get(new PinKey(kind.id()));
     }
 
     /** Holds the hover previews down while an entry is being dragged. */
@@ -294,30 +302,37 @@ public class Taskbar extends UIElement {
     }
 
     /**
-     * Brings the strip in line with the registry. Cheap when nothing changed, and safe to call from a
-     * handler running on an entry — nothing is detached unless its window is genuinely gone.
+     * Brings the strip in line with the registry and the pins. Cheap when nothing changed, and safe to call
+     * from a handler running on an entry — nothing is detached unless what it stood for is genuinely gone.
+     *
+     * <p>Pins first, in their order: a pinned application's windows sit in its slot, and with none running
+     * the slot is a launch button. Then every other window, in open order. A pin's entry is HANDED to its
+     * application's first window when it starts and back when the last one closes, so launching from a pin
+     * and closing back to it keeps the one button in place, as Windows' does.</p>
      */
     public void refresh() {
         Desktop desktop = desktop();
         if (desktop == null) return;
-        List<WindowFrame> live = desktop.registry().taskbarOrder();
+        List<Object> wanted = slots(desktop);
+
+        handOver(desktop, wanted);
 
         // GONE FIRST, so an entry whose window was destroyed cannot be re-used below.
-        List<WindowFrame> stale = new ArrayList<>();
-        for (WindowFrame frame : entryOf.keySet()) {
-            if (!live.contains(frame)) stale.add(frame);
+        List<Object> stale = new ArrayList<>();
+        for (Object key : entryOf.keySet()) {
+            if (!wanted.contains(key)) stale.add(key);
         }
-        for (WindowFrame frame : stale) {
-            Button entry = entryOf.remove(frame);
+        for (Object key : stale) {
+            Entry entry = entryOf.remove(key);
             if (entry == null) continue;
             // CLOSED WHILE IT WAS STILL ARRIVING: settle the arrival first, or both motions write the same
             // cap every frame and the picture is whichever ran last. Cancelling also hands the entry back
             // at full width, which is what the collapse below is about to measure.
-            TaskbarEntryMotion arriving = entering.remove(frame);
+            TaskbarEntryMotion arriving = entering.remove(key);
             if (arriving != null) arriving.cancel();
 
             Runnable detach = () -> {
-                exiting.remove(frame);
+                exiting.remove(key);
                 entries.remove(entry);
             };
             // THE ROW CLOSES UP rather than the button blinking out and everything after it jumping.
@@ -329,7 +344,7 @@ public class Taskbar extends UIElement {
             }
             entry.addClass(EXITING_CLASS);
             TaskbarEntryMotion collapse = TaskbarEntryMotion.closing(entry, detach);
-            if (collapse.start()) exiting.put(frame, collapse);
+            if (collapse.start()) exiting.put(key, collapse);
             else detach.run();
         }
 
@@ -339,52 +354,132 @@ public class Taskbar extends UIElement {
         WindowFrame focused = desktop.activeWindow();
         WindowFrame active = focused == null ? null : focused.taskbarSubject();
         int index = 0;
-        for (WindowFrame frame : live) {
+        for (Object key : wanted) {
             // BACK BEFORE IT FINISHED LEAVING. Dropped now rather than revived: the collapse is 150ms and
             // a window returning inside it is rare, while a half-width entry handed back to the strip is
             // a pinned width nothing would ever clear. @see TaskbarEntryExit
-            TaskbarEntryMotion returning = exiting.remove(frame);
+            TaskbarEntryMotion returning = exiting.remove(key);
             if (returning != null) returning.cancel();
 
-            Button entry = entryOf.get(frame);
+            Entry entry = entryOf.get(key);
             if (entry == null) {
-                entry = createEntry(desktop, frame);
-                entryOf.put(frame, entry);
+                entry = key instanceof WindowFrame frame
+                        ? new Entry(frame, null)
+                        : new Entry(null, desktop.applications().byId(((PinKey) key).id()));
+                wire(desktop, entry);
+                entryOf.put(key, entry);
                 entries.append(entry);
                 // ...AND THE ROW OPENS FOR IT, the collapse in reverse. Only for an entry built HERE: this
                 // loop runs on every activation and every title change, so anything keyed on the frame
                 // rather than on the entry being new would restart the arrival over and over.
                 if (WindowAnimator.isEnabled()) {
-                    Button arrival = entry;
-                    TaskbarEntryMotion open =
-                            TaskbarEntryMotion.opening(arrival, () -> entering.remove(frame));
-                    if (open.start()) entering.put(frame, open);
+                    TaskbarEntryMotion open = TaskbarEntryMotion.opening(entry, () -> entering.remove(key));
+                    if (open.start()) entering.put(key, open);
                 }
             }
-            // OPEN ORDER, and stable: a bar whose entries jump on every activation is the "never in the
-            // same place twice" menu bug wearing a strip. addChildAt is a no-op when it is already there.
-            //
-            // AN ENTRY MID-COLLAPSE HOLDS ITS PLACE, so the running index steps over it. It is not in
-            // `live`, so without this the next live entry is addressed into the slot the collapsing one
-            // still occupies and shunts it to the end of the row: the row snaps shut in one frame and the
-            // dying button slides sideways, which is the opposite of what the animation is for.
+            // SLOT ORDER, and stable: a bar whose entries jump on every activation is the "never in the
+            // same place twice" menu bug wearing a strip. An entry mid-collapse holds its place, so the
+            // running index steps over it; `insertAt` is a move, never a remove and an insert.
+            // @see UIElement#insertAt
             List<UIElement> row = entries.children();
             while (index < row.size() && row.get(index).hasClass(EXITING_CLASS)) index++;
-            // A MOVE, and `insertAt` is what makes it one: it reparents through `moveTo`, so a mirroring
-            // peer sees a single `moved` rather than a remove followed by an insert -- which would
-            // destroy the row and everything in it. @see UIElement#insertAt
             if (entries.indexOf(entry) != index) entries.insertAt(index, entry);
             index++;
 
-            entry.setText(frame.getTitle());
-            setClass(entry, ICONIC_CLASS, frame.getTitle().isEmpty());
-            applyIcon(entry, frame.iconName());
-            setClass(entry, ACTIVE_CLASS, frame == active);
-            setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);
-            setClass(entry, ATTENTION_CLASS, frame.isDemandingAttention());
-            applyBadge(entry, frame.badge());
-            applyProgress(entry, frame.progress());
+            WindowFrame frame = entry.frame;
+            if (frame != null) {
+                entry.setText(frame.getTitle());
+                setClass(entry, ICONIC_CLASS, frame.getTitle().isEmpty());
+                applyIcon(entry, frame.iconName());
+                setClass(entry, LAUNCH_CLASS, false);
+                setClass(entry, ACTIVE_CLASS, frame == active);
+                setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);
+                setClass(entry, ATTENTION_CLASS, frame.isDemandingAttention());
+                applyBadge(entry, frame.badge());
+                applyProgress(entry, frame.progress());
+            } else if (entry.pin != null) {
+                entry.setText(entry.pin.displayName());
+                setClass(entry, ICONIC_CLASS, false);
+                applyIcon(entry, entry.pin.icon());
+                setClass(entry, LAUNCH_CLASS, true);
+                setClass(entry, ACTIVE_CLASS, false);
+                setClass(entry, HIDDEN_CLASS, false);
+                setClass(entry, ATTENTION_CLASS, false);
+                applyBadge(entry, null);
+                applyProgress(entry, -1f);
+            }
         }
+    }
+
+    /** What the bar shows, in order: each pin's windows or the pin itself, then every unpinned window. */
+    private static List<Object> slots(Desktop desktop) {
+        List<WindowFrame> live = desktop.registry().taskbarOrder();
+        List<String> pinned = desktop.pins().ids();
+        List<Object> out = new ArrayList<>(live.size() + pinned.size());
+        for (String id : pinned) {
+            int before = out.size();
+            for (WindowFrame frame : live) {
+                if (id.equals(applicationId(frame))) out.add(frame);
+            }
+            // NOT INSTALLED this launch: kept in the pins, drawn as nothing
+            if (out.size() == before && desktop.applications().byId(id) != null) out.add(new PinKey(id));
+        }
+        for (WindowFrame frame : live) {
+            String id = applicationId(frame);
+            if (id == null || !pinned.contains(id)) out.add(frame);
+        }
+        return out;
+    }
+
+    /**
+     * A pin's entry becomes its application's first window when that opens, and the last window's entry
+     * becomes the pin again when it closes: the button stays where it is rather than one collapsing while
+     * another opens in the same place.
+     */
+    private void handOver(Desktop desktop, List<Object> wanted) {
+        for (Object key : wanted) {
+            String id = idOf(key);
+            if (id == null || !desktop.pins().ids().contains(id)) continue;
+            // AN ENTRY STILL ARRIVING gives way too: a window joins the registry before its application is
+            // set, so the refresh in between built it an entry of its own beside the pin.
+            Entry current = entryOf.get(key);
+            if (current != null && !entering.containsKey(key)) continue;
+            Object from = null;
+            for (Object held : entryOf.keySet()) {
+                if (!wanted.contains(held) && id.equals(idOf(held))) {
+                    from = held;
+                    break;
+                }
+            }
+            if (from == null) continue;
+            if (current != null) {
+                entering.remove(key).cancel();
+                entryOf.remove(key);
+                entries.remove(current);
+            }
+            Entry entry = entryOf.remove(from);
+            TaskbarEntryMotion arriving = entering.remove(from);
+            if (arriving != null) arriving.cancel();
+            if (key instanceof WindowFrame frame) entry.standFor(frame, null);
+            else entry.standFor(null, desktop.applications().byId(id));
+            entryOf.put(key, entry);
+        }
+    }
+
+    /** The application id a slot belongs to, or null for a window without one. */
+    @Nullable
+    private static String idOf(Object key) {
+        return key instanceof PinKey pin ? pin.id() : applicationId((WindowFrame) key);
+    }
+
+    @Nullable
+    private static String applicationId(WindowFrame frame) {
+        ApplicationKind kind = frame.application();
+        return kind == null ? null : kind.id();
+    }
+
+    /** A pinned application with no window, as a key beside the windows in {@link #entryOf}. */
+    private record PinKey(String id) {
     }
 
     /**
@@ -441,53 +536,58 @@ public class Taskbar extends UIElement {
     }
 
     /**
-     * One entry.
+     * One entry's gestures.
      *
      * <p><b>Click semantics are Windows'</b>, and the third case is the one people miss: a click on the
      * entry of the window you are already in <em>minimises</em> it. Without that the strip is a
      * one-way trip — every entry restores, nothing puts anything away — and the gesture that makes a
-     * taskbar feel like a taskbar is the toggle.</p>
+     * taskbar feel like a taskbar is the toggle. A pin with no window launches its application.</p>
+     *
+     * <p>Every handler reads the entry's subject when it runs, never one captured here: a pin's entry is
+     * handed to a window and back.</p>
      */
-    private Button createEntry(Desktop desktop, WindowFrame frame) {
-        Button entry = new Entry(frame);
+    private void wire(Desktop desktop, Entry entry) {
         entry.addClass(ENTRY_CLASS);
-        // W13a's third route, and the one that is NOT ContextMenu.attach.
-        //
-        // The rows are MenuId.TASKBAR_ENTRY's, not the title bar's system menu. The placement differs too: attach anchors at the POINTER, which for a strip along the
-        // bottom of the screen puts a menu at the very edge, left-aligned from wherever the press landed
-        // and drifting further from its entry the wider it gets. Windows' jump list is CENTRED over its
-        // button, which is the same rule the hover previews above these entries already follow --
-        // an anchor that is a label for the thing beneath it wants centring, not left alignment.
+        // CENTRED OVER THE ENTRY, not at the pointer: attach anchors at the press, which for a strip
+        // along the bottom of the screen puts a menu at the very edge, left-aligned from wherever the press
+        // landed. Windows' jump list is centred over its button, as the hover previews are.
         entry.onMouseDown.attachListener((element, event) -> {
-            if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) return;
+            if (event.getButtonId() != CgMouseCodes.RIGHT_BUTTON) {
+                SystemMenu.dismissJumpList(entry.frame, element);
+                return;
+            }
             event.stopPropagation();
-            SystemMenu.showJumpList(frame, element);
+            SystemMenu.showJumpList(entry.frame, element);
         }, false, false);
-        previews.watch(entry, frame);
+        previews.watch(entry, () -> entry.frame);
         // DRAG TO REORDER, from a left press. Never from the keyboard: Space and Enter arrive as a synthesized
         // press at the physical cursor, which would start a drag anchored wherever the mouse rests.
         entry.onMouseDown.attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON || event.getDetail() == Input.KEYBOARD_DETAIL) return;
-            reorder.press(element, frame, event.getPosition().x(), event.getPosition().y());
+            reorder.press(element, event.getPosition().x(), event.getPosition().y());
         }, false, false);
         entry.attachListener(() -> {
             // The release that ended a drag is not a click
             if (reorder.swallowClick()) return;
+            WindowFrame frame = entry.frame;
+            if (frame == null) {
+                if (entry.pin != null) DesktopCommands.open(desktop, entry.pin);
+                return;
+            }
             if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {
                 // POINTER activation, so focus lands without a ring: the user pointed at this. Restoring
                 // a hidden window is part of what activate() means -- see Desktop.activate.
                 desktop.activate(frame, false);
             } else {
                 // THE GESTURE, not the state change -- WindowFrame.minimize plays the flight into this
-                // very entry and hides at the end of it. Calling hide() here put the window away with no
-                // animation at all, while the caption's own button animated: one gesture, two call
-                // sites, and only one of them looked like a minimise.
+                // very entry and hides at the end of it.
                 frame.minimize();
             }
         });
         // MIDDLE-CLICK CLOSES, as it does on every taskbar and on every browser tab. Through
         // requestClose, never destroy: the window's own policy decides what closing means, so a
-        // HIDE_ON_CLOSE window is put away and a dirty one still gets to refuse.
+        // HIDE_ON_CLOSE window is put away and a dirty one still gets to refuse. On a pin it launches,
+        // as Windows' middle-click starts another instance.
         //
         // On mouse-DOWN rather than the press pair, because a Button's activation is button-agnostic --
         // it fires for any button, so routing this through onPressed would close the window on an
@@ -495,9 +595,49 @@ public class Taskbar extends UIElement {
         entry.onMouseDown.attachListener((element, event) -> {
             if (event.getButtonId() != CgMouseCodes.MIDDLE_BUTTON) return;
             event.stopPropagation();
-            frame.requestClose();
+            if (entry.frame != null) entry.frame.requestClose();
+            else if (entry.pin != null) DesktopCommands.open(desktop, entry.pin);
         }, false, false);
+    }
+
+    /**
+     * Moves a dragged entry to just before {@code before}, or to the end of its own run when that is null.
+     *
+     * <p>A pinned application's entry reorders the pins, which are saved; an unpinned window moves among
+     * the unpinned for this session. Neither crosses into the other: dragging a window among the pins does
+     * not pin it.</p>
+     */
+    void move(UIElement dragged, @Nullable UIElement before) {
+        Desktop desktop = desktop();
+        if (desktop == null || !(dragged instanceof Entry entry)) return;
+        String pinned = pinnedIdOf(desktop, entry);
+        String beforePin = before instanceof Entry other ? pinnedIdOf(desktop, other) : null;
+        if (pinned != null) {
+            // Past the last pin, into the unpinned run: the end of the pins
+            desktop.pins().move(pinned, beforePin);
+        } else if (beforePin == null && entry.frame != null) {
+            WindowFrame after = before instanceof Entry other ? other.frame : null;
+            desktop.registry().moveInTaskbar(entry.frame, after);
+        }
+    }
+
+    /**
+     * What an entry moves with: its application's id, or the entry itself for a window without one. Entries of
+     * one application sit together and are dragged as one.
+     */
+    Object groupOf(UIElement entry) {
+        if (entry instanceof Entry known) {
+            String id = known.frame != null ? applicationId(known.frame)
+                    : known.pin != null ? known.pin.id() : null;
+            if (id != null) return id;
+        }
         return entry;
+    }
+
+    @Nullable
+    private static String pinnedIdOf(Desktop desktop, Entry entry) {
+        String id = entry.frame != null ? applicationId(entry.frame) : entry.pin != null ? entry.pin.id() : null;
+        return id != null && desktop.pins().ids().contains(id) ? id : null;
     }
 
     /**
@@ -565,7 +705,7 @@ public class Taskbar extends UIElement {
         return null;
     }
 
-    /** The entry for {@code frame}, or null. Exposed for tests and for a future context menu. */
+    /** The entry for {@code frame}, or null. */
     @Nullable
     public Button entryFor(WindowFrame frame) {
         return entryOf.get(frame);
@@ -577,56 +717,55 @@ public class Taskbar extends UIElement {
     }
 
     /**
-     * One entry, which knows which window it stands for.
+     * One entry, which knows what it stands for: a window, or a pinned application with none.
      *
      * <h3>An entry is NOT inside the window it represents, and that is the whole reason this exists</h3>
      *
      * <p>{@code DataContext}'s walk goes outward from the element a command was invoked on. For a caption
      * button that reaches the frame in two steps; from a taskbar entry it reaches the taskbar, then the
      * desktop — which answers with the <b>active</b> window. So right-clicking a background entry and
-     * choosing Close would close whatever window was in front instead, which is the worst failure
-     * available to a menu whose whole job is to name its subject.</p>
-     *
-     * <p>Answering {@link WindowFrame#WINDOW_FRAME} itself puts the entry ahead of the desktop in the
-     * walk — the documented rule that an element which answers must still win — so the menu is about the
-     * window whose button was pressed, and the desktop's answer stays the last resort it was written to
-     * be.</p>
+     * choosing Close would close whatever window was in front instead. Answering
+     * {@link WindowFrame#WINDOW_FRAME} itself puts the entry ahead of the desktop in the walk, and
+     * {@link UiDataKeys#APPLICATION_KIND} names what Pin acts on.</p>
      */
     private static final class Entry extends Button implements DataProvider {
 
-        private final WindowFrame frame;
+        @Nullable
+        private WindowFrame frame;
+        /** The application this launches while it stands for a pin with no window; null otherwise. */
+        @Nullable
+        private ApplicationKind pin;
 
-        Entry(WindowFrame frame) {
-            // BUTTON'S OWN NAME, which is the one case where inheriting a supertype's tag is right.
-            //
-            // A subclass takes its parent's kind only if it is GIVEN it: without this an Entry would be
-            // registered under nothing and match none of the `button` rules that make it look like a
-            // control -- the ToolWindowFrame lesson, which cost a whole unstyled widget. An entry wants
-            // a button's look entirely, plus ENTRY_CLASS for what differs. `Dropdown` is the opposite
-            // case and deliberately does NOT do this.
-            super(Button.NAME, frame.getTitle());
+        Entry(@Nullable WindowFrame frame, @Nullable ApplicationKind pin) {
+            // BUTTON'S OWN NAME, which is the one case where inheriting a supertype's tag is right: without
+            // it an Entry matches none of the `button` rules that make it look like a control.
+            super(Button.NAME, frame != null ? frame.getTitle() : pin != null ? pin.displayName() : "");
             this.frame = frame;
+            this.pin = pin;
             // THE RUNNING INDICATOR, built here and never later: a Button refuses public children, and
             // an internal one added from inside the strip's refresh would be inserted into a parent whose
-            // children are mid-registration. Absolute in the sheet, so the row of icon and label is laid
-            // out as if it were not there; centred by `left: 50%` plus a translate, which is layout-free
-            // and needs no auto-margin support from Taffy.
+            // children are mid-registration. Absolute in the sheet, centred by `left: 50%` plus a
+            // translate. In the SHADOW TREE: a Button's shadow root ends in a slot, so a light child would
+            // land in the flow after the label.
             UIElement indicator = new UIElement();
             indicator.addClass(INDICATOR_CLASS);
             indicator.set(Attribute.PART, INDICATOR_PART);
             indicator.setHitTest(false);
-            // THE SHADOW TREE, NOT `append`. A Button's shadow root ends in a UISlot, so a light child
-            // lands IN the slot -- in the flow after the label, with the slot as its containing block,
-            // which put `left: 50%; bottom: 0` just past the label at the label's baseline instead of
-            // centred under the entry. The old engine spelled this `addInternalChild` (a Button
-            // refused public children) and the codemod rewrote it to `append`.
             shadow().append(indicator);
+        }
+
+        /** Hands this entry to a window, or back to its pin. */
+        void standFor(@Nullable WindowFrame frame, @Nullable ApplicationKind pin) {
+            this.frame = frame;
+            this.pin = pin;
         }
 
         @Override
         @Nullable
         public Object getData(DataKey<?> key) {
-            return key == WindowFrame.WINDOW_FRAME ? frame : null;
+            if (key == WindowFrame.WINDOW_FRAME) return frame;
+            if (key == UiDataKeys.APPLICATION_KIND) return frame != null ? frame.application() : pin;
+            return null;
         }
 
     }

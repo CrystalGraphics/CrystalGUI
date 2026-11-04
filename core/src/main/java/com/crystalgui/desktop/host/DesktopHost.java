@@ -103,6 +103,8 @@ public final class DesktopHost implements Disposable {
         DownloadLocations.useCacheRoot(cacheRoot);
         // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.
         desktop.useLocalWorld(services::localWorldDirectory);
+        // What a pin, Start and an entry's menu launch against
+        desktop.useWorkspace(this::workspace);
         desktop.persistAs(services.desktopId());
         this.mount = new DesktopWindowMount(document);
     }

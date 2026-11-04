@@ -3,8 +3,6 @@ package com.crystalgui.desktop.taskbar;
 import com.crystalgraphics.easing.CgEasing;
 import com.crystalgraphics.easing.CgEasings;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
@@ -28,20 +26,21 @@ import java.util.Map;
  * <pre>{@code
  * TaskbarReorder reorder = new TaskbarReorder(taskbar, entriesRow);
  * // on an entry's left press:
- * reorder.press(entry, frame, surfaceX, surfaceY);
+ * reorder.press(entry, surfaceX, surfaceY);
  * // in the entry's click handler, first:
  * if (reorder.swallowClick()) return;
  * }</pre>
  *
  * <p>The pointer is read every frame, after layout, from the document's input: a drag event arrives only when
- * the element under the pointer changes, and following that moved the entry in steps. The order lives in
- * {@link WindowRegistry#moveInTaskbar}, so the bar's ordinary refresh is what rearranges the row. Every motion
- * is a compositor transform on the box: layout-free, and withdrawn with a null.</p>
+ * the element under the pointer changes, and following that moved the entry in steps. The order lives in the
+ * pins and in {@link WindowRegistry#moveInTaskbar}, both written by {@link Taskbar#move}, so the bar's ordinary
+ * refresh is what rearranges the row. Every motion is a compositor transform on the box: layout-free, and
+ * withdrawn with a null.</p>
  */
 final class TaskbarReorder {
 
     /** The drag's payload. */
-    record Payload(WindowFrame frame) {
+    record Payload(UIElement entry) {
     }
 
     /** As an entry's arrival and close: @see TaskbarEntryMotion. */
@@ -53,11 +52,9 @@ final class TaskbarReorder {
 
     @Nullable
     private UIElement entry;
+    /** Where the order goes back to on Escape: the entry that followed the dragged one's group. */
     @Nullable
-    private WindowFrame frame;
-    /** Where the order goes back to on Escape: the window that followed the dragged one's group. */
-    @Nullable
-    private WindowFrame originalBefore;
+    private UIElement originalBefore;
     private boolean live;
     /** Where on the entry the pointer grabbed, in the row's space. */
     private float grabX;
@@ -88,16 +85,15 @@ final class TaskbarReorder {
     }
 
     /** Starts the gesture on a left press; a press that never moves past the threshold stays a click. */
-    void press(UIElement pressed, WindowFrame pressedFrame, float surfaceX, float surfaceY) {
+    void press(UIElement pressed, float surfaceX, float surfaceY) {
         swallow = false;
         if (live) return;
         Box box = pressed.box();
         if (box == null) return;
         entry = pressed;
-        frame = pressedFrame;
         Vector2f at = row.toLocal(surfaceX, surfaceY);
         grabX = at.x - box.x();
-        Drag.start(pressed, surfaceX, surfaceY, CgMouseCodes.LEFT_BUTTON, new Payload(pressedFrame),
+        Drag.start(pressed, surfaceX, surfaceY, CgMouseCodes.LEFT_BUTTON, new Payload(pressed),
                 Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
                     @Override
                     public void onDragUpdate(float x, float y, float startX, float startY, float dx, float dy) {
@@ -125,10 +121,10 @@ final class TaskbarReorder {
     }
 
     private void begin() {
-        if (entry == null || frame == null) return;
+        if (entry == null) return;
         live = true;
         swallow = true;
-        originalBefore = nextAfter(frame);
+        originalBefore = nextAfter(entry);
         taskbar.previewsSuppressed(true);
         Box box = entry.box();
         // ABOVE ITS NEIGHBOURS, which it passes over
@@ -144,8 +140,7 @@ final class TaskbarReorder {
     private void finish(boolean cancelled) {
         live = false;
         taskbar.previewsSuppressed(false);
-        WindowRegistry registry = registry();
-        if (cancelled && frame != null && registry != null) registry.moveInTaskbar(frame, originalBefore);
+        if (cancelled && entry != null) taskbar.move(entry, originalBefore);
         // From where it is drawn to its slot. A slide, not a last position: the frame hook adds the offset to that
         if (entry != null) {
             float[] offset = offsets.getOrDefault(entry, ZERO);
@@ -155,7 +150,6 @@ final class TaskbarReorder {
             slide.startNanos = System.nanoTime();
         }
         entry = null;
-        frame = null;
         originalBefore = null;
     }
 
@@ -205,10 +199,9 @@ final class TaskbarReorder {
      * which a wide entry held at the bar's end never carries past a narrow neighbour's middle.
      */
     private void reorderUnderPointer() {
-        WindowRegistry registry = registry();
         ReadOnlyVec2f pointer = pointer();
         Box box = entry == null ? null : entry.box();
-        if (registry == null || pointer == null || box == null || frame == null) return;
+        if (pointer == null || box == null) return;
         float left = followX(pointer, box), right = left + box.width();
         List<UIElement> entries = taskbar.entryRow();
         int at = entries.indexOf(entry);
@@ -216,7 +209,7 @@ final class TaskbarReorder {
         for (int i = 0; i < at; i++) {
             Box ob = entries.get(i).box();
             if (ob != null && left < ob.x() + ob.width() / 2f) {
-                move(registry, taskbar.frameOf(entries.get(i)));
+                move(entries.get(i));
                 return;
             }
         }
@@ -226,11 +219,11 @@ final class TaskbarReorder {
             if (ob == null || right <= ob.x() + ob.width() / 2f) break;
             passed = i;
         }
-        if (passed >= 0) move(registry, passed + 1 < entries.size() ? taskbar.frameOf(entries.get(passed + 1)) : null);
+        if (passed >= 0) move(passed + 1 < entries.size() ? entries.get(passed + 1) : null);
     }
 
-    private void move(WindowRegistry registry, @Nullable WindowFrame before) {
-        if (frame != null && before != nextAfter(frame)) registry.moveInTaskbar(frame, before);
+    private void move(@Nullable UIElement before) {
+        if (entry != null && before != nextAfter(entry)) taskbar.move(entry, before);
     }
 
     /** The dragged entry's x in the row under the pointer, kept between the start button and the bar's end. */
@@ -252,25 +245,16 @@ final class TaskbarReorder {
         return document == null ? null : document.input().pointer();
     }
 
+    /** The entry drawn after {@code of}'s group, or null at the end: what "before" means for it now. */
     @Nullable
-    private WindowRegistry registry() {
-        Desktop desktop = taskbar.desktop();
-        return desktop == null ? null : desktop.registry();
-    }
-
-    /** The window drawn after {@code of}'s group, or null at the end: what "before" means for it now. */
-    @Nullable
-    private WindowFrame nextAfter(WindowFrame of) {
-        WindowRegistry registry = registry();
-        if (registry == null) return null;
-        List<WindowFrame> order = registry.taskbarOrder();
+    private UIElement nextAfter(UIElement of) {
+        List<UIElement> row = taskbar.entryRow();
+        Object group = taskbar.groupOf(of);
         int last = -1;
-        for (int i = 0; i < order.size(); i++) {
-            WindowFrame each = order.get(i);
-            if (each == of || (of.application() != null && each.application() != null
-                    && of.application().id().equals(each.application().id()))) last = i;
+        for (int i = 0; i < row.size(); i++) {
+            if (taskbar.groupOf(row.get(i)).equals(group)) last = i;
         }
-        return last >= 0 && last + 1 < order.size() ? order.get(last + 1) : null;
+        return last >= 0 && last + 1 < row.size() ? row.get(last + 1) : null;
     }
 
     private static final float[] ZERO = {0f, 0f};

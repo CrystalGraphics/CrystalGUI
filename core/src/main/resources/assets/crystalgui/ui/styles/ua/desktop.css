@@ -476,6 +476,12 @@ taskbar .__entry__.__hidden__::part(indicator) {
     background-color: var(--taskbar-indicator-hidden, #5A5D63);
 }
 
+/* A pin with nothing running has no pill. Zero wide rather than absent, so launching grows it from the centre. */
+taskbar .__entry__.__launch__::part(indicator) {
+    width: 0px;
+    transform: translate(0px, 0);
+}
+
 taskbar .__entry__.__active__::part(indicator) {
     width: 16px;
     transform: translate(-8px, 0);
@@ -1343,7 +1349,7 @@ menu.__jump-list__ {
      * which reads as a tooltip rather than as a panel — and it is the same object as the preview, which
      * is always wide enough to hold a thumbnail. A minimum rather than a width, so a contributed row
      * with a long label still grows it. */
-    min-width: 120px;
+    min-width: 140px;
 
     /* THE RESTING VALUES of the rise; __rising__ below carries what it eases FROM. Both ends write the
      * SAME function list — `translate(0, 0)` against `translate(0, 14px)` — because a transform only
@@ -1376,6 +1382,12 @@ menu.__jump-list__ menuitem:hover {
 menu.__jump-list__ menuitem:disabled {
     background: #00000000;
     color: var(--jump-list-disabled-fg, #FFFFFF5D);
+}
+
+/* A little roomier than an editor's menus, as Windows' jump list is: 3px above and below the text, not 1px. */
+menu.__jump-list__ menuitem {
+    padding-top: 3px;
+    padding-bottom: 3px;
 }
 
 .__window-preview__ {

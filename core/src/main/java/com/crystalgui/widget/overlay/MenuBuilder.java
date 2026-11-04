@@ -40,6 +40,9 @@ import java.util.List;
  * focused element and "nothing focused" answers no to everything. A menu whose rows appear and vanish is
  * also a menu whose rows are never in the same place twice, which is IntelliJ's stated reason and the
  * stronger one for a menu bar, where File ▸ Save must be the fourth row whether or not it applies.</p>
+ *
+ * <p>A row that can never apply to its subject is a different case: {@code Command.shownWhen} drops it,
+ * as Pin is absent from a window nothing could relaunch.</p>
  */
 public final class MenuBuilder {
 

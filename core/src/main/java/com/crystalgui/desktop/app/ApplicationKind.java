@@ -57,6 +57,7 @@ public final class ApplicationKind {
     @Nullable
     private Function<LaunchContext, Application> factory;
     private boolean singleInstance;
+    private boolean preventPinning;
     private boolean requiresConnection = true;
     @Nullable
     private Consumer<LaunchContext> autostart;
@@ -136,6 +137,22 @@ public final class ApplicationKind {
     }
 
     /**
+     * Never pinned to the taskbar: its windows offer no Pin row. Windows' {@code PreventPinning}.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:viewer", "Viewer").preventPinning();   // only opened from a file
+     * }</pre>
+     *
+     * <p>For an application that only makes sense opened from somewhere else, so a pin that launches it bare
+     * would open nothing useful. One with no {@link #launch} factory is never pinnable anyway.</p>
+     */
+    public ApplicationKind preventPinning() {
+        check();
+        this.preventPinning = true;
+        return this;
+    }
+
+    /**
      * That this application is useless without a server, and a launcher should say so.
      *
      * <p>The default, because the applications here are workbenches over a workspace. One that is not
@@ -205,6 +222,11 @@ public final class ApplicationKind {
 
     public boolean isSingleInstance() {
         return singleInstance;
+    }
+
+    /** Whether a pin could start it again: it has a launch factory and does not {@link #preventPinning}. */
+    public boolean isPinnable() {
+        return factory != null && !preventPinning;
     }
 
     public boolean requiresConnection() {

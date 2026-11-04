@@ -199,7 +199,8 @@ public final class FrameProfiler {
 
         @Override
         public void activate() {
-            Desktop desktop = Desktop.ifPresent(window.document());
+            // The window's own desktop: a minimised one is detached, and has no document to find it by
+            Desktop desktop = window.desktop();
             if (desktop != null) desktop.activate(window, true);
         }
 

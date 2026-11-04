@@ -4,6 +4,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.app.ApplicationRegistry;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.render.CgUiPaintContext;
@@ -16,6 +17,7 @@ import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.desktop.switcher.WindowSwitcher;
 import com.crystalgui.desktop.taskbar.Taskbar;
+import com.crystalgui.desktop.taskbar.TaskbarPins;
 import com.crystalgui.desktop.window.SnapZones;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -1341,6 +1343,12 @@ public class Desktop extends UIElement implements DataProvider {
             pendingPlacements.put(placement.key(), placement);
         }
         pendingMru = persistence.readMruOrder(id);
+        restoringPins = true;
+        try {
+            pins.restore(persistence.readPins(id));
+        } finally {
+            restoringPins = false;
+        }
         // Windows already open when a host installs this are placed too -- a host that opens its editor
         // and then asks for persistence is doing nothing wrong.
         for (WindowFrame frame : registry.windows()) applyPersistedGeometry(frame);
@@ -1406,6 +1414,28 @@ public class Desktop extends UIElement implements DataProvider {
     public Desktop useLocalWorld(@Nullable Supplier<Path> worldDirectory) {
         this.localWorld = worldDirectory;
         return this;
+    }
+
+    @Nullable
+    private Supplier<Workspace> workspace;
+
+    /**
+     * Tells this desktop how to find the workspace its host is connected to, which every launch from the shell
+     * (a pin, Start, an entry's menu) runs against. Asked at each launch, since a host rebinds it on reconnect.
+     *
+     * <pre>{@code
+     * desktop.useWorkspace(host::workspace);
+     * }</pre>
+     */
+    public Desktop useWorkspace(@Nullable Supplier<Workspace> connected) {
+        this.workspace = connected;
+        return this;
+    }
+
+    /** The host's workspace, or null when there is no connection, as on a title screen. @see #useWorkspace */
+    @Nullable
+    public Workspace workspace() {
+        return workspace == null ? null : workspace.get();
     }
 
     /**
@@ -1745,6 +1775,18 @@ public class Desktop extends UIElement implements DataProvider {
 
     private final ApplicationRegistry applications = new ApplicationRegistry(this);
 
+    private final TaskbarPins pins = new TaskbarPins();
+    /** True while {@link #persistTo} reads the pins back, which is not a change to save. */
+    private boolean restoringPins;
+
+    {
+        // SAVED AS IT HAPPENS: a pin is something the user arranged, and the record is otherwise written only
+        // when the desktop leaves the tree, which a crash or a killed process never reaches.
+        pins.onDidChange.connect(() -> {
+            if (!restoringPins) savePersistedState();
+        });
+    }
+
     /** The window layer — the work area's box, and the containing block every frame is placed in. */
     public UIElement windowLayer() {
         return windows;
@@ -1774,6 +1816,11 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public ApplicationRegistry applications() {
         return applications;
+    }
+
+    /** The applications pinned to the taskbar, saved with the arrangement. @see TaskbarPins */
+    public TaskbarPins pins() {
+        return pins;
     }
 
     /**

@@ -80,7 +80,8 @@ public final class WindowCommands {
      * ({@code 1_appearance}, {@code 2_clipboard}); it looked like decoration until this got it wrong.</p>
      */
     private static final String GROUP_STATE = "1_state";
-    private static final String GROUP_CLOSE = "2_close";
+    /** Close's group, which a taskbar entry's application row and Pin join: Windows draws the three as one. */
+    public static final String GROUP_CLOSE = "2_close";
 
     private static boolean registered;
 

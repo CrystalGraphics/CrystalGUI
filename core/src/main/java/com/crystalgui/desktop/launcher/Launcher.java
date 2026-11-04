@@ -1,16 +1,21 @@
 package com.crystalgui.desktop.launcher;
 
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.app.Application;
+import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuId;
+import com.crystalgui.core.data.DataKey;
+import com.crystalgui.core.data.DataProvider;
+import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowIcon;
-import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.widget.composite.SearchField;
+import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.text.UIText;
 
@@ -164,11 +169,7 @@ public class Launcher extends Popover {
         // HIDE FIRST. Launching raises a window, and a popover still open over the thing it just
         // opened is the one frame everybody notices.
         hide();
-        // THE WORKSPACE OVERLOAD, named explicitly: `null` alone is ambiguous between this and the
-        // LaunchContext one, and a launcher opens an application with nothing asked of it.
-        Workspace workspace = null;
-        Application running = desktop.applications().launch(kind, workspace);
-        if (running != null) running.activate();
+        DesktopCommands.open(desktop, kind);
     }
 
     /** Name on the left of its icon, a note on the right when it is already running. */
@@ -176,8 +177,10 @@ public class Launcher extends Popover {
 
         @Override
         public UIElement createTemplate() {
-            UIElement row = new UIElement();
+            AppRow row = new AppRow();
             row.addClass(ROW_CLASS);
+            // OPEN AND PIN, the application's own menu, as Windows' Start offers on a right-click
+            ContextMenu.attach(row, CommandRegistry.global(), pressed -> ContextMenu.of(MenuId.APPLICATION));
             row.append(new WindowIcon());
             UIText name = new UIText("");
             name.addClass(ROW_NAME_CLASS);
@@ -192,6 +195,7 @@ public class Launcher extends Popover {
         public void bind(ApplicationKind item, int index, UIElement template) {
             List<UIElement> parts = template.children();
             if (parts.size() < 3) return;
+            if (template instanceof AppRow row) row.kind = item;
             // THE WINDOW'S OWN ICON WIDGET, so an application with no icon gets the same coloured
             // monogram tile in the launcher that its window and taskbar entry already draw. One
             // application, one mark, wherever it appears.
@@ -206,6 +210,19 @@ public class Launcher extends Popover {
         @Override
         public String copyTextFor(ApplicationKind item) {
             return item.displayName();
+        }
+    }
+
+    /** A row, answering for the application it shows so its menu acts on that one. */
+    private static final class AppRow extends UIElement implements DataProvider {
+
+        @Nullable
+        private ApplicationKind kind;
+
+        @Override
+        @Nullable
+        public Object getData(DataKey<?> key) {
+            return key == UiDataKeys.APPLICATION_KIND ? kind : null;
         }
     }
 }
