@@ -5066,6 +5066,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_PART Ljava/lang/String;
+  field public,static,final REORDERING_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
   field public,static,final START_CLASS Ljava/lang/String;
@@ -5363,6 +5364,7 @@ com/crystalgui/desktop/window/WindowRegistry
   method public changed ()V
   method public evictIfNeeded ()V
   method public hidden ()Ljava/util/List;
+  method public moveInTaskbar (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public hiddenCap ()I
   method public mruOrder ()Ljava/util/List;
   method public opened (Lcom/crystalgui/desktop/window/WindowFrame;)V

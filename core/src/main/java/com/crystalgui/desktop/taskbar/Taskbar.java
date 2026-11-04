@@ -13,6 +13,7 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.command.CommandRegistry;
@@ -147,6 +148,9 @@ public class Taskbar extends UIElement {
      */
     public static final String ICONIC_CLASS = "__iconic__";
 
+    /** On the entries row while an entry is dragged along it: the sheet lets the dragged entry paint past the row. */
+    public static final String REORDERING_CLASS = "__reordering__";
+
     /** Window → its entry. Insertion-ordered so a rebuild of the child list keeps open order. */
     private final Map<WindowFrame, Button> entryOf = new LinkedHashMap<>();
 
@@ -197,6 +201,7 @@ public class Taskbar extends UIElement {
         entries = new UIElement();
         entries.addClass(ENTRIES_CLASS);
         append(entries);
+        reorder = new TaskbarReorder(this, entries);
 
         // THE STRIP'S OWN CONTEXT MENU -- Windows' home for Show Desktop, and W13c's answer to a command
         // that was registered, enabled, working and findable by nobody: the palette was its only route.
@@ -211,6 +216,29 @@ public class Taskbar extends UIElement {
         // exactly what building the previews lazily from createEntry did, since refresh() runs from
         // onWindowChanged. @see UIElement#taffyChildIndex
         previews = new TaskbarPreviews(this);
+    }
+
+    /** Dragging an entry along the bar. @see TaskbarReorder */
+    private final TaskbarReorder reorder;
+
+    /** The entries in the row, in drawn order, without those still closing. */
+    List<UIElement> entryRow() {
+        List<UIElement> row = new ArrayList<>();
+        for (UIElement child : entries.children()) {
+            if (!child.hasClass(EXITING_CLASS)) row.add(child);
+        }
+        return row;
+    }
+
+    /** The window an entry in the row stands for, or null. */
+    @Nullable
+    WindowFrame frameOf(UIElement entry) {
+        return entry instanceof Entry known ? known.frame : null;
+    }
+
+    /** Holds the hover previews down while an entry is being dragged. */
+    void previewsSuppressed(boolean suppressed) {
+        previews.setSuppressed(suppressed);
     }
 
     /** The start button, and through it the launcher. */
@@ -443,7 +471,15 @@ public class Taskbar extends UIElement {
             SystemMenu.showJumpList(frame, element);
         }, false, false);
         previews.watch(entry, frame);
+        // DRAG TO REORDER, from a left press. Never from the keyboard: Space and Enter arrive as a synthesized
+        // press at the physical cursor, which would start a drag anchored wherever the mouse rests.
+        entry.onMouseDown.attachListener((element, event) -> {
+            if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON || event.getDetail() == Input.KEYBOARD_DETAIL) return;
+            reorder.press(element, frame, event.getPosition().x(), event.getPosition().y());
+        }, false, false);
         entry.attachListener(() -> {
+            // The release that ended a drag is not a click
+            if (reorder.swallowClick()) return;
             if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {
                 // POINTER activation, so focus lands without a ring: the user pointed at this. Restoring
                 // a hidden window is part of what activate() means -- see Desktop.activate.
