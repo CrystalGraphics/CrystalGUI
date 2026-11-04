@@ -224,10 +224,14 @@ taskbar .__start-button__ {
     /* The mark is smaller than the button, so it is centred both ways rather than sitting at the top. */
     justify-content: center;
     align-items: center;
+    /* Fades in as an entry does, @see taskbar .__entry__. */
+    transition: background-color 140ms ease-out;
     border-radius: var(--radius-control, 4px);
     /* NO FACE AT REST, exactly as an entry has none: the bar is the face, and the button says
-     * "hovered" and "pressed" with a quiet fill rather than a border. */
+     * "hovered" and "pressed" with a quiet fill rather than a border. TRANSPARENT, not unset: the
+     * initial background-color is opaque white, and the hover fade started from it -- a white flash. */
     background: none;
+    background-color: transparent;
 }
 
 taskbar .__start-button__:hover {
@@ -236,6 +240,16 @@ taskbar .__start-button__:hover {
 
 taskbar .__start-button__:active {
     background-color: var(--taskbar-entry-active-bg);
+}
+
+/* START'S MARK GOES BLUE, as Windows 10's does, and only start's: overlay-tint multiplies the logo's own
+ * colours, so at rest it is exactly the logo. */
+taskbar .__start-button__:hover::part(pre-icon) {
+    overlay-tint: var(--taskbar-start-hover-tint, #D4E2FF);
+}
+
+taskbar .__start-button__:active::part(pre-icon) {
+    overlay-tint: var(--taskbar-start-pressed-tint, #B7CDF7);
 }
 
 /* THE MARK: the logo's C and gem, the same size as an entry's tile so the start button reads as part of
@@ -247,6 +261,7 @@ taskbar .__start-button__::part(pre-icon) {
     flex-shrink: 0;
     overlay: icon("crystalgui:start");
     overlay-size: contain;
+    transition: overlay-tint 140ms ease-out;
 }
 
 launcher {
@@ -315,6 +330,12 @@ taskbar .__entries__ {
     overflow: hidden;
 }
 
+/* An entry dragged along the bar leaves the row's box, and the clip above would cut it off at the row's
+ * edge. The drag keeps it inside the bar. @see Taskbar#REORDERING_CLASS */
+taskbar .__entries__.__reordering__ {
+    overflow: visible;
+}
+
 /* ONE ENTRY: a tile, a label, and a pill underneath. NO FACE AT REST — the bar is the face, and an
  * entry says "hovered", "active" and "running" with a quiet fill and the pill, never with a button
  * border. That is Fluent's list item, which is what a taskbar button has been since Windows 10.
@@ -341,7 +362,8 @@ taskbar .__entry__ {
     background: none;
     background-color: transparent;
     color: var(--taskbar-entry-fg, #9DA0A8);
-    transition: background-color 120ms ease-out, color 120ms ease-out;
+    /* WinUI's ControlFasterAnimationDuration, what Button fades its pointer-over brush in. */
+    transition: background-color 140ms ease-out, color 140ms ease-out;
 }
 
 /* AN ENTRY WITH NO LABEL is an icon, and is shaped like one.
@@ -403,6 +425,13 @@ taskbar .__entry__.__active__ {
     background-color: var(--taskbar-entry-active-bg, #FFFFFF3D);
 }
 
+/* HOVERING THE ACTIVE ENTRY is the ladder's top step, as Windows': without it the pointer over the window
+ * you are in changed nothing. */
+taskbar .__entry__.__active__:hover {
+    background: none;
+    background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
+}
+
 /* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to
  * prevent. Only the label dims: the tile keeps its colour, because the window still exists and its
  * icon is how you find it again. */
@@ -417,18 +446,21 @@ taskbar .__entry__.__hidden__ {
  * Absolute, so the row of tile and label is laid out as if it were not there, and centred by
  * `left: 50%` plus a translate of half its own width — layout-free, and it needs no auto-margin
  * support from Taffy. The width and the translate change TOGETHER for the active state or the pill
- * slides off-centre; neither is transitioned, because an inset does not interpolate and a pill that
- * grows from one end reads worse than one that switches. */
+ * slides off-centre, so they transition together too, on one duration and curve: the translate is
+ * always half the width, and the pill grows out from its centre as Windows' does. */
 taskbar .__entry__::part(indicator) {
     position: absolute;
     left: 50%;
     bottom: 0px;
     width: 6px;
-    height: 3px;
-    border-radius: 2px;
+    /* A full capsule, the radius half the height: an end lands between pixels (an entry is as wide as its
+     * label), and a round end spreads that over more pixels than a squarer one does. 3.5px is 7 device
+     * pixels at the default uiScale of 2 */
+    height: 3.5px;
+    border-radius: 1.75px;
     transform: translate(-3px, 0);
     background-color: var(--taskbar-indicator, #9DA0A8);
-    transition: background-color 150ms ease-out;
+    transition: background-color 150ms ease-out, width 150ms ease-out, transform 150ms ease-out;
 }
 
 taskbar .__entry__.__hidden__::part(indicator) {
@@ -463,6 +495,8 @@ taskbar .__entry__::part(pre-icon) {
  * inherit here at all. */
 ::part(monogram) {
     font-size: 9;
+    /* Raised off the tile: two device pixels down at the default uiScale of 2. */
+    text-shadow: 0 1px 1.5px #000000C0;
 }
 
 /* THE LABEL BY TAG, because `Button` holds an UNCLASSED `UIText` and `font-size` does not effectively
@@ -590,13 +624,21 @@ taskbar .__entry__.__busy__ .__progress__ {
     color: var(--window-icon-mono-fg, #FFFFFF);
 }
 
-.__window-icon__.__tile-mono__ { background-color: var(--window-icon-mono-bg, #DE2A4D); }
-.__window-icon__.__tile-1__ { background-color: var(--window-icon-tile-1, #4A7CE0); }
-.__window-icon__.__tile-2__ { background-color: var(--window-icon-tile-2, #3FA36B); }
-.__window-icon__.__tile-3__ { background-color: var(--window-icon-tile-3, #D98A3A); }
-.__window-icon__.__tile-4__ { background-color: var(--window-icon-tile-4, #8B63D9); }
-.__window-icon__.__tile-5__ { background-color: var(--window-icon-tile-5, #2FA7B8); }
-.__window-icon__.__tile-6__ { background-color: var(--window-icon-tile-6, #D85A7A); }
+.__window-icon__.__tile-mono__ { background: linear-gradient(135deg, var(--window-icon-mono-bg, #DE2A4D), var(--window-icon-mono-bg-end, #C51E7C)); }
+.__window-icon__.__tile-1__ { background: linear-gradient(135deg, var(--window-icon-tile-1, #4A7CE0), var(--window-icon-tile-1-end, #3E26DA)); }
+.__window-icon__.__tile-2__ { background: linear-gradient(135deg, var(--window-icon-tile-2, #3FA36B), var(--window-icon-tile-2-end, #368C84)); }
+.__window-icon__.__tile-3__ { background: linear-gradient(135deg, var(--window-icon-tile-3, #D98A3A), var(--window-icon-tile-3-end, #C63C26)); }
+.__window-icon__.__tile-4__ { background: linear-gradient(135deg, var(--window-icon-tile-4, #8B63D9), var(--window-icon-tile-4-end, #B43FD0)); }
+.__window-icon__.__tile-5__ { background: linear-gradient(135deg, var(--window-icon-tile-5, #2FA7B8), var(--window-icon-tile-5-end, #28599E)); }
+.__window-icon__.__tile-6__ { background: linear-gradient(135deg, var(--window-icon-tile-6, #D85A7A), var(--window-icon-tile-6-end, #D03796)); }
+
+/* A LETTER'S TILE IS CUT LIKE A GEM: faint white facets over the gradient, one shared drawing whatever the hue, so
+ * a window with no icon still reads as one of this engine's. An overlay paints over the letter too, which is white
+ * already. Only on a letter: a tile showing a glyph spends its overlay on the glyph. @see WindowIcon#MONOGRAM_CLASS */
+.__window-icon__.__monogram__ {
+    overlay: icon("crystalgui:monogram-facets");
+    overlay-origin: border-box;
+}
 
 /* THE SAME TILE, ADDRESSED AS A PART -- for the taskbar, and only the taskbar.
  *
@@ -623,13 +665,18 @@ taskbar .__entry__::part(pre-icon).__branded__ {
     overlay-origin: border-box;
 }
 
-taskbar .__entry__::part(pre-icon).__tile-mono__ { background-color: var(--window-icon-mono-bg, #DE2A4D); }
-taskbar .__entry__::part(pre-icon).__tile-1__ { background-color: var(--window-icon-tile-1, #4A7CE0); }
-taskbar .__entry__::part(pre-icon).__tile-2__ { background-color: var(--window-icon-tile-2, #3FA36B); }
-taskbar .__entry__::part(pre-icon).__tile-3__ { background-color: var(--window-icon-tile-3, #D98A3A); }
-taskbar .__entry__::part(pre-icon).__tile-4__ { background-color: var(--window-icon-tile-4, #8B63D9); }
-taskbar .__entry__::part(pre-icon).__tile-5__ { background-color: var(--window-icon-tile-5, #2FA7B8); }
-taskbar .__entry__::part(pre-icon).__tile-6__ { background-color: var(--window-icon-tile-6, #D85A7A); }
+taskbar .__entry__::part(pre-icon).__monogram__ {
+    overlay: icon("crystalgui:monogram-facets");
+    overlay-origin: border-box;
+}
+
+taskbar .__entry__::part(pre-icon).__tile-mono__ { background: linear-gradient(135deg, var(--window-icon-mono-bg, #DE2A4D), var(--window-icon-mono-bg-end, #C51E7C)); }
+taskbar .__entry__::part(pre-icon).__tile-1__ { background: linear-gradient(135deg, var(--window-icon-tile-1, #4A7CE0), var(--window-icon-tile-1-end, #3E26DA)); }
+taskbar .__entry__::part(pre-icon).__tile-2__ { background: linear-gradient(135deg, var(--window-icon-tile-2, #3FA36B), var(--window-icon-tile-2-end, #368C84)); }
+taskbar .__entry__::part(pre-icon).__tile-3__ { background: linear-gradient(135deg, var(--window-icon-tile-3, #D98A3A), var(--window-icon-tile-3-end, #C63C26)); }
+taskbar .__entry__::part(pre-icon).__tile-4__ { background: linear-gradient(135deg, var(--window-icon-tile-4, #8B63D9), var(--window-icon-tile-4-end, #B43FD0)); }
+taskbar .__entry__::part(pre-icon).__tile-5__ { background: linear-gradient(135deg, var(--window-icon-tile-5, #2FA7B8), var(--window-icon-tile-5-end, #28599E)); }
+taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135deg, var(--window-icon-tile-6, #D85A7A), var(--window-icon-tile-6-end, #D03796)); }
 
 /* ── A window ───────────────────────────────────────────────────────────────────────────────────
  * `resize: both` is what gives a frame its eight handles — UIResizer builds them from this property,

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24">
+  <title>Monogram facets and rim</title>
+  <defs>
+    <radialGradient id="rim" gradientUnits="userSpaceOnUse" cx="2" cy="2" r="24">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.6"/>
+      <stop offset="0.5" stop-color="#FFFFFF" stop-opacity="0.14"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0.03"/>
+    </radialGradient>
+  </defs>
+  <!-- Laid over a letter's tile. No clip-path in the SVG pipeline, so each facet's outer corner follows the
+       tile's own radius (5 of 18, 6.67 of 24). -->
+  <path d="M6.67 0 H15 L0 13 V6.67 A6.67 6.67 0 0 1 6.67 0 Z" fill="#FFFFFF" fill-opacity="0.18"/>
+  <path d="M15 0 H17.33 A6.67 6.67 0 0 1 24 6.67 V10 L10 24 H6.67 A6.67 6.67 0 0 1 0 17.33 V13 Z" fill="#FFFFFF" fill-opacity="0.06"/>
+  <path d="M24 10 V17.33 A6.67 6.67 0 0 1 17.33 24 H10 Z" fill="#000000" fill-opacity="0.12"/>
+  <!-- The glass rim: just inside the tile's edge, lit at the top-left corner and fading along both edges. -->
+  <rect x="0.5" y="0.5" width="23" height="23" rx="6.17" ry="6.17" fill="none" stroke="url(#rim)" stroke-width="1"/>
+</svg>

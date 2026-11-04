@@ -77,6 +77,8 @@ public class WindowIcon extends UIElement {
     public static final String MONO_TILE_CLASS = "__tile-mono__";
     /** {@code __tile-1__} … {@code __tile-N__}: the palette, one class per hue. */
     public static final String TILE_CLASS_PREFIX = "__tile-";
+    /** On the icon while it shows a letter rather than a glyph, so a sheet can dress a letter's tile alone. */
+    public static final String MONOGRAM_CLASS = "__monogram__";
     /** Worn INSTEAD of a tile class by artwork that carries its own palette and is therefore its own tile. */
     public static final String BRANDED_CLASS = "__branded__";
     /** How many hues the sheet defines. Kept small so two windows rarely share one by accident of hashing. */
@@ -115,6 +117,7 @@ public class WindowIcon extends UIElement {
             StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(glyph));
             if (showingMonogram) monogram.setDisplayed(false);
             showingMonogram = false;
+            removeClass(MONOGRAM_CLASS);
             SvgDocument document = glyph.getDocument();
             if (document != null && !document.usesCurrentColor()) {
                 // ARTWORK IS ITS OWN TILE -- see the class comment. No palette class, so nothing paints
@@ -133,6 +136,7 @@ public class WindowIcon extends UIElement {
             if (!showingMonogram) monogram.setDisplayed(true);
             showingMonogram = true;
             removeClass(BRANDED_CLASS);
+            addClass(MONOGRAM_CLASS);
             // A hue per title, so two applications without icons are told apart by colour, not only by letter
             setTile(title == null || title.isBlank() ? MONO_TILE_CLASS
                     : TILE_CLASS_PREFIX + paletteIndexOf(title) + "__");

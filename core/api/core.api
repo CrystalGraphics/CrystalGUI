@@ -4974,9 +4974,9 @@ com/crystalgui/desktop/launcher/Launcher
   access public
   extends com/crystalgui/widget/overlay/Popover
   field public,static,final EMPTY_CLASS Ljava/lang/String;
-  field public,static,final ROW_HEIGHT F
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final ROW_CLASS Ljava/lang/String;
+  field public,static,final ROW_HEIGHT F
   field public,static,final VISIBLE_ROWS I
   field public,static,final ROW_NAME_CLASS Ljava/lang/String;
   field public,static,final ROW_RUNNING_CLASS Ljava/lang/String;
@@ -5323,6 +5323,7 @@ com/crystalgui/desktop/window/WindowFrame
 com/crystalgui/desktop/window/WindowIcon
   access public
   extends com/crystalgui/ui/dom/UIElement
+  field public,static,final MONOGRAM_CLASS Ljava/lang/String;
   field public,static,final BRANDED_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final MONOGRAM_PART Ljava/lang/String;

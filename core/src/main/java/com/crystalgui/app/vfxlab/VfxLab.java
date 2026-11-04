@@ -109,6 +109,7 @@ public class VfxLab extends UIElement {
      * them; the next launch is a fresh lab. Minimised, or with the desktop closed, it keeps playing.
      */
     public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:vfx-lab", "VFX Lab")
+            .icon("crystalgui:vfx-lab")
             .keywords("vfx", "effects", "particles", "lab")
             .singleInstance()
             .standalone()

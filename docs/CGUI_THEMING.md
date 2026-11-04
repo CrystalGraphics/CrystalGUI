@@ -111,7 +111,6 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
-
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -738,8 +737,9 @@ editor scheme's.
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--taskbar-bg` | `var(--surface-overlay)` | base.css |
 | `--taskbar-border` | `var(--border-base)` | base.css |
-| `--taskbar-entry-active-bg` | `#FFFFFF15` | crystal-dark.css |
+| `--taskbar-entry-active-bg` | `#FFFFFF33` | crystal-dark.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
+| `--taskbar-entry-active-hover-bg` | `#FFFFFF4D` | crystal-dark.css |
 | `--taskbar-entry-attention-bg` | `var(--accent-soft)` | base.css |
 | `--taskbar-entry-attention-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-badge-bg` | `var(--error)` | base.css |
@@ -753,6 +753,8 @@ editor scheme's.
 | `--taskbar-indicator` | `var(--fg-secondary)` | base.css |
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |
+| `--taskbar-start-hover-tint` | `#D4E2FF` | crystal-dark.css |
+| `--taskbar-start-pressed-tint` | `#B7CDF7` | crystal-dark.css |
 | `--tooltip-bg` | `#2B2D30` | crystal-dark.css |
 | `--tooltip-border` | `#323438` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |
@@ -779,13 +781,20 @@ editor scheme's.
 | `--window-fg` | `var(--fg)` | base.css |
 | `--window-icon-glyph` | `var(--fg-on-accent)` | base.css |
 | `--window-icon-mono-bg` | `#DE2A4D` | crystal-dark.css |
+| `--window-icon-mono-bg-end` | `#C51E7C` | crystal-dark.css |
 | `--window-icon-mono-fg` | `var(--fg-on-accent)` | base.css |
 | `--window-icon-tile-1` | `#4A7CE0` | crystal-dark.css |
+| `--window-icon-tile-1-end` | `#3E26DA` | crystal-dark.css |
 | `--window-icon-tile-2` | `#3FA36B` | crystal-dark.css |
+| `--window-icon-tile-2-end` | `#368C84` | crystal-dark.css |
 | `--window-icon-tile-3` | `#D98A3A` | crystal-dark.css |
+| `--window-icon-tile-3-end` | `#C63C26` | crystal-dark.css |
 | `--window-icon-tile-4` | `#8B63D9` | crystal-dark.css |
+| `--window-icon-tile-4-end` | `#B43FD0` | crystal-dark.css |
 | `--window-icon-tile-5` | `#2FA7B8` | crystal-dark.css |
+| `--window-icon-tile-5-end` | `#28599E` | crystal-dark.css |
 | `--window-icon-tile-6` | `#D85A7A` | crystal-dark.css |
+| `--window-icon-tile-6-end` | `#D03796` | crystal-dark.css |
 | `--window-title-active-bg` | `var(--surface-base)` | base.css |
 | `--window-title-active-fg` | `var(--fg)` | base.css |
 | `--window-title-bg` | `var(--surface-base)` | base.css |
@@ -793,5 +802,4 @@ editor scheme's.
 | `--workbench-bg` | `var(--surface-base)` | base.css |
 | `--workbench-control-hover-bg` | `var(--hover-bg)` | base.css |
 | `--workbench-control-pressed-bg` | `var(--pressed-bg)` | base.css |
-
 <!-- TOKENS:END -->
