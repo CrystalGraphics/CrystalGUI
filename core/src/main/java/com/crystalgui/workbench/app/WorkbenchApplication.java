@@ -718,5 +718,4 @@ public class WorkbenchApplication extends UIElement
         window.destroy();
         workbench.dispose();
     }
-
 }
