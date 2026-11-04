@@ -15,7 +15,8 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.render.text.FontFamilyCache;
-import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 
 /**
@@ -72,6 +73,9 @@ public final class DesktopHost implements Disposable {
     @Nullable
     private Supplier<WindowMount> preferredMount;
 
+    /** The theme a desktop opens in when nothing has chosen one. */
+    public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
+
     private DesktopHost(HostServices services) {
         this.services = services;
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
@@ -81,9 +85,14 @@ public final class DesktopHost implements Disposable {
         // composes, painting reads and hit-testing inverts -- so there is no second place it can be
         // applied and no window in which the three can disagree.
         this.document.boxes().setUiScale(services.uiScale());
-        // NOT INSTALLED FOR YOU. Without this the surface matches no selector at all and everything on
-        // it renders as an unstyled column of boxes.
-        this.document.styles().addStylesheet(StyleSheet.DEFAULT);
+        // NOT INSTALLED FOR YOU. Without the sheets the surface matches no selector at all, and without a
+        // theme every token falls back to the sheet's literal: until an editor opened and installed one,
+        // the bar drew in those fallbacks.
+        UiThemeManager themes = UiThemeManager.getInstance();
+        themes.installInto(this.document.styles());
+        ThemeRegistry.registerBuiltins();
+        // The editor's own default, so opening one changes nothing
+        if (themes.activeThemeId() == null) themes.setTheme(DEFAULT_THEME);
         // THE HOST SAYS WHERE crystalgui/ IS AND NOTHING ELSE. The compositor derives its config
         // store, its cache root and its arrangement record from that one directory -- durable and
         // derived as separate trees, so "delete cache/ and nothing is lost" needs no caveat.

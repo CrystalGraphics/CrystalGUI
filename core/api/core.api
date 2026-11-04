@@ -4865,6 +4865,7 @@ com/crystalgui/desktop/app/LaunchContext
   method public,static of (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/core/storage/ConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/LaunchContext;
 com/crystalgui/desktop/app/ServerWindowHost
   access public,abstract,interface
+  field public,static,final DEFAULT_THEME Ljava/lang/String;
   extends java/lang/Object
   method public,abstract windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/net/window/WindowMount;
 com/crystalgui/desktop/host/DesktopHost
