@@ -18,6 +18,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
 
@@ -234,8 +235,19 @@ public final class ApplicationRegistry {
         if (application == null) return null;
         refusedForNoServer.remove(kind.id());
         running.add(application);
+        // Its main window destroyed is the application quit: closing it under DESTROY_ON_CLOSE, or anything else
+        // taking it down. Every application gets this from here, so none hooks its own window.
+        WindowFrame main = application.mainWindow();
+        if (main != null) main.onDestroyed.connect(() -> quit(application));
         onDidChange.emit();
         return application;
+    }
+
+    /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
+    private void quit(Application application) {
+        if (!running.contains(application)) return;
+        application.dispose();
+        forget(application);
     }
 
     /**

@@ -4,7 +4,6 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
-import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -30,8 +29,8 @@ import javax.annotation.Nullable;
  *
  * <p>It is resizable, long-lived, arranged into bands, and has to be usable <b>while the application it
  * measures keeps running</b> — you cannot profile something that is blocked on a modal. So a
- * {@link WindowFrame} on the desktop, with {@link WindowPolicy#HIDE_ON_CLOSE}: closing it keeps the
- * selection and the snapshot, and the taskbar entry is how it comes back.</p>
+ * {@link WindowFrame} on the desktop. Closing it quits the profiler, its selection and snapshot with it; the ring it
+ * reads is the engine's, so the next one opened sees every frame recorded meanwhile. Minimised, it keeps both.</p>
  *
  * <h3>One instance</h3>
  *
@@ -147,14 +146,13 @@ public final class FrameProfiler {
         if (config != null) ProfilerSettings.useStorage(config.scoped(StorageLayout.APPS).scoped(ID));
         WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
         if (existing != null) {
-            // ACTIVATE, not raise: a closed profiler is HIDDEN (HIDE_ON_CLOSE), and raising a hidden window
-            // reorders it and leaves it hidden -- the second F9 did nothing at all.
+            // ACTIVATE, not raise: a minimised profiler is hidden, and raising a hidden window reorders it and
+            // leaves it hidden -- the second F9 did nothing at all.
             desktop.activate(existing, true);
             return existing;
         }
         WindowFrame frame = new WindowFrame("Frame Profiler");
         frame.setKey(WINDOW_KEY);
-        frame.setPolicy(WindowPolicy.HIDE_ON_CLOSE);
         frame.setApplication(KIND);
         frame.markApplicationMain();
         FrameProfilerPanel panel = new FrameProfilerPanel();
@@ -207,7 +205,7 @@ public final class FrameProfiler {
 
         @Override
         public void dispose() {
-            window.requestClose();
+            window.destroy();
         }
     }
 }

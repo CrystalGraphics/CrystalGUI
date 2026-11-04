@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import java.nio.file.Path;
+import java.util.ArrayList;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -223,7 +224,8 @@ public final class DesktopHost implements Disposable {
      */
     @Override
     public void dispose() {
-        for (WindowFrame frame : desktop().windows()) frame.destroy();
+        // A copy: destroying a window takes it out of the list being walked
+        for (WindowFrame frame : new ArrayList<>(desktop().windows())) frame.destroy();
         desktop().suspend();
     }
 }

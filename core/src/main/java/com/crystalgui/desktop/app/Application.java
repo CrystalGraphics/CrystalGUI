@@ -24,13 +24,19 @@ import com.crystalgui.fs.Resource;
  *       single-instance application does instead of starting another.</li>
  * </ul>
  *
- * <h3>Closing a window is not quitting</h3>
+ * <h3>Closing its main window quits it</h3>
  *
- * <p>The distinction to hold on to. Under {@code WindowPolicy.HIDE_ON_CLOSE} the window goes away and
- * the application is still <em>running in the background</em>, with every document, the dock
- * arrangement and the undo history intact — which is what its taskbar entry brings back.
- * {@link #dispose()} is the other verb: the window is destroyed, the session written, the workbench
- * taken down and everything it registered withdrawn.</p>
+ * <p>A window closes under {@code DESTROY_ON_CLOSE}, the default, and when the destroyed window is an
+ * application's main window the registry quits the application: {@link #dispose()}, then off the running list.
+ * So an application never hooks its own window; it releases what it holds in {@code dispose()}, which also runs
+ * at a host's shutdown with the window still up. Minimised, or with the desktop closed, it keeps running. Under
+ * {@code WindowPolicy.HIDE_ON_CLOSE} the X hides the window instead and the application runs on in the
+ * background, which is what its taskbar entry brings back.</p>
+ *
+ * <ul>
+ *   <li>{@code dispose()} must be idempotent: a host quitting it destroys the window, which reaches it again.</li>
+ *   <li>Its thread is the document's; GPU resources are released on {@code HostThread.RENDER}.</li>
+ * </ul>
  *
  * <p>It is also why a main window is exempt from hidden-window eviction: a hidden main window <em>is</em>
  * the application, and a cap on hidden windows must never quit one nobody asked to quit.</p>

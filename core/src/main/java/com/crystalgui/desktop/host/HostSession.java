@@ -114,6 +114,7 @@ public final class HostSession {
     private static volatile HostSession current;
 
     private final HostServices services;
+    @Nullable
     private final ApplicationKind primaryKind;
     private final HostInput input = new HostInput(this::document);
 
@@ -182,7 +183,7 @@ public final class HostSession {
     private long traceNanos;
     private boolean painted;
 
-    private HostSession(HostServices services, ApplicationKind primaryKind) {
+    private HostSession(HostServices services, @Nullable ApplicationKind primaryKind) {
         this.services = services;
         this.primaryKind = primaryKind;
         // The game's threads, as UI code reaches them. @see HostThread
@@ -195,9 +196,10 @@ public final class HostSession {
      *
      * @param primaryKind what a host's "open the application" key launches — and what fills an empty
      *                    desktop, since a desktop with nothing on it is a blank screen rather than a
-     *                    desktop
+     *                    desktop; null for a host that opens every application itself, by its own keys,
+     *                    whose empty desktop stays empty
      */
-    public static HostSession install(HostServices services, ApplicationKind primaryKind) {
+    public static HostSession install(HostServices services, @Nullable ApplicationKind primaryKind) {
         if (current != null) return current;
         current = new HostSession(services, primaryKind);
         return current;
@@ -307,7 +309,12 @@ public final class HostSession {
     /** Takes the desktop down. Game shutdown only — never a surface close. @see #hidden() */
     public void dispose() {
         onDocument(() -> {
-            if (primary != null) primary.dispose();
+            // Every application quits, not the primary alone: one holding ticks or stage draws releases them here
+            if (host != null) {
+                for (Application app : host.desktop().applications().running()) app.dispose();
+            } else if (primary != null) {
+                primary.dispose();
+            }
             if (host != null) host.dispose();
         });
         if (driver != null) driver.close();
@@ -695,6 +702,7 @@ public final class HostSession {
      */
     private boolean ensurePrimaryWindow() {
         if (primaryWindow != null) return true;
+        if (primaryKind == null) return false;
         DesktopHost built = host;
         if (built == null) return false;
 
@@ -718,6 +726,12 @@ public final class HostSession {
         if (window == null) return false;
         primary = launched;
         primaryWindow = window;
+        // Its X quits it: the next open launches a fresh one rather than raising a window that is gone
+        window.onDestroyed.connect(() -> {
+            if (primaryWindow != window) return;
+            primary = null;
+            primaryWindow = null;
+        });
 
         placeFirstRun(window);
         trace("window");
@@ -763,6 +777,12 @@ public final class HostSession {
 
         boolean nothingOpen = desktop.registry().size() == 0;
         if (!raiseOnShow && !nothingOpen) return;
+        // No primary: the host opens every application itself, and an empty desktop stays empty
+        if (primaryKind == null) {
+            raiseOnShow = false;
+            launchPending = false;
+            return;
+        }
 
         if (!ensurePrimaryWindow()) {
             // Armed on the FAILURE rather than by the request alone: opening the bare desktop also wants

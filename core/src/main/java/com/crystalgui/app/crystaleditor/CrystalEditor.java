@@ -2,7 +2,6 @@ package com.crystalgui.app.crystaleditor;
 
 import java.util.List;
 
-import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.example.notes.NotesKind;
@@ -31,9 +30,8 @@ import com.crystalgui.workbench.extension.ProjectExtension;
  *
  * <ol>
  *   <li>which extensions are on - {@link #EXTENSIONS};</li>
- *   <li>what the window is called, keyed, and what closing it means - a workbench is not a dialog, so
- *       {@link WindowPolicy#HIDE_ON_CLOSE}: every document, the arrangement and the undo history survive
- *       it, and the taskbar entry is how it comes back;</li>
+ *   <li>what the window is called and keyed; closing it quits the editor (a dirty document may refuse first), and
+ *       minimising it keeps every document, the arrangement and the undo history;</li>
  *   <li>which files it declares itself the handler for, so "open with" can answer with nothing
  *       running.</li>
  * </ol>
@@ -106,7 +104,6 @@ public final class CrystalEditor {
                     // and the window switcher read it. @see WindowFrame#setTitleShown
                     .withoutWindowTitle()
                     .key("editor:main")
-                    .policy(WindowPolicy.HIDE_ON_CLOSE)
                     .start());
 
     // install() IS GONE, and nothing replaced it.

@@ -5,8 +5,12 @@ import com.crystalgraphics.api.mesh.CgMesh;
 import com.crystalgraphics.api.mesh.CgMeshShapes;
 import com.crystalgraphics.api.vertex.CgVertexFormat;
 import com.crystalgraphics.demo.CgVfxDemoControls;
+import com.crystalgraphics.frame.CgTickFunction;
+import com.crystalgraphics.frame.CgTickGroup;
+import com.crystalgraphics.frame.CgWorld;
 import com.crystalgraphics.render.post.CgPostStack;
 import com.crystalgraphics.render.post.bloom.CgBloom;
+import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.world.CgSortLayer;
 import com.crystalgraphics.render.world.CgPipelinePrecache;
 import com.crystalgraphics.render.world.CgWorldRenderer;
@@ -23,9 +27,13 @@ import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.PlatformPort;
@@ -60,8 +68,13 @@ import java.util.function.BooleanSupplier;
  * parameters while it plays. Any host with a world renderer runs it, from a window on its desktop.
  *
  * <pre>{@code
+ * // as an application: its world tick, its viewport and its cleanup are its own
+ * desktop.applications().install(VfxLab.KIND);
+ * desktop.applications().launch(VfxLab.KIND, workspace);
+ *
+ * // by hand, on a host that drives it itself:
  * VfxLab lab = new VfxLab();
- * VfxLab.openOn(desktop, lab);                                  // again to bring a closed window back
+ * VfxLab.openOn(desktop, lab);                                  // again to raise it; closed, the window is gone
  * // on the render thread: the effects play while the world fires this...
  * CgTickFunction frames = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, "mymod:lab", dt -> lab.render(seconds));
  * // ...and the viewport draws after the frame's world, before the desktop paints
@@ -77,7 +90,7 @@ import java.util.function.BooleanSupplier;
  *       host's camera, and the host's draws past the viewport's.</li>
  *   <li>Edits reach every effect the lab spawned that is still playing, and every one it spawns after.</li>
  *   <li>A colour is edited as a swatch and an intensity, Unity's HDR colour: the swatch is the colour over its
- *       brightest channel, the intensity that channel. Curves and shakes are listed only.</li>
+ *       brightest channel, the intensity that channel. Curves, shakes and vectors are listed only.</li>
  *   <li>Copy puts the edited values on the clipboard as {@code .set(...)} lines for a look's builder.</li>
  *   <li>The Rendering tab sets the world's HDR scene and bloom and the blast's flash and impact frame for the whole run, the
  *       harness HUD's switches: {@link CgVfxDemoControls} is shared with its keys.</li>
@@ -89,6 +102,17 @@ public class VfxLab extends UIElement {
 
     /** The window's key on a desktop: one lab a desktop. */
     public static final String WINDOW_KEY = "crystalgui:vfx-lab";
+
+    /**
+     * The lab as an application, one a desktop: its launch opens the window, plays its effects in the world's frame
+     * and draws its viewport on {@link CgRenderStage#HUD}, after the world. Closing the window quits it and releases
+     * them; the next launch is a fresh lab. Minimised, or with the desktop closed, it keeps playing.
+     */
+    public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:vfx-lab", "VFX Lab")
+            .keywords("vfx", "effects", "particles", "lab")
+            .singleInstance()
+            .standalone()
+            .launch(context -> new Instance(context.desktop()));
 
     /** Lab space's floor: effects spawn above the origin of it, aimed along +x. */
     public static final double LAB_Y = -8192.0;
@@ -250,7 +274,7 @@ public class VfxLab extends UIElement {
         }));
     }
 
-    /** Shows {@code lab} in its window on {@code desktop}, or brings back the window already there. */
+    /** Shows {@code lab} in its window on {@code desktop}, or raises the window already there. */
     public static WindowFrame openOn(Desktop desktop, VfxLab lab) {
         WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
         if (existing != null) {
@@ -259,7 +283,8 @@ public class VfxLab extends UIElement {
         }
         WindowFrame frame = new WindowFrame("VFX Lab");
         frame.setKey(WINDOW_KEY);
-        frame.setPolicy(WindowPolicy.HIDE_ON_CLOSE);
+        frame.setApplication(KIND);
+        frame.markApplicationMain();
         frame.setContent(lab);
         desktop.addWindow(frame);
         // After addWindow, which places and sizes it.
@@ -331,6 +356,62 @@ public class VfxLab extends UIElement {
     public void delete() {
         vfx.delete();
         viewport.release();
+    }
+
+    /** One running lab: its window, its effects' tick and its viewport's draw. */
+    private static final class Instance implements Application {
+
+        private final VfxLab lab = new VfxLab();
+        private boolean quit;
+        private final WindowFrame window;
+        private final CgTickFunction frames;
+        private final CgRenderStage.Registration viewportDraw;
+        private double seconds;
+
+        Instance(Desktop desktop) {
+            window = openOn(desktop, lab);
+            // On the world's clock: an effect plays as fast as the world it is in, and holds while it is paused
+            frames = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, "crystalgui:vfx-lab", dt -> {
+                seconds += dt;
+                lab.render(seconds);
+            }).whilePaused(true);
+            // After the world's firing, whose size the viewport renders at; before the desktop paints over it
+            viewportDraw = CgRenderStage.HUD.register(HostSession.COMPOSITOR - 1,
+                    frame -> lab.drawViewport(frame.host().width(), frame.host().height()));
+        }
+
+        @Override
+        public ApplicationKind kind() {
+            return KIND;
+        }
+
+        @Override
+        public WindowFrame mainWindow() {
+            return window;
+        }
+
+        @Override
+        public boolean open(Resource resource) {
+            return false;
+        }
+
+        @Override
+        public void activate() {
+            Desktop desktop = Desktop.ifPresent(window.document());
+            if (desktop != null) desktop.activate(window, true);
+        }
+
+        /** Stops playing and releases the lab: its window closed, or the host shutting down. */
+        @Override
+        public void dispose() {
+            if (quit) return;
+            quit = true;
+            frames.close();
+            viewportDraw.close();
+            window.destroy();
+            // The document's thread; what the lab holds is the render thread's
+            HostThread.RENDER.run(lab::delete);
+        }
     }
 
     // ── Playback, on the render thread ──────────────────────────────────────
@@ -617,7 +698,8 @@ public class VfxLab extends UIElement {
                 } else if (param instanceof CgVfxParam.Palette palette) {
                     for (int e = 0; e < palette.count(); e++) colour(group, edited, new Value(palette, e));
                 } else {
-                    String kind = param instanceof CgVfxParam.Curve ? "Curve" : "Shake";
+                    String kind = param instanceof CgVfxParam.Curve ? "Curve"
+                            : param instanceof CgVfxParam.Vector ? "Vector" : "Shake";
                     group.prop(ConfigDescriptor.info(param.name(), label(param.name())), Property.of(kind));
                 }
             }
@@ -717,13 +799,13 @@ public class VfxLab extends UIElement {
     /** One value a row edits: a number, a colour, or one colour of a palette ({@code entry} 0 up, else -1). */
     private record Value(CgVfxParam param, int entry) {
 
-        /** Every number and colour of {@code layout}, a palette's colours one each. */
+        /** Every number and colour of {@code layout}, a palette's colours one each; a vector is listed, not edited. */
         static List<Value> all(CgVfxLayout layout) {
             List<Value> out = new ArrayList<>();
             for (CgVfxParam param : layout.params()) {
                 if (param instanceof CgVfxParam.Palette palette) {
                     for (int e = 0; e < palette.count(); e++) out.add(new Value(palette, e));
-                } else if (param.numeric()) {
+                } else if (param instanceof CgVfxParam.Scalar || param instanceof CgVfxParam.Color) {
                     out.add(new Value(param, -1));
                 }
             }

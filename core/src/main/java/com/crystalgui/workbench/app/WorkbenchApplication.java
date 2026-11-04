@@ -23,6 +23,7 @@ import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowPolicy;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -63,7 +64,6 @@ import com.crystalgui.workbench.editor.EditorService;
  *         .with("crystalgui:explorer", "crystalgui:problems", "crystalgui:scripting")
  *         .title("Crystal Editor")
  *         .key("editor:main")
- *         .policy(WindowPolicy.HIDE_ON_CLOSE)
  *         .start())
  * }</pre>
  *
@@ -71,12 +71,14 @@ import com.crystalgui.workbench.editor.EditorService;
  * declaration is complete, so nothing is constructed before the extension list is known and nothing is
  * mutated after the window is on screen.</p>
  *
- * <h3>Closing is not quitting</h3>
+ * <h3>Closing quits it; minimising keeps it</h3>
  *
- * <p>Under {@link WindowPolicy#HIDE_ON_CLOSE} the window goes away and the application is still running:
- * every document, the dock arrangement and the undo history are intact, and the taskbar entry is how it
- * comes back. {@link #dispose()} is the other verb. It is also why a main window is exempt from
- * hidden-window eviction - a cap on hidden windows must never quit a product nobody asked to quit.</p>
+ * <p>Its window's X quits it, as a desktop application's does: a dirty document may refuse first (the discard
+ * guard), then the state is written, the window destroyed and the workbench taken down, and the next launch is a
+ * fresh one. Minimised, or with the desktop closed, it keeps running with every document, the dock arrangement and
+ * the undo history. {@code .policy(WindowPolicy.HIDE_ON_CLOSE)} makes the X hide it instead, the taskbar entry
+ * bringing it back. A hidden main window is exempt from hidden-window eviction: a cap on hidden windows must never
+ * quit a product nobody asked to quit.</p>
  *
  * <h3>Restoring waits to be told, and nothing polls</h3>
  *
@@ -184,7 +186,7 @@ public class WorkbenchApplication extends UIElement
         private String key;
         @Nullable
         private String icon;
-        private WindowPolicy policy = WindowPolicy.HIDE_ON_CLOSE;
+        private WindowPolicy policy = WindowPolicy.DESTROY_ON_CLOSE;
         private boolean titleShown = true;
 
         private Builder(LaunchContext context) {
@@ -706,7 +708,9 @@ public class WorkbenchApplication extends UIElement
     public void dispose() {
         if (disposed) return;
         disposed = true;
-        saveState();
+        // Closed by its X, the window detached this before it was destroyed, which wrote the state
+        // (disconnected): a second write now would measure nothing
+        if (window.state() != WindowState.DESTROYED) saveState();
         lifetime.disconnectAll();
         desktop.applications().forget(this);
         // The window's own destroy detaches this element, which is what fires `disconnected` -- so the
@@ -714,4 +718,5 @@ public class WorkbenchApplication extends UIElement
         window.destroy();
         workbench.dispose();
     }
+
 }
