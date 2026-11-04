@@ -67,6 +67,14 @@ subprojects {
     }
 }
 
+// The harness names CrystalGUI by its coordinates, as it names CrystalGraphics: this build supplies its own.
+// Every project: whatever takes the harness on its classpath resolves that name too.
+if (findProject(":gl-debug-harness") != null) allprojects {
+    configurations.configureEach {
+        resolutionStrategy.dependencySubstitution { substitute(module("com.crystalgui:core")).using(project(":core")) }
+    }
+}
+
 // ── Everything a consuming mod's dev run reads, built ────────────────────────────────────────────
 //
 // A mod that consumes CrystalGUI as a composite puts these jars on its game classpath, and nothing

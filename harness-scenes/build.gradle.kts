@@ -1,4 +1,4 @@
-// CrystalGUI's scenes for the GL debug harness, which is CrystalGraphics-only: they reach it as a
+// CrystalGUI's scenes for the GL debug harness, which takes CrystalGUI as a library: they reach it as a
 // HarnessExtension (CrystalGuiHarness), and this script puts them on `:gl-debug-harness:runHarness`.
 plugins {
     `java-library`

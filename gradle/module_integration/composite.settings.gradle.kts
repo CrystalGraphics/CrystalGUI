@@ -118,7 +118,10 @@ val modernNodeSubstitutions: List<Map<String, String>> = modernNodes.getValue("c
 }
 
 submoduleData.forEach { mod ->
-    includeBuild(mod.string("buildPath")) {
+    // -Dcrystalgraphics.dir: a build including this one supplies its own checkout, under the same name.
+    val path = if (mod.string("name") == "CrystalGraphics") System.getProperty("crystalgraphics.dir") else null
+    includeBuild(path ?: mod.string("buildPath")) {
+        name = mod.string("name")
         dependencySubstitution {
             (mod.mapList("substitutions") + modernNodeSubstitutions)
                 .filter { isPresent(it.getValue("projectPath")) }

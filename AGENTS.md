@@ -98,7 +98,7 @@ The harness is LWJGL 3 and GLFW; `--device=gl|tracked|vulkan` picks what `CgGL` 
 
 `cgui-gallery` is the default smoke test and `cgui-desktop` the one-scene check. **Every scene, with each one's switches: [`harness-scenes/CLAUDE.md`](harness-scenes/CLAUDE.md)**, which
 loads itself when you open a scene. Scenes live in `harness-scenes/src/main/java/com/crystalgui/harness/scene/` and
-are registered in `CrystalGuiHarness`; the harness itself is CrystalGraphics-only and reaches them as a
+are registered in `CrystalGuiHarness`; the harness takes CrystalGraphics and CrystalGUI as libraries, and reaches them as a
 `HarnessExtension`. Authoring rules are `gl-debug-harness/AGENTS.md` — never call raw GL.
 
 ---
@@ -138,7 +138,7 @@ resolved to local source. Each row in full: [`docs/CGUI_ARCHITECTURE.md`](docs/C
 | `core/` | The engine. Java 25, an abstract module with a Java 8 copy |
 | `language/` | The language stack: grammars, engines, Run. Ships as its own mod, `crystalgui_language`; `core/` and the host jar never name it |
 | `taffy/` | The layout engine, vendored and forked (`taffy/MODIFICATIONS.md`) |
-| `gl-debug-harness/`, `harness-scenes/` | The harness (CrystalGraphics-only) and CrystalGUI's scenes for it |
+| `gl-debug-harness/`, `harness-scenes/` | The harness (CrystalGraphics and CrystalGUI as libraries) and CrystalGUI's scenes for it |
 | `CrystalGraphics/` | The rendering backend. Consumed, never reimplemented |
 | `runtime/mc/1710/`, `legacy/`, `modern/` | The hosts: Forge 1.7.10; Forge 1.8–1.12.2; Forge 1.13.2+, NeoForge 1.20.2+ and Fabric 1.14.4+ |
 | `runtime/mc/shared/`, `launchwrapper/`, `modern-shared/`, `forge-bootstrap/` | What several hosts share, merged once |

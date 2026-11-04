@@ -10,7 +10,8 @@ pluginManagement {
     // it every 1.20.x node fails at id("cg-modern-loader") with "plugin not found".
     includeBuild("runtime/mc/modern/build-logic")
     // The settings plugin below: the Minecraft nodes, from the versions targeted.
-    includeBuild("CrystalGraphics/singlejar-logic")
+    // CrystalGraphics' checkout: this submodule, or -Dcrystalgraphics.dir from a build including this one.
+    includeBuild((System.getProperty("crystalgraphics.dir") ?: "CrystalGraphics") + "/singlejar-logic")
 
     plugins {
         id("com.gtnewhorizons.gtnhconvention") version("2.0.20")
@@ -84,7 +85,7 @@ include("core")
 // a composite gives each build its own StartParameter, so neither -P nor the parent's gradle.properties
 // reaches here. RPG-Core's settings.gradle sets it; -Dcrystalgui.harness=true works too.
 val harnessRequested = System.getProperty("crystalgui.harness") == "true"
-// The harness is CrystalGraphics-only; harness-scenes is CrystalGUI's half, and puts itself on its run.
+// The harness takes CrystalGUI as a library; harness-scenes holds CrystalGUI's own scenes, and puts itself on its run.
 if (!embedded || harnessRequested) include("gl-debug-harness", "harness-scenes")
 
 // The tree-sitter syntax backend. Its jars are checked in under lib/tree-sitter/, so this is an ordinary
