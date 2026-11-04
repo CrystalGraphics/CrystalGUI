@@ -1464,8 +1464,8 @@ public class Desktop extends UIElement implements DataProvider {
      * Writes the arrangement now.
      *
      * <p>Called automatically when the desktop leaves the tree, which is what suspending a compositor
-     * does and therefore covers a host whose screen closes. A host that tears down some other way — the
-     * harness disposes its scene without ever detaching — calls this itself.</p>
+     * does and therefore covers a host whose screen closes, and by {@code HostSession.dispose}. A host that
+     * tears down some other way calls this itself.</p>
      */
     public void savePersistedState() {
         if (persistence != null && persistenceId != null) persistence.save(persistenceId);

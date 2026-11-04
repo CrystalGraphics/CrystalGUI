@@ -309,6 +309,9 @@ public final class HostSession {
     /** Takes the desktop down. Game shutdown only — never a surface close. @see #hidden() */
     public void dispose() {
         onDocument(() -> {
+            // The arrangement first, with every window still up: a shutdown with the screen up never detached, which is
+            // when it writes itself
+            if (host != null) host.desktop().savePersistedState();
             // Every application quits, not the primary alone: one holding ticks or stage draws releases them here
             if (host != null) {
                 for (Application app : host.desktop().applications().running()) app.dispose();
