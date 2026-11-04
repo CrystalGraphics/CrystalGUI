@@ -104,6 +104,9 @@ theme {
 
     /* The top edge: 20% over the glass, so it lights the blur rather than drawing an opaque seam. */
     --taskbar-border: #00000033;
+    /* The edge on a light bar is a shade, not a light: black at 4% to 14%. @see crystal-dark.css */
+    --taskbar-edge-end: #0000000A;
+    --taskbar-edge-mid: #00000024;
     /* Fluent's light outer focus stroke, black at 89%. @see crystal-dark.css */
     --taskbar-focus-ring: #000000E4;
     /* The taskbar's acrylic tint — @see crystal-dark.css. As the light panels' (#F4F4F700): no colour

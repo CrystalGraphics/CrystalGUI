@@ -4841,6 +4841,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
+  method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
   method public autostart ()V
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;

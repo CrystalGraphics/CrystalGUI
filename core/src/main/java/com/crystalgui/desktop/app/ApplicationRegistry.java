@@ -260,6 +260,34 @@ public final class ApplicationRegistry {
     }
 
     /**
+     * Brings back the application if it runs, and launches it if not: what a key bound to it, or a click on
+     * its button, means. A second instance comes only from {@link #launch}, as Windows opens one from the jump
+     * list and never from the button.
+     *
+     * <pre>{@code
+     * desktop.applications().activateOrLaunch(VfxLab.KIND, workspace);   // F6
+     * }</pre>
+     *
+     * <p>Of several running, the one whose window was active most recently.</p>
+     */
+    @Nullable
+    public Application activateOrLaunch(ApplicationKind kind, @Nullable Workspace workspace) {
+        Application recent = null;
+        int best = Integer.MAX_VALUE;
+        List<WindowFrame> mru = desktop.registry().mruOrder();
+        for (Application live : running(kind)) {
+            int at = mru.indexOf(live.mainWindow());
+            if (recent == null || (at >= 0 && at < best)) {
+                recent = live;
+                if (at >= 0) best = at;
+            }
+        }
+        if (recent == null) return launch(kind, workspace);
+        recent.activate();
+        return recent;
+    }
+
+    /**
      * Launches onto <b>this desktop's own storage</b> — the usual call, and the one to reach for.
      *
      * <p>A caller supplies no directory at all: the host told the desktop once, with

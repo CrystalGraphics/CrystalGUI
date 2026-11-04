@@ -204,7 +204,9 @@ taskbar .__edge__ {
     top: 0;
     width: 100%;
     height: 1px;
-    background-color: var(--taskbar-border, #393B40);
+    /* LIGHT, AND BRIGHTEST IN THE MIDDLE, as Windows 11's: a lit rim fading toward the screen's edges. */
+    background: linear-gradient(90deg, var(--taskbar-edge-end, #FFFFFF0A), var(--taskbar-edge-mid, #FFFFFF73),
+                                var(--taskbar-edge-end, #FFFFFF0A));
 }
 
 /* THE ENTRIES ARE BOUNDED BY THE BAR. `max-width` bounds the box and `overflow` bounds what paints —
@@ -360,11 +362,13 @@ taskbar .__entry__ {
      * price of a 2x UI over a 1x game. */
     height: 28px;
     min-height: 0px;
+    /* An icon in a square-ish button, Windows' 44 of 48 scaled to this bar. */
     padding-left: 6px;
-    padding-right: 9px;
+    padding-right: 6px;
     padding-top: 0px;
     padding-bottom: 0px;
-    gap: 7px;
+    gap: 0px;
+    justify-content: center;
     flex-shrink: 1;
     min-width: 0;
     border-radius: var(--radius-control, 4px);
@@ -462,11 +466,11 @@ taskbar .__entry__::part(indicator) {
     left: 50%;
     bottom: 0px;
     width: 6px;
-    /* A full capsule, the radius half the height: an end lands between pixels (an entry is as wide as its
-     * label), and a round end spreads that over more pixels than a squarer one does. 3.5px is 7 device
-     * pixels at the default uiScale of 2 */
-    height: 3.5px;
-    border-radius: 1.75px;
+    /* A full capsule, the radius half the height: a round end spreads a fractional position over more
+     * pixels than a squarer one does. 2.5px is 5 device pixels at the default uiScale of 2, Windows 11's
+     * thin pill on an icon-only bar */
+    height: 2.5px;
+    border-radius: 1.25px;
     transform: translate(-3px, 0);
     background-color: var(--taskbar-indicator, #9DA0A8);
     transition: background-color 150ms ease-out, width 150ms ease-out, transform 150ms ease-out;
@@ -514,18 +518,10 @@ taskbar .__entry__::part(pre-icon) {
     text-shadow: 0 1px 1.5px var(--window-icon-monogram-shadow, #000000C0);
 }
 
-/* THE LABEL BY TAG, because `Button` holds an UNCLASSED `UIText` and `font-size` does not effectively
- * inherit — `ua/core.css` opens with `* { font-size: 10 }`, which is a candidate at STYLESHEET origin on
- * the label itself, and inheritance only applies where there is no candidate at any origin. A rule on
- * the entry would compute on the entry and leave the text at 10.
- *
- * `taskbar .__entry__ text` is specificity 12 against the universal rule's 0, and `text` is what
- * `ElementRegistry` registers `UIText` under. It also matches the tile's monogram, which is why that
- * one carries its own size at higher specificity above. */
-taskbar .__entry__ text {
-    /* One step above the 10px everything else runs at, and no more: at 12 the taskbar read LOUDER than
-     * the window titles it refers to, which puts the hierarchy exactly backwards. */
-    font-size: 11px;
+/* ICONS ONLY, as Windows 11's bar: the label is kept as the entry's text, which names it and gives the tile its
+ * letter, and is not drawn. A pin with no window names itself in a tooltip; a running window, in its preview. */
+taskbar .__entry__::part(label) {
+    display: none;
 }
 
 /* ── Attention, badge, progress ─────────────────────────────────────────────────────────────────

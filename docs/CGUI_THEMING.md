@@ -729,6 +729,8 @@ editor scheme's.
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--taskbar-bg` | `var(--surface-overlay)` | base.css |
 | `--taskbar-border` | `var(--border-base)` | base.css |
+| `--taskbar-edge-end` | `#FFFFFF0A` | crystal-dark.css |
+| `--taskbar-edge-mid` | `#FFFFFF73` | crystal-dark.css |
 | `--taskbar-entry-active-bg` | `#FFFFFF33` | crystal-dark.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-active-hover-bg` | `#FFFFFF4D` | crystal-dark.css |

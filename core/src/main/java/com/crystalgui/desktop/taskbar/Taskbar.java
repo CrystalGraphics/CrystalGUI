@@ -23,6 +23,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
@@ -149,6 +150,9 @@ public class Taskbar extends UIElement {
 
     /** On the entries row while an entry is dragged along it: the sheet lets the dragged entry paint past the row. */
     public static final String REORDERING_CLASS = "__reordering__";
+
+    /** How long the pointer rests on a pin before its name shows: Windows' one second. */
+    private static final float TOOLTIP_DELAY_SECONDS = 1f;
 
     /** Slot → its entry: a window, or a {@link PinKey} for a pin with no window. Insertion-ordered. */
     private final Map<Object, Entry> entryOf = new LinkedHashMap<>();
@@ -397,6 +401,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, ATTENTION_CLASS, frame.isDemandingAttention());
                 applyBadge(entry, frame.badge());
                 applyProgress(entry, frame.progress());
+                entry.tooltip.setText("");
             } else if (entry.pin != null) {
                 entry.setText(entry.pin.displayName());
                 setClass(entry, ICONIC_CLASS, false);
@@ -407,6 +412,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, ATTENTION_CLASS, false);
                 applyBadge(entry, null);
                 applyProgress(entry, -1f);
+                entry.tooltip.setText(entry.pin.displayName());
             }
         }
     }
@@ -548,6 +554,9 @@ public class Taskbar extends UIElement {
      */
     private void wire(Desktop desktop, Entry entry) {
         entry.addClass(ENTRY_CLASS);
+        // ITS NAME AFTER A SECOND'S REST, Windows' tooltip on an icon-only bar. Text only while the entry is a
+        // pin: a running window's preview names it half a second in, and an empty tooltip never shows.
+        entry.tooltip = Tooltip.attach(entry, "").setDelay(TOOLTIP_DELAY_SECONDS);
         // CENTRED OVER THE ENTRY, not at the pointer: attach anchors at the press, which for a strip
         // along the bottom of the screen puts a menu at the very edge, left-aligned from wherever the press
         // landed. Windows' jump list is centred over its button, as the hover previews are.
@@ -735,6 +744,8 @@ public class Taskbar extends UIElement {
         /** The application this launches while it stands for a pin with no window; null otherwise. */
         @Nullable
         private ApplicationKind pin;
+        /** Its name on hover, set once it is wired. */
+        private Tooltip tooltip;
 
         Entry(@Nullable WindowFrame frame, @Nullable ApplicationKind pin) {
             // BUTTON'S OWN NAME, which is the one case where inheriting a supertype's tag is right: without

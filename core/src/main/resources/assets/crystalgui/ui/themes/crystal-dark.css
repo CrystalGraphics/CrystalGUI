@@ -115,6 +115,9 @@ theme {
 
     /* The top edge: black at 25%, a shade of the glass rather than an opaque seam. White blended into a bright sky above it. */
     --taskbar-border: #00000040;
+    /* The bar's top edge: white at 4% at the ends to 45% in the middle, Windows 11's lit rim. */
+    --taskbar-edge-end: #FFFFFF0A;
+    --taskbar-edge-mid: #FFFFFF73;
     /* The keyboard ring on the bar's entries and start button: white, as Windows 11 draws it on its dark bar. */
     --taskbar-focus-ring: #FFFFFF;
     /* THE TASKBAR'S ACRYLIC TINT: Mica's dark base, #202020, at the floating panels' 7%; the rule's
