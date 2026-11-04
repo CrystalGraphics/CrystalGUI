@@ -154,7 +154,7 @@ public class SourceRootsTest {
     /**
      * <b>The harness fixture's own paths, pinned.</b>
      *
-     * <p>These are the exact files {@code HarnessWorkspace} seeds for the cross-file demonstration, and
+     * <p>These are the exact files the harness's {@code HarnessServer} seeds for the cross-file demonstration, and
      * the names asserted here are the ones their {@code package} declarations state. If the layout and
      * this derivation ever disagree, the fixture stops resolving and reads as the FEATURE being broken
      * rather than the fixture being misplaced — which is the worst way for a demonstration to fail.</p>

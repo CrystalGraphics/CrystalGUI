@@ -1,20 +1,15 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgraphics.harness.SceneRegistry;
-import com.crystalgui.style.StyleGroup;
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.input.FocusPolicy;
 import dev.vfyjxf.taffy.style.AlignContent;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.FlexWrap;
-import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
 
 /**
@@ -25,19 +20,12 @@ import com.crystalgraphics.harness.config.HarnessContext;
  * cross-fades ({@code CgUiCrossFade}, via {@code TextureProperty}'s interpolator) between
  * color/texture/9-slice drawable pairs, triggered by hovering the {@code .fade-*} swatches.
  *
- * <p>Built on the real {@link UIDocument}/input plumbing, so
+ * <p>Built on the real {@code UIDocument}/input plumbing, so
  * {@code :hover}/{@code :active} are driven by genuine mouse input in the harness window — move
  * the cursor over a button, click and hold it, tab between them (focus policy is default CLICK).</p>
  *
- * <p>Register in {@link SceneRegistry}
- * under scene id {@code "cgui-styling"}.</p>
  */
-public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInput.Keyboard, CgSystemInput.Mouse {
-
-    /** Logical-to-surface scale, as the harness\'s other new-engine scenes use. */
-    private static final float SCALE = 2f;
-
-    private UIDocument document;
+public class CgUiStylingScene extends UiDocumentScene {
 
     private final CgUiSprite panelSprite = new CgUiSprite()
             .setTexture("crystalgui:textures/gui/gdp_styles.png")
@@ -187,30 +175,16 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
             """;
 
-    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
-    private DocumentDriver.Painter<Void> painter;
 
     @Override
-    public void init(HarnessContext ctx) {
-        UIElement root = createStylingDemo();
-        document = new UIDocument();
-        driver = DocumentDriver.attach(document);
-        painter = DocumentDriver.whole(document);
-        driver.run(() -> {
-            this.document.boxes().setUiScale(SCALE);
-            UIElement sceneRoot = root;
-            // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-            // root and took the window's size; here the DOCUMENT is the root and this is an
-            // ordinary child, which sizes to its content -- so without this the scene lays out
-            // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-            StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                    l -> l.widthPercent(100f).heightPercent(100f));
-            this.document.append(sceneRoot);
-            this.document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
-        });
+    protected void style(StyleEngine styles) {
+        styles.addStylesheet(StyleSheet.parse(STYLE_SHEET));
+    }
+
+    @Override
+    protected UIElement build(HarnessContext ctx) {
+        return createStylingDemo();
     }
 
     private UIElement createStylingDemo() {
@@ -318,52 +292,4 @@ public class CgUiStylingScene implements InteractiveSceneLifecycle, CgSystemInpu
         return root;
     }
 
-    @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        int w = ctx.getScreenWidth();
-        int h = ctx.getScreenHeight();
-        driver.frame(frame.getDeltaTime(), w, h, painter);
-    }
-
-    @Override
-    public void dispose() {
-        driver.close();
-        document = null;
-    }
-
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
-    }
-
-    @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
-        final var styleEngine = document.styles();
-        if (!styleEngine.getSheets().isEmpty())
-            styleEngine.removeStylesheet(styleEngine.getSheets().getFirst());
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.offerMouse(event, () -> handleMouse(event));
-    }
-
-    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
-    }
 }

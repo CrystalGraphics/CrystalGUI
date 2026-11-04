@@ -1,13 +1,10 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
-import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.widget.composite.SearchField;
@@ -33,9 +30,7 @@ import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
-import com.crystalgui.harness.HarnessThemes;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
@@ -75,18 +70,7 @@ import java.util.Set;
  * from that project arranges. Run from here instead and the scene says so outright rather than drawing
  * a lookalike, because a screenshot of a stand-in is evidence about the stand-in.</p>
  */
-public class RpgConsoleScene implements InteractiveSceneLifecycle,
-        CgSystemInput.Keyboard, CgSystemInput.Mouse {
-
-    /**
-     * What RPG-Core's own host answers, so the fixture measures what the game measures.
-     *
-     * <p>{@code HostServices.DEFAULT_UI_SCALE}. Given to the BOX TREE rather than to the paint pose:
-     * the root transform is the one definition of what {@code uiScale} means, so layout, painting and
-     * hit-testing all compose through it and agree. Scale the pose instead and the picture is right
-     * while every click lands at half the distance.</p>
-     */
-    private static final float SCALE = 2f;
+public class RpgConsoleScene extends UiDocumentScene {
 
     // THE SHELL OWNS THE TAB LIST. These are the two this fixture has a page for, spelled as
     // MenuTab's own constant names because that is what arrives through onSelect.
@@ -120,59 +104,46 @@ public class RpgConsoleScene implements InteractiveSceneLifecycle,
             {"Speed", "100"}, {"Combat Speed", "100"},
     };
 
-    private UIDocument document;
     private RpgShell shell;
     private ProgressBar walking;
     private float elapsed;
 
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
-    private DocumentDriver.Painter<Void> painter;
+    /** RPG-Core's theme, its override rules with its tokens. */
+    @Override
+    protected String theme() {
+        return "rpgcore:console";
+    }
 
     @Override
-    public void init(HarnessContext ctx) {
-        document = new UIDocument();
-        driver = DocumentDriver.attach(document);
-        painter = DocumentDriver.whole(document);
-        driver.run(() -> {
+    protected UIElement build(HarnessContext ctx) {
+        shell = RpgShell.load();
+        if (shell == null) {
+            return new UIText("RPG-Core is not on the classpath. Run ./gradlew runHarness "
+                    + "from RPG-Core-NeoForge, which puts its classes there and this scene builds "
+                    + "the mod's own MenuShell.");
+        }
+        // Whatever the mod puts here in game is the player's name. The fixture needs SOMETHING, or the
+        // ribbon reads as a bar with one word in it and the separator never gets looked at.
+        shell.setSubject("Dev");
+        return shell.element();
+    }
 
-            // THE WHOLE STACK, and not `addStylesheet(StyleSheet.DEFAULT)` by hand. A theme's TOKENS reach
-            // the screen through variable substitution and would work either way; its override RULES live
-            // in a sheet UiThemeManager owns, which only installInto adds. Adding DEFAULT by hand gives a
-            // three-quarters-themed scene that reports nothing about the missing quarter.
-            HarnessThemes.install(document.styles(), "rpgcore:console");
+    @Override
+    protected void attached(UIElement backdrop) {
+        if (shell == null) return;
+        // menu.css is NOT added here: MenuShell scopes it to itself when it joins a document, which is
+        // exactly what the mod does in game. Adding it again would append a second copy at the highest
+        // priority -- correct-looking, and the first rule anyone edited afterwards would appear to
+        // have no effect.
+        document().styles().addStylesheet(StyleSheet.parse(SCENE_CSS), backdrop);
 
-            document.boxes().setUiScale(SCALE);
-
-            shell = RpgShell.load();
-            if (shell == null) {
-                document.append(new UIText("RPG-Core is not on the classpath. Run ./gradlew runHarness "
-                        + "from RPG-Core-NeoForge, which puts its classes there and this scene builds "
-                        + "the mod's own MenuShell."));
-                return;
-            }
-
-            // Whatever the mod puts here in game is the player's name. The fixture needs SOMETHING, or the
-            // ribbon reads as a bar with one word in it and the separator never gets looked at.
-            shell.setSubject("Dev");
-
-            UIElement backdrop = shell.element();
-            document.append(backdrop);
-
-            // menu.css is NOT added here: MenuShell scopes it to itself when it joins a document, which is
-            // exactly what the mod does in game. Adding it again would append a second copy at the highest
-            // priority -- correct-looking, and the first rule anyone edited afterwards would appear to
-            // have no effect.
-            document.styles().addStylesheet(StyleSheet.parse(SCENE_CSS), backdrop);
-
-            // Straight to the page being styled: -Dcrystalgui.rpg.tab=options. runHarness forwards every
-            // -Dcrystalgui.*, so this needs no Gradle plumbing.
-            String start = System.getProperty("crystalgui.rpg.tab", STATUS).toUpperCase(Locale.ROOT);
-            shell.select(start);
-            show(start);
-            // LAST, so the two calls above do not build the first page twice.
-            shell.onSelect(this::show);
-        });
+        // Straight to the page being styled: -Dcrystalgui.rpg.tab=options. runHarness forwards every
+        // -Dcrystalgui.*, so this needs no Gradle plumbing.
+        String start = System.getProperty("crystalgui.rpg.tab", STATUS).toUpperCase(Locale.ROOT);
+        shell.select(start);
+        show(start);
+        // LAST, so the two calls above do not build the first page twice.
+        shell.onSelect(this::show);
     }
 
     /**
@@ -541,61 +512,19 @@ public class RpgConsoleScene implements InteractiveSceneLifecycle,
     // ── Frame ───────────────────────────────────────────────────────────────────────────────────
 
     @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        int w = ctx.getScreenWidth();
-        int h = ctx.getScreenHeight();
-        float delta = frame.getDeltaTime();
-
+    protected void tick(HarnessContext ctx, FrameInfo frame) {
         // A walking bar, so one glance says the accent reaches a fill that is written every frame --
         // a frozen bar and a correct one look identical at rest. Null on every page but the gallery.
-        elapsed += delta;
+        elapsed += frame.getDeltaTime();
         float fraction = (elapsed % 4f) / 4f;
-        driver.post(() -> {
+        driver().post(() -> {
             if (walking != null && walking.document() != null) walking.setFraction(fraction);
         });
-        driver.frame(delta, w, h, painter);
-
-        if (driver.presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
     @Override
-    public void dispose() {
-        driver.close();
-        document = null;
-        shell = null;
-        walking = null;
+    protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
+        if (driver().presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
-    }
-
-    @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.offerMouse(event, () -> handleMouse(event));
-    }
-
-    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
-    }
 }

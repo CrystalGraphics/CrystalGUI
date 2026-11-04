@@ -1,16 +1,11 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
-import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import dev.vfyjxf.taffy.style.FlexDirection;
-import dev.vfyjxf.taffy.style.FlexWrap;
-import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.style.StyleEngine;
 
 /**
  * Nothing but 9-slice sprites, as many as asked for — the instrument for measuring what a sprite
@@ -36,9 +31,7 @@ import com.crystalgraphics.harness.config.HarnessContext;
  * the one-quad {@code WITH_9SLICE_FILL} path; leave it off to measure the ordinary nine-quad path.
  * The two together are the A and the B.</p>
  */
-public class CgUiSpriteStressScene implements InteractiveSceneLifecycle {
-
-    private static final float SCALE = 2f;
+public class CgUiSpriteStressScene extends UiDocumentScene {
 
     /** How many sprite-backed buttons to draw. 500 is enough to dominate a frame; 2000 still runs. */
     private static final int COUNT = Integer.getInteger("crystalgui.spritestress.count", 500);
@@ -54,20 +47,23 @@ public class CgUiSpriteStressScene implements InteractiveSceneLifecycle {
      */
     private static final int CELL = Integer.getInteger("crystalgui.spritestress.cell", 34);
 
-    private UIDocument document;
-
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
-    private DocumentDriver.Painter<Void> painter;
+    @Override
+    protected void style(StyleEngine styles) {
+        styles.addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
+        // The window is sized so every cell RASTERISES at the default count and size: laid out past the
+        // viewport a cell still costs its submission and produces no fragments, which measures half the
+        // question and reads as a clean win for whichever path submits less.
+        styles.addStylesheet(StyleSheet.parse(
+                ".grid { flex-direction: row; flex-wrap: wrap; }"
+                        + ".cell { width: " + CELL + "px; height: " + (CELL * 2 / 3) + "px; margin: 1px;"
+                        + "        background: asset(\"crystalgui:ore\", \"button\"); }"
+                        + ".spun { transform: rotate(7deg); }"));
+    }
 
     @Override
-    public void init(HarnessContext ctx) {
+    protected UIElement build(HarnessContext ctx) {
         UIElement root = new UIElement();
-        StyleGroup.defaultPipeline(root.getStyle().getLayoutGroup(), l -> l
-                .widthPercent(100f).heightPercent(100f)
-                .flexDirection(FlexDirection.ROW)
-                .flexWrap(FlexWrap.WRAP));
-
+        root.addClass("grid");
         // PLAIN ELEMENTS, NOT BUTTONS, and that is the whole point of the instrument: a Button also
         // draws a label, text owns a different material, and the switch per widget buries the very
         // difference being measured. An element whose background IS the sprite draws the sprite and
@@ -79,51 +75,6 @@ public class CgUiSpriteStressScene implements InteractiveSceneLifecycle {
             if (ROTATE) cell.addClass("spun");
             root.append(cell);
         }
-
-        document = new UIDocument();
-
-        driver = DocumentDriver.attach(document);
-        painter = DocumentDriver.whole(document);
-
-        driver.run(() -> {
-            this.document.boxes().setUiScale(SCALE);
-            this.document.append(root);
-            this.document.styles().addStylesheet(StyleSheet.DEFAULT);
-            this.document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:ore"));
-            // The window is sized so every cell RASTERISES at the default count and size: laid out past the
-            // viewport a cell still costs its submission and produces no fragments, which measures half the
-            // question and reads as a clean win for whichever path submits less.
-            this.document.styles().addStylesheet(StyleSheet.parse(
-                    ".cell { width: " + CELL + "px; height: " + (CELL * 2 / 3) + "px; margin: 1px;"
-                            + "        background: asset(\"crystalgui:ore\", \"button\"); }"
-                            + ".spun { transform: rotate(7deg); }"));
-
-        });
-    }
-
-    @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        driver.frame(frame.getDeltaTime(), ctx.getScreenWidth(), ctx.getScreenHeight(), painter);
-    }
-
-    @Override
-    public void dispose() {
-        driver.close();
-        document = null;
-    }
-
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
+        return root;
     }
 }

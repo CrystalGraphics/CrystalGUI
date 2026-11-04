@@ -1,10 +1,11 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.render.UiFrame;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.trace.CgChannels;
 import com.crystalgraphics.harness.trace.TraceReport;
-import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
@@ -16,7 +17,6 @@ import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.FlexWrap;
 import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
 
 import java.io.File;
@@ -62,10 +62,7 @@ import java.util.logging.Logger;
  * of elements and specific visual cases (fallback fonts, wrapping, binding). Folding a stress panel
  * into it would make both jobs worse.
  */
-public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemInput.Keyboard, CgSystemInput.Mouse {
-
-    /** Logical-to-surface scale, as the harness's other new-engine scenes use. */
-    private static final float SCALE = 2f;
+public class CgUiTextStressScene extends UiDocumentScene {
 
     private static final Logger LOGGER = Logger.getLogger(CgUiTextStressScene.class.getName());
 
@@ -129,7 +126,6 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
     };
 
     private HarnessContext ctx;
-    private UIDocument document;
     private final List<UIText> labels = new ArrayList<>(LABEL_COUNT);
 
     private Mode mode = Mode.STATIC;
@@ -140,32 +136,58 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
     private final List<String> trees = new ArrayList<>();
     private final List<String> csvRows = new ArrayList<>();
     private boolean warmupCleared = false;
-    private boolean running = true;
 
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
+    /** Inline: it measures the document's own frame, which asynchronously is not the frame it times. */
+    @Override
+    protected DocumentDriver.Mode mode() {
+        return DocumentDriver.Mode.INLINE;
+    }
 
     @Override
-    public void init(HarnessContext ctx) {
+    protected void style(StyleEngine styles) {
+        styles.addStylesheet(StyleSheet.parse(STYLE_SHEET));
+    }
+
+    @Override
+    protected UIElement build(HarnessContext ctx) {
         this.ctx = ctx;
         CgTrace.enable("crystalgraphics");
-        document = new UIDocument();
-        // INLINE: it measures the document's own frame, which asynchronously is not the frame it times.
-        driver = DocumentDriver.attach(document, DocumentDriver.Mode.INLINE, "CgUiTextStressScene");
-        driver.run(() -> {
-            this.document.boxes().setUiScale(SCALE);
-            UIElement sceneRoot = buildStressPanel();
-            // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-            // root and took the window's size; here the DOCUMENT is the root and this is an
-            // ordinary child, which sizes to its content -- so without this the scene lays out
-            // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-            StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                    l -> l.widthPercent(100f).heightPercent(100f));
-            this.document.append(sceneRoot);
-            document.styles().addStylesheet(StyleSheet.DEFAULT);
-            document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
-            csvRows.add(String.join(",", CSV_HEADER));
-        });
+        csvRows.add(String.join(",", CSV_HEADER));
+        return buildStressPanel();
+    }
+
+    /** Painted or layout only, the document's frame inside one zone, and the mode's line over it either way. */
+    @Override
+    protected DocumentDriver.Painter<Void> painter() {
+        return new DocumentDriver.Painter<>() {
+            @Override
+            public void paint(float deltaSeconds, int width, int height) {
+                UIDocument document = document();
+                CgUiPaintContext context = document.paintContext();
+                try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "document.paintFrame")) {
+                    float scale = document.boxes().uiScale();
+                    if (DRAW_LABELS) {
+                        document.frame(deltaSeconds, width / scale, height / scale);
+                        context.beginFrame(width, height);
+                        document.paint(context);
+                    } else {
+                        document.update(width / scale, height / scale);
+                        context.beginFrame(width, height);
+                    }
+                }
+                context.text().draw().at(0, 0)
+                        .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
+                                + String.format(Locale.ROOT, "  [%.1f/%.1fs]", elapsed, TOTAL_SECONDS))
+                        .font(context.getFont().atSize(14)).submit();
+                context.endFrame();
+            }
+
+            /** Never asked: the scene runs inline. */
+            @Override
+            public UiFrame record(float deltaSeconds, int width, int height) {
+                return null;
+            }
+        };
     }
 
     private UIElement buildStressPanel() {
@@ -220,12 +242,12 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
         return s.substring(0, Math.min(len, s.length()));
     }
 
+    private double elapsed;
+
     @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        double now = frame.getElapsedTime();
-        if (modeStartedAt < 0) modeStartedAt = now;
-
-
+    protected void tick(HarnessContext ctx, FrameInfo frame) {
+        elapsed = frame.getElapsedTime();
+        if (modeStartedAt < 0) modeStartedAt = elapsed;
         long f = frame.getFrameNumber();
         try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "uiText.setText")) {
             for (int i = 0; i < labels.size(); i++) {
@@ -236,23 +258,11 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
                 }
             }
         }
+    }
 
-        try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "document.paintFrame")) {
-            if (DRAW_LABELS) {
-                document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
-
-                // AND THE PAINT. `paintFrame()` did both; `frame()` only advances, so a scene that
-                // lost this half advanced perfectly and drew nothing.
-                CgUiPaintContext paintContext = document.paintContext();
-                paintContext.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
-                document.paint(paintContext);
-                paintContext.endFrame();
-            } else {
-                document.update(ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
-            }
-        }
-
-        double inMode = now - modeStartedAt;
+    @Override
+    protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
+        double inMode = elapsed - modeStartedAt;
         boolean measured = inMode >= WARMUP_SECONDS;
 
         // Snapshot then reset every frame, so every CSV row and every printed tree is ONE frame's
@@ -263,16 +273,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
         recordRow(frame, measured, report);
         if (measured) samples.add(frame.getDeltaTime() * 1000.0);
 
-        boolean lastFrameOfMode = inMode >= MODE_SECONDS;
-        if (lastFrameOfMode) advanceMode(report);
-
-        var context = document.paintContext();
-        context.text().draw().at(0, 0)
-                .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
-                        + String.format(Locale.ROOT, "  [%.1f/%.1fs]", now, TOTAL_SECONDS))
-                .font(context.getFont().atSize(14)).submit();
-        // Between frames this draws at once, on top; left queued it would flush inside the next frame's recording.
-        context.flush();
+        if (inMode >= MODE_SECONDS) advanceMode(report);
     }
 
     private void advanceMode(TraceReport report) {
@@ -285,7 +286,7 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
         int next = mode.ordinal() + 1;
         if (next >= all.length) {
             dump();
-            running = false;
+            finish();
             return;
         }
         mode = all[next];
@@ -392,19 +393,8 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
     }
 
     @Override
-    public void dispose() {
-        document = null;
+    protected void disposed() {
         labels.clear();
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
     }
 
     @Override
@@ -412,21 +402,4 @@ public class CgUiTextStressScene implements InteractiveSceneLifecycle, CgSystemI
         return true;
     }
 
-    @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.offerMouse(event, () -> handleMouse(event));
-    }
-
-    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
-    }
 }

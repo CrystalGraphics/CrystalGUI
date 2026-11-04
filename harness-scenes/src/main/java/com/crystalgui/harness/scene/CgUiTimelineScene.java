@@ -1,12 +1,12 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.display.CounterTrack;
@@ -15,7 +15,6 @@ import com.crystalgui.widget.display.SpanTrack;
 import com.crystalgui.widget.display.TimelineAxis;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
 
 import java.util.ArrayList;
@@ -40,9 +39,7 @@ import java.util.Random;
  *   <li><b>R</b> resets the zoom, <b>G</b> regenerates with a new seed.</li>
  * </ul>
  */
-public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInput.Keyboard, CgSystemInput.Mouse {
-
-    private static final float SCALE = 2f;
+public class CgUiTimelineScene extends UiDocumentScene {
 
     /** Larger than any real frame records, which is the whole point of a gate. */
     private static final int SPANS = 10_000;
@@ -57,7 +54,6 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
             "animation:tick", "settle", "svg:raster", "gpu:flush", "buffer:map",
     };
 
-    private UIDocument document;
     private TimelineAxis axis;
     private SpanTrack spans;
     private FrameStripTrack strip;
@@ -74,26 +70,22 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
     private long seed = 20260921L;
 
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
+    /** Inline: its gate is this scene's own frame time, which asynchronously is not the frame it times. */
+    @Override
+    protected DocumentDriver.Mode mode() {
+        return DocumentDriver.Mode.INLINE;
+    }
 
     @Override
-    public void init(HarnessContext ctx) {
-        document = new UIDocument();
-        // INLINE: its gate is this scene's own frame time, which asynchronously is not the frame it times.
-        driver = DocumentDriver.attach(document, DocumentDriver.Mode.INLINE, "CgUiTimelineScene");
-        driver.run(() -> {
-            document.boxes().setUiScale(SCALE);
+    protected void style(StyleEngine styles) {
+        styles.addStylesheet(StyleSheet.parse(STYLES));
+    }
 
-            UIElement root = build();
-            StyleGroup.defaultPipeline(root.getStyle().getLayoutGroup(),
-                    l -> l.widthPercent(100f).heightPercent(100f));
-            document.append(root);
-            document.styles().addStylesheet(StyleSheet.DEFAULT);
-            document.styles().addStylesheet(StyleSheet.parse(STYLES));
-
-            generate();
-        });
+    @Override
+    protected UIElement build(HarnessContext ctx) {
+        UIElement root = buildTree();
+        generate();
+        return root;
     }
 
     private static final String STYLES = """
@@ -104,7 +96,7 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
             countertrack { color: #5AA9E6ff; border-color: #9AA4B2ff; font-size: 9; width: 100%; }
             """;
 
-    private UIElement build() {
+    private UIElement buildTree() {
         UIElement root = new UIElement()
                 .layout(l -> l.flexDirection(FlexDirection.COLUMN).gapAll(8))
                 .setFocusPolicy(FocusPolicy.NONE);
@@ -213,24 +205,22 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
 
     // ── Frame ───────────────────────────────────────────────────────────────────────────────
 
+    private long began;
+
     @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        long began = System.nanoTime();
+    protected void tick(HarnessContext ctx, FrameInfo frame) {
+        began = System.nanoTime();
+    }
 
-        document.frame(frame.getDeltaTime(), ctx.getScreenWidth() / SCALE, ctx.getScreenHeight() / SCALE);
+    @Override
+    protected void paintOver(CgUiPaintContext paint) {
+        paint.text().draw().at(0, 0).text(status).font(paint.getFont().atSize(13)).submit();
+        paint.text().draw().at(0, 16).text(selection).font(paint.getFont().atSize(13)).submit();
+    }
 
-        CgUiPaintContext paint = document.paintContext();
-        paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
-        document.paint(paint);
-        paint.endFrame();
-
+    @Override
+    protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
         record((System.nanoTime() - began) / 1_000_000d);
-
-        paint.text().draw().at(0, 0).text(status)
-                .font(paint.getFont().atSize(13)).submit();
-        paint.text().draw().at(0, 16).text(selection)
-                .font(paint.getFont().atSize(13)).submit();
-
         if (frame.getFrameNumber() == 8) ctx.getArtifactService().requestCapture("startup");
     }
 
@@ -248,11 +238,7 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
     }
 
     @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
+    protected boolean key(CgSystemInput.Keyboard.Event event) {
         if (event.pressed()) {
             switch (event.key()) {
                 case CgKeyCodes.KEY_LEFT -> {
@@ -276,35 +262,7 @@ public class CgUiTimelineScene implements InteractiveSceneLifecycle, CgSystemInp
                 }
             }
         }
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.offerMouse(event, () -> handleMouse(event));
-    }
-
-    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
-    }
-
-    @Override
-    public void dispose() {
-        document = null;
-    }
-
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
         return false;
     }
 
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
-    }
 }

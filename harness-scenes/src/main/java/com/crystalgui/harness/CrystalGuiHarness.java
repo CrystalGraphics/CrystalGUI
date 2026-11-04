@@ -116,12 +116,11 @@ public final class CrystalGuiHarness implements HarnessExtension {
 
         reg.register(
             SceneDescriptor.builder("cgui-desktop")
-                .description("M6 NEW ENGINE: CrystalOS -- stacking windows, drag, resize, cascade, the taskbar, per-window modality, maximise, and CrystalEditor running as a window. The counterpart to cgui-new-gallery: that one answers whether a ported WIDGET draws, this one whether a ported WINDOW behaves")
+                .description("CrystalOS on the harness's desktop over an empty world: stacking windows, drag, resize, cascade, the taskbar, per-window modality, maximise, CrystalEditor as a window; Escape is game mode")
                 .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
                 .category(SceneDescriptor.Category.SCENE)
                 .needsFbo(false)
-                .needsDepthBuffer(false)
-                .clearColor(0.06f, 0.06f, 0.08f, 1.0f)
+                .needsDepthBuffer(true)
                 .build(),
             () -> new CgUiDesktopScene()
         );

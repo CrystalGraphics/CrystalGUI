@@ -71,7 +71,10 @@ subprojects {
 // Every project: whatever takes the harness on its classpath resolves that name too.
 if (findProject(":gl-debug-harness") != null) allprojects {
     configurations.configureEach {
-        resolutionStrategy.dependencySubstitution { substitute(module("com.crystalgui:core")).using(project(":core")) }
+        resolutionStrategy.dependencySubstitution {
+            substitute(module("com.crystalgui:core")).using(project(":core"))
+            substitute(module("com.crystalgui:language")).using(project(":language"))
+        }
     }
 }
 

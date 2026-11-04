@@ -1,21 +1,19 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgraphics.harness.SceneRegistry;
+import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgui.style.StyleGroup;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
+import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import dev.vfyjxf.taffy.style.FlexWrap;
-import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
+import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.style.StyleEngine;
 
 /**
  * Interactive harness scene exercising {@code UIText} — CrystalGUI's first concrete widget —
@@ -43,15 +41,10 @@ import com.crystalgraphics.harness.config.HarnessContext;
  * here; this scene verifies the integration is functionally correct and visually stable across
  * repeated frames instead.</p>
  *
- * <p>Register in {@link SceneRegistry} under scene id
- * {@code "cgui-text"}.</p>
+ * <p>Ctrl+= and Ctrl+- change the scale, which the top-left corner shows.</p>
  */
-public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.Keyboard, CgSystemInput.Mouse {
+public class CgUiTextScene extends UiDocumentScene {
 
-    /** Logical-to-surface scale, as the harness\'s other new-engine scenes use. */
-    private static final float SCALE = 2f;
-
-    private UIDocument document;
     private final Property<String> liveText = new Property<>("Short.");
     private int liveIndex = 0;
 
@@ -84,29 +77,27 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
             }
             """;
 
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
-    private DocumentDriver.Painter<Void> painter;
+    @Override
+    protected void style(StyleEngine styles) {
+        styles.addStylesheet(StyleSheet.parse(STYLE_SHEET));
+    }
 
     @Override
-    public void init(HarnessContext ctx) {
-        UIElement root = createTextDemo();
-        document = new UIDocument();
-        driver = DocumentDriver.attach(document);
-        painter = DocumentDriver.whole(document, null, context -> context.text().draw().at(0, 0)
-                .text(document.boxes().uiScale() + "x").font(context.getFont().atSize(32)).submit());
-        driver.run(() -> {
-            this.document.boxes().setUiScale(SCALE);
-            UIElement sceneRoot = root;
-            // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-            // root and took the window's size; here the DOCUMENT is the root and this is an
-            // ordinary child, which sizes to its content -- so without this the scene lays out
-            // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-            StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                    l -> l.widthPercent(100f).heightPercent(100f));
-            this.document.append(sceneRoot);
-            this.document.styles().addStylesheet(StyleSheet.parse(STYLE_SHEET));
-        });
+    protected UIElement build(HarnessContext ctx) {
+        return createTextDemo();
+    }
+
+    @Override
+    protected void paintOver(CgUiPaintContext paint) {
+        paint.text().draw().at(0, 0).text(document().boxes().uiScale() + "x").font(paint.getFont().atSize(32)).submit();
+    }
+
+    @Override
+    protected boolean key(CgSystemInput.Keyboard.Event event) {
+        if (!event.pressed() || event.repeat() || event.key() != CgKeyCodes.KEY_SPACE) return false;
+        liveIndex = (liveIndex + 1) % LIVE_STRINGS.length;
+        liveText.set(LIVE_STRINGS[liveIndex]);
+        return true;
     }
 
     private UIElement createTextDemo() {
@@ -115,9 +106,8 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
                         .paddingAll(16)
                         .flexDirection(FlexDirection.ROW)
                         .gapAll(16)
-                        .alignItems(dev.vfyjxf.taffy.style.AlignItems.FLEX_START)
+                        .alignItems(AlignItems.FLEX_START)
                         .flexWrap(FlexWrap.WRAP)
-    //                        .width(500)
                 ).setFocusPolicy(FocusPolicy.NONE);
 
         // Case 1: plain single-line, auto-sized.
@@ -161,65 +151,5 @@ public class CgUiTextScene implements InteractiveSceneLifecycle, CgSystemInput.K
         root.append(rawText);
 
         return root;
-    }
-
-    @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        int w = ctx.getScreenWidth();
-        int h = ctx.getScreenHeight();
-        driver.frame(frame.getDeltaTime(), w, h, painter);
-    }
-
-    @Override
-    public void dispose() {
-        driver.close();
-        document = null;
-    }
-
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
-    }
-
-    @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
-        if (event.pressed() && !event.repeat()) {
-            switch(event.key()) {
-                case CgKeyCodes.KEY_SPACE:
-                    liveIndex = (liveIndex + 1) % LIVE_STRINGS.length;
-                    liveText.set(LIVE_STRINGS[liveIndex]);
-                    return true;
-                case CgKeyCodes.KEY_UP:
-                    document.boxes().setUiScale(Math.min(4, document.boxes().uiScale() + 0.5f));
-                    return true;
-                case CgKeyCodes.KEY_DOWN:
-                    document.boxes().setUiScale(Math.max(0.5f, document.boxes().uiScale() - 0.5f));
-                    return true;
-            }
-        }
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.offerMouse(event, () -> handleMouse(event));
-    }
-
-    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
     }
 }

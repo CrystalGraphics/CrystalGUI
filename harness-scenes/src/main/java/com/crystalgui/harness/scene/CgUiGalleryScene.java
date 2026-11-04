@@ -1,14 +1,12 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.api.text.CgTextStroke;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
-import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
@@ -105,12 +103,8 @@ import java.util.function.BiConsumer;
  * constructed during {@code init}. That is fine at this size; a page heavy enough to matter should
  * populate itself from an {@code onTabSelected} listener instead.</p>
  */
-public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInput.Keyboard, CgSystemInput.Mouse {
+public class CgUiGalleryScene extends UiDocumentScene {
 
-    /** Logical-to-surface scale, as the harness\'s other new-engine scenes use. */
-    private static final float SCALE = 2f;
-
-    private UIDocument document;
     private TabView pages;
     private Button themeToggle;
 
@@ -125,55 +119,28 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
     private final Property<String> boundText = new Property<>("bound");
 
     @Override
-    public void init(HarnessContext ctx) {
-        // Held keys matter on the Slider, TextField and Scroller pages.
-
-        this.oreSheet = StyleSheetRegistry.of("crystalgui:ore");
-        this.sceneSheet = StyleSheetRegistry.of("harness:gallery");
-
-        this.document = new UIDocument();
-        this.driver = DocumentDriver.attach(document);
-        this.painter = DocumentDriver.whole(document, null, this::paintHeader);
-        driver.run(this::build);
-    }
-
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. Everything that touches the tree goes through it. */
-    private DocumentDriver<Void> driver;
-    private DocumentDriver.Painter<Void> painter;
-
-    private void build() {
-        this.document.boxes().setUiScale(SCALE);
-        UIElement sceneRoot = createDemo();
-        // THE ROOT FILLS THE DOCUMENT. On the old engine the scene's root WAS the window's
-        // root and took the window's size; here the DOCUMENT is the root and this is an
-        // ordinary child, which sizes to its content -- so without this the scene lays out
-        // at nothing and draws nothing. DEFAULT origin, so a scene sheet still wins.
-        StyleGroup.defaultPipeline(sceneRoot.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).heightPercent(100f));
-        this.document.append(sceneRoot);
-        var engine = document.styles();
-        engine.addStylesheet(StyleSheet.DEFAULT);   // USER_AGENT origin — stays through every toggle
-        // NO COMMAND INSTALLS HERE ANY MORE, deliberately.
-        //
-        // This scene used to install UndoCommands and GraphCommands on the root, and that was the ONLY
-        // place either happened -- so every other host got a graph that took focus, drew a selection and
-        // answered no key at all. A widget's own keys belong to the widget: TextEditor installs
-        // EditorCommands, GraphView installs GraphCommands plus the edit.undo/edit.redo chords, each
-        // bound on itself so the bare letters cannot fire while typing somewhere else in the window.
-        //
-        // An APPLICATION's commands are still the application's -- see WorkbenchApplication, which
-        // registers the dock, palette and file commands it decides to offer.
+    protected void style(StyleEngine engine) {
+        oreSheet = StyleSheetRegistry.of("crystalgui:ore");
+        sceneSheet = StyleSheetRegistry.of("harness:gallery");
         // The graph theme. Added once and never toggled: the Ore toggle is about Minecraft chrome, and
         // a node graph has no Ore look to switch to — without it the nodes are unstyled boxes and the
         // port palette, which is the whole readability of the page, is missing.
         engine.addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
         engine.addStylesheet(oreSheet);
         engine.addStylesheet(sceneSheet);
+    }
 
-        // After the window exists, because commands live on it — see installKeymap.
-        installKeymap(document);
-        installListStats(document);
-        installTreeStats(document);
+    @Override
+    protected UIElement build(HarnessContext ctx) {
+        return createDemo();
+    }
+
+    /** Commands live on the document, so these wait until the root is in it. */
+    @Override
+    protected void attached(UIElement root) {
+        installKeymap(document());
+        installListStats(document());
+        installTreeStats(document());
     }
 
     /**
@@ -188,7 +155,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
      * re-adding Ore would start winning this scene's own layout rules at equal specificity.</p>
      */
     private void toggleTheme() {
-        var engine = document.styles();
+        var engine = document().styles();
         engine.removeStylesheet(sceneSheet);
         if (oreOn) {
             engine.removeStylesheet(oreSheet);
@@ -316,7 +283,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         // A COMPOSITOR OVERRIDE, not the cascade: the drift is not a transition and must not become an
         // animation slot somebody then has to end. Written every frame, so a rebuilt box heals itself
         // on the next one. The hook is OWNED by the blobs and stops when they leave the tree.
-        document.animation().every(blobs, delta -> {
+        document().animation().every(blobs, delta -> {
             glassPhase += delta;
             Box box = blobs.box();
             if (box != null) {
@@ -1790,7 +1757,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
     /** Live counters. A ticker rather than a per-frame poll in render(), because the numbers are UI state
      * and the engine already has a place for that. */
     private void installListStats(UIDocument window) {
-        document.animation().every(window, delta -> {
+        document().animation().every(window, delta -> {
             if (listView == null || listStats == null) return false;
             listStats.setText("realised " + listView.realisedCount()
                     + "   pooled " + listView.pooledCount()
@@ -1899,7 +1866,7 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
     /** Live tree state. The focused index is the one the arrows act on, and seeing it is the difference
      * between "Right is broken" and "nothing was focused". */
     private void installTreeStats(UIDocument window) {
-        document.animation().every(window, delta -> {
+        document().animation().every(window, delta -> {
             if (treeView == null || treeStatus == null) return false;
             treeStatus.setText("focus " + treeView.getFocusedIndex()
                     + "   rows " + treeView.visibleRows().size()
@@ -2905,10 +2872,13 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
     // ── Lifecycle ───────────────────────────────────────────────────────────────────────────────
 
     @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        driver.post(this::attachPreviews);
-        driver.frame(frame.getDeltaTime(), ctx.getScreenWidth(), ctx.getScreenHeight(), painter);
+    protected void tick(HarnessContext ctx, FrameInfo frame) {
+        driver().post(this::attachPreviews);
+    }
 
+    @Override
+    protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
+        DocumentDriver<Void> driver = driver();
         // OPEN ON A NAMED PAGE, AND PHOTOGRAPH IT. `-Dcrystalgui.gallery.page=glass` with `--seconds=N`
         // turns this scene into an unattended diagnostic: a run that leaves a PNG of ONE page on disk.
         // The property prefix must be crystalgui. or crystalgraphics. -- the build forwards only those
@@ -2959,88 +2929,27 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
     }
 
     /** The status line, drawn over the document in its own frame. */
-    private void paintHeader(CgUiPaintContext context) {
+    @Override
+    protected void paintOver(CgUiPaintContext context) {
         Tab selected = pages.getSelectedTab();
         context.text().draw().at(0, 0)
-                .text(String.format("Gallery — page=%s   theme=%s   uiScale=%.2f ([ ])   clicks=%d   slider=%.0f",
+                .text(String.format("Gallery — page=%s   theme=%s   uiScale=%.2f (Ctrl+= Ctrl+-)   clicks=%d   slider=%.0f",
                         selected == null ? "none" : selected.getText(),
                         oreOn ? "ore" : "default",
-                        document.boxes().uiScale(),
+                        document().boxes().uiScale(),
                         buttonClicks,
                         continuous.getValue()))
                 .font(context.getFont().atSize(14)).submit();
     }
 
+    /** The preview pool's targets are createOwned framebuffers, so no registry sweep reaches them: this frees them. */
     @Override
-    public void dispose() {
-        // The preview pool's targets are createOwned framebuffers, so no registry sweep reaches them —
-        // this is the only thing that ever frees them.
-        driver.run(() -> {
-            if (shaderPreviews != null) {
-                shaderPreviews.delete();
-                shaderPreviews = null;
-                shaderPreviewsAttached = false;
-            }
-        });
-        driver.close();
-        document = null;
-    }
-
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
-    }
-
-    @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
-        // BARE brackets only. The keyboard Event carries no modifier state, so this reads the live mask --
-        // without it, Ctrl+Shift+[ changes uiScale and returns true, and the editor's own fold binding
-        // never sees the key at all. Any accelerator built on a bracket is invisible in this scene
-        // otherwise, which is exactly how it presented: the binding was correct and untestable.
-        int mods = document.platform().modifiers();
-        boolean bare = !CgModifiers.hasCtrl(mods) && !CgModifiers.hasShift(mods)
-                && !CgModifiers.hasAlt(mods) && !CgModifiers.hasSuper(mods);
-        if (event.pressed() && bare) {
-            switch (event.key()) {
-                case CgKeyCodes.KEY_RBRACKET -> {
-                    setScale(Math.min(8f, document.boxes().uiScale() + 0.1f));
-                    return true;
-                }
-                case CgKeyCodes.KEY_LBRACKET -> {
-                    setScale(Math.max(0.1f, document.boxes().uiScale() - 0.1f));
-                    return true;
-                }
-                default -> { }
-            }
+    protected void disposed() {
+        if (shaderPreviews != null) {
+            shaderPreviews.delete();
+            shaderPreviews = null;
+            shaderPreviewsAttached = false;
         }
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    /**
-     * {@code [} / {@code ]} step {@code uiScale} in quarters — fractional values on purpose, since
-     * those are the ones that expose pixel-alignment bugs and every other cgui scene runs at a fixed
-     * 2. Punctuation rather than letters or arrows: TabView owns the arrows, and a letter would be
-     * swallowed by a focused TextField.
-     *
-     * <p>{@code init(0, 0)} forces the re-init a scale change needs — {@code init} early-returns when
-     * the physical dimensions are unchanged, and they are. Same trick {@code CgUiTextScene} uses.</p>
-     */
-    private void setScale(float scale) {
-        document.boxes().setUiScale(scale);
     }
 
     // ── graph page (P6.2.2 canvas + P6.2.3 nodes, ports and wires) ──────────────────────────────
@@ -3634,8 +3543,4 @@ public class CgUiGalleryScene implements InteractiveSceneLifecycle, CgSystemInpu
         return String.valueOf(value);
     }
 
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.consumeMouseEvent(event);
-    }
 }

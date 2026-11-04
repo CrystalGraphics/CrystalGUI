@@ -1,7 +1,8 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.style.StyleEngine;
 import com.crystalgui.core.notify.StatusBar;
-import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
@@ -24,8 +25,6 @@ import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.lang.SymbolKind;
 import com.crystalgui.text.lang.SymbolModifier;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.DocumentDriver;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.collection.list.ListRenderer;
@@ -66,7 +65,6 @@ import com.crystalgui.widget.text.UIText;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -78,7 +76,7 @@ import javax.annotation.Nullable;
  * <b>Every widget the M6 port has moved, on the NEW engine, in one scrolling column.</b>
  *
  * <p>{@code --mode=cgui-new-gallery}. The counterpart to {@code cgui-gallery}, which is the same idea
- * over {@code UIWindow}/{@code UIElement} — this one builds a {@link UIDocument} and paints through
+ * over {@code UIWindow}/{@code UIElement} — this one builds a {@code UIDocument} and paints through
  * the box tree, so what it shows is the ported widget rendering itself under the ported cascade.</p>
  *
  * <h3>What it is for, and what it can only be told by eye</h3>
@@ -98,62 +96,29 @@ import javax.annotation.Nullable;
  * {@code acceptsPublicChildren}. If the slot were missing, every section below would be in the tree
  * and on screen nowhere, which is exactly the shape that reads as "the scene did not build".</p>
  *
- * <p>Interactive: mouse and keyboard go to {@link UIDocument}'s input service, so hover, press, focus,
+ * <p>Interactive: mouse and keyboard go to the document's input service, so hover, press, focus,
  * dragging a slider and typing in a field are all real here. A scene that only painted would miss
  * every state rule in the sheets, which is most of them.</p>
  */
-public class CgUiNewEngineGalleryScene
-        implements InteractiveSceneLifecycle, CgSystemInput.Keyboard, CgSystemInput.Mouse {
+public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
-    /**
-     * The same {@code uiScale} the other CrystalGUI scenes run at.
-     *
-     * <p>Given to the BOX TREE ({@code setRootTransform}) and never applied to the paint pose by hand.
-     * That is the engine's own rule with one word changed: the root transform is the single definition
-     * of what {@code uiScale} means, so layout composes every box's world matrix through it, the
-     * painter takes its pose from that matrix, and hit-testing inverts the same one. Scale the pose
-     * instead and the two disagree by exactly the scale factor — the picture is right and every click
-     * lands at half the distance, which is what "the mouse input Y is shifted down" was.</p>
-     *
-     * <p>Deliberately not in the ortho projection either: {@code CgTextRenderer} picks its glyph
-     * raster size off the pose scale, so a projection-side scale rasterizes glyphs at logical size and
-     * magnifies them — blurry text, and only the text.</p>
-     */
-    private static final float SCALE = 2f;
-
-    private UIDocument document;
     private ProgressBar determinate;
     private float elapsed;
 
-    /** Runs the document: here, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<Void> driver;
-    private DocumentDriver.Painter<Void> painter;
+    @Override
+    protected void style(StyleEngine styles) {
+        // THE GRAPH THEME, which the UA sheet deliberately does not contain. The split is the same
+        // one `ore.css` sits on: `ua/config-kit.css` gives a graphnode its GEOMETRY -- width, min and
+        // max width, the title bar's row and height, the port columns -- and `crystalgui:graph` gives
+        // it the Unity look, every background and border and the per-type port palette a wire reads
+        // its colour from. Without it the nodes lay out and paint nothing.
+        styles.addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
+        styles.addStylesheet(StyleSheet.parse(SCENE_CSS));
+    }
 
     @Override
-    public void init(HarnessContext ctx) {
-        document = new UIDocument();
-        driver = DocumentDriver.attach(document);
-        painter = DocumentDriver.whole(document);
-        driver.run(() -> {
-            // THE USER-AGENT SHEET, which is not installed for you -- a scene that asserts on default.css
-            // behaviour without this exercises no CSS at all and looks like a styling regression.
-            document.styles().addStylesheet(StyleSheet.DEFAULT);
-            // THE GRAPH THEME, which the UA sheet deliberately does not contain. The split is the same
-            // one `ore.css` sits on: `ua/config-kit.css` gives a graphnode its GEOMETRY -- width, min and
-            // max width, the title bar's row and height, the port columns -- and `crystalgui:graph` gives
-            // it the Unity look, every background and border and the per-type port palette a wire reads
-            // its colour from. Measured: the UA half is 93% geometry declarations, the theme 39% colour
-            // and the rest radii and outlines.
-            //
-            // Without this the nodes lay out perfectly and paint nothing -- no background, no border, no
-            // port colour -- which reads as a broken port rather than as an unthemed widget. The old
-            // gallery loads it on the line below its own DEFAULT and hardcodes not one graph rule in its
-            // scene sheet; this scene simply never did.
-            document.styles().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
-            document.styles().addStylesheet(StyleSheet.parse(SCENE_CSS));
-            document.boxes().setUiScale(SCALE);
-            document.append(buildRoot());
-        });
+    protected UIElement build(HarnessContext ctx) {
+        return buildRoot();
     }
 
     /**
@@ -633,7 +598,7 @@ public class CgUiNewEngineGalleryScene
                 l -> l.widthPercent(100f).height(180f));
 
         UIText counter = hint("");
-        document.animation().every(list, delta -> {
+        document().animation().every(list, delta -> {
             long realised = list.children().stream()
                     .filter(c -> c.hasClass(ListView.ROW_CLASS)).count();
             counter.setText(realised + " of 10,000 rows realised · "
@@ -799,7 +764,7 @@ public class CgUiNewEngineGalleryScene
                             .withDescription("one axis of the Gaussian"),
                     QuickPickItem.of("gradient", "gui_gradient.shader")
                             .withDescription("eight stops, one draw"))));
-            pick.open(document);
+            pick.open(document());
         });
         return row(open);
     }
@@ -849,7 +814,7 @@ public class CgUiNewEngineGalleryScene
         graph.connect(bOut, cIn);
 
         UIText status = hint("");
-        document.animation().every(graph, delta -> {
+        document().animation().every(graph, delta -> {
             status.setText(String.format("pan %.0f, %.0f · zoom %.2f · %d wires — "
                             + "middle-drag to pan, wheel to zoom, drag a port to rewire",
                     graph.getPanX(), graph.getPanY(), graph.getZoom(),
@@ -893,7 +858,7 @@ public class CgUiNewEngineGalleryScene
         }
 
         UIText status = hint("");
-        document.animation().every(canvas, delta -> {
+        document().animation().every(canvas, delta -> {
             int visible = 0;
             for (UIElement tile : tiles) {
                 Box box = tile.box();
@@ -933,62 +898,19 @@ public class CgUiNewEngineGalleryScene
     }
 
     @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
-        int w = ctx.getScreenWidth();
-        int h = ctx.getScreenHeight();
-        float delta = frame.getDeltaTime();
-
+    protected void tick(HarnessContext ctx, FrameInfo frame) {
         // The determinate bar walks, so a single glance says whether a value write reaches the fill
         // -- a frozen bar at its first value is what the old ProgressBar's non-idempotent setter
         // looked like from the other side.
-        elapsed += delta;
+        elapsed += frame.getDeltaTime();
         float fraction = (elapsed % 4f) / 4f;
-        driver.post(() -> determinate.setFraction(fraction));
-        driver.frame(delta, w, h, painter);
-
-        // A startup capture, so this scene contributes to the pixel-regression set. Without it the
-        // scene runs and writes no artifact, and a "scenes diff to zero" check silently covers
-        // nothing here.
-        if (driver.presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
+        driver().post(() -> determinate.setFraction(fraction));
     }
 
+    /** A startup capture, so this scene contributes to the pixel-regression set. */
     @Override
-    public void dispose() {
-        driver.close();
-        document = null;
-        determinate = null;
+    protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
+        if (driver().presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
-        return false;
-    }
-
-    @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        return driver.offerKey(event, () -> handleKey(event));
-    }
-
-    private boolean handleKey(CgSystemInput.Keyboard.Event event) {
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
-        return driver.offerMouse(event, () -> handleMouse(event));
-    }
-
-    private boolean handleMouse(CgSystemInput.Mouse.Event event) {
-        return document.input().consumeMouseEvent(event);
-    }
 }

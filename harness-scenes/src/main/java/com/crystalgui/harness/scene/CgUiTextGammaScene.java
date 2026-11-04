@@ -7,14 +7,13 @@ import com.crystalgraphics.text.render.CgTextGamma.Level;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.UIElementRegistry;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgraphics.harness.FrameInfo;
-import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
-import com.crystalgui.harness.HarnessThemes;
+import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.style.StyleEngine;
+import com.crystalgui.ui.dom.DocumentDriver;
 
 import java.util.logging.Logger;
 
@@ -25,7 +24,7 @@ import java.util.logging.Logger;
  * <p>Writes {@code scale<n>-<preset>} for every preset. Interactive afterwards: G cycles the presets, S toggles the
  * scale.</p>
  */
-public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemInput.Keyboard {
+public class CgUiTextGammaScene extends UiDocumentScene {
 
     private static final Logger LOGGER = Logger.getLogger(CgUiTextGammaScene.class.getName());
 
@@ -56,21 +55,34 @@ public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemIn
     /** Frames each preset is held before its capture; a scale change waits longer, for the glyph workers. */
     private static final int HOLD = 6, SETTLE = 40;
 
-    private UIDocument document;
     private float scale = 1f;
-    private int preset;
+    private volatile int preset;
 
     @Override
-    public void init(HarnessContext ctx) {
-        UIElementRegistry.bootstrap();
-        document = new UIDocument().markFrameThread();
-        document.boxes().setUiScale(scale);
-        HarnessThemes.install(document.styles(), "crystalgui:crystal-dark");
-        document.styles().addStylesheet(StyleSheet.parse(STYLES));
+    protected String theme() {
+        return "crystalgui:crystal-dark";
+    }
 
+    @Override
+    protected float scale() {
+        return 1f;
+    }
+
+    /** Inline: each capture is of the frame its preset was set for. */
+    @Override
+    protected DocumentDriver.Mode mode() {
+        return DocumentDriver.Mode.INLINE;
+    }
+
+    @Override
+    protected void style(StyleEngine styles) {
+        styles.addStylesheet(StyleSheet.parse(STYLES));
+    }
+
+    @Override
+    protected UIElement build(HarnessContext ctx) {
         UIElement root = new UIElement();
         root.addClass("specimen");
-        StyleGroup.defaultPipeline(root.getStyle().getLayoutGroup(), l -> l.widthPercent(100f).heightPercent(100f));
 
         UIElement dark = panel(root, "dark");
         for (int px : new int[]{2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 16}) line(dark, px + "px  " + PANGRAM, px);
@@ -85,8 +97,7 @@ public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemIn
         for (int px : new int[]{2, 3, 4, 5, 6, 7, 8, 10, 12, 14}) line(light, px + "px  " + PANGRAM, px);
         line(light, "12px secondary  " + PANGRAM, 12, "secondary");
         line(light, "public static void main(String[] args) { return value != null; }", 12, "code");
-
-        document.append(root);
+        return root;
     }
 
     private static UIElement panel(UIElement parent, String tone) {
@@ -105,31 +116,23 @@ public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemIn
     }
 
     @Override
-    public void render(HarnessContext ctx, FrameInfo frame) {
+    protected void tick(HarnessContext ctx, FrameInfo frame) {
         // Each scale settles once for the glyph workers; a preset change needs no new glyphs.
         long n = frame.getFrameNumber();
         long perScale = SETTLE + (long) PRESETS.length * HOLD;
-        if (n < 2 * perScale) {
-            float wantScale = n < perScale ? 1f : 2f;
-            if (scale != wantScale) setScale(wantScale);
-            long t = n % perScale - SETTLE;
-            if (t >= 0) {
-                int p = (int) (t / HOLD);
-                if (t % HOLD == 0) setPreset(p);
-                if (t % HOLD == HOLD - 2) {
-                    ctx.getArtifactService().requestCapture("scale" + (int) scale + "-" + PRESET_NAMES[p]);
-                }
-            }
-        }
+        if (n >= 2 * perScale) return;
+        float wantScale = n < perScale ? 1f : 2f;
+        if (scale != wantScale) inDocument(() -> setScale(wantScale));
+        long t = n % perScale - SETTLE;
+        if (t < 0) return;
+        int p = (int) (t / HOLD);
+        if (t % HOLD == 0) setPreset(p);
+        if (t % HOLD == HOLD - 2) ctx.getArtifactService().requestCapture("scale" + (int) scale + "-" + PRESET_NAMES[p]);
+    }
 
-        int w = ctx.getScreenWidth();
-        int h = ctx.getScreenHeight();
-        document.frame(frame.getDeltaTime(), w / scale, h / scale);
-        CgUiPaintContext paint = document.paintContext();
+    @Override
+    protected void beforePaint(CgUiPaintContext paint) {
         paint.textGamma(PRESETS[preset]);
-        paint.beginFrame(w, h);
-        document.paint(paint);
-        paint.endFrame();
     }
 
     private void setPreset(int preset) {
@@ -139,41 +142,20 @@ public class CgUiTextGammaScene implements InteractiveSceneLifecycle, CgSystemIn
 
     private void setScale(float scale) {
         this.scale = scale;
-        document.boxes().setUiScale(scale);
+        document().boxes().setUiScale(scale);
     }
 
     @Override
-    public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
-        if (event.pressed() && !event.repeat()) {
-            if (event.key() == CgKeyCodes.KEY_G) {
-                setPreset((preset + 1) % PRESETS.length);
-                return true;
-            }
-            if (event.key() == CgKeyCodes.KEY_S) {
-                setScale(scale == 1f ? 2f : 1f);
-                return true;
-            }
+    protected boolean key(CgSystemInput.Keyboard.Event event) {
+        if (!event.pressed() || event.repeat()) return false;
+        if (event.key() == CgKeyCodes.KEY_G) {
+            setPreset((preset + 1) % PRESETS.length);
+            return true;
         }
-        return document.input().consumeKeyboardEvent(event);
-    }
-
-    @Override
-    public void dispose() {
-        document = null;
-    }
-
-    @Override
-    public boolean isRunning() {
-        return true;
-    }
-
-    @Override
-    public boolean uses3DCamera() {
-        return false;
-    }
-
-    @Override
-    public boolean shouldShutdownOnComplete() {
+        if (event.key() == CgKeyCodes.KEY_S) {
+            setScale(scale == 1f ? 2f : 1f);
+            return true;
+        }
         return false;
     }
 }
