@@ -113,37 +113,33 @@ theme {
     --snap-preview-bg: #9AA0A640;
     --snap-preview-border: #C8CDD2AA;
 
-    /* THE TASKBAR'S MICA TINT: the bar's own dark, (28,29,33), at Mica's tint opacity of 0.8 -- the
-     * rest of the bar's colour is the blurred world's HUE at the tint's brightness, since the rule
-     * runs `luminosity 1`. What comes through is a temperature, never a picture. A pin because no
-     * system role carries this alpha. Slightly darker than --surface-overlay so the fallback (flat,
-     * headless) and the live bar sit within a shade of each other.
+    /* THE TASKBAR'S ACRYLIC TINT: Mica's dark base, #202020, at the floating panels' 7%; the rule's
+     * `luminosity 0.48` does the darkening, so the blurred world shows through. A pin because no system
+     * role carries this alpha.
      *
      * #RRGGBBAA, ALPHA LAST. In the engine's int order this pin is a RED, and it was written that way
      * twice: the shipped #E01F2023 parses as (224,31,32) at 14%, and #EB1C1D21 -- the value the Mica
      * rewrite replaced it with -- as (235,28,29) at 13%. The bar was maroon throughout, and two comments
      * blamed saturation and the harness's clear colour for it before anyone read the parser.
      * @see AGENTS.md, load-bearing invariants. */
-    --taskbar-glass-tint: #1C1D21CC;
-    /* THE GLOW under the entries: the accent at 20%, which the gradient fades to nothing either side.
-     * A pin because it is the accent WITH an alpha, which no system role carries and var() cannot add. */
-    --taskbar-glow: #3574F033;
+    --taskbar-glass-tint: #20202013;
     /* A HIDDEN DECLARATION'S VEIL: the panel, and the recessed field, at 60% over what they cover -- what opacity 0.4
      * looked like, as one flat draw rather than a layer. Pins, for the same reason as the glow: an alpha. */
     --hidden-veil: #191A1C99;
     --hidden-veil-recessed: #13141699;
-    /* THE SAME TONE on the hover preview and the switcher: they are the bar's material, and the wash is
-     * part of it. The same ALPHA too -- what differs is the AXIS, which is the sheet's to say: a panel
-     * runs it down from the top edge as a header tint rather than across the middle. @see ua/desktop.css.
-     * Separate pins because a component token never chains off another component's. */
+    /* THE ACCENT WASH on the hover preview and the switcher: the accent at 20%, run down from the top edge
+     * as a header tint. A pin because it is the accent WITH an alpha, which no system role carries and
+     * var() cannot add; separate pins because a component token never chains off another component's. */
     --preview-glow: #3574F033;
     --switcher-glow: #3574F033;
     /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
      * where --pressed-bg was a step of twenty and read as nothing. @see base.css */
-    /* WHITE AT LOW ALPHA, not a grey: these are the top stop of a sheen over a live blurred bar, so
-     * they have to composite with whatever is behind rather than replace it. @see ua/desktop.css */
-    --taskbar-entry-hover-bg: #FFFFFF29;
-    --taskbar-entry-active-bg: #FFFFFF3D;
+    /* WHITE AT LOW ALPHA, not a grey, so they composite with the blurred bar rather than replace it.
+     * Fluent's: hover is SubtleFillColorSecondary (5.9%), active a step up at ControlFillColorSecondary
+     * (8.2%). These were 16% and 24%, about three times Windows'. Fluent writes #AARRGGBB; these are
+     * the sheet's #RRGGBBAA, alpha last, or the active entry is an opaque cyan. */
+    --taskbar-entry-hover-bg: #FFFFFF0F;
+    --taskbar-entry-active-bg: #FFFFFF15;
     /* THE FLOATING PANELS' ACRYLIC: WinUI's SystemControlTransientBackgroundBrush, dark, at HALF its
      * strength -- tint #2C2C2C-class at 0.07 where Windows runs 0.15, with the rule's `luminosity 0.48`
      * (Windows: 0.96) doing the rest. At Windows' numbers the panels read as opaque slabs over this

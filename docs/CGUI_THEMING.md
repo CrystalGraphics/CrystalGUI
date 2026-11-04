@@ -738,7 +738,7 @@ editor scheme's.
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--taskbar-bg` | `var(--surface-overlay)` | base.css |
 | `--taskbar-border` | `var(--border-base)` | base.css |
-| `--taskbar-entry-active-bg` | `#FFFFFF3D` | crystal-dark.css |
+| `--taskbar-entry-active-bg` | `#FFFFFF15` | crystal-dark.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-attention-bg` | `var(--accent-soft)` | base.css |
 | `--taskbar-entry-attention-fg` | `var(--fg)` | base.css |
@@ -749,8 +749,7 @@ editor scheme's.
 | `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
 | `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-progress` | `var(--accent-soft)` | base.css |
-| `--taskbar-glass-tint` | `#1C1D21CC` | crystal-dark.css |
-| `--taskbar-glow` | `#3574F033` | crystal-dark.css |
+| `--taskbar-glass-tint` | `#20202013` | crystal-dark.css |
 | `--taskbar-indicator` | `var(--fg-secondary)` | base.css |
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |

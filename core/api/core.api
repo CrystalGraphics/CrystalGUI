@@ -4974,8 +4974,10 @@ com/crystalgui/desktop/launcher/Launcher
   access public
   extends com/crystalgui/widget/overlay/Popover
   field public,static,final EMPTY_CLASS Ljava/lang/String;
+  field public,static,final ROW_HEIGHT F
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final ROW_CLASS Ljava/lang/String;
+  field public,static,final VISIBLE_ROWS I
   field public,static,final ROW_NAME_CLASS Ljava/lang/String;
   field public,static,final ROW_RUNNING_CLASS Ljava/lang/String;
   method public <init> ()V
@@ -4987,9 +4989,8 @@ com/crystalgui/desktop/launcher/Launcher
 com/crystalgui/desktop/launcher/LauncherButton
   access public
   extends com/crystalgui/widget/control/Button
-  field public,static,final GLYPH_CLASS Ljava/lang/String;
+  field public,static,final MARK_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
-  field public,static,final PANE_CLASS Ljava/lang/String;
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V

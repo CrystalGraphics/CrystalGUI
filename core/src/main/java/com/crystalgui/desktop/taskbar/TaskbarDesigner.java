@@ -113,7 +113,7 @@ public final class TaskbarDesigner {
         this.taskbar = taskbar;
         // Every one of these is a final field of a live widget, so none can be absent — a desktop always
         // has a switcher and a taskbar always has its one preview panel. @see #tone
-        this.glows = List.of(taskbar.glow(), taskbar.previewPanel().glow(), desktop.switcher().glow());
+        this.glows = List.of(taskbar.previewPanel().glow(), desktop.switcher().glow());
         // THE BAR, not the entries row. Since the strip became a full-width bar the glass, the height, the
         // padding and the radius are all the bar's own, and the entries row is a transparent flex row
         // inside it with nothing to tune; a designer aimed at the row would move sliders and change
@@ -315,7 +315,7 @@ public final class TaskbarDesigner {
                  .setRimAmbient(live.getRimAmbient()).setLuminosity(live.getLuminosity());
         }
         // The tone is the glow's middle stop -- the sheet's gradient is transparent / tone / transparent.
-        Object wash = taskbar.glow().getStyle().getComputed(StylePropertyRegistry.BACKGROUND);
+        Object wash = taskbar.previewPanel().glow().getStyle().getComputed(StylePropertyRegistry.BACKGROUND);
         if (wash instanceof CgUiGradient gradient && gradient.stops().size() >= 2) {
             tone = gradient.stops().get(gradient.stops().size() / 2).argb();
         }
@@ -459,9 +459,9 @@ public final class TaskbarDesigner {
         sb.append("    backdrop-filter: ").append(BackdropFilterValue.write(glass)).append(";" + LINE);
         sb.append("}\n");
         // THE TONE IS A THEME PIN, not a rule: it goes in crystal-dark.css / crystal-light.css, one value
-        // for the three surfaces that share the bar's material.
+        // for the two panels that wear the wash.
         sb.append(String.format(Locale.ROOT,
-                "theme {%n    --taskbar-glow: %1$s;%n    --preview-glow: %1$s;%n    --switcher-glow: %1$s;%n}%n",
+                "theme {%n    --preview-glow: %1$s;%n    --switcher-glow: %1$s;%n}%n",
                 hex(tone)));
         if (offsetX != 0f || offsetY != 0f) {
             sb.append(String.format(Locale.ROOT,

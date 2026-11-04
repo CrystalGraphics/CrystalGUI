@@ -51,6 +51,12 @@ public class Launcher extends Popover {
     public static final String ROW_RUNNING_CLASS = "__app-running__";
     public static final String EMPTY_CLASS = "__app-none__";
 
+    /** A row's height, a taskbar entry's, so an application is the same height wherever it appears. */
+    public static final float ROW_HEIGHT = 28f;
+
+    /** Rows shown before the list scrolls. */
+    public static final int VISIBLE_ROWS = 10;
+
     private final SearchField search = new SearchField();
     private final ObservableList<ApplicationKind> shown = new ObservableList<>();
     private final ListView<ApplicationKind> list = new ListView<>(shown);
@@ -65,6 +71,7 @@ public class Launcher extends Popover {
         appendStructural(search);
 
         list.setRenderer(new AppRenderer());
+        list.setItemHeight(ROW_HEIGHT);
         list.onRowActivated.connect(this::launchAt);
         appendStructural(list);
 
@@ -118,6 +125,9 @@ public class Launcher extends Popover {
             }
         }
         shown.setAll(matches);
+        // A virtualised list has no content height of its own, so it is given the rows it shows
+        float rows = Math.min(matches.size(), VISIBLE_ROWS);
+        list.layout(l -> l.height(rows * ROW_HEIGHT));
 
         boolean nothing = matches.isEmpty();
         // TWO DIFFERENT EMPTIES. "Nothing installed" is a broken classpath and "no match" is a typo,

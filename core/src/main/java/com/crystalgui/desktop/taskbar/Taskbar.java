@@ -106,9 +106,9 @@ public class Taskbar extends UIElement {
 
     public static final String EDGE_CLASS = "__edge__";
     /**
-     * The accent glow under the entries — IntelliJ's New UI header gradient, translated: a soft wash of
-     * the accent centred where the entries cluster, fading to the bar at either side. Paint over the
-     * glass, as a separate absolute child, so glass stays the material and the glow stays a gradient.
+     * The accent wash on the floating panels — the hover preview and the switcher — IntelliJ's New UI
+     * header gradient, translated. Paint over their glass, as a separate absolute child. The bar itself
+     * has none: Windows' says "this one" with the active pill alone.
      */
     public static final String GLOW_CLASS = "__glow__";
 
@@ -116,8 +116,6 @@ public class Taskbar extends UIElement {
 
     /** What CAN run, beside the strip that shows what IS running. @see #start() */
     private final LauncherButton start;
-    /** The glow, kept so the designer can retone it. @see #GLOW_CLASS */
-    private final UIElement glow;
 
     /**
      * An entry collapsing out of the row — it is no longer in {@link #entryOf} and is not a target.
@@ -187,12 +185,6 @@ public class Taskbar extends UIElement {
         edge.setHitTest(false);
         append(edge);
 
-        // THE GLOW, after the hairline and before the entries: it paints over the glass and under the
-        // buttons, and being absolute it takes no part in centring the row. @see #GLOW_CLASS
-        glow = new UIElement();
-        glow.addClass(GLOW_CLASS);
-        glow.setHitTest(false);
-        append(glow);
 
         // THE START BUTTON, before the entries and outside their island: it is the one thing on this
         // strip that is NOT a running window, and putting it inside the island would make it cascade,
@@ -229,14 +221,6 @@ public class Taskbar extends UIElement {
     /** The hover previews. One panel that moves between entries. @see TaskbarPreviews */
     private final TaskbarPreviews previews;
 
-    /**
-     * The accent wash under the entries — the element, so {@link TaskbarDesigner} can write its
-     * gradient. Package-private: a theme retones this through {@code --taskbar-glow}, and the element
-     * itself is only reachable because the designer writes at IMPORTANT origin while it runs.
-     */
-    UIElement glow() {
-        return glow;
-    }
 
     /** The hover preview panel, for the designer: it carries the same tone as the bar. */
     WindowPreview previewPanel() {

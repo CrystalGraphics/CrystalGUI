@@ -165,27 +165,23 @@ taskbar {
     /* An entry's 28px plus the padding: with nothing running -- a desktop opened over the title screen,
      * where the editor needs a server -- the bar would otherwise be the 6px of its padding. */
     min-height: 34px;
-    /* MICA, NOT ACRYLIC. The backdrop is blurred hard, desaturated, and then almost entirely replaced
-     * by the tint, so what survives is a tone. Every lens term is off — `ior 1` is the documented
-     * off-switch for refraction, `bezel 1` leaves no sharp band, `specular`/`glow`/`edge` at 0 draw
-     * nothing — so the material costs one capture and one blur and nothing else.
+    /* ACRYLIC, the floating panels' recipe (@see .__window-preview__): the world shows through, blurred
+     * and darkened, rather than Mica's tone alone. Mica (`luminosity 1`, tint 0.8) read as an opaque
+     * slab. Every lens term is off — `ior 1` is the documented off-switch for refraction, `bezel 0` is
+     * frosted to the edge (a 1px bezel left the bottom row SHARP, the one edge no hairline covers),
+     * `specular`/`glow`/`edge` at 0 draw nothing — so the material costs one capture and one blur.
      *
-     * THE TINT IS A THEME PIN, not the system --surface-glass: that token is a 40% veil for a panel
-     * floating over the desktop and a bar wants ~88%. It degrades to `fallback` — the flat
+     * THE TINT IS A THEME PIN, not the system --surface-glass. It degrades to `fallback` — the flat
      * --taskbar-bg — wherever there is no backdrop to sample, which is what the bar is headless.
      *
      * THE COST IS THE REGION (plan/style-glass.md R2): the capture and the blur are sized to what asks for a
      * backdrop, so a 34px bar on a 1080p surface is about 6% of it. The first glass captured the whole
      * screen and took a 120fps desktop to 50–70 for one line of CSS. */
-    /* A TEMPERATURE, NEVER A COLOUR -- and the mechanism is the LUMINOSITY blend, not desaturation.
-     * Mica replaces the wallpaper's brightness with the tint's (`luminosity 1`) and keeps its hue, then
-     * lays the tint colour over at 0.8; what survives of a red wallpaper is a warmth at the bar's own
-     * darkness. Saturation stays at 1: the hue is the only thing the backdrop is being asked for, and
-     * the blur has already averaged most of it away. (An earlier comment here blamed `saturation 0.7`
-     * for the bar going maroon and cut it to 0.4; the maroon was the tint pin written alpha-first,
-     * which the CSS parser read as pure red at 13% -- @see crystal-dark.css.) */
-    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #1C1D21CC)) bezel(1px) ior(1)
-                     specular(0) noise(0.02) saturate(1) luminosity(1)
+    /* `luminosity 0.48` pulls the world halfway to the tint's brightness, so a bright sky still reads
+     * as a dark bar under white labels; the tint itself is a whisper. If bright scenery makes the labels
+     * hard to read, the tint's alpha is the dial. */
+    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
+                     specular(0) noise(0.02) saturate(1.25) luminosity(0.48)
                      glow(0) edge(0) edge-width(1px) rim-ambient(1)
                      chromatic(0) fallback(var(--taskbar-bg, #2B2D30));
 }
@@ -201,23 +197,6 @@ taskbar .__edge__ {
     width: 100%;
     height: 1px;
     background-color: var(--taskbar-border, #393B40);
-}
-
-/* THE GLOW: IntelliJ's New UI header gradient, translated. Theirs washes the project's colour across the
- * toolbar from one end; a taskbar's centre of gravity is the cluster of entries, so the wash sits under
- * them — the accent at a whisper in the middle, gone by the third of the width either side — and ties
- * the accent pills to the strip. Over the glass and under the entries, as paint rather than material:
- * glass is the surface, this is light on it. The colour is a theme PIN because it needs an alpha no
- * system role carries. */
-taskbar .__glow__ {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    background: linear-gradient(90deg, transparent 18%, var(--taskbar-glow, #3574F033) 50%, transparent 82%);
-    /* UNDER THE ENTRIES: an absolute box paints over its context's flow, and the glass bar is the context. */
-    z-index: -1;
 }
 
 /* THE ENTRIES ARE BOUNDED BY THE BAR. `max-width` bounds the box and `overflow` bounds what paints —
@@ -242,6 +221,9 @@ taskbar .__start-button__ {
     flex-shrink: 0;
     padding: 0px;
     margin-right: 6px;
+    /* The mark is smaller than the button, so it is centred both ways rather than sitting at the top. */
+    justify-content: center;
+    align-items: center;
     border-radius: var(--radius-control, 4px);
     /* NO FACE AT REST, exactly as an entry has none: the bar is the face, and the button says
      * "hovered" and "pressed" with a quiet fill rather than a border. */
@@ -256,23 +238,15 @@ taskbar .__start-button__:active {
     background-color: var(--taskbar-entry-active-bg);
 }
 
-/* FOUR PANES, as every start button since 1995 has drawn. A grid rather than an icon file: it is two
- * rules here against an SVG to ship, and the mark has to read at 12 logical pixels where an outline
- * icon would not. */
-taskbar .__start-glyph__ {
-    width: 12px;
-    height: 12px;
+/* THE MARK: the logo's C and gem, the same size as an entry's tile so the start button reads as part of
+ * the row. A PART RULE because the slot is the button's pre-icon, which lives in its shadow tree: a
+ * descendant selector never reaches it, and the grid mark this replaced drew nothing for that reason. */
+taskbar .__start-button__::part(pre-icon) {
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    grid-template-rows: 1fr 1fr;
-    gap: 2px;
-}
-
-/* AN EMPTY GRID DRAWS NOTHING, which is why the panes are elements rather than a border trick. */
-taskbar .__start-pane__ {
-    background-color: var(--fg);
-    border-radius: 1px;
+    overlay: icon("crystalgui:start");
+    overlay-size: contain;
 }
 
 launcher {
@@ -286,23 +260,28 @@ launcher {
     font-size: 11;
 }
 
+/* Its height is the rows it shows, set by Launcher: a virtualised list has no content height. */
 launcher listview {
     width: 100%;
-    height: 0px;
-    flex-grow: 1;
-    min-height: 0px;
+    flex-shrink: 0;
 }
 
-/* 28 matches a taskbar entry, so an application is the same height wherever it appears. */
+/* Its height is the list's (Launcher.ROW_HEIGHT), which positions the rows; a sheet height loses to it. */
 launcher .__app-row__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    height: 28px;
     gap: 8px;
     padding-left: 6px;
     padding-right: 6px;
     border-radius: var(--radius-control, 4px);
+}
+
+/* The tile at a list's size; a window icon has no size of its own. */
+launcher .__app-row__ .__window-icon__ {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
 }
 
 launcher .__app-name__ {
@@ -1384,7 +1363,7 @@ menu.__jump-list__.__rising__ {
     height: 100%;
     border-radius: var(--radius-panel, 8px);
     background: linear-gradient(180deg, var(--preview-glow, #3574F033), transparent);
-    /* Under the header and the picture: see taskbar .__glow__. */
+    /* Under the header and the picture: an absolute box paints over its context's flow otherwise. */
     z-index: -1;
 }
 
@@ -1594,7 +1573,7 @@ menu.__jump-list__.__rising__ {
     height: 100%;
     border-radius: var(--radius-panel, 8px);
     background: linear-gradient(180deg, var(--switcher-glow, #3574F033), transparent);
-    /* Under the tiles: see taskbar .__glow__. */
+    /* Under the tiles: an absolute box paints over its context's flow otherwise. */
     z-index: -1;
 }
 
