@@ -1,7 +1,6 @@
 package com.crystalgui.harness;
 
 import com.crystalgraphics.harness.HarnessExtension;
-import com.crystalgraphics.harness.HarnessDesktop;
 import com.crystalgraphics.harness.SceneRegistry;
 import com.crystalgraphics.harness.config.SceneDescriptor;
 import com.crystalgui.harness.scene.CgGpuTraceProbeScene;
@@ -18,27 +17,17 @@ import com.crystalgui.harness.scene.CgUiTimelineScene;
 import com.crystalgui.harness.scene.CgUiVisualLayersScene;
 import com.crystalgui.harness.scene.RpgConsoleScene;
 import com.crystalgui.harness.scene.VfxLabScene;
-import com.crystalgui.lifecycle.CgUiStart;
-import com.crystalgui.style.theme.UiThemeManager;
 
 import java.util.List;
-import java.util.concurrent.CompletableFuture;
-import java.util.logging.Logger;
 
 /**
- * CrystalGUI's scenes in the harness, and what Ctrl+R has to re-read for them.
+ * CrystalGUI's own scenes in the harness, and its shaders for the compile audit.
  *
- * <p>The harness names no CrystalGUI type, so this is found through {@code ServiceLoader}; the
- * {@code harness-scenes} build puts it on {@code :gl-debug-harness:runHarness}' classpath.</p>
+ * <p>Found through {@code ServiceLoader}; the {@code harness-scenes} build puts it on
+ * {@code :gl-debug-harness:runHarness}' classpath. CrystalGUI itself, its start, its theme reload and the desktop
+ * over a 3D scene, is the harness's own.</p>
  */
 public final class CrystalGuiHarness implements HarnessExtension {
-
-    private static final Logger LOGGER = Logger.getLogger(CrystalGuiHarness.class.getName());
-
-    @Override
-    public HarnessDesktop desktop() {
-        return new CrystalGuiDesktop();
-    }
 
     @Override
     public void registerScenes(SceneRegistry reg) {
@@ -215,24 +204,8 @@ public final class CrystalGuiHarness implements HarnessExtension {
         );
     }
 
-    /**
-     * Themes before anything else: a theme captures its token table at registration, so the stylesheets
-     * CrystalGraphics' reload then re-reads (through {@code CgUiLifecycle}, a reload listener) would
-     * otherwise re-substitute against the old table, and an edited token would change nothing.
-     */
-    @Override
-    public void beforeReload() {
-        int themes = UiThemeManager.getInstance().reloadFromDisk();
-        LOGGER.info("[CrystalGuiHarness] Ctrl+R: reloaded " + themes + " theme file(s)");
-    }
-
     @Override
     public List<String> shaderNamespaces() {
         return List.of("crystalgui");
-    }
-
-    @Override
-    public CompletableFuture<?> start() {
-        return CgUiStart.ahead();
     }
 }
