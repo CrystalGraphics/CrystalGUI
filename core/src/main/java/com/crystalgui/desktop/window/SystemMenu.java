@@ -21,8 +21,8 @@ import java.util.WeakHashMap;
  *
  * <h3>The rows are shared; only the anchor differs</h3>
  *
- * <p>All three routes build {@link MenuId#WINDOW_SYSTEM} through {@link MenuBuilder}, which is the one
- * place commands become rows. A title-bar right-click is the straightforward one and uses
+ * <p>The title bar and keyboard routes build {@link MenuId#WINDOW_SYSTEM}, the taskbar route
+ * {@link MenuId#TASKBAR_ENTRY}, through {@link MenuBuilder}, which is the one place commands become rows. A title-bar right-click is the straightforward one and uses
  * {@code ContextMenu.attach}, which anchors at the press. The other two cannot:</p>
  *
  * <ul>
@@ -86,7 +86,7 @@ public final class SystemMenu {
         // BUILT AGAINST THE FRAME, so every enabledWhen resolves to this window rather than to whatever
         // happens to be focused. That matters most for the route that has no pointer: Alt+- with focus
         // inside window A must not offer window B's rows.
-        Menu menu = open(frame, frame, window);
+        Menu menu = open(MenuId.WINDOW_SYSTEM, frame, frame, window);
 
         // UNDER the title bar, at its left edge -- Win32's placement, and the one that does not cover the
         // caption you just asked about. Read off the BAR's own measured box rather than the frame's
@@ -138,7 +138,9 @@ public final class SystemMenu {
 
         // BUILT AGAINST THE ENTRY, whose DataProvider answers for the window it stands for -- which is
         // how the same rows come out about a background window rather than the active one.
-        Menu menu = open(frame, anchor, window);
+        // A JUMP LIST IS NOT THE SYSTEM MENU: Windows 11's carries only Close, and the window's own verbs
+        // stay on its title bar.
+        Menu menu = open(MenuId.TASKBAR_ENTRY, frame, anchor, window);
 
         // SUPPRESSED AFTER THE OPEN, never before it. `open` discards whatever chain was already up, and
         // discarding is what LIFTS a suppression -- so suppressing first and opening second silences the
@@ -232,9 +234,9 @@ public final class SystemMenu {
      * child list that has quietly emptied. {@code ContextMenu.attach} records the same hazard, with the
      * crash it produces.</p>
      */
-    private static Menu open(WindowFrame frame, UIElement source, UIDocument window) {
+    private static Menu open(MenuId id, WindowFrame frame, UIElement source, UIDocument window) {
         discardFor(frame);
-        Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), source);
+        Menu menu = MenuBuilder.build(id, CommandRegistry.global(), source);
         LIVE.put(frame, MenuBuilder.present(menu, source, window));
         menu.onClosed.connect(() -> discardFor(frame));
         return menu;

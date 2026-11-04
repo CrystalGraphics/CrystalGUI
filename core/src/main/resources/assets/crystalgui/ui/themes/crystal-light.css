@@ -104,16 +104,14 @@ theme {
 
     /* The top edge: 20% over the glass, so it lights the blur rather than drawing an opaque seam. */
     --taskbar-border: #00000033;
+    /* Fluent's light outer focus stroke, black at 89%. @see crystal-dark.css */
+    --taskbar-focus-ring: #000000E4;
     /* The taskbar's acrylic tint — @see crystal-dark.css. As the light panels' (#F4F4F700): no colour
      * tint, the luminosity layer pulling the world toward the light base. #RRGGBBAA, alpha last. */
     --taskbar-glass-tint: #F3F3F300;
     /* A hidden declaration's veil -- @see crystal-dark.css. */
     --hidden-veil: #FFFFFF99;
     --hidden-veil-recessed: #FFFFFF99;
-    /* The accent wash on the preview and the switcher -- @see crystal-dark.css. Lighter on white: an
-     * accent over white reads twice as loud. */
-    --preview-glow: #3574F024;
-    --switcher-glow: #3574F024;
     /* The active entry -- @see crystal-dark.css. A clear step BELOW the hover fill (#E0E4EA) on a white
      * bar; the dark theme's mid grey would be a slab here. */
     /* THE SHEEN INVERTS. Over a pale blurred bar, light added to light says nothing -- what reads as
@@ -126,11 +124,6 @@ theme {
     --taskbar-entry-active-hover-bg: #0000001A;
     --taskbar-start-hover-tint: #D4E2FF;
     --taskbar-start-pressed-tint: #B7CDF7;
-    /* The floating panels' acrylic -- @see crystal-dark.css. WinUI's light transient brush carries NO
-     * colour tint at all (#FCFCFC at 0.0) and lets the luminosity layer at 0.85 do everything, so the
-     * alpha here is zero on purpose: the colour still names the brightness the backdrop is pulled to. */
-    --preview-glass-tint: #F4F4F700;
-    --switcher-glass-tint: #F4F4F700;
 
     /* The window icon tiles — @see crystal-dark.css. A step deeper than the dark theme's, because the
      * glyph on them is still white and a pastel tile on a white bar would carry it at nothing. */
@@ -153,6 +146,8 @@ theme {
      * either theme, so there is nothing for a darker variant to buy here. */
     --window-icon-mono-bg: #DE2A4D;
     --window-icon-mono-bg-end: #C51E7C;
+    /* What raises a tile's letter off it. */
+    --window-icon-monogram-shadow: #000000C0;
     --colorpicker-bg: #FFFFFFEE;
     --colorpicker-handle-shadow: #00000040;
 
@@ -222,8 +217,8 @@ theme {
      * where dark-theme white disappears. Near-black is the readable answer, and it is the reason this is
      * a theme decision rather than a derivation from the system vocabulary. */
     --switcher-selected-ring: #1E1F22;
-    /* Fluent's light SubtleFillColorSecondary: black at 3.5%. @see crystal-dark.css */
-    --switcher-entry-hover-bg: #00000009;
+    /* Fluent's light TextFillColorDisabled: black at 36%. @see crystal-dark.css */
+    --jump-list-disabled-fg: #0000005C;
 
     /* -- Differences -----------------------------------------------------------
      *

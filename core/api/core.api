@@ -3491,6 +3491,7 @@ com/crystalgui/core/command/MenuId
   field public,static,final PALETTE Lcom/crystalgui/core/command/MenuId;
   field public,static,final TASKBAR_CONTEXT Lcom/crystalgui/core/command/MenuId;
   field public,static,final TOOL_WINDOW_OPTIONS Lcom/crystalgui/core/command/MenuId;
+  field public,static,final TASKBAR_ENTRY Lcom/crystalgui/core/command/MenuId;
   field public,static,final TOOL_WINDOW_VIEW_MODE Lcom/crystalgui/core/command/MenuId;
   field public,static,final WINDOW_SYSTEM Lcom/crystalgui/core/command/MenuId;
   method public name ()Ljava/lang/String;
@@ -5042,7 +5043,6 @@ com/crystalgui/desktop/switcher/WindowSwitcher
   field public,static,final TITLE_CLASS Ljava/lang/String;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
   method public cycle (ZLjava/lang/String;)V
-  method public glow ()Lcom/crystalgui/ui/dom/UIElement;
   method public handleKey (I)Z
   method public isOpen ()Z
   method public isVisible ()Z
@@ -5060,7 +5060,6 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final ENTRIES_CLASS Ljava/lang/String;
   field public,static,final ENTRY_CLASS Ljava/lang/String;
   field public,static,final EXITING_CLASS Ljava/lang/String;
-  field public,static,final GLOW_CLASS Ljava/lang/String;
   field public,static,final HIDDEN_CLASS Ljava/lang/String;
   field public,static,final ICONIC_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;

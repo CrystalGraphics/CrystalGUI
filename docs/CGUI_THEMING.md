@@ -378,6 +378,7 @@ editor scheme's.
 | `--inspection-error-fg` | `var(--error)` | base.css |
 | `--inspection-info-fg` | `var(--info)` | base.css |
 | `--inspection-warning-fg` | `var(--warning)` | base.css |
+| `--jump-list-disabled-fg` | `#FFFFFF5D` | crystal-dark.css |
 | `--kind-glyph-addon` | `#7AC0A0` | crystal-dark.css |
 | `--kind-glyph-addon-selected` | `#9EF2CB` | crystal-dark.css |
 | `--kind-glyph-collection` | `#B38FD8` | crystal-dark.css |
@@ -487,13 +488,9 @@ editor scheme's.
 | `--pill-name-fg` | `var(--fg)` | base.css |
 | `--pill-type-fg` | `var(--fg-secondary)` | base.css |
 | `--pressed-bg` | `#35373B` | crystal-dark.css |
-| `--preview-bg` | `var(--surface-overlay)` | base.css |
-| `--preview-border` | `var(--border-base)` | base.css |
 | `--preview-close-hover-bg` | `var(--error)` | base.css |
 | `--preview-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--preview-fg` | `var(--fg)` | base.css |
-| `--preview-glass-tint` | `#1F202313` | crystal-dark.css |
-| `--preview-glow` | `#3574F033` | crystal-dark.css |
 | `--preview-surface-bg` | `var(--surface-editor)` | base.css |
 | `--preview-thumbnail-bg` | `var(--surface-base)` | base.css |
 | `--problems-bg` | `#00000000` | base.css |
@@ -646,15 +643,10 @@ editor scheme's.
 | `--switch-checked-bg` | `var(--success)` | base.css |
 | `--switch-disabled-knob` | `var(--fg-disabled)` | base.css |
 | `--switch-knob` | `var(--fg)` | base.css |
-| `--switcher-bg` | `var(--surface-overlay)` | base.css |
-| `--switcher-border` | `var(--border-base)` | base.css |
 | `--switcher-close-hover-bg` | `var(--error)` | base.css |
 | `--switcher-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--switcher-entry-border` | `#00000000` | base.css |
-| `--switcher-entry-hover-bg` | `#FFFFFF0F` | crystal-dark.css |
 | `--switcher-fg` | `var(--fg)` | base.css |
-| `--switcher-glass-tint` | `#1F202313` | crystal-dark.css |
-| `--switcher-glow` | `#3574F033` | crystal-dark.css |
 | `--switcher-selected-ring` | `var(--fg)` | base.css |
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
 | `--syntax-attribute-style` | `normal` | dark-plus.css |
@@ -749,6 +741,7 @@ editor scheme's.
 | `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
 | `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-progress` | `var(--accent-soft)` | base.css |
+| `--taskbar-focus-ring` | `#FFFFFF` | crystal-dark.css |
 | `--taskbar-glass-tint` | `#20202013` | crystal-dark.css |
 | `--taskbar-indicator` | `var(--fg-secondary)` | base.css |
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
@@ -783,6 +776,7 @@ editor scheme's.
 | `--window-icon-mono-bg` | `#DE2A4D` | crystal-dark.css |
 | `--window-icon-mono-bg-end` | `#C51E7C` | crystal-dark.css |
 | `--window-icon-mono-fg` | `var(--fg-on-accent)` | base.css |
+| `--window-icon-monogram-shadow` | `#000000C0` | crystal-dark.css |
 | `--window-icon-tile-1` | `#4A7CE0` | crystal-dark.css |
 | `--window-icon-tile-1-end` | `#3E26DA` | crystal-dark.css |
 | `--window-icon-tile-2` | `#3FA36B` | crystal-dark.css |

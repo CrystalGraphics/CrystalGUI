@@ -165,25 +165,33 @@ taskbar {
     /* An entry's 28px plus the padding: with nothing running -- a desktop opened over the title screen,
      * where the editor needs a server -- the bar would otherwise be the 6px of its padding. */
     min-height: 34px;
-    /* ACRYLIC, the floating panels' recipe (@see .__window-preview__): the world shows through, blurred
-     * and darkened, rather than Mica's tone alone. Mica (`luminosity 1`, tint 0.8) read as an opaque
-     * slab. Every lens term is off — `ior 1` is the documented off-switch for refraction, `bezel 0` is
-     * frosted to the edge (a 1px bezel left the bottom row SHARP, the one edge no hairline covers),
-     * `specular`/`glow`/`edge` at 0 draw nothing — so the material costs one capture and one blur.
-     *
-     * THE TINT IS A THEME PIN, not the system --surface-glass. It degrades to `fallback` — the flat
-     * --taskbar-bg — wherever there is no backdrop to sample, which is what the bar is headless.
-     *
-     * THE COST IS THE REGION (plan/style-glass.md R2): the capture and the blur are sized to what asks for a
-     * backdrop, so a 34px bar on a 1080p surface is about 6% of it. The first glass captured the whole
-     * screen and took a 120fps desktop to 50–70 for one line of CSS. */
-    /* `luminosity 0.48` pulls the world halfway to the tint's brightness, so a bright sky still reads
-     * as a dark bar under white labels; the tint itself is a whisper. If bright scenery makes the labels
-     * hard to read, the tint's alpha is the dial. */
+}
+
+/* THE DESKTOP'S GLASS: one material for the bar and everything that floats over the desktop -- the jump
+ * list, the hover preview, the switcher and the launcher. Written once so they cannot drift apart.
+ *
+ * ACRYLIC: the world shows through, blurred and darkened. Every lens term is off -- `ior 1` is the
+ * off-switch for refraction, `bezel 0` frosts to the edge (a 1px bezel left the bottom row sharp),
+ * `specular`/`glow`/`edge` at 0 draw nothing -- so it costs one capture and one blur, sized to the
+ * region that asks (a 34px bar is about 6% of a 1080p surface).
+ *
+ * `luminosity 0.3` pulls the world a third of the way to the tint's brightness, so a bright sky still reads dark
+ * under white labels; if bright scenery makes labels hard to read, the tint's alpha is the dial. The
+ * tint is a theme pin, and `fallback` is what draws where there is no backdrop to sample. */
+taskbar,
+menu.__jump-list__,
+.__window-preview__,
+.__window-switcher__ > .__switcher-panel__,
+launcher {
     backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.48)
+                     specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
                      glow(0) edge(0) edge-width(1px) rim-ambient(1)
                      chromatic(0) fallback(var(--taskbar-bg, #2B2D30));
+}
+
+/* The bar's keyboard ring: white over the glass, where the system blue sinks into a blue sky. */
+taskbar :focus-visible {
+    outline: 1px var(--taskbar-focus-ring, #FFFFFF);
 }
 
 /* The hairline along the top — the one line every OS bar draws, and what separates it from a window
@@ -270,7 +278,8 @@ launcher {
     max-height: 320px;
     padding: 6px;
     gap: 4px;
-    background-color: var(--surface-overlay);
+    /* The desktop's glass (above), ringed with the bar's edge. */
+    outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
     font-size: 11;
 }
@@ -496,7 +505,7 @@ taskbar .__entry__::part(pre-icon) {
 ::part(monogram) {
     font-size: 9;
     /* Raised off the tile: two device pixels down at the default uiScale of 2. */
-    text-shadow: 0 1px 1.5px #000000C0;
+    text-shadow: 0 1px 1.5px var(--window-icon-monogram-shadow, #000000C0);
 }
 
 /* THE LABEL BY TAG, because `Button` holds an UNCLASSED `UIText` and `font-size` does not effectively
@@ -1316,38 +1325,17 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
 
 /* ── The floating surfaces: jump list, hover preview, switcher ──────────────────────────────────
  * ONE SURFACE, three panels. A taskbar entry's jump list, its hover preview and the Mod+Tab switcher
- * are all "a panel belonging to a window, floating over the desktop", so they take one fill, one border,
- * one radius and one close button — the same overlay surface the bar itself falls back to, so the whole
- * shell reads as one material. Drawn three different ways they read as three features that happened to
- * be nearby; drawn one way they read as one affordance with three doors.
+ * are all "a panel belonging to a window, floating over the desktop", so they wear the bar's glass (the
+ * shared rule beside `taskbar`), its edge, its hover fill and one close button.
  *
  * The MENU's own rules still supply the jump list's row metrics; only the container is restyled, which
  * is why it sets no padding of its own beyond the panel inset. */
 menu.__jump-list__ {
-    /* ACRYLIC, where the bar is Mica: the same recipe with a lighter tint, so a floating panel shows
-     * the windows behind it as shapes and reads as floating rather than as a slab. The bar's own note
-     * says why every lens term is off; the fallback is the flat --preview-bg this used to be. Glass
-     * is one capture region shared by everything that asks, so a panel above the bar widens it by its
-     * own height for exactly as long as it is up. */
-    /* ACRYLIC, by WinUI's effect graph -- blur, saturation 1.25, a luminosity layer, the tint, noise
-     * 0.02 -- at HALF of WinUI's strengths: luminosity 0.48 where Windows runs 0.96, tint 0x13 where
-     * it runs 0.15. At Windows' numbers the panel's brightness was entirely the tint's, and over this
-     * desktop's dark windows it read as an opaque slab; at half, half of what is behind it comes
-     * through as blurred shapes, which is what "floating" looks like here. In this model a panel's
-     * opacity IS the luminosity layer, so "halve the alpha" halves both.
-     * @see docs/CGUI_MODERN_UI_RENDERING_RESEARCH.md §1.2 */
-    backdrop-filter: blur(24px) tint(var(--preview-glass-tint, #1F202313)) bezel(1px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.48)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--preview-bg, #2B2D30));
-    /* NO background-color HERE, though a backdrop-filter no longer forbids one. In this engine
-     * background-color is the ambient TINT a background drawable is multiplied by, and paints as a fill
-     * only when there is no drawable -- so `background-color: transparent` multiplied the whole panel
-     * by #00000000 and it drew nothing but its outline. The filter's own tint() is what colours this
-     * panel; a fill over the top would sit on the blur rather than mix with it. */
-    /* An OUTLINE, not a border, on a glass panel: the outline is a ring drawn after the drawable, which
-     * is the path the glass island proved, and it takes no layout. */
-    outline: 1px var(--preview-border, #393B40);
+    /* The base menu's flat `background` would sit over the blur and hide it. Never `background-color:
+     * transparent`: that is the tint a drawable is multiplied by, and it would multiply the glass away. */
+    background: none;
+    /* An OUTLINE, not a border, on a glass panel: a ring drawn after the drawable, taking no layout. */
+    outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
     padding-top: 4px;
     padding-bottom: 4px;
@@ -1372,46 +1360,31 @@ menu.__jump-list__.__rising__ {
     opacity: 0;
 }
 
+/* A focused menu restates the base menu's grey ring; this one keeps the bar's edge. */
+menu.__jump-list__:focus-visible {
+    outline: 1px var(--taskbar-border, #393B40);
+}
+
+/* Rows light as a taskbar entry does: translucent, so the glass reads through the highlight. */
+menu.__jump-list__ menuitem:focus,
+menu.__jump-list__ menuitem:hover {
+    background: var(--taskbar-entry-hover-bg, #FFFFFF1A);
+}
+
+/* ...except an unavailable row, which the rule above would otherwise outrank. Its text is translucent
+ * like the glass, since the opaque menu's grey vanishes over a bright backdrop. */
+menu.__jump-list__ menuitem:disabled {
+    background: #00000000;
+    color: var(--jump-list-disabled-fg, #FFFFFF5D);
+}
+
 .__window-preview__ {
     position: absolute;
     flex-direction: column;
-    /* Acrylic -- @see menu.__jump-list__ above, which is the same object, for the whole recipe and why
-     * it runs at half of WinUI's strengths. */
-    backdrop-filter: blur(24px) tint(var(--preview-glass-tint, #1F202313)) bezel(1px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.48)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--preview-bg, #2B2D30));
-    outline: 1px var(--preview-border, #393B40);
+    outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
     padding: 6px;
     z-index: 100;
-}
-
-/* THE SAME TONE AS THE BAR, RUN DOWN THE PANEL RATHER THAN ACROSS IT.
- *
- * The bar's wash is horizontal because a bar's centre of gravity is the cluster of entries in the middle
- * of a very wide strip. A panel is neither wide nor centred on anything: it is a header with a picture
- * under it, and the horizontal version put a blue hotspot in the middle of both — measured at +26 of blue
- * over the panel's own edges, a ramp seven times steeper than the bar's because a gradient's softness is
- * its alpha change PER PIXEL and this one spends the bar's 0.2 over ~90px instead of ~640.
- *
- * Down the panel it is a HEADER TINT, which is what IntelliJ's New UI gradient — the thing this was
- * translated from — actually is: strongest along the top edge behind the icon and the title, gone by the
- * time it reaches the thumbnail, so the picture is never washed. Same accent, same alpha as the bar; only
- * the axis differs, and the axis is what was wrong.
- *
- * The child carries the panel's radius so the gradient masks itself to the corners (CgUiGradient is
- * CornerRadiusAware); without it the wash squares them off. */
-.__window-preview__ > .__glow__ {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: var(--radius-panel, 8px);
-    background: linear-gradient(180deg, var(--preview-glow, #3574F033), transparent);
-    /* Under the header and the picture: an absolute box paints over its context's flow otherwise. */
-    z-index: -1;
 }
 
 /* The header is a ROW that fills the panel's width, and the title is the part that gives. `width: 0`
@@ -1600,28 +1573,10 @@ menu.__jump-list__.__rising__ {
     /* ACRYLIC over the whole desktop, as Windows' Alt+Tab is. This is the one glass consumer that can
      * ask for most of the screen -- the capture region is the union of what asks, and a panel at 80%
      * of the width is most of it -- and it is affordable for the same reason Windows' is: it exists for
-     * the second or two a modifier is held, never for a settled frame. */
-    /* ACRYLIC -- the preview's recipe at the same half strength, @see .__window-preview__ above. */
-    backdrop-filter: blur(24px) tint(var(--switcher-glass-tint, #1F202313)) bezel(1px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.48)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--switcher-bg, #2B2D30));
-    outline: 1px var(--switcher-border, #393B40);
+     * the second or two a modifier is held, never for a settled frame. The glass is the shared rule
+     * beside `taskbar`. */
+    outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
-}
-
-/* The bar's tone under the tiles -- @see .__window-preview__ > .__glow__ for why it is the same wash
- * from a separate pin. */
-.__switcher-panel__ > .__glow__ {
-    position: absolute;
-    left: 0;
-    top: 0;
-    width: 100%;
-    height: 100%;
-    border-radius: var(--radius-panel, 8px);
-    background: linear-gradient(180deg, var(--switcher-glow, #3574F033), transparent);
-    /* Under the tiles: an absolute box paints over its context's flow otherwise. */
-    z-index: -1;
 }
 
 /* One window. A COLUMN -- icon and title above, picture below, which is Windows' arrangement and not the
@@ -1648,10 +1603,9 @@ menu.__jump-list__.__rising__ {
  * happens to be showing while an outline never does.
  *
  * TRANSLUCENT WHITE, never the panel ladder's grey: a tile on acrylic that goes opaque under the
- * pointer hides the very backdrop the switcher floats over. Fluent's subtle fill, at an alpha no
- * system role carries -- which is why both fills are theme pins. */
+ * pointer hides the very backdrop the switcher floats over. It is the taskbar entry's own token. */
 .__switcher-entry__:hover {
-    background-color: var(--switcher-entry-hover-bg, #FFFFFF0F);
+    background-color: var(--taskbar-entry-hover-bg, #FFFFFF1A);
 }
 
 /* NO FILL UNDER THE RING: a grey slab behind the selected tile hid the backdrop for the same reason,

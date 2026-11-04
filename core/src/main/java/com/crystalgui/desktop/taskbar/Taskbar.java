@@ -106,12 +106,6 @@ public class Taskbar extends UIElement {
     public static final String START_CLASS = "__start-button__";
 
     public static final String EDGE_CLASS = "__edge__";
-    /**
-     * The accent wash on the floating panels — the hover preview and the switcher — IntelliJ's New UI
-     * header gradient, translated. Paint over their glass, as a separate absolute child. The bar itself
-     * has none: Windows' says "this one" with the active pill alone.
-     */
-    public static final String GLOW_CLASS = "__glow__";
 
     private final UIElement entries;
 
@@ -459,8 +453,7 @@ public class Taskbar extends UIElement {
         entry.addClass(ENTRY_CLASS);
         // W13a's third route, and the one that is NOT ContextMenu.attach.
         //
-        // The rows are MenuId.WINDOW_SYSTEM's, exactly as the title bar's and the keyboard route's are.
-        // What differs is the placement: attach anchors at the POINTER, which for a strip along the
+        // The rows are MenuId.TASKBAR_ENTRY's, not the title bar's system menu. The placement differs too: attach anchors at the POINTER, which for a strip along the
         // bottom of the screen puts a menu at the very edge, left-aligned from wherever the press landed
         // and drifting further from its entry the wider it gets. Windows' jump list is CENTRED over its
         // button, which is the same rule the hover previews above these entries already follow --

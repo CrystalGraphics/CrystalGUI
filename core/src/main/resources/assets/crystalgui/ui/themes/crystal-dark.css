@@ -115,6 +115,8 @@ theme {
 
     /* The top edge: black at 25%, a shade of the glass rather than an opaque seam. White blended into a bright sky above it. */
     --taskbar-border: #00000040;
+    /* The keyboard ring on the bar's entries and start button: white, as Windows 11 draws it on its dark bar. */
+    --taskbar-focus-ring: #FFFFFF;
     /* THE TASKBAR'S ACRYLIC TINT: Mica's dark base, #202020, at the floating panels' 7%; the rule's
      * `luminosity 0.48` does the darkening, so the blurred world shows through. A pin because no system
      * role carries this alpha.
@@ -129,11 +131,6 @@ theme {
      * looked like, as one flat draw rather than a layer. Pins, for the same reason as the glow: an alpha. */
     --hidden-veil: #191A1C99;
     --hidden-veil-recessed: #13141699;
-    /* THE ACCENT WASH on the hover preview and the switcher: the accent at 20%, run down from the top edge
-     * as a header tint. A pin because it is the accent WITH an alpha, which no system role carries and
-     * var() cannot add; separate pins because a component token never chains off another component's. */
-    --preview-glow: #3574F033;
-    --switcher-glow: #3574F033;
     /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
      * where --pressed-bg was a step of twenty and read as nothing. @see base.css */
     /* WHITE AT LOW ALPHA, not a grey, so they composite with the blurred bar rather than replace it.
@@ -147,15 +144,6 @@ theme {
     /* What start's mark is multiplied by when hovered and pressed: the C's middle and last stops, halfway to white. */
     --taskbar-start-hover-tint: #D4E2FF;
     --taskbar-start-pressed-tint: #B7CDF7;
-    /* THE FLOATING PANELS' ACRYLIC: WinUI's SystemControlTransientBackgroundBrush, dark, at HALF its
-     * strength -- tint #2C2C2C-class at 0.07 where Windows runs 0.15, with the rule's `luminosity 0.48`
-     * (Windows: 0.96) doing the rest. At Windows' numbers the panels read as opaque slabs over this
-     * desktop's dark windows, @see ua/desktop.css. A shade darker than Windows' so it sits between the
-     * bar and a window. Two pins with one value, because a component token never chains off another
-     * component's -- restyling the preview must not move the switcher. #RRGGBBAA; was #C71F2023,
-     * which is a red at 14%. */
-    --preview-glass-tint: #1F202313;
-    --switcher-glass-tint: #1F202313;
 
     /* THE WINDOW ICON TILES. Six hues, keyed on the icon name by WindowIcon; a filled rounded square
      * with a white glyph on it, so each is tuned to carry white at 14–18px on a dark bar — saturated
@@ -183,6 +171,8 @@ theme {
      * in the strip is a filled crimson square. */
     --window-icon-mono-bg: #DE2A4D;
     --window-icon-mono-bg-end: #C51E7C;
+    /* What raises a tile's letter off it. */
+    --window-icon-monogram-shadow: #000000C0;
     --colorpicker-bg: #1E1E1EDD;
     --colorpicker-handle-shadow: #00000080;
 
@@ -248,9 +238,8 @@ theme {
      * arbitrary window pictures, so it has to read against a screenshot of anything at all rather than
      * merely against a panel. Windows' switcher uses the same. */
     --switcher-selected-ring: #FFFFFF;
-    /* THE HOVER FILL ON A TILE: Fluent's SubtleFillColorSecondary, dark -- white at 6%. Translucent so
-     * the acrylic shows through it; an opaque grey here was a slab over the backdrop. @see base.css */
-    --switcher-entry-hover-bg: #FFFFFF0F;
+    /* A jump list's unavailable row on the glass: Fluent's TextFillColorDisabled, white at 36%. */
+    --jump-list-disabled-fg: #FFFFFF5D;
     --activitybar-item-checked-bg: #46484b;
     /* A MENU'S OUTLINE AND ITS SEPARATORS, a step darker than --border-base: the popup's edge reads as a
      * seam rather than a frame, and the rules inside it match. Every Menu draws both -- the bar's drops,

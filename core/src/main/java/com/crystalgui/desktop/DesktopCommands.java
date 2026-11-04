@@ -180,7 +180,8 @@ public final class DesktopCommands {
 
     private static boolean hasSomethingToSwitchTo(CommandContext context) {
         Desktop desktop = desktopFor(context);
-        return desktop != null && desktop.registry().size() > 1;
+        // One window is enough, as for Alt+Tab. A disabled chord falls through to Tab traversal.
+        return desktop != null && desktop.registry().size() > 0;
     }
 
     /**

@@ -104,6 +104,7 @@ public final class WindowCommands {
         // Screen and W13c's Move and Size land in their own slots without renumbering anything already
         // here -- and what will let W14's Pin do the same.
         registry.register(Command.of(RESTORE, "Restore")
+                .icon("crystalgui:window-restore")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 10)
                 .run(context -> withFrame(context, WindowFrame::restore))
                 .enabledWhen(context -> {
@@ -126,6 +127,7 @@ public final class WindowCommands {
                 .enabledWhen(context -> canNudge(frameFor(context))));
 
         registry.register(Command.of(MINIMIZE, "Minimize")
+                .icon("crystalgui:window-minimize")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 40)
                 .run(context -> withFrame(context, WindowFrame::minimize))
                 .enabledWhen(context -> {
@@ -134,6 +136,7 @@ public final class WindowCommands {
                 }));
 
         registry.register(Command.of(MAXIMIZE, "Maximize")
+                .icon("crystalgui:window-maximize")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 50)
                 .run(context -> withFrame(context, WindowFrame::maximize))
                 .enabledWhen(context -> {
@@ -199,7 +202,9 @@ public final class WindowCommands {
                 }));
 
         registry.register(Command.of(CLOSE, "Close")
+                .icon("crystalgui:x")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_CLOSE, 10)
+                .menu(MenuId.TASKBAR_ENTRY, GROUP_CLOSE, 10)
                 .run(context -> withFrame(context, WindowFrame::requestClose))
                 .enabledWhen(context -> frameFor(context) != null));
 
