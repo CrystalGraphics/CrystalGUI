@@ -2,6 +2,7 @@ package com.crystalgui.render.text;
 
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgStrokeAlign;
+import com.crystalgraphics.api.text.CgStrokeJoin;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.text.render.CgTextRenderer;
 import com.crystalgui.core.CrystalGuiCore;
@@ -81,7 +82,10 @@ public final class TextStrokeStyle {
                         : align == StrokeAlign.INSET ? CgStrokeAlign.INSET : CgStrokeAlign.OUTSET)
                 // `paint-order: stroke` is the one that reorders; `fill` and `normal` are the same
                 // thing, which is why the enum carries all three rather than a boolean.
-                .strokeOverFill(general.paintOrder() != PaintOrder.STROKE);
+                .strokeOverFill(general.paintOrder() != PaintOrder.STROKE)
+                // CSS's stroke: a path stroke's mitre, overflowing the box rather than moving the text
+                .strokeJoin(CgStrokeJoin.MITRE)
+                .contained(false);
     }
 
     /**

@@ -42,7 +42,8 @@ public final class TextShadowStyle {
     public static void applyTo(CgTextRenderer.Draw draw, GeneralGroup general, int currentColor) {
         ShadowList shadows = general.textShadow();
         if (shadows == null || shadows.isEmpty()) return;
-        draw.shadowCount(shadows.size());
+        // CSS's text-shadow: the stroke's shape too, overflowing the box rather than moving the text
+        draw.shadowCount(shadows.size()).shadowsStroked(true).contained(false);
         for (int i = 0; i < shadows.size(); i++) {
             Shadow s = shadows.get(i);
             draw.shadow(i, s.x(), s.y(), s.sigma(), s.spread(), s.color().resolve(currentColor), s.inset());
@@ -62,7 +63,7 @@ public final class TextShadowStyle {
     public static void appendScoped(CgTextRenderer.Draw draw, ShadowList shadows, int scope, int currentColor) {
         if (shadows == null || shadows.isEmpty()) return;
         int base = draw.shadowCount();
-        draw.shadowCount(base + shadows.size());
+        draw.shadowCount(base + shadows.size()).shadowsStroked(true).contained(false);
         for (int i = 0; i < shadows.size(); i++) {
             Shadow s = shadows.get(i);
             draw.shadow(base + i, s.x(), s.y(), s.sigma(), s.spread(), s.color().resolve(currentColor), s.inset())
