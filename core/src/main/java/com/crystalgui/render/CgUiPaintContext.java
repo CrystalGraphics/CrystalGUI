@@ -12,6 +12,7 @@ import com.crystalgraphics.api.shader.CgShaderBindings;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
@@ -2550,11 +2551,22 @@ public final class CgUiPaintContext {
         }, limited, whole);
     }
 
-    /** Damages {@code region} of the surface being walked when drawn straight into it: a layer composited there. */
-    public void damageSurface(LayerRegion region) {
+    /**
+     * Composites {@code inner} into the surface being walked at {@code region}: damaged there now, and once {@code inner}
+     * is no longer composited into it, so a box that leaves takes its picture with it.
+     */
+    public void placeSurface(Surface inner, LayerRegion region) {
         Surface surface = walkingSurface();
         if (surface != null) {
-            surface.damage(region.x(), region.y(), region.x() + region.width(), region.y() + region.height());
+            inner.placeIn(surface, region.x(), region.y(), region.x() + region.width(), region.y() + region.height(), frameId);
+        }
+    }
+
+    /** Composites a layer into the surface being walked at {@code region}, as {@link #placeSurface} a surface. */
+    public void placeLayer(Surface.Placement placement, LayerRegion region) {
+        Surface surface = walkingSurface();
+        if (surface != null) {
+            placement.place(surface, region.x(), region.y(), region.x() + region.width(), region.y() + region.height(), frameId);
         }
     }
 
@@ -3011,7 +3023,9 @@ public final class CgUiPaintContext {
         float v1 = Math.max(0f, 1f - (float) region.height() / layer.getHeight());
         // Declared rather than bound by hand: _MainTex has a "white" default, so an undeclared texture composites
         // the white fallback, premultiplied -- a destination flooded white rather than a missing image.
-        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
+        // THROUGH A TRANSFORM IT IS RESAMPLED, so filtered: sampled as it stands, a slow scale steps a texel at a time
+        if (turn != null) layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer, CgSampler.BILINEAR_CLAMP));
+        else layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         int effect = 0;
         if (NODES && (opacity < 1f || fades) && nodesSuspended == 0 && recording.effects().count() < CgSpatialTree.MAX_NODES) {
             effect = recording.effects().add(effectNode, opacity);

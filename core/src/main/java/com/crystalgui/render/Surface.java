@@ -4,6 +4,8 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 
 import java.util.Arrays;
 
+import javax.annotation.Nullable;
+
 /**
  * A box the compositor moves, drawn into a texture of its own -- DWM's redirection surface (render-graph G7). The
  * frame draws the texture under the box's node, so a move or a fade is the node's value and leaves the texture as it
@@ -207,6 +209,53 @@ public final class Surface {
         damageY0 = Math.min(damageY0, y0);
         damageX1 = Math.max(damageX1, x1);
         damageY1 = Math.max(damageY1, y1);
+    }
+
+    /** Where this surface is composited into another. */
+    private final Placement placement = new Placement();
+
+    /** @see Placement#place */
+    void placeIn(Surface parent, float x0, float y0, float x1, float y1, long frame) {
+        placement.place(parent, x0, y0, x1, y1, frame);
+    }
+
+    /**
+     * A picture composited into a surface — a surface nested in it, a layer — that repaints where it was once it moves
+     * or is no longer composited there, so no ghost of it stays. One per picture, kept across frames.
+     *
+     * <pre>{@code
+     * placement.place(walking, x0, y0, x1, y1, frameId);   // each walk that composites it
+     * // a walk that does not: its old place is damaged when that walk ends
+     * }</pre>
+     */
+    public static final class Placement implements Tenant {
+        @Nullable
+        private Surface in;
+        private float x0, y0, x1, y1;
+        private long frame;
+
+        /**
+         * Composites into {@code parent} at {@code (x0, y0)-(x1, y1)}, its pixels top-down, on the walk at {@code frame}:
+         * that place is damaged now, the last one too if it moved, and this one on the first walk that does not reach it.
+         */
+        public void place(Surface parent, float x0, float y0, float x1, float y1, long frame) {
+            parent.damage(x0, y0, x1, y1);
+            if (in == parent) parent.damage(this.x0, this.y0, this.x1, this.y1);
+            in = parent;
+            this.x0 = x0;
+            this.y0 = y0;
+            this.x1 = x1;
+            this.y1 = y1;
+            this.frame = frame;
+            parent.visit(this, 0);
+        }
+
+        @Override
+        public void vacate(Surface surface, int part, long frame) {
+            if (in != surface || this.frame == frame) return;
+            surface.damage(x0, y0, x1, y1);
+            in = null;
+        }
     }
 
     /** Records that this walk reached {@code tenant}'s {@code part}. */

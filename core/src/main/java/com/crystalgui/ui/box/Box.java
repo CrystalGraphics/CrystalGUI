@@ -4,6 +4,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.render.Surface;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
@@ -381,6 +382,15 @@ public final class Box {
         scrolledNode = node;
         scrolledFrame = frame;
     }
+
+    /** Where its opacity or mask layer was composited into a surface. @see BoxPainter */
+    Surface.Placement layerPlacement() {
+        if (layerPlacement == null) layerPlacement = new Surface.Placement();
+        return layerPlacement;
+    }
+
+    @Nullable
+    private Surface.Placement layerPlacement;
 
     void noteFadedNode(int node, long frame) {
         if (node == 0) return;

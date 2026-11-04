@@ -190,11 +190,11 @@ public final class BoxPainter {
         box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor(), turn),
                 ctx.frameId());
         if (turn == null) {
-            ctx.damageSurface(region);
+            ctx.placeSurface(surface, region);
         } else {
             boundsThrough(region.x(), region.y(), region.x() + region.width(), region.y() + region.height(),
                     surfaceScratch.set(ctx.drawToTarget()).mul(turn).mul(ctx.targetToDraw()));
-            ctx.damageSurface(ctx.surfaceRegion(ink[0], ink[1], ink[2], ink[3]));
+            ctx.placeSurface(surface, ctx.surfaceRegion(ink[0], ink[1], ink[2], ink[3]));
         }
         return true;
     }
@@ -333,7 +333,7 @@ public final class BoxPainter {
             paintOwnAfter(box, style, node, ctx);
             ctx.endLayerFbo();
             box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
-            ctx.damageSurface(region);
+            ctx.placeLayer(box.layerPlacement(), region);
         } finally {
             if (clipPath == CLIPPED) ctx.popRoundedClip();
             painted.set(base).mul(box.localToWorld());
@@ -393,7 +393,7 @@ public final class BoxPainter {
             ctx.compositeMask(childrenFbo, maskFbo, inside);
             ctx.endLayerFbo();
             ctx.blitLayer(childrenFbo, 1f, region);
-            ctx.damageSurface(region);
+            ctx.placeLayer(box.layerPlacement(), region);
             pose.last().pose().set(base).mul(box.localToWorld());
         }
         paintOwnAfter(box, style, node, ctx);
