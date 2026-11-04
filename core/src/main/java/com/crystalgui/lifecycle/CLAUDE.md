@@ -15,7 +15,7 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 |---|---|
 | `onPreInit` | `CgUiStart.ahead()`: style properties, widget kinds, the user-agent sheet, the built-in themes, the desktop record's codecs and the frame profiler's settings on a worker, the load task `crystalgui:start` — half a second to two the first UI paid on the render thread. The harness also starts it through `HarnessExtension.start()` and holds a scene's `init` behind it |
 | `onContextInit` | The disposal GL gate, and makes `CgUiPaintContext.warm()` |
-| `onLoad` | The warm-up as the load task `crystalgui:paint`, held until `CgUiStart.done()`: a render part stepped in the frame tick's host section (which `onContextInit` from a late registrant is not: 26.x's GUI extraction is outside one), its compiles spread over frames within `CgWarmBudget`; tracked and named on the loading screen |
+| `onLoad` | The warm-up as the load task `crystalgui:paint`, held until `CgUiStart.done()`: a render part stepped in the frame tick's host section (which `onContextInit` from a late registrant is not: 26.x's GUI extraction is outside one), its compiles spread over frames within `CgWarmBudget`, then the sheets' font families at every size they use and their ASCII glyphs (capped at 5 s); tracked and named on the loading screen. Then `crystalgui:desktop`: `HostSession.preload()` builds the desktop and runs its first cascade and layout, so the first open is a resume |
 | `onFrame` | Drains queued GL disposals, then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
 | `onContextDestroy` | `UiGpu.destroy()`, and nothing else |
 

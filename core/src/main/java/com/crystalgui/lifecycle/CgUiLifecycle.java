@@ -13,6 +13,7 @@ import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.platform.gl.state.CgGlScope;
 import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.core.CrystalGuiCore;
@@ -168,6 +169,12 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
                 if (warm != null) task.progress(warm.progress());
             }
             return warm == null;
+        }).start();
+        // THE DESKTOP BUILT BEHIND THE SCREEN, after the fonts and shaders its first frame needs, so opening it is
+        // a resume. A client whose host installed no session (the harness) has none to build.
+        plan.task("crystalgui:desktop").after("crystalgui:paint").render(task -> {
+            if (HostSession.isInstalled()) HostSession.session().preload();
+            return true;
         }).start();
     }
 
