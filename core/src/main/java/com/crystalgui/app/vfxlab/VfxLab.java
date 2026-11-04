@@ -524,9 +524,6 @@ public class VfxLab extends UIElement {
                 Property.derived(() -> night ? "Night" : "Day", v -> night = "Night".equals(v)));
 
         ConfigForm post = panel.form().group("Post processing");
-        post.prop(ConfigDescriptor.bool("hdr", "HDR scene")
-                        .tooltip("Effects drawn into a linear 16-bit scene and composited back"),
-                Property.derived(() -> world.hdrScene(), on -> pending.add(() -> world.hdrScene(on))));
         Configurator glow = post.prop(ConfigDescriptor.number("glow", "Glow").range(0f, 20f).decimals(2)
                         .tooltip("How much a glowing layer adds into the HDR scene"),
                 Property.derived(() -> (double) world.sceneEmission(),
