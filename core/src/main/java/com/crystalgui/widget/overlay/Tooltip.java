@@ -107,6 +107,12 @@ public class Tooltip extends UIElement {
      */
     public static final String BESIDE_CLASS = "__beside__";
 
+    /** On a tooltip placed ABOVE its anchor: the sheet turns its gap upward. @see #BESIDE_CLASS */
+    public static final String ABOVE_CLASS = "__above__";
+
+    /** On a tooltip while it shows, which the sheet fades it in on. */
+    public static final String OPEN_CLASS = "__open__";
+
     /** Distance from the anchor's edge, in logical pixels. Zero for the flush look a label wants. */
     private float gap;
 
@@ -125,7 +131,7 @@ public class Tooltip extends UIElement {
     private UIElement edgeOf;
 
     /**
-     * Sits against {@code bar}'s edge rather than its anchor's, still lined up with the anchor along it: a
+     * Sits against {@code bar}'s edge rather than its anchor's, centred on the anchor along it: a
      * button in a bar names itself from the bar's edge, as Windows' taskbar tooltips sit on the taskbar.
      *
      * <pre>{@code
@@ -259,6 +265,8 @@ public class Tooltip extends UIElement {
     private void setHidden(boolean hidden) {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.display(hidden ? TaffyDisplay.NONE : TaffyDisplay.FLEX));
+        // The closed state is a declared opacity, so the fade has a value to start from, as a popover's does
+        toggleClass(OPEN_CLASS, !hidden);
     }
 
     /**
@@ -837,7 +845,8 @@ public class Tooltip extends UIElement {
         // other way round: the tip is TALLER than the button, so a shared top edge puts the words below
         // the icon they name. The short axis is the one where the two sizes differ, so it is the one
         // that has to be centred.
-        AnchoredPlacement.CrossAlign cross = side.isVertical()
+        // A bar's button names itself centred over the button, as Windows' taskbar does.
+        AnchoredPlacement.CrossAlign cross = side.isVertical() && edgeOf == null
                 ? AnchoredPlacement.CrossAlign.START
                 : AnchoredPlacement.CrossAlign.CENTER;
         // AND THE SHEET IS TOLD WHICH IT IS. `tooltip` carries a `margin-top` that IS the gap under an
@@ -845,6 +854,7 @@ public class Tooltip extends UIElement {
         // is neither when the tip sits BESIDE its anchor: there the top margin is not a gap at all but a
         // shove down the cross axis, which is what put the rail's labels below the icons they name.
         toggleClass(BESIDE_CLASS, !side.isVertical());
+        toggleClass(ABOVE_CLASS, side == AnchoredPlacement.Side.TOP);
         UIDocument document = document();
         if (edgeOf != null && against != null && document != null) {
             AnchoredPlacement.Rect own = AnchoredPlacement.anchorRectInRoot(against, document);

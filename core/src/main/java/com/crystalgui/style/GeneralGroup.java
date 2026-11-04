@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.style.property.visual.ClipPath;
 import com.crystalgui.style.property.visual.stacking.Isolation;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.text.StrokeAlign;
@@ -487,6 +488,15 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     public GeneralGroup backdropFilter(CgUiBackdropFilter filter) {
         set(StylePropertyRegistry.BACKDROP_FILTER, filter);
+        return this;
+    }
+
+    public ClipPath clipPath() {
+        return getValueSave(StylePropertyRegistry.CLIP_PATH);
+    }
+
+    public GeneralGroup clipPath(ClipPath clip) {
+        set(StylePropertyRegistry.CLIP_PATH, clip);
         return this;
     }
 

@@ -259,6 +259,9 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         int attached = countMenus(document);
         assertTrue("the menu must be in the tree, or Popover refuses to show it", attached > 0);
         bar.close();
+        // ONCE THE CLOSE FADE HAS LANDED: a menu stays laid out for the sheet's fade, then leaves
+        long until = System.nanoTime() + 1_000_000_000L;
+        while (countMenus(document) > 0 && System.nanoTime() < until) frame();
         assertEquals("left in place they accumulate one set per press",
                 0, countMenus(document));
     }
