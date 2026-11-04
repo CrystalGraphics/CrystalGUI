@@ -8,7 +8,7 @@ import com.crystalgraphics.gl.material.CgMaterialShaderRegistry;
 import com.crystalgraphics.gl.material.parse.CgParsedPass;
 import com.crystalgraphics.gl.material.parse.CgParsedShader;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
-import com.crystalgraphics.platform.device.recording.CgRecordingDevice;
+import com.crystalgraphics.platform.rhi.nulldrv.CgNullRHI;
 import com.crystalgraphics.platform.gl.CgCapabilities;
 import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.gl.state.CgGlState;
@@ -43,7 +43,7 @@ public class ShippedShadersOnTrackedBackendTest {
     @BeforeClass
     public static void install() {
         compiler = new ShadercGlslCompiler();
-        CgTrackedGLBackend gl = new CgTrackedGLBackend(new CgRecordingDevice(64, 64), compiler, true);
+        CgTrackedGLBackend gl = new CgTrackedGLBackend(new CgNullRHI(64, 64), compiler, true);
         CgGL.init(gl);
         CgCapabilities.init(new CgTrackedGLContext());
         CgCapabilities.clearCache();
