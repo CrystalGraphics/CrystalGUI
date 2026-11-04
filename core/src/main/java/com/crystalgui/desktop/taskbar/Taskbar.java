@@ -881,6 +881,14 @@ public class Taskbar extends UIElement {
         }
     }
 
+    /** {@code successor}'s button where {@code was}'s is: an application's window taking its starting window's place. */
+    public void takePlace(WindowFrame successor, WindowFrame was) {
+        int at = sessionOrder.indexOf(was);
+        if (at < 0) return;
+        sessionOrder.remove(successor);
+        sessionOrder.set(sessionOrder.indexOf(was), successor);
+    }
+
     /**
      * An uncombined bar's move: the one button, in the session's order. A pinned application's buttons set the
      * pins' order by where their first button now sits, so the pins are saved as they were arranged.

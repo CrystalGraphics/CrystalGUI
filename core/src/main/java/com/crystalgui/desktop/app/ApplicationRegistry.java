@@ -18,9 +18,11 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.ui.dom.UIDocument;
 
 /**
  * What is <b>installed</b> on this desktop, and what is <b>running</b> — the shell's side of an
@@ -252,6 +254,58 @@ public final class ApplicationRegistry {
         return application;
     }
 
+    /**
+     * Launches {@code kind} behind its starting window, as a click on Start, a pin or a key does: the window opens on
+     * this frame and the application builds into it once that frame is on screen, however long it takes.
+     *
+     * <pre>{@code
+     * desktop.applications().launchInStartingWindow(CrystalEditor.KIND, workspace);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>A single-instance kind already running is brought forward, as {@link #launch} does, with no window.</li>
+     *   <li>A kind that cannot start here (no factory, no server it needs) is refused at once, with no window.</li>
+     *   <li>Closing the starting window before the build cancels the launch.</li>
+     *   <li>For the instance itself, call {@link #launch}: this answers nothing, since nothing exists yet.</li>
+     * </ul>
+     */
+    public void launchInStartingWindow(ApplicationKind kind, @Nullable Workspace workspace) {
+        bootstrap();
+        boolean runsAlready = kind.isSingleInstance() && firstRunning(kind) != null;
+        boolean refused = kind.factory() == null || (kind.requiresConnection() && workspace == null)
+                || desktop.config() == null;
+        UIDocument document = desktop.document();
+        if (runsAlready || refused || document == null) {
+            Application launched = launch(kind, workspace);
+            if (launched != null) launched.activate();
+            return;
+        }
+        if (desktop.isStarting(kind)) {
+            desktop.activate(desktop.openStartingWindow(kind));
+            return;
+        }
+        WindowFrame starter = desktop.openStartingWindow(kind);
+        int[] frames = {0};
+        long asked = System.nanoTime();
+        document.animation().every(starter, delta -> {
+            // ITS MARK ON SCREEN WHOLE BEFORE THE BUILD, which holds this document while it runs: begun sooner, the
+            // mark would stand still part way in
+            boolean shown = ++frames[0] >= STARTING_FRAMES && StartingMark.settled(starter);
+            if (!shown && System.nanoTime() - asked < STARTING_LONGEST_NANOS) return true;
+            if (!desktop.isStarting(kind)) return false;
+            Application launched = launch(kind, workspace);
+            // No main window took its place: a refusal, a failure, or an application with none
+            if (desktop.isStarting(kind)) desktop.endStartingWindow(kind, launched == null ? null : launched.mainWindow());
+            if (launched != null) launched.activate();
+            return false;
+        });
+    }
+
+    /** Frames a starting window shows before its application builds: one recorded and presented, then the build. */
+    private static final int STARTING_FRAMES = 2;
+    /** The longest a build waits for its starting window's mark to come in. */
+    private static final long STARTING_LONGEST_NANOS = 3_000_000_000L;
+
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
     private void quit(Application application) {
         if (!running.contains(application)) return;
@@ -268,7 +322,8 @@ public final class ApplicationRegistry {
      * desktop.applications().activateOrLaunch(VfxLab.KIND, workspace);   // F6
      * }</pre>
      *
-     * <p>Of several running, the one whose window was active most recently.</p>
+     * <p>Of several running, the one whose window was active most recently. None running, it launches behind a
+     * starting window ({@link #launchInStartingWindow}) and answers null, since the instance builds a frame later.</p>
      */
     @Nullable
     public Application activateOrLaunch(ApplicationKind kind, @Nullable Workspace workspace) {
@@ -282,7 +337,11 @@ public final class ApplicationRegistry {
                 if (at >= 0) best = at;
             }
         }
-        if (recent == null) return launch(kind, workspace);
+        // A WINDOW AT ONCE, the application built into it: what a key or a button asks for
+        if (recent == null) {
+            launchInStartingWindow(kind, workspace);
+            return null;
+        }
         recent.activate();
         return recent;
     }

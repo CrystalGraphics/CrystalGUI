@@ -232,6 +232,15 @@ public final class WindowRegistry {
         changed();
     }
 
+    /** {@code successor} where {@code was} is in open order, whatever their groups: one window standing in for another. */
+    public void takePlace(WindowFrame successor, WindowFrame was) {
+        int at = live.indexOf(was);
+        if (at < 0 || !live.contains(successor) || successor == was) return;
+        live.remove(successor);
+        live.add(live.indexOf(was), successor);
+        changed();
+    }
+
     /** The windows the taskbar keeps together with {@code frame}, in open order. */
     private List<WindowFrame> taskbarGroupOf(WindowFrame frame) {
         ApplicationKind kind = frame.application();

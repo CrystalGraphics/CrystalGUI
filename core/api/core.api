@@ -4689,6 +4689,7 @@ com/crystalgui/desktop/Desktop
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final OVERLAY_LAYER_CLASS Ljava/lang/String;
   field public,static,final SNAP_PREVIEW_CLASS Ljava/lang/String;
+  field public,static,final STARTING_CLASS Ljava/lang/String;
   field public,static,final WINDOW_LAYER_CLASS Ljava/lang/String;
   implements com/crystalgui/core/data/DataProvider
   method protected connected ()V
@@ -4706,6 +4707,7 @@ com/crystalgui/desktop/Desktop
   method public config ()Lcom/crystalgui/core/storage/ConfigStorage;
   method public deactivate ()V
   method public desktopSettings ()Lcom/crystalgui/desktop/DesktopSettings;
+  method public endStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public enterHudMode ()V
   method public exitHudMode ()V
   method public extensionStore (Ljava/lang/String;)Lcom/crystalgui/core/storage/ConfigStorage;
@@ -4717,10 +4719,12 @@ com/crystalgui/desktop/Desktop
   method public isHudMode ()Z
   method public isLive ()Z
   method public isShowingDesktop ()Z
+  method public isStarting (Lcom/crystalgui/desktop/app/ApplicationKind;)Z
   method public isSuspended ()Z
   method public jointResize (Lcom/crystalgui/desktop/window/WindowFrame;IIFF)V
   method public keyboardMove ()Lcom/crystalgui/desktop/window/WindowKeyboardMove;
   method public moveModifier ()I
+  method public openStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public overlayLayer ()Lcom/crystalgui/ui/dom/UIElement;
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FII)V
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
@@ -4796,7 +4800,8 @@ com/crystalgui/desktop/DesktopSession
 com/crystalgui/desktop/DesktopSession$Placement
   access public,final,record
   extends java/lang/Record
-  method public <init> (Ljava/lang/String;FFFFZZ)V
+  method public <init> (Ljava/lang/String;FFFFZZLjava/lang/String;)V
+  method public app ()Ljava/lang/String;
   method public height ()F
   method public hidden ()Z
   method public isUsable ()Z
@@ -4870,6 +4875,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
   method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/core/storage/ConfigStorage;)Lcom/crystalgui/desktop/app/Application;
   method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/core/storage/ConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
+  method public launchInStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)V
   method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/core/storage/ConfigStorage;)Lcom/crystalgui/desktop/app/Application;
   method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/core/storage/ConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
   method public running ()Ljava/util/List;
@@ -5111,6 +5117,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   method public setBarVisible (Z)V
   method public setPreviewsSuppressed (Z)V
   method public start ()Lcom/crystalgui/desktop/launcher/LauncherButton;
+  method public takePlace (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/taskbar/Taskbar;
 com/crystalgui/desktop/taskbar/TaskbarCombine
   access public,final,enum
@@ -5214,6 +5221,14 @@ com/crystalgui/desktop/window/SnapZones$Zone
   method public movesVerticalDivider (I)Z
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/desktop/window/SnapZones$Zone;
   method public,static values ()[Lcom/crystalgui/desktop/window/SnapZones$Zone;
+com/crystalgui/desktop/window/StartingMark
+  access public,final
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final COVER_CLASS Ljava/lang/String;
+  field public,static,final MARK_CLASS Ljava/lang/String;
+  method public <init> (Ljava/lang/String;Ljava/lang/String;)V
+  method public,static leaveOver (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public,static settled (Lcom/crystalgui/desktop/window/WindowFrame;)Z
 com/crystalgui/desktop/window/SystemMenu
   access public,final
   extends java/lang/Object
@@ -5443,6 +5458,7 @@ com/crystalgui/desktop/window/WindowRegistry
   method public setHiddenCap (I)V
   method public size ()I
   method public switcherOrder ()Ljava/util/List;
+  method public takePlace (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public taskbarOrder ()Ljava/util/List;
   method public windows ()Ljava/util/List;
 com/crystalgui/document/AbstractDocumentModel
@@ -8166,7 +8182,6 @@ com/crystalgui/render/CgUiPaintContext
   method public compositeMask (Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgui/render/LayerRegion;)V
   method public curve ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Curve;
   method public damageCheckTarget (Lcom/crystalgui/render/Surface;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
-  method public damageSurface (Lcom/crystalgui/render/LayerRegion;)V
   method public deviceScale ()F
   method public drawImage (Lcom/crystalgraphics/api/texture/CgTexture;FFFFFFFFI)V
   method public drawLayer (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;FFFF)V
@@ -8206,6 +8221,8 @@ com/crystalgui/render/CgUiPaintContext
   method public mirroring ()Z
   method public notePainted (Lorg/joml/Matrix4f;FFFF)V
   method public outsideClip (FFFF)Z
+  method public placeLayer (Lcom/crystalgui/render/Surface$Placement;Lcom/crystalgui/render/LayerRegion;)V
+  method public placeSurface (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;)V
   method public popLayerOpacity (F)V
   method public popRoundedClip ()V
   method public popScissor ()V
@@ -8362,6 +8379,13 @@ com/crystalgui/render/Surface$Owner
   extends java/lang/Object
   method public,abstract keepsSurface ()Z
   method public,abstract surface (Lcom/crystalgui/render/Surface;)V
+com/crystalgui/render/Surface$Placement
+  access public,final
+  extends java/lang/Object
+  implements com/crystalgui/render/Surface$Tenant
+  method public <init> ()V
+  method public place (Lcom/crystalgui/render/Surface;FFFFJ)V
+  method public vacate (Lcom/crystalgui/render/Surface;IJ)V
 com/crystalgui/render/Surface$Tenant
   access public,abstract,interface
   extends java/lang/Object
@@ -14212,6 +14236,7 @@ com/crystalgui/ui/service/CompositorAnimation
   access public,final
   extends java/lang/Object
   method public <init> (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/style/property/visual/transform/Transform;Lcom/crystalgui/style/property/visual/transform/Transform;FFLcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;JLcom/crystalgraphics/easing/CgEasing;)V
+  method public <init> (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/style/property/visual/transform/Transform;Lcom/crystalgui/style/property/visual/transform/Transform;FFLcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;JLcom/crystalgraphics/easing/CgEasing;JLcom/crystalgraphics/easing/CgEasing;)V
   method public isFinished (J)Z
   method public opacityAt (J)F
   method public originX (F)F

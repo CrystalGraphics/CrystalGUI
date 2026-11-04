@@ -212,6 +212,8 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         desktop.applications().install(single);
         desktop.persistTo(new InMemoryConfigStorage(), "pins");
         DesktopCommands.open(desktop, single);
+        // Built behind its starting window, a frame or two later
+        for (int i = 0; i < 4; i++) frame();
         WindowFrame window = desktop.registry().windows().get(0);
         WindowFrame other = desktop.addWindow(new WindowFrame("Other"));
         for (int i = 0; i < 3; i++) frame();

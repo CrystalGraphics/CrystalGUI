@@ -4,6 +4,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
@@ -763,11 +764,17 @@ public class Desktop extends UIElement implements DataProvider {
         windows.append(frame);
         // BEFORE the animation and the activation below: a window restored from a record should open AT
         // the size and place it is meant to be, not fly in at a default and jump. @see #persistTo
-        if (!applyPersistedGeometry(frame) && !frame.isSized() && frame.isApplicationMain()) sizeByDefault(frame);
+        // AN APPLICATION'S STARTING WINDOW GIVES WAY to its main window: the same place, already open, no second flight
+        WindowFrame starter = startingFor(frame);
+        if (!applyPersistedGeometry(frame)) {
+            if (starter != null) takeGeometry(frame, starter);
+            else if (!frame.isSized() && frame.isApplicationMain()) sizeByDefault(frame);
+        }
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
         // show() puts a hidden one back -- and the animation is the only thing they share.
-        frame.playOpenAnimation();
+        if (starter == null) frame.playOpenAnimation();
+        else replaceStarting(starter, frame);
         if (!activate) {
             // NO RAISE EITHER. A background window that jumped to the front of the stack would be a
             // focus steal missing only the focus -- it would cover the window being typed in. Its stack
@@ -1563,6 +1570,108 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     private final List<WindowFrame> hideAfterRestore = new ArrayList<>();
+
+    /** On a starting window's content: the placeholder an application's window shows until it has built. */
+    public static final String STARTING_CLASS = "__starting__";
+
+    /** Each launching application's starting window, by its kind's id. @see #openStartingWindow */
+    private final Map<String, WindowFrame> starting = new HashMap<>();
+
+    /**
+     * Opens {@code kind}'s window at once, before the application has built it: its title and icon, where its main
+     * window was last closed or at its kind's size, and its icon ({@link StartingMark}). The application's main window takes
+     * its place when it is added. Android's starting window and Windows' splash: the click is answered on this frame,
+     * however long the application takes.
+     *
+     * <pre>{@code
+     * WindowFrame starter = desktop.openStartingWindow(kind);
+     * // a frame or more later: kind's factory adds its main window, which replaces the starter
+     * }</pre>
+     *
+     * <p>Closing it before the application has built cancels nothing by itself: the launcher asks
+     * {@link #isStarting}. {@link #endStartingWindow} takes it down when the launch fails.</p>
+     */
+    public WindowFrame openStartingWindow(ApplicationKind kind) {
+        WindowFrame open = starting.get(kind.id());
+        if (open != null && open.state() != WindowState.DESTROYED) return open;
+        WindowFrame frame = new WindowFrame(kind.displayName());
+        if (kind.icon() != null) frame.setIcon(kind.icon());
+        // ITS APPLICATION'S: the pin's slot on the bar, and its kind's size when nothing was recorded
+        frame.setApplication(kind).markApplicationMain();
+        frame.content().addClass(STARTING_CLASS);
+        frame.content().append(new StartingMark(kind.icon(), kind.displayName()));
+        DesktopSession.Placement remembered = placementOfApplication(kind.id());
+        if (remembered != null && remembered.isUsable()) {
+            frame.resizeTo(remembered.width(), remembered.height());
+            frame.moveTo(remembered.left(), remembered.top());
+        }
+        addWindow(frame);
+        if (remembered != null && remembered.maximized()) {
+            frame.maximize();
+            frame.setRestoreRect(remembered.left(), remembered.top(), remembered.width(), remembered.height());
+        }
+        starting.put(kind.id(), frame);
+        return frame;
+    }
+
+    /** Whether {@code kind}'s starting window is still waiting for its application: not closed, not replaced. */
+    public boolean isStarting(ApplicationKind kind) {
+        WindowFrame frame = starting.get(kind.id());
+        return frame != null && frame.state() != WindowState.DESTROYED;
+    }
+
+    /**
+     * Takes down {@code kind}'s starting window once its launch is over without a main window taking its place: failed,
+     * or built a window that named its application only after it was added.
+     *
+     * @param successor the window it stood for, which takes its place on the taskbar; null for none
+     */
+    public void endStartingWindow(ApplicationKind kind, @Nullable WindowFrame successor) {
+        WindowFrame frame = starting.remove(kind.id());
+        if (frame == null) return;
+        if (successor != null && successor.desktop() == this) replaceStarting(frame, successor);
+        else frame.destroy();
+    }
+
+    /** {@code successor} where {@code starter} was on the taskbar, then the starter gone. */
+    private void replaceStarting(WindowFrame starter, WindowFrame successor) {
+        registry.takePlace(successor, starter);
+        Taskbar bar = taskbar();
+        if (bar != null) bar.takePlace(successor, starter);
+        // NO CUT TO THE APPLICATION: its mark and backdrop leave over it, the loading screen's way out
+        StartingMark.leaveOver(starter, successor);
+        starter.destroy();
+    }
+
+    @Nullable
+    private WindowFrame startingFor(WindowFrame frame) {
+        ApplicationKind kind = frame.isApplicationMain() ? frame.application() : null;
+        if (kind == null) return null;
+        WindowFrame starter = starting.get(kind.id());
+        if (starter == null || starter == frame) return null;
+        starting.remove(kind.id());
+        return starter.state() == WindowState.DESTROYED ? null : starter;
+    }
+
+    /** The starting window's geometry, for an application's main window nothing recorded. */
+    private static void takeGeometry(WindowFrame frame, WindowFrame starter) {
+        if (starter.isMaximized()) {
+            frame.maximize();
+            frame.setRestoreRect(starter.restoreLeft(), starter.restoreTop(), starter.restoreWidth(), starter.restoreHeight());
+            return;
+        }
+        frame.resizeTo(starter.recordedWidth(), starter.recordedHeight());
+        frame.moveTo(starter.getWantedLeft(), starter.getWantedTop());
+    }
+
+    /** The waiting placement an application's main window last had, or null. */
+    @Nullable
+    private DesktopSession.Placement placementOfApplication(String applicationId) {
+        for (DesktopSession.Placement placement : pendingPlacements.values()) {
+            if (applicationId.equals(placement.app())) return placement;
+        }
+        return null;
+    }
 
     /** A closing window's geometry, for the next window under its key. @see WindowFrame#dispose */
     public void rememberPlacement(WindowFrame frame) {

@@ -66,6 +66,7 @@ public final class DesktopSession {
     private static final String KEY_HEIGHT = "height";
     private static final String KEY_MAXIMIZED = "maximized";
     private static final String KEY_HIDDEN = "hidden";
+    private static final String KEY_APP = "app";
 
     private final Desktop desktop;
     private final ConfigStorage storage;
@@ -160,9 +161,14 @@ public final class DesktopSession {
 
     // ── Restoring ───────────────────────────────────────────────────────────────────────────────
 
-    /** One window's recorded geometry. */
+    /**
+     * One window's recorded geometry.
+     *
+     * @param app the application whose main window it was, empty for any other: what a starting window opens at
+     *            before the application has named its window's key
+     */
     public record Placement(String key, float left, float top, float width, float height,
-                            boolean maximized, boolean hidden) {
+                            boolean maximized, boolean hidden, String app) {
 
         static final CgCodec<Placement> CODEC = CgCodecs.record(
                 CgCodecs.fieldOr(KEY_KEY, CgCodecs.STRING, Placement::key, ""),
@@ -172,6 +178,7 @@ public final class DesktopSession {
                 CgCodecs.fieldOr(KEY_HEIGHT, CgCodecs.FLOAT, Placement::height, 0f),
                 CgCodecs.optionalField(KEY_MAXIMIZED, CgCodecs.BOOL, Placement::maximized, false),
                 CgCodecs.optionalField(KEY_HIDDEN, CgCodecs.BOOL, Placement::hidden, false),
+                CgCodecs.optionalField(KEY_APP, CgCodecs.STRING, Placement::app, ""),
                 Placement::new);
 
         /**
@@ -194,7 +201,7 @@ public final class DesktopSession {
          */
         /** The same geometry, shown rather than minimised: a closed window reopens on screen. */
         Placement shown() {
-            return new Placement(key, left, top, width, height, maximized, false);
+            return new Placement(key, left, top, width, height, maximized, false, app);
         }
 
         static Placement of(WindowFrame frame) {
@@ -206,7 +213,8 @@ public final class DesktopSession {
                     maximized ? frame.restoreTop() : frame.getWantedTop(),
                     maximized ? frame.restoreWidth() : frame.recordedWidth(),
                     maximized ? frame.restoreHeight() : frame.recordedHeight(),
-                    maximized, frame.state() == WindowState.HIDDEN);
+                    maximized, frame.state() == WindowState.HIDDEN,
+                    frame.isApplicationMain() && frame.application() != null ? frame.application().id() : "");
         }
 
         /**

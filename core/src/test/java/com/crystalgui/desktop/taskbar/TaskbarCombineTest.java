@@ -164,6 +164,10 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
         assertSame(taskbar.pinEntryFor(late), taskbar.entryRow().get(0));
 
         DesktopCommands.open(desktop, late);
+        // Built behind its starting window, a frame or two later
+        frame();
+        frame();
+        frame();
         WindowFrame window = desktop.registry().windows().get(1);
         assertEquals("the launched pin went back to the end", List.of(taskbar.entryFor(window), taskbar.entryFor(one)),
                 taskbar.entryRow());

@@ -29,8 +29,8 @@ public class DesktopSessionTest {
         DesktopSession session = new DesktopSession(null, storage);
 
         List<DesktopSession.Placement> windows = session.read("main");
-        assertEquals(new DesktopSession.Placement("editor", 10, 20, 300, 200, true, false), windows.get(0));
-        assertEquals(new DesktopSession.Placement("log", 0, 0, 120, 80, false, true), windows.get(1));
+        assertEquals(new DesktopSession.Placement("editor", 10, 20, 300, 200, true, false, ""), windows.get(0));
+        assertEquals(new DesktopSession.Placement("log", 0, 0, 120, 80, false, true, ""), windows.get(1));
         assertEquals(Arrays.asList("log", "editor"), session.readMruOrder("main"));
     }
 

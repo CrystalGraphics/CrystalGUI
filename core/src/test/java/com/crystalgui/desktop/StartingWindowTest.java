@@ -1,0 +1,119 @@
+package com.crystalgui.desktop;
+
+import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.window.StartingMark;
+import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.fs.Resource;
+import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.testsupport.UiDocumentTestBase;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
+
+/** A launch's window on the frame it was asked for, and the application built into its place a frame later. */
+public class StartingWindowTest extends UiDocumentTestBase {
+
+    private Desktop desktop;
+    private int built;
+    private final ApplicationKind kind = ApplicationKind.of("test:slow", "Slow").windowSize(400, 260).standalone();
+
+    @Before
+    public void openADesktop() {
+        Desktop.setAnimationsEnabled(false);
+        document.styles().addStylesheet(StyleSheet.DEFAULT);
+        desktop = Desktop.of(document);
+        kind.launch(context -> {
+            built++;
+            WindowFrame main = new WindowFrame("Slow").setKey("test:slow").setApplication(kind);
+            main.markApplicationMain();
+            context.desktop().addWindow(main);
+            return new Running(kind, main);
+        });
+        desktop.applications().install(kind);
+        desktop.persistTo(new InMemoryConfigStorage(), "starting");
+        document.update(800f, 600f);
+    }
+
+    @After
+    public void animationsBackOn() {
+        Desktop.setAnimationsEnabled(true);
+    }
+
+    private void frames(int count) {
+        for (int i = 0; i < count; i++) frame();
+    }
+
+    @Test
+    public void theWindowOpensAtOnceAndTheApplicationTakesItsPlace() {
+        desktop.applications().launchInStartingWindow(kind, null);
+        assertTrue("no window on the frame it was asked for", desktop.isStarting(kind));
+        assertEquals("built before its window showed", 0, built);
+        WindowFrame starter = desktop.registry().windows().get(0);
+
+        frames(4);
+        assertEquals(1, built);
+        assertFalse("the starting window outlived its application's", desktop.isStarting(kind));
+        assertEquals("two windows for one launch", 1, desktop.registry().windows().size());
+        WindowFrame main = desktop.registry().windows().get(0);
+        assertEquals("test:slow", main.key());
+        assertEquals("it moved on the swap", starter.getWantedLeft(), main.getWantedLeft(), 0.5f);
+        assertEquals(400f, main.recordedWidth(), 0.5f);
+    }
+
+    @Test
+    public void aMarkSeenLeavesOverTheApplicationsWindowAndIsGoneAfter() throws InterruptedException {
+        Desktop.setAnimationsEnabled(true);
+        desktop.applications().launchInStartingWindow(kind, null);
+        frame();
+        frames(3);
+        assertTrue("it built before its mark had come in", desktop.isStarting(kind));
+        Thread.sleep(2150);   // the mark is in whole, settled, 1.43 s after its first frame
+        frames(3);
+        WindowFrame main = desktop.registry().windows().get(0);
+        assertEquals("test:slow", main.key());
+        assertTrue("the application cut in with no cover leaving over it", hasCover(main));
+        Thread.sleep(800);   // past the 700 ms out
+        frames(2);
+        assertFalse("the cover outlived its out", hasCover(main));
+    }
+
+    private static boolean hasCover(WindowFrame frame) {
+        for (UIElement child : frame.content().children()) {
+            if (child.hasClass(StartingMark.COVER_CLASS)) return true;
+        }
+        return false;
+    }
+
+    @Test
+    public void closingTheStartingWindowCancelsTheLaunch() {
+        desktop.applications().launchInStartingWindow(kind, null);
+        desktop.registry().windows().get(0).destroy();
+        frames(4);
+        assertEquals("it built an application nobody wanted any more", 0, built);
+        assertTrue(desktop.registry().windows().isEmpty());
+    }
+
+    @Test
+    public void aSecondClickWhileStartingOpensNoSecondWindow() {
+        desktop.applications().launchInStartingWindow(kind, null);
+        WindowFrame starter = desktop.registry().windows().get(0);
+        desktop.applications().launchInStartingWindow(kind, null);
+        assertSame(starter, desktop.registry().windows().get(0));
+        assertEquals(1, desktop.registry().windows().size());
+    }
+
+    private record Running(ApplicationKind kind, WindowFrame window) implements Application {
+        @Override public WindowFrame mainWindow() { return window; }
+        @Override public boolean open(Resource resource) { return false; }
+        @Override public void activate() { }
+        @Override public void dispose() { }
+    }
+}

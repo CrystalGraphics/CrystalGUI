@@ -609,6 +609,39 @@ taskbar .__entry__.__busy__ .__progress__ {
     color: var(--window-icon-glyph, #FFFFFF);
 }
 
+/* A STARTING WINDOW: its application's icon, centred, until the application has built into it --
+ * Android's starting window and Windows' splash. Then the cover, the same backdrop and mark laid over the application's
+ * content while they leave. @see Desktop#STARTING_CLASS @see StartingMark */
+.__starting__,
+.__starting-cover__ {
+    justify-content: center;
+    align-items: center;
+}
+
+/* Over everything its window's content stacks: an application's own panels go up to 7, and paint over an `auto` */
+.__starting-cover__ {
+    z-index: 100;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--window-bg, #191A1C);
+}
+
+/* A surface of its own, so it is drawn once at rest and its scale applied to the picture: an icon mid-scale is drawn
+ * without its cached raster, and loses its drop shadow */
+.__starting-mark__ {
+    will-change: transform;
+}
+
+.__starting-mark__ > .__window-icon__ {
+    width: 72px;
+    height: 72px;
+    padding: 12px;
+    border-radius: 15px;
+}
+
 /* BRANDED ARTWORK IS ITS OWN TILE. A file that names every colour it uses — no currentColor anywhere in
  * it, which is how WindowIcon tells a brand mark from a Feather chrome mark — already ships as the
  * filled rounded square the tile exists to supply. So it wears this class INSTEAD of a palette class
