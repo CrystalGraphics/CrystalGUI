@@ -769,7 +769,7 @@ tasks.register("serverSmoke") {
 // the daemon and the run never sees it, which reads as a flag that does nothing -- so the ones worth
 // turning on from a command line are forwarded: every crystalgui.* and crystalgraphics.* one.
 //
-//   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.layer.probe=true
+//   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true
 //   ./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true -Dcrystalgui.autotest.script=Probe.java
 tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
     for (prefix in listOf("crystalgui.", "crystalgraphics.")) {

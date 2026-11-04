@@ -31,8 +31,7 @@ import org.lwjgl.glfw.GLFW;
  * ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true
  * }</pre>
  *
- * <p>Screenshots land in {@code runs/client/screenshots} as {@code cgui-NN-step.png}. Add
- * {@code -Dcrystalgui.layer.probe=true} for GL readbacks alongside them.</p>
+ * <p>Screenshots land in {@code runs/client/screenshots} as {@code cgui-NN-step.png}.</p>
  */
 public final class ClientProbe {
 
