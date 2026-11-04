@@ -214,8 +214,7 @@ public final class CgUiPaintContext {
                 }
             }
             if (built < materials.length) return false;
-            // THE DESKTOP'S TEXT READY BEFORE IT OPENS: its families loaded and their glyphs generated, so its first
-            // frame neither loads a font nor draws from the bitmap stand-ins
+            // THE DESKTOP'S FONTS LOADED BEFORE IT OPENS, so its first frame loads none
             if (!glyphsLanded()) return false;
             try {
                 context.beginFrame(Math.max(1, width), Math.max(1, height));
@@ -230,10 +229,12 @@ public final class CgUiPaintContext {
             return true;
         }
 
+        /**
+         * The families loaded. Their glyphs keep generating behind the first frames: every size the sheets use is
+         * thousands of bitmap glyphs, which held the loading screen five seconds.
+         */
         private boolean glyphsLanded() {
-            if (System.nanoTime() > glyphsDeadline) return true;
-            if (glyphs != null && !glyphs.isDone()) return false;
-            return !CgFontRegistry.get().isWarming();
+            return System.nanoTime() > glyphsDeadline || glyphs == null || glyphs.isDone();
         }
 
         /** How far along, 0 to 1: the materials built, then the empty frame. */
@@ -638,7 +639,7 @@ public final class CgUiPaintContext {
      * would also submit the distance-field tier once per size, and those jobs are not {@code equals}
      * — they would slip past the executor's dedup and generate the same entry six times over.</p>
      */
-    /** How long the warm waits for the sheets' glyphs at most. */
+    /** How long the warm waits for the sheets' families at most. */
     private static final long GLYPH_WAIT_NANOS = 5_000_000_000L;
 
     /** Null when it could not start: glyphs rasterise on demand. */
