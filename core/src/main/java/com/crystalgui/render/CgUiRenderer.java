@@ -14,7 +14,7 @@ import com.crystalgraphics.render.draw.CgChunkSink;
  * <p>This used to wrap {@code CgBatchRenderer}, writing four transformed vertices per quad through a
  * {@code PoseStack}-aware {@code CgVertexConsumer}. {@link CgQuadRenderer} expresses the same thing as
  * one per-instance record — {@code origin} plus the two edge vectors {@code right}/{@code up} — living
- * in a class-wide SSBO/TBO, with a single shared unit-quad mesh drawn instanced.</p>
+ * in a class-wide SSBO, with a single shared unit-quad mesh drawn instanced.</p>
  *
  * <p>The pose is no longer applied per vertex on the CPU here: {@link CgQuadRenderer.Quad#pose} bakes
  * it at submit time by running {@code origin} through {@code transformPosition} and {@code right}/

@@ -372,7 +372,7 @@ public final class CgUiPaintContext {
      *
      * <p>They stay separate instances rather than sharing one because each batches across its own
      * {@code begin()}/{@code end()} window against its own material — only the CPU-side accumulation
-     * buffer is per-instance state, while the unit-quad mesh and the instance SSBO/TBO behind them
+     * buffer is per-instance state, while the unit-quad mesh and the instance SSBO behind them
      * are class-wide and shared regardless.</p>
      */
     @Getter

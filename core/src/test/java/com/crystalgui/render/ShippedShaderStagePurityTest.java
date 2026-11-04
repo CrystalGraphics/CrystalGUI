@@ -72,15 +72,8 @@ public class ShippedShaderStagePurityTest {
 
     // ── The gate ──────────────────────────────────────────────────────────────
 
-    /** TBO path — {@code #version 330 core}. */
-    @Test
-    public void shippedShaders_vertexStage_hasNoFragmentOnlyBuiltins_tboPath() throws Exception {
-        assertAllShippedShadersPure(CgCapabilities.ShaderBufferPath.TBO);
-    }
-
     /**
-     * SSBO path — {@code #version 430 core}. This is what the AMD box runs, and the two paths emit
-     * different sources, so covering one leaves half the generated GLSL unexamined.
+     * The storage-block path, {@code #version 430 core}: the one every context runs.
      */
     @Test
     public void shippedShaders_vertexStage_hasNoFragmentOnlyBuiltins_ssboPath() throws Exception {
