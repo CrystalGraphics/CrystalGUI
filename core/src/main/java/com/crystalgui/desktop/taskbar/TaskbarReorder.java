@@ -245,16 +245,10 @@ final class TaskbarReorder {
         return document == null ? null : document.input().pointer();
     }
 
-    /** The entry drawn after {@code of}'s group, or null at the end: what "before" means for it now. */
+    /** The button after {@code of}'s group, or null at the end: what "before" means for it now. */
     @Nullable
     private UIElement nextAfter(UIElement of) {
-        List<UIElement> row = taskbar.entryRow();
-        Object group = taskbar.groupOf(of);
-        int last = -1;
-        for (int i = 0; i < row.size(); i++) {
-            if (taskbar.groupOf(row.get(i)).equals(group)) last = i;
-        }
-        return last >= 0 && last + 1 < row.size() ? row.get(last + 1) : null;
+        return taskbar.afterGroupOf(of);
     }
 
     private static final float[] ZERO = {0f, 0f};

@@ -6,6 +6,7 @@ import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.window.WindowFrame;
 
 import java.util.List;
 
@@ -120,4 +121,12 @@ public final class UiDataKeys {
      */
     public static final DataKey<ApplicationKind> APPLICATION_KIND =
             DataKey.create("applicationKind", ApplicationKind.class);
+
+    /**
+     * The windows an element stands for: one for a window's taskbar button, every window of its application
+     * for a combined one. What Close all windows acts on.
+     */
+    @SuppressWarnings("unchecked")
+    public static final DataKey<List<WindowFrame>> WINDOWS =
+            DataKey.create("windows", (Class<List<WindowFrame>>) (Class<?>) List.class);
 }

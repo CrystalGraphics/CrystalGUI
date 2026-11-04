@@ -226,6 +226,12 @@ public class WindowPreview extends UIElement {
     }
 
     /** Points the preview at a window. Cheap enough to call while it is moving between entries. */
+    /** The window shown, or null. */
+    @Nullable
+    public WindowFrame frame() {
+        return frame;
+    }
+
     public WindowPreview setFrame(@Nullable WindowFrame frame) {
         this.frame = frame;
         thumbnail.setFrame(frame);

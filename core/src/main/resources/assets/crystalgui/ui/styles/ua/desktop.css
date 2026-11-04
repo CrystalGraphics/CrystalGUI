@@ -180,7 +180,8 @@ taskbar {
  * tint is a theme pin, and `fallback` is what draws where there is no backdrop to sample. */
 taskbar,
 menu.__jump-list__,
-.__window-preview__,
+taskbar > .__window-preview__,
+.__preview-row__,
 .__window-switcher__ > .__switcher-panel__,
 launcher {
     backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
@@ -464,13 +465,13 @@ taskbar .__entry__.__hidden__ {
 taskbar .__entry__::part(indicator) {
     position: absolute;
     left: 50%;
-    bottom: 0px;
+    bottom: 1px;
     width: 6px;
     /* A full capsule, the radius half the height: a round end spreads a fractional position over more
-     * pixels than a squarer one does. 2.5px is 5 device pixels at the default uiScale of 2, Windows 11's
-     * thin pill on an icon-only bar */
-    height: 2.5px;
-    border-radius: 1.25px;
+     * pixels than a squarer one does. 2px is 4 device pixels at the default uiScale of 2, Windows 11's
+     * thin pill on an icon-only bar, lifted off the bottom as theirs is */
+    height: 2px;
+    border-radius: 1px;
     transform: translate(-3px, 0);
     background-color: var(--taskbar-indicator, #9DA0A8);
     transition: background-color 150ms ease-out, width 150ms ease-out, transform 150ms ease-out;
@@ -1314,6 +1315,33 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
  * Java, so a theme can restyle the fade and nothing outranks it; TaskbarPreviews only says when. */
 .__window-preview__.__placing__ {
     opacity: 0;
+}
+
+/* A COMBINED BUTTON'S WINDOWS, side by side on one panel of the bar's glass, as Windows 11's row. */
+.__preview-row__ {
+    position: absolute;
+    flex-direction: row;
+    gap: 4px;
+    padding: 4px;
+    outline: 1px var(--taskbar-border, #393B40);
+    border-radius: var(--radius-panel, 8px);
+    z-index: 100;
+}
+
+.__preview-row__.__placing__ {
+    opacity: 0;
+}
+
+/* Each card is a preview without a panel of its own: the row is the panel, and a card is lit only under the
+ * pointer. The glass rule names the standalone preview alone, so no card samples a backdrop of its own. */
+.__preview-row__ > .__window-preview__ {
+    position: relative;
+    outline: 0px;
+    border-radius: var(--radius-control, 4px);
+}
+
+.__preview-row__ > .__window-preview__:hover {
+    background-color: var(--taskbar-entry-hover-bg, #FFFFFF1A);
 }
 
 /* A fullscreen window has no border and no rounding: there is nothing beside it for either to separate

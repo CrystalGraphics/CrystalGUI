@@ -1335,6 +1335,7 @@ public class Desktop extends UIElement implements DataProvider {
         // A caller that named one place for the arrangement did not mean a second place for everything
         // else. @see #useStorage
         this.config = storage;
+        desktopSettings.useStorage(storage);
         applications().autostart();
         persistence = new DesktopSession(this, storage);
         persistenceId = id;
@@ -1376,6 +1377,7 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public Desktop useStorage(Path installation) {
         this.config = new LocalConfigStorage(StorageLayout.configIn(installation));
+        desktopSettings.useStorage(config);
         // A PATH, NOT A STORAGE: LocalConfigStorage creates its directory eagerly, and a cache/ that
         // exists before anything derived does is a directory nobody can explain.
         this.cacheRoot = StorageLayout.cacheIn(installation);
@@ -1776,6 +1778,8 @@ public class Desktop extends UIElement implements DataProvider {
     private final ApplicationRegistry applications = new ApplicationRegistry(this);
 
     private final TaskbarPins pins = new TaskbarPins();
+    /** Over this node's own settings store, so the shell's settings resolve through the settings tree. */
+    private final DesktopSettings desktopSettings = new DesktopSettings(settings());
     /** True while {@link #persistTo} reads the pins back, which is not a change to save. */
     private boolean restoringPins;
 
@@ -1821,6 +1825,11 @@ public class Desktop extends UIElement implements DataProvider {
     /** The applications pinned to the taskbar, saved with the arrangement. @see TaskbarPins */
     public TaskbarPins pins() {
         return pins;
+    }
+
+    /** The desktop's own settings, in {@code desktop-settings.json}. @see DesktopSettings */
+    public DesktopSettings desktopSettings() {
+        return desktopSettings;
     }
 
     /**

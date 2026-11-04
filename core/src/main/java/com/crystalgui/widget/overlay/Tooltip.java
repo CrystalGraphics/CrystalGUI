@@ -120,6 +120,25 @@ public class Tooltip extends UIElement {
         return this;
     }
 
+    /** The element whose edge this sits against, or null for the anchor's own. @see #setEdgeOf */
+    @Nullable
+    private UIElement edgeOf;
+
+    /**
+     * Sits against {@code bar}'s edge rather than its anchor's, still lined up with the anchor along it: a
+     * button in a bar names itself from the bar's edge, as Windows' taskbar tooltips sit on the taskbar.
+     *
+     * <pre>{@code
+     * Tooltip.attach(button, "Start").setSide(AnchoredPlacement.Side.TOP).setEdgeOf(taskbar);
+     * }</pre>
+     *
+     * <p>Null puts it back against the anchor. {@code bar} should contain the anchor along the side used.</p>
+     */
+    public Tooltip setEdgeOf(@Nullable UIElement bar) {
+        this.edgeOf = bar;
+        return this;
+    }
+
     public AnchoredPlacement.Side getSide() {
         return side;
     }
@@ -826,6 +845,19 @@ public class Tooltip extends UIElement {
         // is neither when the tip sits BESIDE its anchor: there the top margin is not a gap at all but a
         // shove down the cross axis, which is what put the rail's labels below the icons they name.
         toggleClass(BESIDE_CLASS, !side.isVertical());
+        UIDocument document = document();
+        if (edgeOf != null && against != null && document != null) {
+            AnchoredPlacement.Rect own = AnchoredPlacement.anchorRectInRoot(against, document);
+            AnchoredPlacement.Rect edge = AnchoredPlacement.anchorRectInRoot(edgeOf, document);
+            if (own != null && edge != null) {
+                // The anchor's extent along the side, the bar's across it
+                AnchoredPlacement.Rect rect = side.isVertical()
+                        ? new AnchoredPlacement.Rect(own.x(), edge.y(), own.width(), edge.height())
+                        : new AnchoredPlacement.Rect(edge.x(), own.y(), edge.width(), own.height());
+                AnchoredPlacement.placeInRect(this, rect, side, gap, cross);
+                return;
+            }
+        }
         AnchoredPlacement.place(this, against, side, gap, cross);
     }
 

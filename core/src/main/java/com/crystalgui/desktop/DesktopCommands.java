@@ -8,6 +8,7 @@ import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.taskbar.TaskbarCombine;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -52,6 +53,9 @@ public final class DesktopCommands {
     /** The prefix of the row that opens an application from its menu, followed by the application's id. */
     public static final String OPEN_APPLICATION = "desktop.openApplication";
     public static final String PIN_TO_TASKBAR = "desktop.pinToTaskbar";
+    public static final String COMBINE_ALWAYS = "desktop.combineAlways";
+    public static final String COMBINE_WHEN_FULL = "desktop.combineWhenFull";
+    public static final String COMBINE_NEVER = "desktop.combineNever";
     public static final String TASKBAR_DESIGNER = "desktop.taskbarDesigner";
     public static final String FRAME_STATS = "desktop.frameStats";
     public static final String FRAME_STATS_DETAIL = "desktop.frameStatsDetail";
@@ -129,6 +133,12 @@ public final class DesktopCommands {
         // It TOGGLES on its key rather than opening a second one, because two designers would fight for
         // the same IMPORTANT slots on the same island and the loser's sliders would silently stop doing
         // anything -- which reads as the tool being broken rather than as there being two of it.
+        // COMBINE TASKBAR BUTTONS, Windows' three choices, one of them ticked
+        combineCommand(registry, COMBINE_ALWAYS, "Combine buttons: Always", TaskbarCombine.ALWAYS, 10);
+        combineCommand(registry, COMBINE_WHEN_FULL, "Combine buttons: When taskbar is full",
+                TaskbarCombine.WHEN_FULL, 20);
+        combineCommand(registry, COMBINE_NEVER, "Combine buttons: Never", TaskbarCombine.NEVER, 30);
+
         registry.register(Command.of(TASKBAR_DESIGNER, "Design Taskbar…")
                 .binding("Mod+Alt+T")
                 .menu(MenuId.TASKBAR_CONTEXT, "9_design", 10)
@@ -234,6 +244,21 @@ public final class DesktopCommands {
                         .icon(kind.icon())
                         .run(() -> open(desktop, kind)),
                 WindowCommands.GROUP_CLOSE, 1));
+    }
+
+    private static void combineCommand(CommandRegistry registry, String id, String label, TaskbarCombine mode,
+                                       int order) {
+        registry.register(Command.of(id, label)
+                .menu(MenuId.TASKBAR_CONTEXT, "5_combine", order)
+                .run(context -> {
+                    Desktop desktop = desktopFor(context);
+                    if (desktop != null) desktop.desktopSettings().setTaskbarCombine(mode);
+                })
+                .enabledWhen(context -> desktopFor(context) != null)
+                .toggledWhen(context -> {
+                    Desktop desktop = desktopFor(context);
+                    return desktop != null && desktop.desktopSettings().taskbarCombine() == mode;
+                }));
     }
 
     /** Whether the application the command is about could be pinned: installed here, and pinnable. */
