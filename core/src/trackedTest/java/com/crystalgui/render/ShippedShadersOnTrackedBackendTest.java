@@ -15,6 +15,7 @@ import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.platform.gl.tracked.CgTrackedGLBackend;
 import com.crystalgraphics.platform.gl.tracked.CgTrackedGLContext;
 import com.crystalgraphics.platform.gl.tracked.CgTrackedStateProvider;
+import com.crystalgraphics.vulkan.shader.ExplicitBindingCheck;
 import com.crystalgraphics.vulkan.shader.ShadercGlslCompiler;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
@@ -38,12 +39,13 @@ import static org.junit.Assert.*;
  */
 public class ShippedShadersOnTrackedBackendTest {
 
-    private static ShadercGlslCompiler compiler;
+    private static ShadercGlslCompiler compiler, bare;
 
     @BeforeClass
     public static void install() {
         compiler = new ShadercGlslCompiler();
-        CgTrackedGLBackend gl = new CgTrackedGLBackend(new CgNullRHI(64, 64), compiler, true);
+        bare = new ShadercGlslCompiler(null, false);
+        CgTrackedGLBackend gl = new CgTrackedGLBackend(new CgNullRHI(64, 64), new ExplicitBindingCheck(compiler, bare), true);
         CgGL.init(gl);
         CgCapabilities.init(new CgTrackedGLContext());
         CgCapabilities.clearCache();
@@ -58,6 +60,7 @@ public class ShippedShadersOnTrackedBackendTest {
     public static void uninstall() {
         CgGlState.reset();
         compiler.close();
+        bare.close();
     }
 
     @Test
