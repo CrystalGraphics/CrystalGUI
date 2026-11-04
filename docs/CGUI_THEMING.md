@@ -750,6 +750,9 @@ editor scheme's.
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |
 | `--taskbar-start-hover-tint` | `#D4E2FF` | crystal-dark.css |
 | `--taskbar-start-pressed-tint` | `#B7CDF7` | crystal-dark.css |
+| `--taskbar-tooltip-bg` | `#F9F9F9` | crystal-dark.css |
+| `--taskbar-tooltip-border` | `#0000001A` | crystal-dark.css |
+| `--taskbar-tooltip-fg` | `#1A1A1A` | crystal-dark.css |
 | `--tooltip-bg` | `#2B2D30` | crystal-dark.css |
 | `--tooltip-border` | `#323438` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |

@@ -120,6 +120,10 @@ theme {
     --taskbar-edge-mid: #FFFFFF73;
     /* The keyboard ring on the bar's entries and start button: white, as Windows 11 draws it on its dark bar. */
     --taskbar-focus-ring: #FFFFFF;
+    /* The bar's button names: light on either bar, as Windows 11 draws its taskbar tooltips. */
+    --taskbar-tooltip-bg: #F9F9F9;
+    --taskbar-tooltip-border: #0000001A;
+    --taskbar-tooltip-fg: #1A1A1A;
     /* THE TASKBAR'S ACRYLIC TINT: Mica's dark base, #202020, at the floating panels' 7%; the rule's
      * `luminosity 0.48` does the darkening, so the blurred world shows through. A pin because no system
      * role carries this alpha.

@@ -17,6 +17,7 @@ import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.service.Animation;
@@ -163,8 +164,12 @@ public class Taskbar extends UIElement {
     /** How long the pointer rests on a button before its name shows: Windows' one second. */
     private static final float TOOLTIP_DELAY_SECONDS = 1f;
 
+    /** On the tooltips naming the bar's buttons, which the sheet draws light, as Windows' are. */
+    public static final String TIP_CLASS = "__taskbar-tip__";
+
     /** A button's name after a second's rest, sitting on the bar's top edge over it, as Windows' does. */
     private Tooltip nameOnTheBar(Tooltip tooltip) {
+        tooltip.addClass(TIP_CLASS);
         return tooltip.setDelay(TOOLTIP_DELAY_SECONDS).setSide(AnchoredPlacement.Side.TOP).setEdgeOf(this);
     }
 
@@ -236,9 +241,10 @@ public class Taskbar extends UIElement {
         //
         // A right-click on an ENTRY never reaches here, because the entry's own handler consumes it and
         // opens the jump list instead -- which is the distinction the two menus exist for. This one is
-        // about the SET of windows; that one names a window.
+        // about the SET of windows; that one names a window. Nor is it the start button's.
         ContextMenu.attach(this, CommandRegistry.global(),
-                pressed -> ContextMenu.of(MenuId.TASKBAR_CONTEXT));
+                pressed -> UINode.isShadowIncludingInclusiveAncestor(start, pressed)
+                        ? null : ContextMenu.of(MenuId.TASKBAR_CONTEXT));
         // BOTH CHILDREN BEFORE ATTACH. Adding one later means inserting a Taffy node into a parent
         // whose children are mid-registration -- `Index (is 1) should be < child_count (0)` -- which is
         // exactly what building the previews lazily from createEntry did, since refresh() runs from
@@ -798,6 +804,8 @@ public class Taskbar extends UIElement {
                 return;
             }
             event.stopPropagation();
+            // ALREADY UP: a second right-click on its own entry leaves it, as Windows does
+            if (SystemMenu.isJumpListOpen(entry.subject(), element)) return;
             SystemMenu.showJumpList(entry.subject(), element);
         }, false, false);
         previews.watch(entry, entry::shown);

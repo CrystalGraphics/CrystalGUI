@@ -46,8 +46,8 @@ import java.util.WeakHashMap;
  */
 public final class SystemMenu {
 
-    /** The gap between a jump list and the entry it belongs to — the previews use the same. */
-    private static final float GAP = 4f;
+    /** The gap between a jump list and the bar's top edge, as the previews'. The sheet's rise is the same distance. */
+    private static final float GAP = 1f;
 
     /**
      * On a system menu opened from a taskbar entry — Windows' jump list.
@@ -215,7 +215,10 @@ public final class SystemMenu {
             float widest = Math.max(0f, root.width() - box.width());
             // COMPUTED rather than read back: the y placement resolved to is in the promoted space this
             // is trying to avoid reading, and "above the anchor" is one subtraction.
-            menu.moveTo(Math.max(0f, Math.min(centred, widest)), on.y() - box.height() - GAP);
+            // FROM THE BAR'S EDGE, not the entry's, so the rise starts on the bar rather than over it.
+            AnchoredPlacement.Rect bar = taskbar == null ? null : AnchoredPlacement.anchorRectInRoot(taskbar, window);
+            float edge = bar == null ? on.y() : bar.y();
+            menu.moveTo(Math.max(0f, Math.min(centred, widest)), edge - box.height() - GAP);
             // DROPPED ONCE IT IS PLACED, which starts the rise. Doing it before the placement would
             // animate from wherever the unmeasured first frame put it, which is a rise from the wrong
             // place -- the panel would slide sideways as well as up.
@@ -252,6 +255,16 @@ public final class SystemMenu {
      */
     public static void dismissJumpList(@Nullable WindowFrame frame, UIElement anchor) {
         discard(frame != null ? frame : anchor);
+    }
+
+    /** Whether the jump list of {@code frame}, or of {@code anchor} for a pin with no window, is open. */
+    public static boolean isJumpListOpen(@Nullable WindowFrame frame, UIElement anchor) {
+        List<Menu> live = LIVE.get(frame != null ? frame : anchor);
+        if (live == null) return false;
+        for (Menu menu : live) {
+            if (menu.isOpen()) return true;
+        }
+        return false;
     }
 
     /** Closes and drops {@code frame}'s menu chain, if it has one. */

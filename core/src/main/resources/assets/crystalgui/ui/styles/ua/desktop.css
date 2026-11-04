@@ -1218,6 +1218,17 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     display: none;
 }
 
+/* ── The taskbar's button names: light, as Windows 11's are. @see Taskbar#TIP_CLASS */
+tooltip.__taskbar-tip__ {
+    background: var(--taskbar-tooltip-bg, #F9F9F9);
+    outline: 1px var(--taskbar-tooltip-border, #0000001A);
+}
+
+tooltip.__taskbar-tip__ .__label__,
+tooltip.__taskbar-tip__::part(label) {
+    color: var(--taskbar-tooltip-fg, #1A1A1A);
+}
+
 /* ── The caption buttons' tooltips ───────────────────────────────────────────────────
  * TWO SECONDS, against the sheet-wide one. A tooltip's wait is a property on the TOOLTIP, and a
  * tooltip is an internal child of the control it names -- so it is reached through that control, and
@@ -1317,6 +1328,34 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     opacity: 0;
 }
 
+/* OPENING AND CLOSING, WinUI's menu flyout (MenuPopupThemeTransition): it slides up from half its height
+ * below while the bottom half is cut away, so the visible edge stays on the bar and the panel comes out of
+ * it; 250ms on (0, 0, 0, 1), with no fade. Closing fades over 83ms, linear. The placing state above is
+ * where the slide starts, so removing it starts the slide; the opacity is in no open list, so it snaps.
+ * The rest is translate(0, 0%), never 0: a px against a % does not interpolate and snaps halfway. */
+taskbar > .__window-preview__,
+.__preview-row__ {
+    transform: translate(0, 0%);
+    clip-path: inset(0 0 0 0 round var(--radius-panel, 8px));
+    /* `display` HERE TOO, though it is the close's: closing writes `display: none` before the class change
+     * re-cascades, so the list in force for that write is this one, and without it the box goes at once. */
+    transition: transform 250ms cubic-bezier(0, 0, 0, 1), clip-path 250ms cubic-bezier(0, 0, 0, 1),
+            display 83ms linear;
+}
+
+taskbar > .__window-preview__.__placing__,
+.__preview-row__.__placing__ {
+    transform: translate(0, 50%);
+    clip-path: inset(0 0 50% 0 round var(--radius-panel, 8px));
+}
+
+/* `display` holds the closed panel laid out for the fade; it leaves once it has no box. @see TaskbarPreviews#CLOSING_CLASS */
+taskbar > .__window-preview__.__closing__,
+.__preview-row__.__closing__ {
+    opacity: 0;
+    transition: opacity 83ms linear, display 83ms linear;
+}
+
 /* A COMBINED BUTTON'S WINDOWS, side by side on one panel of the bar's glass, as Windows 11's row. */
 .__preview-row__ {
     position: absolute;
@@ -1376,17 +1415,29 @@ menu.__jump-list__ {
     min-width: 140px;
 
     /* THE RESTING VALUES of the rise; __rising__ below carries what it eases FROM. Both ends write the
-     * SAME function list — `translate(0, 0)` against `translate(0, 14px)` — because a transform only
+     * SAME function list — `translate(0, 0)` against `translate(0, 50%)` — because a transform only
      * interpolates component-wise when the lists line up, and `none`/IDENTITY lines up with nothing and
      * snaps at the halfway point instead. That one cost four window animations. */
-    transform: translate(0, 0);
-    opacity: 1;
-    transition: transform 150ms ease-out, opacity 150ms ease-out;
+    transform: translate(0, 0%);
+    clip-path: inset(0 0 0 0 round var(--radius-panel, 8px));
+    /* CLOSING, WinUI's 83ms linear fade, with `display` so the box is held for it. A transition plays the
+     * list of the state it goes TO, so the open below names its own. */
+    transition: opacity 83ms linear, display 83ms linear;
 }
 
-/* Up from below, as the hover preview it replaces does — same distance, same duration. */
+/* The previews' open, WinUI's menu flyout: no opacity in the list, so it snaps in. */
+menu.__jump-list__:open {
+    /* A BEAT AFTER THE PRESS, as Windows' jump list: the slide waits 250ms, and the menu stays transparent until
+     * it starts (the 1ms opacity step at the same delay). `display` for the close: its `display: none` is
+     * written while this list is still in force. */
+    transition: transform 250ms 250ms cubic-bezier(0, 0, 0, 1), clip-path 250ms 250ms cubic-bezier(0, 0, 0, 1),
+            opacity 1ms 250ms linear, display 83ms linear;
+}
+
+/* Where the open starts, as the previews' placing state. Transparent too, for the unplaced first frame. */
 menu.__jump-list__.__rising__ {
-    transform: translate(0, 14px);
+    transform: translate(0, 50%);
+    clip-path: inset(0 0 50% 0 round var(--radius-panel, 8px));
     opacity: 0;
 }
 

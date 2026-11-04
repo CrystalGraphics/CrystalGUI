@@ -10,6 +10,8 @@ import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.style.StyleGroup;
+import dev.vfyjxf.taffy.style.TaffyDisplay;
 import org.joml.Vector2f;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.control.Button;
@@ -63,11 +65,8 @@ public final class TaskbarPreviews {
      */
     private static final long TRAVEL_NANOS = 150L * 1_000_000L;
 
-    /** How far below its resting place a preview starts, in logical pixels. */
-    private static final float RISE = 14f;
-
-    /** The gap between the panel and the entry it belongs to. */
-    private static final float GAP = 6f;
+    /** The gap between the panel and the bar's top edge, in logical pixels. The rise itself is the sheet's. */
+    private static final float GAP = 1f;
 
     /**
      * How long the pointer may be over neither the entry nor the panel before the preview goes.
@@ -154,6 +153,8 @@ public final class TaskbarPreviews {
      */
     TaskbarPreviews(Taskbar taskbar) {
         this.taskbar = taskbar;
+        previewFade = new Fade(preview);
+        rowFade = new Fade(row);
 
         // PARKED IN THE TASKBAR so it has a tree to be promoted OUT of. Same idiom as DragGhost's: an
         // element must be somewhere before the top layer can take it.
@@ -256,7 +257,8 @@ public final class TaskbarPreviews {
 
     /** Takes the panel down at once — a click, a closed window, a rebuilt strip. */
     void dismiss() {
-        hideRow();
+        hideRow(true);
+        boolean visible = showing != null && !preview.hasClass(PLACING_CLASS);
         hovered = null;
         hoveredGroup = null;
         hoveredEntry = null;
@@ -265,10 +267,78 @@ public final class TaskbarPreviews {
         pendingPlacement = false;
         showing = null;
         cancelMotion();
-        preview.setFrame(null);
-        taskbar.document().demote(preview);
-        setPanelShown(false);
+        if (visible) previewFade.start(this::previewGone);
+        else previewGone();
     }
+
+    /** The single preview off the screen, once any fade has landed. */
+    private void previewGone() {
+        preview.setFrame(null);
+        UIDocument window = taskbar.document();
+        if (window != null) window.demote(preview);
+        setPanelShown(false);
+        preview.setHitTest(true);
+    }
+
+    /**
+     * On a panel while it fades out: the sheet's fade, after which it leaves.
+     *
+     * <p>WinUI closes a menu flyout with an 83ms fade. The length is the sheet's alone: closing writes
+     * {@code display: none}, which the sheet's {@code display} transition holds laid out for the fade, and the
+     * panel goes once it has no box. Its computed opacity cannot say when: a compositor runs the fade.</p>
+     */
+    public static final String CLOSING_CLASS = "__closing__";
+
+    /** One panel's fade out, cancelled by showing it again. */
+    private final class Fade {
+        private final UIElement panel;
+        /** Bumped by every start and cancel, so a superseded watch drops itself. */
+        private int generation;
+
+        private Fade(UIElement panel) {
+            this.panel = panel;
+        }
+
+        void start(Runnable gone) {
+            int mine = ++generation;
+            panel.setHitTest(false);
+            panel.addClass(CLOSING_CLASS);
+            setDisplay(false);
+            UIDocument window = taskbar.document();
+            if (window == null) {
+                finish(gone);
+                return;
+            }
+            window.animation().afterLayout(panel, delta -> {
+                if (generation != mine) return false;
+                if (panel.box() != null) return true;
+                finish(gone);
+                return false;
+            });
+        }
+
+        void cancel() {
+            generation++;
+            panel.removeClass(CLOSING_CLASS);
+            setDisplay(true);
+        }
+
+        private void finish(Runnable gone) {
+            generation++;
+            panel.removeClass(CLOSING_CLASS);
+            gone.run();
+            setDisplay(true);
+        }
+
+        /** Inline, as a popover's: the one value the sheet's {@code display} transition holds for the fade. */
+        private void setDisplay(boolean shown) {
+            StyleGroup.inlinePipeline(panel.getStyle().getLayoutGroup(),
+                    l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
+        }
+    }
+
+    private final Fade previewFade;
+    private final Fade rowFade;
 
     /**
      * Starts the per-frame check, if it is not already running.
@@ -337,7 +407,7 @@ public final class TaskbarPreviews {
             preview.syncThumbnail();
             // FROM A ROW TO ONE WINDOW: the row goes and the preview comes up without a second wait
             if (rowEntry != null) {
-                hideRow();
+                hideRow(false);
                 elapsed = true;
             }
             if (showing == null && elapsed) {
@@ -409,12 +479,23 @@ public final class TaskbarPreviews {
             taskbar.document().demote(preview);
             setPanelShown(false);
         }
+        rowFade.cancel();
         rowEntry = entry;
         row.setWindows(windows);
         row.setDisplayed(true);
         taskbar.document().promote(row);
-        // Invisible until it has a size to be placed by, as the single preview is
+        // Invisible until it has a size to be placed by, and unhittable until it has risen, as the single preview is
         row.addClass(PLACING_CLASS);
+        row.setHitTest(false);
+    }
+
+    /** {@code entry}'s extent along the bar and the bar's across it: a panel sits on the bar's edge, as Windows' do. */
+    @Nullable
+    private AnchoredPlacement.Rect onTheBar(Button entry, UIDocument window) {
+        AnchoredPlacement.Rect own = AnchoredPlacement.anchorRectInRoot(entry, window);
+        AnchoredPlacement.Rect bar = AnchoredPlacement.anchorRectInRoot(taskbar, window);
+        if (own == null || bar == null) return own;
+        return new AnchoredPlacement.Rect(own.x(), bar.y(), own.width(), bar.height());
     }
 
     /** Centred over its entry and rising into place, as the single preview does. */
@@ -424,7 +505,7 @@ public final class TaskbarPreviews {
         Box self = row.box();
         if (window == null || entry == null || self == null || self.width() <= 0f || self.height() <= 0f) return;
         Box root = window.box();
-        AnchoredPlacement.Rect anchor = AnchoredPlacement.anchorRectInRoot(entry, window);
+        AnchoredPlacement.Rect anchor = onTheBar(entry, window);
         if (root == null || anchor == null) return;
         var target = AnchoredPlacement.resolve(anchor, self.width(), self.height(),
                 root.width(), root.height(), AnchoredPlacement.Side.TOP, GAP);
@@ -434,10 +515,14 @@ public final class TaskbarPreviews {
         row.removeClass(PLACING_CLASS);
         rowPlacedHeight = self.height();
         if (rowMotion != null) rowMotion.cancel();
-        // RISES IN on its first placement; a later one (a card closed, a picture reshaped) moves at once
+        // PLACED WHERE IT RESTS: the rise is the sheet's, started by dropping the placing class above. Held for
+        // the length of a move so the row takes no pointer until it has arrived.
         rowMotion = new WindowGeometryAnimation(row, this::rowIsLive,
-                target.x, entering ? target.y + RISE : target.y, 0f, 0f, target.x, target.y, 0f, 0f,
-                true, false, entering ? TRAVEL_NANOS : 0L, CgEasings.OUT_QUAD, () -> rowMotion = null);
+                target.x, target.y, 0f, 0f, target.x, target.y, 0f, 0f,
+                true, false, entering ? TRAVEL_NANOS : 0L, CgEasings.OUT_QUAD, () -> {
+                    rowMotion = null;
+                    row.setHitTest(true);
+                });
         window.animation().every(row, rowMotion);
     }
 
@@ -453,13 +538,20 @@ public final class TaskbarPreviews {
         return row.parent() != null && rowEntry != null;
     }
 
-    private void hideRow() {
+    /** @param fade whether it fades out, as a dismissal does; giving way to the single preview is at once */
+    private void hideRow(boolean fade) {
         if (rowEntry == null) return;
         rowEntry = null;
         if (rowMotion != null) {
             rowMotion.cancel();
             rowMotion = null;
         }
+        if (fade && !row.hasClass(PLACING_CLASS)) rowFade.start(this::rowGone);
+        else rowGone();
+    }
+
+    private void rowGone() {
+        row.setHitTest(true);
         row.clear();
         UIDocument window = taskbar.document();
         if (window != null) window.demote(row);
@@ -467,6 +559,7 @@ public final class TaskbarPreviews {
     }
 
     private void show(WindowFrame frame) {
+        previewFade.cancel();
         showing = frame;
         // A FRESH SHOW HAS NO MORPH IN FLIGHT, so nothing may be holding the picture's size. Belt and
         // braces beside cancelMotion's hand-back: an entrance that inherited a suppressed thumbnail
@@ -484,13 +577,16 @@ public final class TaskbarPreviews {
         // rule that would ever want to restyle it, so the hiding belongs in the sheet and this only says
         // WHEN. Dropping the class hands the property back exactly as withdrawing a candidate did.
         preview.addClass(PLACING_CLASS);
+        // UNHITTABLE UNTIL IT HAS SETTLED: an invisible panel under the pointer takes the entry's hover, and
+        // the placement then dismisses it for having no entry -- a loop at the hover delay. @see #play
+        preview.setHitTest(false);
         placeWhenMeasured(true);
     }
 
     /**
      * Puts the panel where it belongs, and animates it getting there.
      *
-     * @param entering whether this is a first appearance, which starts {@link #RISE} below where it
+     * @param entering whether this is a first appearance, which rises in from the sheet's placing state where it
      *                 belongs, rather than a move between entries, which starts wherever it already is
      */
     private void placeAndPlay(boolean entering) {
@@ -539,7 +635,7 @@ public final class TaskbarPreviews {
         }
 
         Box root = window.box();
-        AnchoredPlacement.Rect anchor = AnchoredPlacement.anchorRectInRoot(entry, window);
+        AnchoredPlacement.Rect anchor = onTheBar(entry, window);
         if (root == null || anchor == null) {
             placeWhenMeasured(entering);
             return;
@@ -569,10 +665,10 @@ public final class TaskbarPreviews {
         // texture, the position path does not do, so there is no reason to keep two mechanisms for one
         // kind of motion.
         //
-        // The panel therefore starts RISE below where it belongs and travels there, exactly as it
-        // travels between entries. Opacity is left alone: at anything under 1 an element goes through a
-        // screen-sized layer FBO, which for a panel containing a re-rendered window subtree is the most
-        // expensive frame in the system, and a rise reads as an arrival without it.
+        // A FIRST APPEARANCE IS PLACED WHERE IT RESTS, and rises in from the sheet's placing state as the class
+        // drops: WinUI's flyout slide, a transform and a clip with no fade. Opacity is left alone: at anything
+        // under 1 an element goes through a layer, which for a panel holding a window's picture is the most
+        // expensive frame in the system. The move between entries stays a position animation.
         preview.removeClass(PLACING_CLASS);
 
         // THE PICTURE IS WHAT CHANGES SIZE, and the panel is never told to. Two windows are rarely the
@@ -589,7 +685,7 @@ public final class TaskbarPreviews {
         // its content, so it follows the picture frame by frame, and the header follows it too through
         // matchHeaderToThumbnail. Nothing writes a size onto the panel, so nothing can pin one.
         float fromLeft = entering ? target.x : morphLeft;
-        float fromTop = entering ? target.y + RISE : morphTop;
+        float fromTop = entering ? target.y : morphTop;
         play(new WindowGeometryAnimation(preview, this::panelIsLive,
                 fromLeft, fromTop, 0f, 0f, target.x, target.y, 0f, 0f,
                 true, false, TRAVEL_NANOS, CgEasings.OUT_QUAD, this::motionFinished));
@@ -622,21 +718,9 @@ public final class TaskbarPreviews {
 
     private void play(WindowMotion started) {
         motion = started;
-        // UNHITTABLE WHILE IT MOVES, and this is a correctness fix rather than a nicety.
-        //
-        // The panel rises from RISE below its resting place while the gap to the entry is only GAP, so
-        // for the first part of every entrance it physically COVERS the entry it belongs to -- and it is
-        // promoted to the top layer, so it wins the hit test. The pointer therefore stops being over the
-        // entry, becomes over the panel, and stops again as the panel rises clear: the entry's :hover
-        // highlight blinks off and back on, the panel's own hover rules churn with it, and the whole
-        // thing settles the instant the motion ends. Which is exactly how it was reported -- flickering
-        // while it animates up, fine afterwards.
-        //
-        // It also removes a second, quieter fault: that churn ran the leave logic, so an entrance could
-        // start its own grace timer against a pointer that had never actually gone anywhere.
-        //
-        // setHitTest covers the whole subtree, so the close button is unreachable for the 150ms this
-        // lasts. That is the right trade: a control you cannot aim at yet is not a control.
+        // UNHITTABLE WHILE IT MOVES: a panel travelling under a resting pointer churns its hover rules and
+        // the leave logic, which can start the grace timer against a pointer that never moved. The close
+        // button is out of reach for the 150ms; a control you cannot aim at yet is not a control.
         preview.setHitTest(false);
         UIDocument window = taskbar.document();
         if (window != null) window.animation().every(preview, started);
