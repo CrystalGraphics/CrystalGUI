@@ -1799,6 +1799,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         boolean wasActive = owner != null && owner.activeWindow() == this;
 
         hide();
+        // ITS SIZE AND PLACE OUTLIVE IT: the next window under its key opens there, as an application
+        // reopens where it was closed. Before the state changes, which the record refuses.
+        if (owner != null) owner.rememberPlacement(this);
         state = WindowState.DESTROYED;
         Desktop desktop = owner;
         owner = null;
@@ -2182,9 +2185,17 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * one: the spec has a user resize replace "existing property declaration(s) in the style attribute".</p>
      */
     public WindowFrame resizeTo(float width, float height) {
+        sized = true;
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(height));
         return this;
     }
+
+    /** Whether anything has given this window a size; one that has not takes the desktop's default. @see #resizeTo */
+    public boolean isSized() {
+        return sized;
+    }
+
+    private boolean sized;
 
     /**
      * Moves and sizes the window in one gesture, <b>animating the change</b> — the tiled counterpart of

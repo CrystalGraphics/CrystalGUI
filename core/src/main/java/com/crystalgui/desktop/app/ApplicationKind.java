@@ -61,6 +61,7 @@ public final class ApplicationKind {
     private boolean requiresConnection = true;
     @Nullable
     private Consumer<LaunchContext> autostart;
+    private float windowWidth, windowHeight;
     private boolean frozen;
 
     private ApplicationKind(String id, String displayName) {
@@ -77,6 +78,37 @@ public final class ApplicationKind {
         check();
         this.icon = iconName;
         return this;
+    }
+
+    /**
+     * The size its main window opens at, in logical pixels, until the desktop has recorded one: the size an
+     * application asks for when its window is made, as Windows' {@code CreateWindow} takes it.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:picker", "Picker").windowSize(820, 460).launch(...);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Only the main window ({@code WindowFrame.markApplicationMain}); another window sizes itself.</li>
+     *   <li>A kind that names none opens at the desktop's default, most of the screen, centred.</li>
+     *   <li>Clamped to the desktop like any size, so a small screen gets a smaller window.</li>
+     * </ul>
+     */
+    public ApplicationKind windowSize(float width, float height) {
+        check();
+        this.windowWidth = width;
+        this.windowHeight = height;
+        return this;
+    }
+
+    /** @see #windowSize; 0 when it names none */
+    public float windowWidth() {
+        return windowWidth;
+    }
+
+    /** @see #windowSize; 0 when it names none */
+    public float windowHeight() {
+        return windowHeight;
     }
 
     /**

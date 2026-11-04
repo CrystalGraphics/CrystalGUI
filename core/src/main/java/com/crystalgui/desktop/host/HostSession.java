@@ -88,15 +88,6 @@ public final class HostSession {
      */
     public static final String ROOT_CLASS = "__host-root__";
 
-    /**
-     * How much of the surface a first-run window takes.
-     *
-     * <p>Large enough to work in, small enough that the desktop is visibly underneath — showing that
-     * there <em>is</em> a desktop is the whole job of this number, and persistence takes over from the
-     * second run. The two hosts said 0.86 and 0.8 for the same stated reason; 0.8 serves it better and
-     * is the one the later host chose.</p>
-     */
-    private static final float FIRST_RUN_FRACTION = 0.8f;
 
     /**
      * Longest delta reported, whatever the wall clock says.
@@ -249,6 +240,21 @@ public final class HostSession {
     public void requestApplication() {
         raiseOnShow = true;
         launchPending = true;
+    }
+
+    /**
+     * Builds the desktop before anything shows it, so the first open only resumes it: its document, sheets, theme,
+     * compositor, taskbar and arrangement, and their first cascade and layout. The loading screen runs it, as the load
+     * task {@code crystalgui:desktop}. Render thread; does nothing once built.
+     *
+     * <p>Nothing draws it until a screen is up: a desktop with no pinned window presents nothing.</p>
+     */
+    public void preload() {
+        if (host != null) return;
+        refreshHost();
+        build();
+        DesktopHost built = host;
+        post(() -> built.document().update(services.surfaceWidth(), services.surfaceHeight()));
     }
 
     /**
@@ -736,33 +742,8 @@ public final class HostSession {
             primaryWindow = null;
         });
 
-        placeFirstRun(window);
         trace("window");
         return true;
-    }
-
-    /**
-     * A window on a desktop, not a full-screen application — and only as a DEFAULT: an arrangement
-     * record overrides it the moment there is one.
-     *
-     * <p>Sized in logical pixels off the surface and the host's scale. A percentage in a stylesheet
-     * would be tempting and would lose to the desktop's own cascade, which writes left and top at a
-     * higher origin for any window nobody placed.</p>
-     */
-    private void placeFirstRun(WindowFrame window) {
-        HostServices seen = snapshot != null ? snapshot : services;
-        float scale = seen.uiScale();
-        if (scale <= 0f) return;
-        float width = seen.surfaceWidth() / scale;
-        float height = seen.surfaceHeight() / scale;
-        // NO SURFACE YET, so there is nothing to be a fraction of. Placing against zero would pin the
-        // window at 0x0 and then persist that, which survives every later run.
-        if (width <= 0f || height <= 0f) return;
-
-        window.resizeTo(Math.round(width * FIRST_RUN_FRACTION),
-                Math.round(height * FIRST_RUN_FRACTION));
-        window.moveTo(Math.round(width * (1f - FIRST_RUN_FRACTION) / 2f),
-                Math.round(height * (1f - FIRST_RUN_FRACTION) / 2f));
     }
 
     /**

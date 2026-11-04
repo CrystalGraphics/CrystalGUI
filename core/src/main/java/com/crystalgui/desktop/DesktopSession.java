@@ -11,6 +11,8 @@ import com.crystalgraphics.serialization.format.CgFormats;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.List;
 import java.util.Locale;
 
@@ -100,8 +102,16 @@ public final class DesktopSession {
     /** The record as text, without writing it — what a test asserts on. */
     public String toJson() {
         List<Placement> windows = new ArrayList<>();
+        Set<String> open = new HashSet<>();
         for (WindowFrame frame : desktop.registry().windows()) {
-            if (isPersistable(frame)) windows.add(Placement.of(frame));
+            if (!isPersistable(frame)) continue;
+            windows.add(Placement.of(frame));
+            open.add(frame.key());
+        }
+        // AND THE CLOSED ONES, which open again where they were. A placement never applied this session is kept
+        // too, or a window not reopened before the next save would lose its size for good.
+        for (Placement waiting : desktop.waitingPlacements()) {
+            if (open.add(waiting.key())) windows.add(waiting);
         }
         List<String> mru = new ArrayList<>();
         for (WindowFrame frame : desktop.registry().mruOrder()) {
@@ -142,7 +152,7 @@ public final class DesktopSession {
      * because {@code attachOwned} never reaches {@code addWindow} at all — so it presented as only some
      * of them being wrong, which reads as a placement bug rather than as a duplicated record.</p>
      */
-    private static boolean isPersistable(WindowFrame frame) {
+    static boolean isPersistable(WindowFrame frame) {
         return frame.key() != null && !frame.key().isEmpty()
                 && frame.state() != WindowState.DESTROYED
                 && !frame.isToolWindow();
@@ -182,6 +192,11 @@ public final class DesktopSession {
          * much. Size has no equivalent hazard: nothing stores a wanted size, and a size clamped up to a
          * minimum is idempotent, so asking for it again gives the same answer rather than compounding.</p>
          */
+        /** The same geometry, shown rather than minimised: a closed window reopens on screen. */
+        Placement shown() {
+            return new Placement(key, left, top, width, height, maximized, false);
+        }
+
         static Placement of(WindowFrame frame) {
             boolean maximized = frame.isMaximized();
             // recordedWidth, never the measured box: a HIDDEN window is detached, so its box is zero -- and

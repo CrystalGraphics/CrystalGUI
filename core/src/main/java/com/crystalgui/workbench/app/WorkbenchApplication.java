@@ -292,12 +292,14 @@ public class WorkbenchApplication extends UIElement
         this.session = new WorkbenchSession(workbench);
         loadPreferences();
 
-        this.window = desktop.addWindow(new WindowFrame(
-                builder.title == null ? kind.displayName() : builder.title));
-        window.setApplication(kind).markApplicationMain();
-        window.setPolicy(builder.policy);
-        if (builder.key != null) window.setKey(builder.key);
-        window.setTitleShown(builder.titleShown);
+        // WHOSE IT IS AND ITS KEY BEFORE IT IS ADDED: the desktop places a window by its key and sizes an
+        // application's main window by its kind as it adds it, so one named afterwards reopened at the default.
+        WindowFrame frame = new WindowFrame(builder.title == null ? kind.displayName() : builder.title);
+        frame.setApplication(kind).markApplicationMain();
+        frame.setPolicy(builder.policy);
+        if (builder.key != null) frame.setKey(builder.key);
+        frame.setTitleShown(builder.titleShown);
+        this.window = desktop.addWindow(frame);
         String iconName = builder.icon != null ? builder.icon : kind.icon();
         if (iconName != null) {
             window.setIcon(iconName);

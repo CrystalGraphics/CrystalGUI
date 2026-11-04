@@ -111,6 +111,7 @@ public class VfxLab extends UIElement {
     public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:vfx-lab", "VFX Lab")
             .icon("crystalgui:vfx-lab")
             .keywords("vfx", "effects", "particles", "lab")
+            .windowSize(960, 560)
             .singleInstance()
             .standalone()
             .launch(context -> new Instance(context.desktop()));
@@ -288,8 +289,6 @@ public class VfxLab extends UIElement {
         frame.markApplicationMain();
         frame.setContent(lab);
         desktop.addWindow(frame);
-        // After addWindow, which places and sizes it.
-        frame.resizeTo(960f, 560f);
         return frame;
     }
 

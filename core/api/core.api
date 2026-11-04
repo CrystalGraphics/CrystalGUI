@@ -4732,6 +4732,7 @@ com/crystalgui/desktop/Desktop
   method public reattach (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public record (Lcom/crystalgui/core/window/DesktopPresentation;FII)Lcom/crystalgui/render/UiFrame;
   method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
+  method public rememberPlacement (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public renormaliseStack ()V
   method public resume ()V
   method public savePersistedState ()V
@@ -4844,6 +4845,9 @@ com/crystalgui/desktop/app/ApplicationKind
   method public requiresConnection ()Z
   method public singleInstance ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public standalone ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public windowHeight ()F
+  method public windowSize (FF)Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public windowWidth ()F
   method public,static of (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
 com/crystalgui/desktop/app/ApplicationKinds
   access public,abstract,interface
@@ -4965,6 +4969,7 @@ com/crystalgui/desktop/host/HostSession
   method public offerKey (ICZ)Z
   method public offerMouse (Lcom/crystalgui/desktop/host/HostSession$PaintHost;ZIIIZF)Z
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FLcom/crystalgui/desktop/host/HostSession$PaintHost;)V
+  method public preload ()V
   method public presentation (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)Lcom/crystalgui/core/window/DesktopPresentation;
   method public requestApplication ()V
   method public services ()Lcom/crystalgui/desktop/host/HostServices;
@@ -5321,6 +5326,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public isMinimizeControl (Lcom/crystalgui/ui/dom/UIElement;)Z
   method public isPinned ()Z
   method public isPlaced ()Z
+  method public isSized ()Z
   method public isToolWindow ()Z
   method public keepsSurface ()Z
   method public key ()Ljava/lang/String;
