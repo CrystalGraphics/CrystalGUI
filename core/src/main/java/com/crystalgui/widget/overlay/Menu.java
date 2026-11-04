@@ -322,8 +322,10 @@ public class Menu extends Popover {
             // the pointer kept :hover, the parent regained :focus, and a menu showed two highlighted rows
             // at once. Closing first lets the restore happen while nobody is claiming anything, and this
             // claim is then the last word. @see MenuOneHighlightTest
+            // A DISABLED ROW CANNOT TAKE FOCUS, so the menu takes it back, as it holds it on open: asking for
+            // the row was refused and left the last enabled row lit under a pointer that had moved on.
             UIDocument window = document();
-            if (window != null) window.focus().requestPointerFocus(item);
+            if (window != null) window.focus().requestPointerFocus(item.isEnabled() ? item : this);
         }, false, false);
 
         item.attachListener(() -> {

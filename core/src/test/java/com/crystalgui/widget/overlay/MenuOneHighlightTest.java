@@ -56,4 +56,29 @@ public class MenuOneHighlightTest extends UiDocumentTestBase {
         assertTrue("the hovered row is the focused one", plain.isFocused());
         assertFalse("and the row that opened the submenu is not", parent.isFocused());
     }
+
+    /** <b>Moving from an enabled row onto a disabled one leaves no row lit.</b> A disabled row refuses focus. */
+    @Test
+    public void hoveringADisabledRowTakesTheHighlightOffTheLastOne() {
+        withDefaultStyles();
+        UIElement root = sized("root", 400, 300);
+        document.append(root);
+
+        Menu menu = new Menu();
+        MenuItem restore = menu.addItem("Restore");
+        restore.setEnabled(false);
+        MenuItem close = menu.addItem("Close");
+        document.addOverlay(menu, root);
+        menu.showAt(10f, 10f, null);
+        for (int i = 0; i < 4; i++) frame();
+
+        document.input().send(close, new MouseEvent.Enter(close, ORIGIN));
+        frame();
+        assertTrue("the enabled row took focus", close.isFocused());
+
+        document.input().send(restore, new MouseEvent.Enter(restore, ORIGIN));
+        frame();
+        assertFalse("the row the pointer left is no longer focused", close.isFocused());
+        assertTrue("focus parked on the menu, as on open", menu.isFocused());
+    }
 }
