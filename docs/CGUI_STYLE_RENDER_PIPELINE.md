@@ -634,6 +634,14 @@ where something did (G7, `core/src/main/java/com/crystalgui/render/CLAUDE.md`). 
 whose subject is not in this tree at all. `UIElement.repaint()` is the door for a widget whose picture
 changes without moving a box.
 
+**`clip-path: inset()` is the same clip over the box itself.** `BoxPainter.pushClipPath` pushes one
+`pushRoundedClip` entry in the box's own space, its corners `round <radius>` (one radius for all four, so a
+rounded panel cut short keeps its corners at the cut), before anything of the box paints, so it cuts
+the box's background, backdrop and children alike; an inset that leaves nothing draws nothing. It eases
+between two insets (`ClipPathProperty`), which is what a flyout's slide-out-of-an-edge open is: a
+`translate(0, 50%)` with `inset(0 0 50% 0)`, both easing to zero, keeps the visible edge fixed while the box
+moves (the taskbar previews and jump list, `desktop.css`). It clips paint only; hit testing sees the whole box.
+
 **A rounded `overflow: hidden` is a clip, not a layer.** It clips to the box's shape less its border,
 **whatever the background** — CSS's rule; a translucent panel does not fade its own children, and alpha
 masking is the `mask` property's job. `pushRoundedClip` adds a `CgClipTable` entry — the box's rect,

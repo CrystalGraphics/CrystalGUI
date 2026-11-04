@@ -114,6 +114,20 @@ tooltip {
     padding-top: 3px;
     padding-bottom: 4px;
     margin-top: 3px;
+    /* FADED IN, every tooltip: the closed state is a declared 0 so the fade has a start (Tooltip.OPEN_CLASS).
+     * Hiding has no fade, for the reason it has no delay: the pointer has moved on. */
+    opacity: 0;
+    transition: opacity 120ms ease;
+}
+
+tooltip.__open__ {
+    opacity: 1;
+}
+
+/* ABOVE ITS ANCHOR it sits flush on the edge: the downward gap would push it back over the anchor.
+ * @see Tooltip#ABOVE_CLASS */
+tooltip.__above__ {
+    margin-top: 0px;
 }
 
 /* THE HELP TOOLTIP -- IntelliJ's HelpTooltip: the name, its shortcut beside it in the dimmer tone, and a
@@ -355,9 +369,12 @@ dropdown::part(menu) {
      *
      * QUICK, deliberately: the pause before a submenu appears is the hover delay doing its job, and a slow
      * fade stacked on top of it reads as lag rather than polish. The timing lives here and not in Java because
-     * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken. */
+     * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken.
+     *
+     * `display` IN THE LIST is the fade OUT: it holds the closed box laid out for the fade, as a dialog's, and
+     * the popover leaves the top layer once it has no box. */
     opacity: 0;
-    transition: opacity 120ms ease;
+    transition: opacity 120ms ease, display 120ms ease;
     /* ONE, AND THE BORDER TAKES IT. An `outline` is painted INSET over the box's own last pixel -- the
      * rule the window caption records for its close button -- so this pixel is the border's and the
      * highlight begins immediately after it. There is no surface between the two by design: measured
@@ -397,6 +414,8 @@ popover:open,
 menu:open,
 dropdown::part(menu):open {
     opacity: 1;
+    /* IN SLOWER THAN OUT: a transition plays the list of the state it goes to, so this is the fade in. */
+    transition: opacity 180ms ease, display 180ms ease;
 }
 
 /* THE GAP MATCHES THE POPUP'S PADDING, and that equality is the whole rule.

@@ -360,6 +360,10 @@ public class Popover extends UIElement {
         if (mode == Mode.AUTO) window.dismiss().lightDismiss(opener() != null ? opener() : this);
 
         open = true;
+        if (hitTestOffForClose) {
+            hitTestOffForClose = false;
+            setHitTest(true);
+        }
         // A RE-SHOW STARTS UNPLACED TOO: hide() may have left the popup detached and its box with it,
         // so the first frame of the second open has exactly the problem the first one had.
         placed = freelyPositioned;
@@ -453,11 +457,29 @@ public class Popover extends UIElement {
      */
     public Popover removeWhenHidden() {
         removeWhenHidden = true;
+        // ALREADY CLOSED, perhaps still fading: it leaves once that has landed
+        if (!open && parent() != null) removeOnceItHasGone();
         return this;
     }
 
     /** @see #removeWhenHidden() */
     private boolean removeWhenHidden;
+
+    /** Set by {@link #hide} while a closing box may still be laid out, and undone by the next show. */
+    private boolean hitTestOffForClose;
+
+    private void demoteOnceItHasGone(UIDocument window) {
+        if (get(Attribute.HIT_TEST)) {
+            hitTestOffForClose = true;
+            setHitTest(false);
+        }
+        window.animation().afterLayout(this, delta -> {
+            if (open) return false;
+            if (box() != null) return true;
+            window.demote(this);
+            return false;
+        });
+    }
 
     /** Leaves the tree on the first frame this popover has no box, which is when its fade has landed. */
     private void removeOnceItHasGone() {
@@ -486,8 +508,10 @@ public class Popover extends UIElement {
 
         open = false;
         applyOpenState();
+        // DEMOTED ONCE ITS BOX HAS GONE, so a sheet that names `display` in its transition list fades it out
+        // where it was, as a dialog does; with no fade the box goes on the next layout. Unhittable meanwhile.
         // NULL WHEN HIDDEN FROM A DETACH, which already demoted it: closing a window with a menu open.
-        if (openWindow != null) openWindow.demote(this);
+        if (openWindow != null) demoteOnceItHasGone(openWindow);
         setOpener(null);
 
         UIDocument window = document();
@@ -591,10 +615,13 @@ public class Popover extends UIElement {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
                 l -> l.display(open ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         if (open) {
-            // RECURSES, and must: a rule keyed through .__open__ decides what every descendant looks
-            // like, and they are about to be visible.
-            addClass(OPEN_CLASS);
+            // THE OPEN LOOK ON THE FIRST FRAME WITH A BOX, not this one, as a dialog's: a box coming out of
+            // `display: none` has no earlier opacity, so the sheet's fade in snapped. `:open` is held off
+            // until then too, since it is what the sheet keys the fade on; isOpen() stays true for logic.
+            forceState(PseudoClasses.OPEN, false);
+            revealAfterLayout();
         } else {
+            forceState(PseudoClasses.OPEN, null);
             // AND CLOSING DOES NOT. The subtree is display:none by the line above, so nothing will read
             // a descendant's computed style before the next open re-adds the class and re-matches them
             // all. A picker with a full result list is 345 elements, and re-matching them on the way out
@@ -605,6 +632,29 @@ public class Popover extends UIElement {
             // existed to dodge is not there to dodge.
             removeClass(OPEN_CLASS);
         }
+    }
+
+    /**
+     * Adds {@link #OPEN_CLASS} and lets {@code :open} through on the first frame this popover has a box.
+     * RECURSES, and must: a rule keyed through either decides what every descendant looks like.
+     */
+    private void revealAfterLayout() {
+        UIDocument window = document();
+        if (window == null) {
+            reveal();
+            return;
+        }
+        window.animation().afterLayout(this, delta -> {
+            if (!open) return false;
+            if (box() == null) return true;
+            reveal();
+            return false;
+        });
+    }
+
+    private void reveal() {
+        addClass(OPEN_CLASS);
+        forceState(PseudoClasses.OPEN, null);
     }
 
     // ── Placement ───────────────────────────────────────────────────────────

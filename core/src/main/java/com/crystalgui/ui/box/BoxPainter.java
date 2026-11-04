@@ -12,6 +12,7 @@ import com.crystalgui.render.texture.*;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.ClipPath;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.border.BorderRadiusProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
@@ -19,6 +20,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.api.PoseStack;
 import dev.vfyjxf.taffy.geometry.FloatRect;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import javax.annotation.Nullable;
 import org.joml.Matrix4f;
@@ -227,7 +229,9 @@ public final class BoxPainter {
         // what it samples. Noted before and after, since a capture taken by a child in between clears it -- but
         // a glass box only after: noted before its own draw, it found itself painted over and recaptured always.
         if (style.get(StylePropertyRegistry.BACKDROP_FILTER) == null) notePainted(box, ctx, pose.last().pose());
+        int clipPath = pushClipPath(box, style, ctx);
         try {
+            if (clipPath == CLIPPED_AWAY) return;
             Radii radii = radiiOf(style, box.width(), box.height());
             boolean clips = box.clips();
             boolean mask = clips && (!radii.isZero() || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY);
@@ -331,11 +335,34 @@ public final class BoxPainter {
             box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
             ctx.damageSurface(region);
         } finally {
+            if (clipPath == CLIPPED) ctx.popRoundedClip();
             painted.set(base).mul(box.localToWorld());
             notePainted(box, ctx, painted);
             pose.popPose();
         }
     }
+
+    /** {@link #pushClipPath}: no {@code clip-path}, a clip pushed, or nothing left to draw. */
+    private static final int UNCLIPPED = 0, CLIPPED = 1, CLIPPED_AWAY = 2;
+
+    /**
+     * {@code clip-path: inset()} over the box and everything it hosts, as a rounded clip in the box's
+     * own space. Past the clip table's depth it draws unclipped, as a rounded {@code overflow} falls back.
+     */
+    private int pushClipPath(Box box, ComputedStyle style, CgUiPaintContext ctx) {
+        ClipPath clip = style.get(StylePropertyRegistry.CLIP_PATH);
+        if (clip == null || clip.isNone()) return UNCLIPPED;
+        float w = box.width(), h = box.height();
+        float left = clip.left().resolve(w), top = clip.top().resolve(h);
+        float width = w - left - clip.right().resolve(w), height = h - top - clip.bottom().resolve(h);
+        if (width <= 0f || height <= 0f) return CLIPPED_AWAY;
+        Arrays.fill(clipPathRx, Math.min(clip.round().resolve(width), width / 2f));
+        Arrays.fill(clipPathRy, Math.min(clip.round().resolve(height), height / 2f));
+        return ctx.pushRoundedClip(left, top, width, height, clipPathRx, clipPathRy, null) ? CLIPPED : UNCLIPPED;
+    }
+
+    /** @see #pushClipPath -- its corners, all four alike. */
+    private final float[] clipPathRx = new float[4], clipPathRy = new float[4];
 
     /**
      * A masking box at opacity 1: itself straight into the target, then its children clipped to the mask -- by a

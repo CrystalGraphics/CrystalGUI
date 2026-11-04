@@ -8,6 +8,8 @@ import com.crystalgui.style.property.general.floats.FloatProperty;
 import com.crystalgui.style.property.general.ints.IntProperty;
 import com.crystalgui.style.property.general.strings.StringValue;
 import com.crystalgui.style.property.visual.BoxOrigin;
+import com.crystalgui.style.property.visual.ClipPath;
+import com.crystalgui.style.property.visual.ClipPathProperty;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.style.property.visual.DrawableFit;
@@ -488,6 +490,8 @@ public class StylePropertyRegistry {
     public static final StyleProperty<Float> TOOLTIP_DELAY =
             create("tooltip-delay", 0f).setRange(0f, Float.MAX_VALUE).setAllowTransition(false);
     public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
+    /** What of a box and its subtree is drawn: {@code none} or {@code inset(...)}. @see ClipPath */
+    public static final StyleProperty<ClipPath> CLIP_PATH = create(new ClipPathProperty("clip-path"));
     // Geometry longhands for the `mask` layer, exactly mirroring the `overlay-*` trio above (same
     // types, same defaults, same CgUiLayerBox.resolve path). Defaults reproduce the previous
     // behaviour — the mask stretched to the full border box — so this changes nothing until a

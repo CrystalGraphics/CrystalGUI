@@ -185,6 +185,11 @@ public final class CgUiPaintContext {
         /** The default font loading on a worker: the context is made once it has. */
         @Nullable
         private CgJob<CgFont> font;
+        /** The sheets' families resolved and their ASCII queued, on a worker. @see #warmGlyphs */
+        @Nullable
+        private CgJob<?> glyphs;
+        /** When the warm stops waiting for glyphs, so a font that never settles cannot hold the loading screen. */
+        private long glyphsDeadline;
 
         private Warm() {}
 
@@ -197,7 +202,8 @@ public final class CgUiPaintContext {
                 materials = new CgMaterial[] {context.boxModelMaterial, context.curveMaterial, context.layerBlitMaterial};
                 // The two asset caches, both off the render thread and neither needing GL.
                 preloadIcons();
-                warmGlyphs(WARM_UI_SCALE);
+                glyphs = warmGlyphs(WARM_UI_SCALE);
+                glyphsDeadline = System.nanoTime() + GLYPH_WAIT_NANOS;
             }
             built = 0;
             for (CgMaterial material : materials) {
@@ -208,6 +214,9 @@ public final class CgUiPaintContext {
                 }
             }
             if (built < materials.length) return false;
+            // THE DESKTOP'S TEXT READY BEFORE IT OPENS: its families loaded and their glyphs generated, so its first
+            // frame neither loads a font nor draws from the bitmap stand-ins
+            if (!glyphsLanded()) return false;
             try {
                 context.beginFrame(Math.max(1, width), Math.max(1, height));
                 context.endFrame();
@@ -219,6 +228,12 @@ public final class CgUiPaintContext {
                 cancel();
             }
             return true;
+        }
+
+        private boolean glyphsLanded() {
+            if (System.nanoTime() > glyphsDeadline) return true;
+            if (glyphs != null && !glyphs.isDone()) return false;
+            return !CgFontRegistry.get().isWarming();
         }
 
         /** How far along, 0 to 1: the materials built, then the empty frame. */
@@ -623,7 +638,12 @@ public final class CgUiPaintContext {
      * would also submit the distance-field tier once per size, and those jobs are not {@code equals}
      * — they would slip past the executor's dedup and generate the same entry six times over.</p>
      */
-    private static void warmGlyphs(float uiScale) {
+    /** How long the warm waits for the sheets' glyphs at most. */
+    private static final long GLYPH_WAIT_NANOS = 5_000_000_000L;
+
+    /** Null when it could not start: glyphs rasterise on demand. */
+    @Nullable
+    private static CgJob<?> warmGlyphs(float uiScale) {
         try {
             Set<List<String>> families = new LinkedHashSet<>();
             Set<Integer> cssSizes = new LinkedHashSet<>();
@@ -657,12 +677,16 @@ public final class CgUiPaintContext {
             int next = 0;
             for (int cssPx : cssSizes) effective[next++] = Math.round(cssPx * uiScale);
 
-            // Resolving a family reads its font files and opens them in FreeType: a worker's, not the frame's
-            int anySize = cssSizes.iterator().next();
-            CgJob.lane(CgJobLane.BACKGROUND).named("cgui glyph warm").run(() -> {
+            // Resolving a family reads its font files and opens them in FreeType: a worker's, not the frame's. At EVERY
+            // size the sheets use, since the cache is keyed by size and a miss loads the face again on the frame.
+            return CgJob.lane(CgJobLane.BACKGROUND).named("cgui glyph warm").run(() -> {
                 try {
                     for (List<String> stack : families) {
-                        CgFontFamily family = FontFamilyCache.resolve(stack, anySize);
+                        CgFontFamily family = null;
+                        for (int cssPx : cssSizes) {
+                            FontFamilyCache.resolveGroup(stack, cssPx);
+                            family = FontFamilyCache.resolve(stack, cssPx);
+                        }
                         if (family != null) CgFontRegistry.get().warmAscii(family.getPrimaryFont(), effective);
                     }
                 } catch (RuntimeException | LinkageError broken) {
@@ -672,6 +696,7 @@ public final class CgUiPaintContext {
         } catch (RuntimeException | LinkageError broken) {
             CrystalGuiCore.LOGGER.warn("CgUiPaintContext: glyph warm failed; glyphs rasterise on demand",
                     broken);
+            return null;
         }
     }
 

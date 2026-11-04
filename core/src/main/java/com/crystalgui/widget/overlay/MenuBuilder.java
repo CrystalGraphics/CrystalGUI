@@ -144,9 +144,8 @@ public final class MenuBuilder {
     /**
      * Closes and detaches a chain from {@link #present}.
      *
-     * <p><b>Close before remove, never the other way round.</b> Closing demotes a promoted popover, which
-     * restores its Taffy node to its DOM parent — removing it while still promoted leaves the engine
-     * reconciling a node parented to the root against a DOM parent that no longer lists it.</p>
+     * <p>Each menu leaves once its close fade has landed ({@link Popover#removeWhenHidden}), so the sheet's fade
+     * out plays; one with no box leaves on the next frame.</p>
      *
      * <p>Clears {@code live} <em>first</em>, so an {@code onClosed} hook that calls back into this does
      * not recurse.</p>
@@ -156,8 +155,9 @@ public final class MenuBuilder {
         List<Menu> going = new ArrayList<>(live);
         live.clear();
         for (Menu menu : going) {
+            // A CLOSED ONE TOO: closing is what calls this, from onClosed, with the fade just begun
+            menu.removeWhenHidden();
             if (menu.isOpen()) menu.hide();
-            if (menu.parent() != null) menu.parent().remove(menu);
         }
     }
 

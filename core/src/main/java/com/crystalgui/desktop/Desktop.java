@@ -3,6 +3,7 @@ package com.crystalgui.desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.storage.LocalConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
@@ -49,6 +50,7 @@ import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -761,7 +763,7 @@ public class Desktop extends UIElement implements DataProvider {
         windows.append(frame);
         // BEFORE the animation and the activation below: a window restored from a record should open AT
         // the size and place it is meant to be, not fly in at a default and jump. @see #persistTo
-        applyPersistedGeometry(frame);
+        if (!applyPersistedGeometry(frame) && !frame.isSized() && frame.isApplicationMain()) sizeByDefault(frame);
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
         // show() puts a hidden one back -- and the animation is the only thing they share.
@@ -1503,15 +1505,16 @@ public class Desktop extends UIElement implements DataProvider {
         if (persistence != null && persistenceId != null) persistence.save(persistenceId);
     }
 
-    private void applyPersistedGeometry(WindowFrame frame) {
+    /** @return whether a recorded placement was applied */
+    private boolean applyPersistedGeometry(WindowFrame frame) {
         String key = frame.key();
         // A TOOL WINDOW IS PLACED BY WHATEVER OWNS IT, per project -- and this record is per host. It is
         // no longer written here, but a record from before that was, so this has to refuse to apply one
         // rather than merely stop producing them. @see DesktopSession#isPersistable
-        if (frame.isToolWindow()) return;
-        if (key == null || pendingPlacements.isEmpty()) return;
+        if (frame.isToolWindow()) return false;
+        if (key == null || pendingPlacements.isEmpty()) return false;
         DesktopSession.Placement placement = pendingPlacements.remove(key);
-        if (placement == null) return;
+        if (placement == null) return false;
         frame.resizeTo(placement.width(), placement.height());
         frame.moveTo(placement.left(), placement.top());
         if (placement.maximized()) {
@@ -1522,9 +1525,55 @@ public class Desktop extends UIElement implements DataProvider {
                     placement.width(), placement.height());
         }
         if (placement.hidden()) hideAfterRestore.add(frame);
+        return true;
+    }
+
+    /**
+     * How much of the work area a window takes when nothing sized it and nothing recorded it: Windows'
+     * {@code CW_USEDEFAULT}. Large enough to work in, small enough that the desktop shows underneath; the record
+     * takes over once it has closed once.
+     */
+    private static final float DEFAULT_WINDOW_FRACTION = 0.8f;
+
+    /**
+     * An application's main window that nobody sized and nothing recorded: its kind's
+     * {@link ApplicationKind#windowSize}, else {@link #DEFAULT_WINDOW_FRACTION} of the desktop. The size only; the
+     * cascade places it, as Windows' default position does. Any other window keeps fitting its content. On the first
+     * layout when the desktop has no size yet, since a size against nothing is no size.
+     */
+    private void sizeByDefault(WindowFrame frame) {
+        Box area = windows.box();
+        if (area != null && area.width() > 0f && area.height() > 0f) {
+            ApplicationKind kind = frame.application();
+            boolean named = kind != null && kind.windowWidth() > 0f && kind.windowHeight() > 0f;
+            float width = Math.round(Math.min(area.width(), named ? kind.windowWidth() : area.width() * DEFAULT_WINDOW_FRACTION));
+            float height = Math.round(Math.min(area.height(), named ? kind.windowHeight() : area.height() * DEFAULT_WINDOW_FRACTION));
+            frame.resizeTo(width, height);
+            return;
+        }
+        UIDocument document = document();
+        if (document == null) return;
+        document.animation().afterLayout(frame, delta -> {
+            if (frame.isSized() || frame.state() == WindowState.DESTROYED) return false;
+            Box laidOut = windows.box();
+            if (laidOut == null || laidOut.width() <= 0f) return true;
+            sizeByDefault(frame);
+            return false;
+        });
     }
 
     private final List<WindowFrame> hideAfterRestore = new ArrayList<>();
+
+    /** A closing window's geometry, for the next window under its key. @see WindowFrame#dispose */
+    public void rememberPlacement(WindowFrame frame) {
+        if (!DesktopSession.isPersistable(frame)) return;
+        pendingPlacements.put(frame.key(), DesktopSession.Placement.of(frame).shown());
+    }
+
+    /** Geometry waiting for a window: read from the record or left by one that closed. Saved with the rest. */
+    Collection<DesktopSession.Placement> waitingPlacements() {
+        return pendingPlacements.values();
+    }
 
     /**
      * Replays activation and minimisation once the host has finished opening windows.

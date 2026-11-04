@@ -4732,6 +4732,7 @@ com/crystalgui/desktop/Desktop
   method public reattach (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public record (Lcom/crystalgui/core/window/DesktopPresentation;FII)Lcom/crystalgui/render/UiFrame;
   method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
+  method public rememberPlacement (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public renormaliseStack ()V
   method public resume ()V
   method public savePersistedState ()V
@@ -4844,6 +4845,9 @@ com/crystalgui/desktop/app/ApplicationKind
   method public requiresConnection ()Z
   method public singleInstance ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public standalone ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public windowHeight ()F
+  method public windowSize (FF)Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public windowWidth ()F
   method public,static of (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
 com/crystalgui/desktop/app/ApplicationKinds
   access public,abstract,interface
@@ -4965,6 +4969,7 @@ com/crystalgui/desktop/host/HostSession
   method public offerKey (ICZ)Z
   method public offerMouse (Lcom/crystalgui/desktop/host/HostSession$PaintHost;ZIIIZF)Z
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FLcom/crystalgui/desktop/host/HostSession$PaintHost;)V
+  method public preload ()V
   method public presentation (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)Lcom/crystalgui/core/window/DesktopPresentation;
   method public requestApplication ()V
   method public services ()Lcom/crystalgui/desktop/host/HostServices;
@@ -5095,6 +5100,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
   field public,static,final REORDERING_CLASS Ljava/lang/String;
   field public,static,final START_CLASS Ljava/lang/String;
+  field public,static,final TIP_CLASS Ljava/lang/String;
   method protected connected ()V
   method public <init> ()V
   method public entries ()Lcom/crystalgui/ui/dom/UIElement;
@@ -5135,6 +5141,7 @@ com/crystalgui/desktop/taskbar/TaskbarPins
 com/crystalgui/desktop/taskbar/TaskbarPreviews
   access public,final
   extends java/lang/Object
+  field public,static,final CLOSING_CLASS Ljava/lang/String;
   field public,static,final PLACING_CLASS Ljava/lang/String;
 com/crystalgui/desktop/taskbar/WindowPreview
   access public
@@ -5214,6 +5221,7 @@ com/crystalgui/desktop/window/SystemMenu
   field public,static,final RISING_CLASS Ljava/lang/String;
   method public,static discardFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static dismissJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
+  method public,static isJumpListOpen (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)Z
   method public,static showFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static showJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
 com/crystalgui/desktop/window/WindowChrome
@@ -5318,6 +5326,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public isMinimizeControl (Lcom/crystalgui/ui/dom/UIElement;)Z
   method public isPinned ()Z
   method public isPlaced ()Z
+  method public isSized ()Z
   method public isToolWindow ()Z
   method public keepsSurface ()Z
   method public key ()Ljava/lang/String;
@@ -9268,6 +9277,8 @@ com/crystalgui/style/GeneralGroup
   method public caretColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public caretWidth ()F
   method public caretWidth (F)Lcom/crystalgui/style/GeneralGroup;
+  method public clipPath ()Lcom/crystalgui/style/property/visual/ClipPath;
+  method public clipPath (Lcom/crystalgui/style/property/visual/ClipPath;)Lcom/crystalgui/style/GeneralGroup;
   method public color ()I
   method public color (I)Lcom/crystalgui/style/GeneralGroup;
   method public cursor ()Lcom/crystalgui/core/cursor/Cursor;
@@ -9805,6 +9816,7 @@ com/crystalgui/style/property/StylePropertyRegistry
   field public,static,final BORDER_TOP_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CARET_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CARET_WIDTH Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final CLIP_PATH Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CURSOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final FONT_FAMILY Lcom/crystalgui/style/property/StyleProperty;
@@ -10224,6 +10236,27 @@ com/crystalgui/style/property/visual/BoxOrigin
   field public,static,final PADDING_BOX Lcom/crystalgui/style/property/visual/BoxOrigin;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/BoxOrigin;
   method public,static values ()[Lcom/crystalgui/style/property/visual/BoxOrigin;
+com/crystalgui/style/property/visual/ClipPath
+  access public,final,record
+  extends java/lang/Record
+  field public,static,final NONE Lcom/crystalgui/style/property/visual/ClipPath;
+  method public <init> (Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;)V
+  method public bottom ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
+  method public isNone ()Z
+  method public left ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
+  method public right ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
+  method public round ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
+  method public toString ()Ljava/lang/String;
+  method public top ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,static inset (Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;)Lcom/crystalgui/style/property/visual/ClipPath;
+  method public,static inset (Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;Lcom/crystalgui/style/property/visual/border/LengthPercent;)Lcom/crystalgui/style/property/visual/ClipPath;
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/ClipPath;
+com/crystalgui/style/property/visual/ClipPathProperty
+  access public,final
+  extends com/crystalgui/style/property/StyleProperty
+  method public <init> (Ljava/lang/String;)V
 com/crystalgui/style/property/visual/DrawableAlign
   access public,final,enum
   extends java/lang/Enum
@@ -17012,12 +17045,14 @@ com/crystalgui/widget/overlay/Popover$Mode
 com/crystalgui/widget/overlay/Tooltip
   access public
   extends com/crystalgui/ui/dom/UIElement
+  field public,static,final ABOVE_CLASS Ljava/lang/String;
   field public,static,final BESIDE_CLASS Ljava/lang/String;
   field public,static,final CONTRACT Lcom/crystalgui/ui/contract/WidgetContract;
   field public,static,final DESCRIPTION_PART Ljava/lang/String;
   field public,static,final HEADING_PART Ljava/lang/String;
   field public,static,final LABEL_PART Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  field public,static,final OPEN_CLASS Ljava/lang/String;
   field public,static,final SHORTCUT_PART Ljava/lang/String;
   field public,static,final TEXT Lcom/crystalgui/ui/contract/State;
   field public,static,final WAIT_CLASS Ljava/lang/String;
