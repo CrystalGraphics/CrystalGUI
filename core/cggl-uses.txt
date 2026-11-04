@@ -1,0 +1,7 @@
+# Files allowed to name CgGL or org.lwjgl.opengl: shrinks only (rhi.md §2.12). Regenerate:
+#   python plan/crystalgraphics/rhi/steps/cggl_ledger.py . --write
+com/crystalgui/app/frameprofiler/FrameImageView.java
+com/crystalgui/probe/ServerSmoke.java
+com/crystalgui/render/CgUiBackdrop.java
+com/crystalgui/render/CgUiPaintContext.java
+com/crystalgui/render/UiGpu.java
