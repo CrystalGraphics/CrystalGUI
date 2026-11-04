@@ -8136,6 +8136,7 @@ com/crystalgui/render/CgUiPaintContext
   method public getWhitePixel ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
   method public isFrameActive ()Z
   method public isPoseAxisAligned ()Z
+  method public getPictureTint ()I
   method public isVisible (FFFF)Z
   method public layerOpacity ()F
   method public layerRegion (FFFF)Lcom/crystalgui/render/LayerRegion;
@@ -8168,6 +8169,7 @@ com/crystalgui/render/CgUiPaintContext
   method public surfaceRegion (FFFF)Lcom/crystalgui/render/LayerRegion;
   method public svgLodBudget ()Lcom/crystalgui/render/texture/svg/SvgDocument$LodBudget;
   method public svgRaster ()Lcom/crystalgui/render/SvgRasterCache;
+  method public setPictureTint (I)V
   method public targetHeight ()I
   method public targetPose ()Lorg/joml/Matrix4f;
   method public targetToDraw ()Lorg/joml/Matrix4f;
@@ -9271,6 +9273,8 @@ com/crystalgui/style/GeneralGroup
   method public overlay ()Lcom/crystalgui/render/texture/CgUiDrawable;
   method public overlay (Lcom/crystalgui/render/texture/CgUiDrawable;)Lcom/crystalgui/style/GeneralGroup;
   method public overlayOrigin ()Lcom/crystalgui/style/property/visual/BoxOrigin;
+  method public overlayTint ()I
+  method public overlayTint (I)Lcom/crystalgui/style/GeneralGroup;
   method public overlayOrigin (Lcom/crystalgui/style/property/visual/BoxOrigin;)Lcom/crystalgui/style/GeneralGroup;
   method public overlayPosition ()Lcom/crystalgui/style/property/visual/DrawableAlign;
   method public overlayPosition (Lcom/crystalgui/style/property/visual/DrawableAlign;)Lcom/crystalgui/style/GeneralGroup;
@@ -9782,6 +9786,7 @@ com/crystalgui/style/property/StylePropertyRegistry
   field public,static,final OUTLINE_OFFSET_RIGHT Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OUTLINE_OFFSET_TOP Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OUTLINE_WIDTH Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final OVERLAY_TINT Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERFLOW Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY_ORIGIN Lcom/crystalgui/style/property/StyleProperty;

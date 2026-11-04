@@ -50,6 +50,16 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    /** What an overlay picture's own colours are multiplied by; white draws it as authored. */
+    public int overlayTint() {
+        return getValueSave(StylePropertyRegistry.OVERLAY_TINT);
+    }
+
+    public GeneralGroup overlayTint(int argb) {
+        set(StylePropertyRegistry.OVERLAY_TINT, argb);
+        return this;
+    }
+
     // ── overlay geometry longhands (CSS background-origin / object-fit / object-position) ────────
 
     public BoxOrigin overlayOrigin() {

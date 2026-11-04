@@ -1025,12 +1025,17 @@ public final class BoxPainter {
         ctx.setColor(WHITE);
         CgUiDrawable overlay = style.get(StylePropertyRegistry.OVERLAY);
         if (overlay == CgUiDrawable.EMPTY) return;
-        // A mark takes the box's `color`; a picture keeps its own palette.
+        // A mark takes the box's `color`; a picture keeps its own palette, multiplied by `overlay-tint`.
         if (overlay.followsTextColor()) ctx.setColor(style.get(StylePropertyRegistry.COLOR));
         originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN), originBox);
         CgUiLayerBox.resolveInto(overlay, originBox[0], originBox[1], originBox[2], originBox[3],
                 style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION), laid);
-        overlay.draw(ctx, laid[0], laid[1], laid[2], laid[3]);
+        ctx.setPictureTint(style.get(StylePropertyRegistry.OVERLAY_TINT));
+        try {
+            overlay.draw(ctx, laid[0], laid[1], laid[2], laid[3]);
+        } finally {
+            ctx.setPictureTint(WHITE);
+        }
     }
 
     private void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {

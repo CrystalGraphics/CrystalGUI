@@ -10,6 +10,7 @@ import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.SvgRasterCache;
+import com.crystalgui.render.texture.ArgbMath;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -695,10 +696,12 @@ public final class SvgDocument {
             return;
         }
         warnShadowSkipped();
+        // The cascade's overlay-tint, multiplying the colours the file names; currentColor takes `tint`
+        int picture = ctx.getPictureTint();
         for (DrawOp op : ops()) {
-            int argb = op.currentColor() ? tint : op.argb();
+            int argb = op.currentColor() ? tint : ArgbMath.multiply(op.argb(), picture);
             if (op.fill()) {
-                drawFill(ctx, op, x, y, scale, argb, false);
+                drawFill(ctx, op, x, y, scale, argb, false, false, picture);
             } else {
                 drawStroke(ctx, op, x, y, scale, argb, op.halfWidth() * scale);
             }
@@ -750,17 +753,19 @@ public final class SvgDocument {
                               boolean flat, float halfWidth) {
         SvgDocument tier = rasterTier(Math.max(width, height) * scale * ctx.deviceScale());
         List<DrawOp> ops = tier.ops();
+        // Applied as each raster's draw colour, so animating it rasterises nothing again
+        int picture = flat ? 0xFFFFFFFF : ctx.getPictureTint();
         for (int i = 0; i < ops.size(); i++) {
             DrawOp op = ops.get(i);
             // Under the whole group, before its first op: SVG paints a filtered element's result as a unit
             if (!flat && op.shadow() != null && (i == 0 || ops.get(i - 1).shadow() != op.shadow())) {
                 ctx.svgRaster().drawShadow(tier, i, x, y, scale);
             }
-            int colour = flat || op.currentColor() ? argb : op.argb();
+            int colour = flat || op.currentColor() ? argb : ArgbMath.multiply(op.argb(), picture);
             // A fill with colours of its own -- a gradient, a per-slice ramp -- bakes them into the
             // raster and is drawn untinted; everything else is white coverage under the tint.
             boolean baked = op.fill() && !flat && op.colours() != null;
-            ctx.svgRaster().draw(tier, i, x, y, scale, baked ? 0xFFFFFFFF : colour, flat, halfWidth);
+            ctx.svgRaster().draw(tier, i, x, y, scale, baked ? picture : colour, flat, halfWidth);
         }
     }
 
@@ -819,7 +824,7 @@ public final class SvgDocument {
      */
     public void accumulateFill(CgUiPaintContext ctx, int op, float x, float y, float scale, boolean flat) {
         DrawOp fill = ops().get(op);
-        drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true);
+        drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true, 0xFFFFFFFF);
     }
 
     /**
@@ -846,15 +851,17 @@ public final class SvgDocument {
      */
     private static void drawFill(CgUiPaintContext ctx, DrawOp op,
                                  float x, float y, float scale, int argb, boolean flat) {
-        drawFill(ctx, op, x, y, scale, argb, flat, false);
+        drawFill(ctx, op, x, y, scale, argb, flat, false, 0xFFFFFFFF);
     }
 
     /**
      * @param accumulate every edge is an exact area rather than only the outline ones, for cells that
      *                   are being summed into a coverage target instead of composited one by one
      */
+    /** @param picture multiplies the file's own per-cell colours; white for none */
     private static void drawFill(CgUiPaintContext ctx, DrawOp op,
-                                 float x, float y, float scale, int argb, boolean flat, boolean accumulate) {
+                                 float x, float y, float scale, int argb, boolean flat, boolean accumulate,
+                                 int picture) {
         // Scoped per OP, never per cell: a scope costs a nanoTime pair, and a fill is hundreds of cells,
         // so per-cell instrumentation would measure itself. The cell count rides along as a counter
         // instead, which is what turns "drawFill is slow" into "drawFill is slow per cell" or "there are
@@ -886,11 +893,11 @@ public final class SvgDocument {
                 // reciprocal length. Getting that inverse backwards makes the ramp shrink as the icon
                 // grows, which reads as a gradient that is nearly flat at small sizes.
                 int at = cell * 4;
-                out.gradient(start[cell], end[cell],
+                out.gradient(ArgbMath.multiply(start[cell], picture), ArgbMath.multiply(end[cell], picture),
                         x + axes[at] * scale, y + axes[at + 1] * scale,
                         axes[at + 2] / scale, axes[at + 3] / scale);
             } else {
-                out.color(start == null || flat ? argb : start[cell]);
+                out.color(start == null || flat ? argb : ArgbMath.multiply(start[cell], picture));
             }
             out.submit();
         }

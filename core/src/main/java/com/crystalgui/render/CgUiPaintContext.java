@@ -519,6 +519,14 @@ public final class CgUiPaintContext {
     @Getter @Setter
     private int color = 0xFFFFFFFF;
 
+    /**
+     * Multiplies the colours a picture names itself, as {@link #getColor()} resolves a mark's
+     * {@code currentColor}: the cascade's {@code overlay-tint}, set around an overlay's draw. White draws a
+     * picture as authored; anything else must be set back to white after.
+     */
+    @Getter @Setter
+    private int pictureTint = 0xFFFFFFFF;
+
     private CgUiPaintContext() {
         this.gpu = UiGpu.get();
         this.frameTarget = gpu.frameTarget;

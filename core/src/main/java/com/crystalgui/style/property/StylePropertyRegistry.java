@@ -104,6 +104,8 @@ public class StylePropertyRegistry {
             create("overlay-size", DrawableFit.class, DrawableFit.FILL);
     public static final StyleProperty<DrawableAlign> OVERLAY_POSITION =
             create("overlay-position", DrawableAlign.class, DrawableAlign.CENTER);
+    // Multiplies an overlay picture's own colours; white leaves it as authored. Transitions as a colour.
+    public static final StyleProperty<Integer> OVERLAY_TINT = create(new ColorProperty("overlay-tint", 0xFFFFFFFF));
     // Distinct from BACKGROUND (a drawable) and COLOR (inherited, meant for text) — matches real CSS,
     // where `background-color` is its own independent fill layer. Not inherited.
     // Unset = white, a multiplicative identity for the tint model in UIElement.paintSelf — "no
