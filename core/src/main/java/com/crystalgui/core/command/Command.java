@@ -36,6 +36,7 @@ public final class Command {
 
     private Consumer<CommandContext> handler = context -> { };
     private Predicate<CommandContext> enabled = context -> true;
+    private Predicate<CommandContext> shown = context -> true;
 
     private Command(String id, String label) {
         this.id = id;
@@ -153,6 +154,29 @@ public final class Command {
         this.icon = iconId;
         this.iconClass = cssClass;
         return this;
+    }
+
+    /**
+     * Whether a menu lists this row at all for its subject.
+     *
+     * <pre>{@code
+     * Command.of(PIN, "Pin to taskbar")
+     *         .shownWhen(context -> pinnable(context))     // a window that can never be pinned has no row
+     *         .enabledWhen(context -> ...);                 // one that cannot right now is dimmed
+     * }</pre>
+     *
+     * <p>For a row that can never apply to what the menu is about, which does not change while the menu is
+     * open. Availability is {@link #enabledWhen}'s: a menu dims an unavailable row rather than dropping it,
+     * so its rows stay in the same place. The palette ignores this.</p>
+     */
+    public Command shownWhen(Predicate<CommandContext> predicate) {
+        this.shown = predicate == null ? context -> true : predicate;
+        return this;
+    }
+
+    /** @see #shownWhen */
+    public boolean isShown(CommandContext context) {
+        return shown.test(context);
     }
 
     /** @see #isEnabled */

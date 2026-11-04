@@ -26,18 +26,15 @@ public class LauncherButton extends Button {
 
     public static final Name NAME = Name.of("launcherbutton");
 
-    /** The mark on the button. Four panes, as every start button since 1995 has drawn. */
-    public static final String GLYPH_CLASS = "__start-glyph__";
-
-    /** One of the glyph's four panes. */
-    public static final String PANE_CLASS = "__start-pane__";
+    /** The slot the sheet draws the start mark into: the logo's C and gem, {@code crystalgui:start}. */
+    public static final String MARK_CLASS = "__start-mark__";
 
     private final Launcher launcher = new Launcher();
 
     public LauncherButton() {
         super(NAME, "");
         addClass("__start__");
-        setPreIcon(glyph());
+        setPreIcon(new UIElement().addClass(MARK_CLASS));
         append(launcher);
         attachListener(this::toggle);
     }
@@ -53,23 +50,5 @@ public class LauncherButton extends Button {
         }
         launcher.refill();
         launcher.showFor(this, this);
-    }
-
-    /**
-     * The four-pane mark.
-     *
-     * <p>Four real elements in a grid rather than an SVG: two CSS rules against an asset to ship, and
-     * the mark has to read at twelve logical pixels, where a stroked outline icon would not. An empty
-     * grid draws nothing, so the panes are what make it a mark at all.</p>
-     */
-    private static UIElement glyph() {
-        UIElement mark = new UIElement();
-        mark.addClass(GLYPH_CLASS);
-        for (int pane = 0; pane < 4; pane++) {
-            UIElement quarter = new UIElement();
-            quarter.addClass(PANE_CLASS);
-            mark.append(quarter);
-        }
-        return mark;
     }
 }

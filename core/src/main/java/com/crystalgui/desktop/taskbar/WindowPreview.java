@@ -54,8 +54,6 @@ public class WindowPreview extends UIElement {
     public static final String CLOSE_CLASS = "__preview-close__";
     public static final String ICON_CLASS = "__pre-icon__";
 
-    /** The bar's accent wash, on the panel too -- one material, one tone. @see Taskbar#GLOW_CLASS */
-    private final UIElement glow = new UIElement();
     private final UIElement header = new UIElement();
     private final WindowIcon icon = new WindowIcon();
     private final UIText title = new UIText("");
@@ -72,25 +70,9 @@ public class WindowPreview extends UIElement {
     /** The window was closed from here, so whoever is showing this should stop. */
     public final Signal.Action onClosed = new Signal.Action();
 
-    /**
-     * The accent wash under the content, for {@link TaskbarDesigner} to retone the whole family at
-     * once. Package-private: a theme retones this through {@code --preview-glow}, and the element
-     * itself is only reachable because the designer writes at IMPORTANT origin while it runs.
-     */
-    UIElement glow() {
-        return glow;
-    }
-
     public WindowPreview() {
         super(NAME);
         addClass(PREVIEW_CLASS);
-
-        // THE GLOW FIRST, so it paints over the glass and under everything else -- the same wash the
-        // bar carries, from a pin of its own, so the preview reads as a piece of the bar it rose from.
-        // Absolute, unhittable, and it carries the panel's radius so the gradient masks itself.
-        glow.addClass(Taskbar.GLOW_CLASS);
-        glow.setHitTest(false);
-        append(glow);
 
         icon.addClass(ICON_CLASS);
         // Unhittable, like every composite part: click-focus targets the exact element hit, so a
@@ -244,6 +226,12 @@ public class WindowPreview extends UIElement {
     }
 
     /** Points the preview at a window. Cheap enough to call while it is moving between entries. */
+    /** The window shown, or null. */
+    @Nullable
+    public WindowFrame frame() {
+        return frame;
+    }
+
     public WindowPreview setFrame(@Nullable WindowFrame frame) {
         this.frame = frame;
         thumbnail.setFrame(frame);

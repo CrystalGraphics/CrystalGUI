@@ -9,6 +9,8 @@ import com.crystalgui.core.trace.UiTrace;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.SvgRasterCache;
+import com.crystalgui.render.texture.ArgbMath;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,9 +53,13 @@ import javax.annotation.Nullable;
  * <p>A gradient is sampled per triangle rather than per pixel, so it is a fine staircase rather than a
  * ramp — cut fine enough that each band moves the colour by at most two levels, and it costs no shader. A
  * stroke painted with a gradient is filled as its own outline ({@link SvgStroker}) and painted like any
- * gradient fill. Patterns, filters, masks and clip paths are ignored
+ * gradient fill. Patterns, masks, clip paths and every filter but a drop shadow are ignored
  * outright — a clipped shape draws unclipped rather than vanishing, on the reasoning that a visible
  * approximation beats a silent hole.</p>
+ *
+ * <p>A drop shadow ({@link SvgScene.DropShadow}) is drawn at icon sizes, where {@link
+ * SvgRasterCache} blurs it once and keeps it. Larger draws skip it, logging once per
+ * document, and so does a monochrome draw, which is a silhouette by definition.</p>
  *
  * <p>Group {@code opacity} multiplies into children instead of compositing the group as a unit; see
  * {@link SvgStyle}. Text is not rendered — an icon with live text is a font problem, not an SVG one.</p>
@@ -105,12 +111,15 @@ public final class SvgDocument {
      * @param segmentCaps  one packed cap pair per stroke segment, so that an interior joint gets exactly
      *                     one round cap and not two — see {@link SvgGeometry#segmentsOf}. Null for a fill,
      *                     which has no ends
+     * @param shadow       the drop shadow of the filtered element this op is part of; the ops sharing one
+     *                     are consecutive, and its shadow is drawn under the first of them
      */
     public record DrawOp(boolean fill, float[] data, @Nullable int[] colours,
                          @Nullable int[] coloursEnd, @Nullable float[] gradients,
                          @Nullable int[] edges, boolean opaque,
                          int argb, boolean currentColor,
-                         float halfWidth, int cap, @Nullable int[] segmentCaps) {
+                         float halfWidth, int cap, @Nullable int[] segmentCaps,
+                         @Nullable SvgScene.DropShadow shadow) {
     }
 
     /** Retained so {@link #ops()} can tessellate on demand; see the laziness note there. */
@@ -257,6 +266,7 @@ public final class SvgDocument {
                 CgTrace.counter(UiTrace.FRAME, "svg.lodDeferred", 0.0);
                 SvgDocument built = lods.computeIfAbsent(LOD_STEPS[i], steps -> {
                     SvgDocument tier = fromScene(SvgResolver.resolve(tags, steps));
+                    tier.source = source;
                     // Forced HERE rather than left to the first draw. ops() is lazy now, and the whole
                     // point of this scope is that the build is charged against LOD_BUILD_BUDGET_NANOS --
                     // let the tessellation escape it and the budget silently stops spreading the work it
@@ -431,6 +441,7 @@ public final class SvgDocument {
             CgTrace.add(UiTrace.FRAME, "svg.parse.count", 1);
             SvgDocument document = parse(source);
             document.sourceFingerprint = fingerprint(source);
+            document.source = path;
             return document;
         }
     }
@@ -607,7 +618,7 @@ public final class SvgDocument {
                             ? ramp.argb() : ((SvgScene.Solid) paint).argb();
                     ops.add(new DrawOp(true, mesh.cells(), mesh.colour0(), mesh.colour1(),
                             mesh.axes(), mesh.edges(), mesh.opaque(), argb,
-                            paint.currentColor(), 0f, 0, null));
+                            paint.currentColor(), 0f, 0, null, node.shadow()));
                 }
             }
 
@@ -621,7 +632,7 @@ public final class SvgDocument {
                     SvgScene.Solid paint = (SvgScene.Solid) stroke.paint();
                     ops.add(new DrawOp(false, segments.data(), null, null, null, null, true,
                             paint.argb(), paint.currentColor(), stroke.halfWidth(), stroke.cap(),
-                            segments.caps()));
+                            segments.caps(), node.shadow()));
                 }
             }
         }
@@ -684,10 +695,13 @@ public final class SvgDocument {
             lod.render(ctx, x, y, scale, tint);
             return;
         }
+        warnShadowSkipped();
+        // The cascade's overlay-tint, multiplying the colours the file names; currentColor takes `tint`
+        int picture = ctx.getPictureTint();
         for (DrawOp op : ops()) {
-            int argb = op.currentColor() ? tint : op.argb();
+            int argb = op.currentColor() ? tint : ArgbMath.multiply(op.argb(), picture);
             if (op.fill()) {
-                drawFill(ctx, op, x, y, scale, argb, false);
+                drawFill(ctx, op, x, y, scale, argb, false, false, picture);
             } else {
                 drawStroke(ctx, op, x, y, scale, argb, op.halfWidth() * scale);
             }
@@ -739,14 +753,50 @@ public final class SvgDocument {
                               boolean flat, float halfWidth) {
         SvgDocument tier = rasterTier(Math.max(width, height) * scale * ctx.deviceScale());
         List<DrawOp> ops = tier.ops();
+        // Applied as each raster's draw colour, so animating it rasterises nothing again
+        int picture = flat ? 0xFFFFFFFF : ctx.getPictureTint();
         for (int i = 0; i < ops.size(); i++) {
             DrawOp op = ops.get(i);
-            int colour = flat || op.currentColor() ? argb : op.argb();
+            // Under the whole group, before its first op: SVG paints a filtered element's result as a unit
+            if (!flat && op.shadow() != null && (i == 0 || ops.get(i - 1).shadow() != op.shadow())) {
+                ctx.svgRaster().drawShadow(tier, i, x, y, scale);
+            }
+            int colour = flat || op.currentColor() ? argb : ArgbMath.multiply(op.argb(), picture);
             // A fill with colours of its own -- a gradient, a per-slice ramp -- bakes them into the
             // raster and is drawn untinted; everything else is white coverage under the tint.
             boolean baked = op.fill() && !flat && op.colours() != null;
-            ctx.svgRaster().draw(tier, i, x, y, scale, baked ? 0xFFFFFFFF : colour, flat, halfWidth);
+            ctx.svgRaster().draw(tier, i, x, y, scale, baked ? picture : colour, flat, halfWidth);
         }
+    }
+
+    /** The path {@link #load} read this from, for a log line; null for parsed text. */
+    @Nullable
+    private String source;
+
+    /** Set once a draw too large to cache has skipped this document's shadow, so the log says it once. */
+    private volatile boolean shadowSkipLogged;
+
+    private void warnShadowSkipped() {
+        if (shadowSkipLogged) return;
+        for (DrawOp op : ops()) {
+            if (op.shadow() == null) continue;
+            shadowSkipLogged = true;
+            CrystalGuiCore.LOGGER.warn("Icon {} drawn above {} device px: its drop shadow is drawn only at icon sizes",
+                    source == null ? "(parsed text)" : source, SvgRasterCache.MAX_DEVICE_PX);
+            return;
+        }
+    }
+
+    /**
+     * Ops {@code first} up to the end of its shadow group: the consecutive ops sharing {@code first}'s shadow.
+     * What {@link SvgRasterCache#drawShadow} rasterises the shadow of.
+     */
+    public int shadowGroupEnd(int first) {
+        List<DrawOp> ops = ops();
+        SvgScene.DropShadow shadow = ops.get(first).shadow();
+        int end = first + 1;
+        while (end < ops.size() && ops.get(end).shadow() == shadow) end++;
+        return end;
     }
 
     /** The mesh tier for a draw {@code devicePx} tall, built synchronously. */
@@ -756,6 +806,7 @@ public final class SvgDocument {
             if (devicePx > LOD_MAX_DEVICE_PX[i]) continue;
             return lods.computeIfAbsent(LOD_STEPS[i], steps -> {
                 SvgDocument built = fromScene(SvgResolver.resolve(tags, steps));
+                built.source = source;
                 built.ops();
                 return built;
             });
@@ -765,7 +816,7 @@ public final class SvgDocument {
 
     /**
      * Submits fill op {@code op}'s cells for accumulation: every edge an exact area, the document origin
-     * at {@code (x, y)} in the target's own pixels. What {@link com.crystalgui.render.SvgRasterCache}
+     * at {@code (x, y)} in the target's own pixels. What {@link SvgRasterCache}
      * rasterises through, under its additive material.
      *
      * @param flat every cell white; otherwise a fill with colours of its own keeps them and a plain
@@ -773,7 +824,7 @@ public final class SvgDocument {
      */
     public void accumulateFill(CgUiPaintContext ctx, int op, float x, float y, float scale, boolean flat) {
         DrawOp fill = ops().get(op);
-        drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true);
+        drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true, 0xFFFFFFFF);
     }
 
     /**
@@ -800,15 +851,17 @@ public final class SvgDocument {
      */
     private static void drawFill(CgUiPaintContext ctx, DrawOp op,
                                  float x, float y, float scale, int argb, boolean flat) {
-        drawFill(ctx, op, x, y, scale, argb, flat, false);
+        drawFill(ctx, op, x, y, scale, argb, flat, false, 0xFFFFFFFF);
     }
 
     /**
      * @param accumulate every edge is an exact area rather than only the outline ones, for cells that
      *                   are being summed into a coverage target instead of composited one by one
      */
+    /** @param picture multiplies the file's own per-cell colours; white for none */
     private static void drawFill(CgUiPaintContext ctx, DrawOp op,
-                                 float x, float y, float scale, int argb, boolean flat, boolean accumulate) {
+                                 float x, float y, float scale, int argb, boolean flat, boolean accumulate,
+                                 int picture) {
         // Scoped per OP, never per cell: a scope costs a nanoTime pair, and a fill is hundreds of cells,
         // so per-cell instrumentation would measure itself. The cell count rides along as a counter
         // instead, which is what turns "drawFill is slow" into "drawFill is slow per cell" or "there are
@@ -840,11 +893,11 @@ public final class SvgDocument {
                 // reciprocal length. Getting that inverse backwards makes the ramp shrink as the icon
                 // grows, which reads as a gradient that is nearly flat at small sizes.
                 int at = cell * 4;
-                out.gradient(start[cell], end[cell],
+                out.gradient(ArgbMath.multiply(start[cell], picture), ArgbMath.multiply(end[cell], picture),
                         x + axes[at] * scale, y + axes[at + 1] * scale,
                         axes[at + 2] / scale, axes[at + 3] / scale);
             } else {
-                out.color(start == null || flat ? argb : start[cell]);
+                out.color(start == null || flat ? argb : ArgbMath.multiply(start[cell], picture));
             }
             out.submit();
         }

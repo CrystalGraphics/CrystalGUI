@@ -94,6 +94,27 @@ public final class MenuId {
     public static final MenuId TASKBAR_CONTEXT = of("taskbar/context");
 
     /**
+     * A taskbar entry's jump list: what a right-click on one window's entry offers.
+     *
+     * <p>Windows 11's: Close, and the window's own verbs (move, size, maximise...) stay in its title
+     * bar's {@link #WINDOW_SYSTEM}. A command placed here resolves its window from the entry.</p>
+     *
+     * <pre>{@code
+     * registry.register(Command.of("myapp.closeAll", "Close all windows")
+     *         .menu(MenuId.TASKBAR_ENTRY, "2_close", 20)
+     *         .run(context -> ...));
+     * }</pre>
+     */
+    public static final MenuId TASKBAR_ENTRY = of("taskbar/entry");
+
+    /**
+     * An installed application's menu, wherever one is offered without a window: a taskbar pin that is not
+     * running, a row of the launcher. A command placed here reads the application from
+     * {@code UiDataKeys.APPLICATION_KIND}.
+     */
+    public static final MenuId APPLICATION = of("application");
+
+    /**
      * A right-click on <b>bare desktop</b> — the surface itself, not a window on it.
      *
      * <p>Every desktop has one, and it is the only affordance a desktop with nothing open still has:

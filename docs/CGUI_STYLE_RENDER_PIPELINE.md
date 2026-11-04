@@ -378,7 +378,7 @@ decorative visual because its style system lacks background geometry controls):
 | Layer | Painted | Clipped by own mask/scissor? | Geometry longhands |
 |---|---|---|---|
 | `background` | before children | no | *(none — see §9)* |
-| `overlay` | after children | no | `overlay-origin`, `overlay-size`, `overlay-position` |
+| `overlay` | after children | no | `overlay-origin`, `overlay-size`, `overlay-position`, `overlay-tint` |
 | `outline` | after overlay, last | no | `outline-offset`, `outline-width`, `outline-color` |
 
 - **`overlay-origin`** (`border-box`\|`padding-box`\|`content-box`, default `border-box`) — CSS
@@ -389,6 +389,14 @@ decorative visual because its style system lacks background geometry controls):
   `-1` when it has none); every mode degrades to `fill` when unknown, so solid colours and SDF shapes
   keep filling as before. `CgUiSprite` reports its source-rect size, interpreted 1:1 as logical px.
 - **`overlay-position`** (9 keywords, default `center`) — CSS `object-position`, keyword subset.
+- **`overlay-tint`** (a colour, default white) — multiplies the colours an SVG overlay names itself, as `color`
+  resolves its `currentColor`; transitions as a colour, and costs no re-raster at icon size. The start button's
+  mark goes blue on hover through it:
+
+  ```css
+  taskbar .__start-button__::part(pre-icon)       { transition: overlay-tint 140ms ease-out; }
+  taskbar .__start-button__:hover::part(pre-icon) { overlay-tint: #D4E2FF; }
+  ```
 - **`outline`** — a layout-free ring drawn above everything, at the border box expanded by
   `outline-offset` (a `LengthPercent`, so `2px`/`2`/`%` all parse; default `0`). This exists because
   `border-width` feeds Taffy and therefore *resizes* the element, making it unusable for focus

@@ -11,6 +11,8 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.MenuBuilder;
 
+import javax.annotation.Nullable;
+
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -21,8 +23,8 @@ import java.util.WeakHashMap;
  *
  * <h3>The rows are shared; only the anchor differs</h3>
  *
- * <p>All three routes build {@link MenuId#WINDOW_SYSTEM} through {@link MenuBuilder}, which is the one
- * place commands become rows. A title-bar right-click is the straightforward one and uses
+ * <p>The title bar and keyboard routes build {@link MenuId#WINDOW_SYSTEM}, the taskbar route
+ * {@link MenuId#TASKBAR_ENTRY}, through {@link MenuBuilder}, which is the one place commands become rows. A title-bar right-click is the straightforward one and uses
  * {@code ContextMenu.attach}, which anchors at the press. The other two cannot:</p>
  *
  * <ul>
@@ -86,7 +88,7 @@ public final class SystemMenu {
         // BUILT AGAINST THE FRAME, so every enabledWhen resolves to this window rather than to whatever
         // happens to be focused. That matters most for the route that has no pointer: Alt+- with focus
         // inside window A must not offer window B's rows.
-        Menu menu = open(frame, frame, window);
+        Menu menu = open(MenuId.WINDOW_SYSTEM, frame, frame, window);
 
         // UNDER the title bar, at its left edge -- Win32's placement, and the one that does not cover the
         // caption you just asked about. Read off the BAR's own measured box rather than the frame's
@@ -121,7 +123,7 @@ public final class SystemMenu {
      * the entry (which flips it above the strip for free), then centred on the next frame, which is the
      * same two-step the hover previews use for the identical placement.</p>
      */
-    public static void showJumpList(WindowFrame frame, UIElement anchor) {
+    public static void showJumpList(@Nullable WindowFrame frame, UIElement anchor) {
         // THE ANCHOR'S WINDOW, NEVER THE FRAME'S -- and this route is the one place the difference is
         // fatal. HIDE IS DETACH: a minimised window is out of the tree entirely, so `frame` answers null
         // here for exactly the windows a jump list exists to reach, and the method returned having done
@@ -138,7 +140,11 @@ public final class SystemMenu {
 
         // BUILT AGAINST THE ENTRY, whose DataProvider answers for the window it stands for -- which is
         // how the same rows come out about a background window rather than the active one.
-        Menu menu = open(frame, anchor, window);
+        // A JUMP LIST IS NOT THE SYSTEM MENU: Windows 11's carries only Close, and the window's own verbs
+        // stay on its title bar.
+        // A PIN WITH NO WINDOW offers its application's menu instead, remembered under the entry itself.
+        Object owner = frame != null ? frame : anchor;
+        Menu menu = open(frame != null ? MenuId.TASKBAR_ENTRY : MenuId.APPLICATION, owner, anchor, window);
 
         // SUPPRESSED AFTER THE OPEN, never before it. `open` discards whatever chain was already up, and
         // discarding is what LIFTS a suppression -- so suppressing first and opening second silences the
@@ -152,7 +158,7 @@ public final class SystemMenu {
         Taskbar taskbar = Taskbar.of(anchor);
         if (taskbar != null) {
             taskbar.setPreviewsSuppressed(true);
-            SUPPRESSED.put(frame, taskbar);
+            SUPPRESSED.put(owner, taskbar);
         }
         // THE SAME SURFACE THE HOVER PREVIEW WEARS. A jump list and a preview are the same object from
         // the strip's point of view -- a panel that belongs to one entry and floats above it -- so they
@@ -232,35 +238,48 @@ public final class SystemMenu {
      * child list that has quietly emptied. {@code ContextMenu.attach} records the same hazard, with the
      * crash it produces.</p>
      */
-    private static Menu open(WindowFrame frame, UIElement source, UIDocument window) {
-        discardFor(frame);
-        Menu menu = MenuBuilder.build(MenuId.WINDOW_SYSTEM, CommandRegistry.global(), source);
-        LIVE.put(frame, MenuBuilder.present(menu, source, window));
-        menu.onClosed.connect(() -> discardFor(frame));
+    private static Menu open(MenuId id, Object owner, UIElement source, UIDocument window) {
+        discard(owner);
+        Menu menu = MenuBuilder.build(id, CommandRegistry.global(), source);
+        LIVE.put(owner, MenuBuilder.present(menu, source, window));
+        menu.onClosed.connect(() -> discard(owner));
         return menu;
+    }
+
+    /**
+     * Closes the jump list a press on its own entry should take down: Windows closes it as the button is
+     * clicked, and a menu's own light dismiss leaves alone a press on the element it was opened from.
+     */
+    public static void dismissJumpList(@Nullable WindowFrame frame, UIElement anchor) {
+        discard(frame != null ? frame : anchor);
     }
 
     /** Closes and drops {@code frame}'s menu chain, if it has one. */
     public static void discardFor(WindowFrame frame) {
+        discard(frame);
+    }
+
+    /** Closes and drops the chain remembered under {@code owner}: a window, or a pin's entry. */
+    private static void discard(Object owner) {
         // PREVIEWS COME BACK, and the strip is REMEMBERED rather than found from the menu: a promoted
         // popover's parent is the overlay host, not the element it was opened from, so walking out of the
         // menu never reaches the taskbar. That divergence is the whole reason promotion is documented.
-        Taskbar suppressed = SUPPRESSED.remove(frame);
+        Taskbar suppressed = SUPPRESSED.remove(owner);
         if (suppressed != null) suppressed.setPreviewsSuppressed(false);
 
-        List<Menu> live = LIVE.remove(frame);
+        List<Menu> live = LIVE.remove(owner);
         if (live != null) MenuBuilder.discard(new ArrayList<>(live));
     }
 
-    /** Frame → the strip whose previews it silenced. @see #discardFor */
-    private static final Map<WindowFrame, Taskbar> SUPPRESSED = new WeakHashMap<>();
+    /** Owner → the strip whose previews it silenced. @see #discardFor */
+    private static final Map<Object, Taskbar> SUPPRESSED = new WeakHashMap<>();
 
     /**
-     * Frame → its live chain.
+     * Owner (a window, or a pin's entry) → its live chain.
      *
      * <p><b>Weak-keyed</b>, so a destroyed window that never closed its menu cannot keep itself, its
      * whole content subtree and its documents reachable from a static map for the life of the process.
      * The same reason {@code StyleEngine} keeps its applied-slot record weakly.</p>
      */
-    private static final Map<WindowFrame, List<Menu>> LIVE = new WeakHashMap<>();
+    private static final Map<Object, List<Menu>> LIVE = new WeakHashMap<>();
 }

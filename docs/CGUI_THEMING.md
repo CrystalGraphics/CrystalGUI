@@ -111,7 +111,6 @@ crystal-dark.css is a migration-era pin awaiting the Islands pass; dark-plus.css
 editor scheme's.
 
 <!-- TOKENS:BEGIN -->
-
 | Token | Value | Defined in |
 |---|---|---|
 | `--accent` | `#3574F0` | crystal-dark.css |
@@ -379,6 +378,7 @@ editor scheme's.
 | `--inspection-error-fg` | `var(--error)` | base.css |
 | `--inspection-info-fg` | `var(--info)` | base.css |
 | `--inspection-warning-fg` | `var(--warning)` | base.css |
+| `--jump-list-disabled-fg` | `#FFFFFF5D` | crystal-dark.css |
 | `--kind-glyph-addon` | `#7AC0A0` | crystal-dark.css |
 | `--kind-glyph-addon-selected` | `#9EF2CB` | crystal-dark.css |
 | `--kind-glyph-collection` | `#B38FD8` | crystal-dark.css |
@@ -488,13 +488,9 @@ editor scheme's.
 | `--pill-name-fg` | `var(--fg)` | base.css |
 | `--pill-type-fg` | `var(--fg-secondary)` | base.css |
 | `--pressed-bg` | `#35373B` | crystal-dark.css |
-| `--preview-bg` | `var(--surface-overlay)` | base.css |
-| `--preview-border` | `var(--border-base)` | base.css |
 | `--preview-close-hover-bg` | `var(--error)` | base.css |
 | `--preview-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--preview-fg` | `var(--fg)` | base.css |
-| `--preview-glass-tint` | `#1F202313` | crystal-dark.css |
-| `--preview-glow` | `#3574F033` | crystal-dark.css |
 | `--preview-surface-bg` | `var(--surface-editor)` | base.css |
 | `--preview-thumbnail-bg` | `var(--surface-base)` | base.css |
 | `--problems-bg` | `#00000000` | base.css |
@@ -647,15 +643,10 @@ editor scheme's.
 | `--switch-checked-bg` | `var(--success)` | base.css |
 | `--switch-disabled-knob` | `var(--fg-disabled)` | base.css |
 | `--switch-knob` | `var(--fg)` | base.css |
-| `--switcher-bg` | `var(--surface-overlay)` | base.css |
-| `--switcher-border` | `var(--border-base)` | base.css |
 | `--switcher-close-hover-bg` | `var(--error)` | base.css |
 | `--switcher-close-hover-fg` | `var(--fg-on-accent)` | base.css |
 | `--switcher-entry-border` | `#00000000` | base.css |
-| `--switcher-entry-hover-bg` | `#FFFFFF0F` | crystal-dark.css |
 | `--switcher-fg` | `var(--fg)` | base.css |
-| `--switcher-glass-tint` | `#1F202313` | crystal-dark.css |
-| `--switcher-glow` | `#3574F033` | crystal-dark.css |
 | `--switcher-selected-ring` | `var(--fg)` | base.css |
 | `--syntax-attribute` | `#9CDCFE` | dark-plus.css |
 | `--syntax-attribute-style` | `normal` | dark-plus.css |
@@ -738,8 +729,11 @@ editor scheme's.
 | `--tab-strip-bg` | `#00000000` | base.css |
 | `--taskbar-bg` | `var(--surface-overlay)` | base.css |
 | `--taskbar-border` | `var(--border-base)` | base.css |
-| `--taskbar-entry-active-bg` | `#FFFFFF3D` | crystal-dark.css |
+| `--taskbar-edge-end` | `#FFFFFF0A` | crystal-dark.css |
+| `--taskbar-edge-mid` | `#FFFFFF73` | crystal-dark.css |
+| `--taskbar-entry-active-bg` | `#FFFFFF33` | crystal-dark.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
+| `--taskbar-entry-active-hover-bg` | `#FFFFFF4D` | crystal-dark.css |
 | `--taskbar-entry-attention-bg` | `var(--accent-soft)` | base.css |
 | `--taskbar-entry-attention-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-badge-bg` | `var(--error)` | base.css |
@@ -749,11 +743,13 @@ editor scheme's.
 | `--taskbar-entry-hover-bg` | `var(--hover-bg)` | base.css |
 | `--taskbar-entry-hover-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-progress` | `var(--accent-soft)` | base.css |
-| `--taskbar-glass-tint` | `#1C1D21CC` | crystal-dark.css |
-| `--taskbar-glow` | `#3574F033` | crystal-dark.css |
+| `--taskbar-focus-ring` | `#FFFFFF` | crystal-dark.css |
+| `--taskbar-glass-tint` | `#20202013` | crystal-dark.css |
 | `--taskbar-indicator` | `var(--fg-secondary)` | base.css |
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |
+| `--taskbar-start-hover-tint` | `#D4E2FF` | crystal-dark.css |
+| `--taskbar-start-pressed-tint` | `#B7CDF7` | crystal-dark.css |
 | `--tooltip-bg` | `#2B2D30` | crystal-dark.css |
 | `--tooltip-border` | `#323438` | crystal-dark.css |
 | `--tooltip-fg` | `var(--fg)` | base.css |
@@ -780,13 +776,21 @@ editor scheme's.
 | `--window-fg` | `var(--fg)` | base.css |
 | `--window-icon-glyph` | `var(--fg-on-accent)` | base.css |
 | `--window-icon-mono-bg` | `#DE2A4D` | crystal-dark.css |
+| `--window-icon-mono-bg-end` | `#C51E7C` | crystal-dark.css |
 | `--window-icon-mono-fg` | `var(--fg-on-accent)` | base.css |
+| `--window-icon-monogram-shadow` | `#000000C0` | crystal-dark.css |
 | `--window-icon-tile-1` | `#4A7CE0` | crystal-dark.css |
+| `--window-icon-tile-1-end` | `#3E26DA` | crystal-dark.css |
 | `--window-icon-tile-2` | `#3FA36B` | crystal-dark.css |
+| `--window-icon-tile-2-end` | `#368C84` | crystal-dark.css |
 | `--window-icon-tile-3` | `#D98A3A` | crystal-dark.css |
+| `--window-icon-tile-3-end` | `#C63C26` | crystal-dark.css |
 | `--window-icon-tile-4` | `#8B63D9` | crystal-dark.css |
+| `--window-icon-tile-4-end` | `#B43FD0` | crystal-dark.css |
 | `--window-icon-tile-5` | `#2FA7B8` | crystal-dark.css |
+| `--window-icon-tile-5-end` | `#28599E` | crystal-dark.css |
 | `--window-icon-tile-6` | `#D85A7A` | crystal-dark.css |
+| `--window-icon-tile-6-end` | `#D03796` | crystal-dark.css |
 | `--window-title-active-bg` | `var(--surface-base)` | base.css |
 | `--window-title-active-fg` | `var(--fg)` | base.css |
 | `--window-title-bg` | `var(--surface-base)` | base.css |
@@ -794,5 +798,4 @@ editor scheme's.
 | `--workbench-bg` | `var(--surface-base)` | base.css |
 | `--workbench-control-hover-bg` | `var(--hover-bg)` | base.css |
 | `--workbench-control-pressed-bg` | `var(--pressed-bg)` | base.css |
-
 <!-- TOKENS:END -->

@@ -109,7 +109,7 @@ public final class FrameProfiler {
     }
 
     public static final ApplicationKind KIND = ApplicationKind.of(ID, "Frame Profiler")
-            .icon("crystalgui:activity")
+            .icon("crystalgui:frame-profiler")
             // WHAT SOMEBODY TYPES WHEN THEY DO NOT KNOW WHAT IT IS CALLED. Nobody looking for a
             // dropped frame searches for "frame profiler"; they search for "fps" or "lag".
             .keywords("fps", "performance", "profiler", "trace", "lag", "frame time", "jank")
@@ -199,7 +199,8 @@ public final class FrameProfiler {
 
         @Override
         public void activate() {
-            Desktop desktop = Desktop.ifPresent(window.document());
+            // The window's own desktop: a minimised one is detached, and has no document to find it by
+            Desktop desktop = window.desktop();
             if (desktop != null) desktop.activate(window, true);
         }
 

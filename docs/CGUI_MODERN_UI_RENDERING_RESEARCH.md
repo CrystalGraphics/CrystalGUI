@@ -272,7 +272,7 @@ taps would halve the fetch count.
 because `CgUiBackdrop` pads the captured region by the blur's reach, so the clamp only bites at the
 screen's own edges — which is precisely where the bar lives. Mirroring the tap coordinate into the
 sub-rect (`u' = lo + |((u − lo) mod 2w) − w|` style reflection) is the spec's answer and removes the
-edge streak at the bottom lip for good.
+edge streak at the bottom lip for good. **Done:** `gui_blur.shader`'s `cg_tap` mirrors into `_Bounds`.
 
 ---
 

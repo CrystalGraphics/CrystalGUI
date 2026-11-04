@@ -16,6 +16,10 @@ import com.crystalgui.widget.control.Button;
 
 import javax.annotation.Nullable;
 
+import java.util.List;
+
+import java.util.function.Supplier;
+
 /**
  * The hover behaviour behind {@link WindowPreview} — when it appears, where, and how it gets there.
  *
@@ -78,6 +82,16 @@ public final class TaskbarPreviews {
 
     private final Taskbar taskbar;
     private final WindowPreview preview = new WindowPreview();
+    /** A combined button's windows, side by side, in place of the one preview. @see WindowPreviewRow */
+    private final WindowPreviewRow row = new WindowPreviewRow();
+    /** The entry the row is up over, or null when it is not. */
+    @Nullable
+    private Button rowEntry;
+    @Nullable
+    private WindowMotion rowMotion;
+    /** The windows of the combined entry the pointer rests on, while it has more than one. */
+    @Nullable
+    private List<WindowFrame> hoveredGroup;
 
     /** The one panel. */
     WindowPreview panel() {
@@ -162,6 +176,22 @@ public final class TaskbarPreviews {
             if (frame != null && desktop != null) desktop.activate(frame, false);
         });
         preview.onClosed.connect(this::dismiss);
+
+        row.setDisplayed(false);
+        taskbar.append(row);
+        row.onMouseEnter.attachListener((element, event) -> {
+            pointerInPanel = true;
+            wake();
+        }, false, false);
+        row.onMouseLeave.attachListener((element, event) -> {
+            pointerInPanel = false;
+            wake();
+        }, false, false);
+        row.onPicked.connect(frame -> {
+            Desktop desktop = taskbar.desktop();
+            dismiss();
+            if (desktop != null) desktop.activate(frame, false);
+        });
     }
 
     /** The window the panel is showing, or null when it is not up. */
@@ -170,11 +200,16 @@ public final class TaskbarPreviews {
         return showing;
     }
 
-    /** Wires one taskbar entry's hover. Called as each entry is built. */
-    void watch(Button entry, WindowFrame frame) {
+    /**
+     * Wires one taskbar entry's hover. Called as each entry is built; {@code frame} is asked on every hover,
+     * since a pin's entry has no window until its application runs and none again once it closes.
+     */
+    void watch(Button entry, Supplier<List<WindowFrame>> windows) {
         entry.onMouseEnter.attachListener((element, event) -> {
-            if (suppressed) return;
-            hovered = frame;
+            List<WindowFrame> shown = windows.get();
+            if (suppressed || shown.isEmpty()) return;
+            hovered = shown.size() == 1 ? shown.get(0) : null;
+            hoveredGroup = shown.size() > 1 ? shown : null;
             hoveredEntry = entry;
             hoveredSince = System.nanoTime();
             wake();
@@ -185,8 +220,9 @@ public final class TaskbarPreviews {
         // the entry afterwards, so no mouseleave is coming to take it down.
         entry.onMouseDown.attachListener((element, event) -> dismiss(), false, false);
         entry.onMouseLeave.attachListener((element, event) -> {
-            if (hovered == frame) {
+            if (hoveredEntry == entry) {
                 hovered = null;
+                hoveredGroup = null;
                 hoveredEntry = null;
             }
             wake();
@@ -220,7 +256,9 @@ public final class TaskbarPreviews {
 
     /** Takes the panel down at once — a click, a closed window, a rebuilt strip. */
     void dismiss() {
+        hideRow();
         hovered = null;
+        hoveredGroup = null;
         hoveredEntry = null;
         pointerInPanel = false;
         leftAt = 0L;
@@ -265,6 +303,25 @@ public final class TaskbarPreviews {
             placeAndPlay(pendingEntering);
             return true;
         }
+        if (rowEntry != null) {
+            // PLACED ONCE THE PICTURES HAVE SETTLED, as the single preview is: against a box measured
+            // before they took their windows' shapes it sat a picture's height too high
+            boolean changed = row.sync();
+            if (row.windows().isEmpty()) {
+                dismiss();
+                return false;
+            }
+            if (!changed && (row.hasClass(PLACING_CLASS) || rowPlacedHeight != heightOf(row))) placeRow();
+        }
+        UIDocument here = taskbar.document();
+        if (hoveredGroup != null && here != null) {
+            leftAt = 0L;
+            boolean asked = System.nanoTime() - hoveredSince >= HOVER_DELAY_NANOS
+                    || showing != null || rowEntry != null;
+            // ALREADY UP somewhere: no second wait, as between single previews
+            if (asked && rowEntry != hoveredEntry) showRow(hoveredEntry, hoveredGroup);
+            return true;
+        }
 
         // A PREVIEW OF A WINDOW THAT NO LONGER EXISTS. Closing one from its own preview is the ordinary
         // route here: the entry goes, so no mouseleave will ever arrive to take the panel down with it.
@@ -278,6 +335,11 @@ public final class TaskbarPreviews {
             leftAt = 0L;
             boolean elapsed = System.nanoTime() - hoveredSince >= HOVER_DELAY_NANOS;
             preview.syncThumbnail();
+            // FROM A ROW TO ONE WINDOW: the row goes and the preview comes up without a second wait
+            if (rowEntry != null) {
+                hideRow();
+                elapsed = true;
+            }
             if (showing == null && elapsed) {
                 show(hovered);
             } else if (showing != null && showing != hovered) {
@@ -313,7 +375,7 @@ public final class TaskbarPreviews {
             leftAt = 0L;
             return true;
         }
-        if (showing != null) {
+        if (showing != null || rowEntry != null) {
             long now = System.nanoTime();
             if (leftAt == 0L) {
                 leftAt = now;
@@ -325,6 +387,83 @@ public final class TaskbarPreviews {
         }
         leftAt = 0L;
         return false;
+    }
+
+    /** Shows a combined entry's row now, without the hover's wait: what clicking it does. */
+    void showNow(Button entry) {
+        List<WindowFrame> windows = taskbar.windowsOf(entry);
+        if (windows.size() < 2) return;
+        hoveredEntry = entry;
+        hoveredGroup = windows;
+        hovered = null;
+        showRow(entry, windows);
+        wake();
+    }
+
+    private void showRow(Button entry, List<WindowFrame> windows) {
+        // ONE PANEL AT A TIME: the single preview gives way
+        if (showing != null) {
+            showing = null;
+            cancelMotion();
+            preview.setFrame(null);
+            taskbar.document().demote(preview);
+            setPanelShown(false);
+        }
+        rowEntry = entry;
+        row.setWindows(windows);
+        row.setDisplayed(true);
+        taskbar.document().promote(row);
+        // Invisible until it has a size to be placed by, as the single preview is
+        row.addClass(PLACING_CLASS);
+    }
+
+    /** Centred over its entry and rising into place, as the single preview does. */
+    private void placeRow() {
+        UIDocument window = taskbar.document();
+        Button entry = rowEntry;
+        Box self = row.box();
+        if (window == null || entry == null || self == null || self.width() <= 0f || self.height() <= 0f) return;
+        Box root = window.box();
+        AnchoredPlacement.Rect anchor = AnchoredPlacement.anchorRectInRoot(entry, window);
+        if (root == null || anchor == null) return;
+        var target = AnchoredPlacement.resolve(anchor, self.width(), self.height(),
+                root.width(), root.height(), AnchoredPlacement.Side.TOP, GAP);
+        float centred = anchor.x() + (anchor.width() - self.width()) / 2f;
+        target.x = Math.max(0f, Math.min(centred, Math.max(0f, root.width() - self.width())));
+        boolean entering = row.hasClass(PLACING_CLASS);
+        row.removeClass(PLACING_CLASS);
+        rowPlacedHeight = self.height();
+        if (rowMotion != null) rowMotion.cancel();
+        // RISES IN on its first placement; a later one (a card closed, a picture reshaped) moves at once
+        rowMotion = new WindowGeometryAnimation(row, this::rowIsLive,
+                target.x, entering ? target.y + RISE : target.y, 0f, 0f, target.x, target.y, 0f, 0f,
+                true, false, entering ? TRAVEL_NANOS : 0L, CgEasings.OUT_QUAD, () -> rowMotion = null);
+        window.animation().every(row, rowMotion);
+    }
+
+    /** The row's height when it was last placed: a different one means it has to be placed again. */
+    private float rowPlacedHeight = -1f;
+
+    private static float heightOf(UIElement element) {
+        Box box = element.box();
+        return box == null ? -1f : box.height();
+    }
+
+    private boolean rowIsLive() {
+        return row.parent() != null && rowEntry != null;
+    }
+
+    private void hideRow() {
+        if (rowEntry == null) return;
+        rowEntry = null;
+        if (rowMotion != null) {
+            rowMotion.cancel();
+            rowMotion = null;
+        }
+        row.clear();
+        UIDocument window = taskbar.document();
+        if (window != null) window.demote(row);
+        row.setDisplayed(false);
     }
 
     private void show(WindowFrame frame) {

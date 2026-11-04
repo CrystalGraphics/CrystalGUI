@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.window;
 
+import java.util.List;
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -61,6 +63,7 @@ import javax.annotation.Nullable;
 public final class WindowCommands {
 
     public static final String CLOSE = "window.close";
+    public static final String CLOSE_ALL = "window.closeAll";
     public static final String MINIMIZE = "window.minimize";
     public static final String MAXIMIZE = "window.maximize";
     public static final String RESTORE = "window.restore";
@@ -80,7 +83,8 @@ public final class WindowCommands {
      * ({@code 1_appearance}, {@code 2_clipboard}); it looked like decoration until this got it wrong.</p>
      */
     private static final String GROUP_STATE = "1_state";
-    private static final String GROUP_CLOSE = "2_close";
+    /** Close's group, which a taskbar entry's application row and Pin join: Windows draws the three as one. */
+    public static final String GROUP_CLOSE = "2_close";
 
     private static boolean registered;
 
@@ -104,6 +108,7 @@ public final class WindowCommands {
         // Screen and W13c's Move and Size land in their own slots without renumbering anything already
         // here -- and what will let W14's Pin do the same.
         registry.register(Command.of(RESTORE, "Restore")
+                .icon("crystalgui:window-restore")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 10)
                 .run(context -> withFrame(context, WindowFrame::restore))
                 .enabledWhen(context -> {
@@ -126,6 +131,7 @@ public final class WindowCommands {
                 .enabledWhen(context -> canNudge(frameFor(context))));
 
         registry.register(Command.of(MINIMIZE, "Minimize")
+                .icon("crystalgui:window-minimize")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 40)
                 .run(context -> withFrame(context, WindowFrame::minimize))
                 .enabledWhen(context -> {
@@ -134,6 +140,7 @@ public final class WindowCommands {
                 }));
 
         registry.register(Command.of(MAXIMIZE, "Maximize")
+                .icon("crystalgui:window-maximize")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_STATE, 50)
                 .run(context -> withFrame(context, WindowFrame::maximize))
                 .enabledWhen(context -> {
@@ -199,9 +206,21 @@ public final class WindowCommands {
                 }));
 
         registry.register(Command.of(CLOSE, "Close")
+                .icon("crystalgui:x")
                 .menu(MenuId.WINDOW_SYSTEM, GROUP_CLOSE, 10)
+                .menu(MenuId.TASKBAR_ENTRY, GROUP_CLOSE, 10)
                 .run(context -> withFrame(context, WindowFrame::requestClose))
+                // A COMBINED BUTTON of several offers Close all windows in its place, as Windows does
+                .shownWhen(context -> windowsFor(context).size() <= 1)
                 .enabledWhen(context -> frameFor(context) != null));
+
+        registry.register(Command.of(CLOSE_ALL, "Close all windows")
+                .icon("crystalgui:x")
+                .menu(MenuId.TASKBAR_ENTRY, GROUP_CLOSE, 10)
+                .run(context -> {
+                    for (WindowFrame frame : List.copyOf(windowsFor(context))) frame.requestClose();
+                })
+                .shownWhen(context -> windowsFor(context).size() > 1));
 
         // NOT IN THE MENU IT OPENS. A row that reopens the menu it is in is a loop with a label on it;
         // Win32's system menu has no such entry either. It exists so the gesture is REBINDABLE and so the
@@ -241,6 +260,12 @@ public final class WindowCommands {
     @Nullable
     public static WindowFrame frameFor(CommandContext context) {
         return context.data().get(WindowFrame.WINDOW_FRAME);
+    }
+
+    /** The windows a taskbar button stands for, or none from anywhere else. @see UiDataKeys#WINDOWS */
+    private static List<WindowFrame> windowsFor(CommandContext context) {
+        List<WindowFrame> windows = context.data().get(UiDataKeys.WINDOWS);
+        return windows == null ? List.of() : windows;
     }
 
     /**

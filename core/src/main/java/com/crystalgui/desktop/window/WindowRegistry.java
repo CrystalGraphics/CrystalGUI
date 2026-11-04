@@ -113,16 +113,17 @@ public final class WindowRegistry {
      * <p><b>Stable, and by FIRST appearance</b> — an application keeps the position its earliest window
      * gave it, and its windows keep their order within the group. A grouping that re-sorted by anything
      * else would move entries under the pointer whenever a window opened somewhere else in the strip,
-     * which is the one thing a taskbar must never do. Windows with no application declared are
-     * untouched: they group under the null key and stay where they were.</p>
+     * which is the one thing a taskbar must never do. A window with no application declared is
+     * a group of its own and stays where it was.</p>
      */
     private static List<WindowFrame> groupedByApplication(List<WindowFrame> from) {
         // Keyed by the application ID rather than the manifest, so two desktops that installed the same
         // kind object and one that did not still group identically -- an id is what the field MEANS.
-        Map<String, List<WindowFrame>> groups = new LinkedHashMap<>();
+        Map<Object, List<WindowFrame>> groups = new LinkedHashMap<>();
         for (WindowFrame frame : from) {
             ApplicationKind kind = frame.application();
-            groups.computeIfAbsent(kind == null ? "" : kind.id(), key -> new ArrayList<>()).add(frame);
+            // A window with no application is its own group: one shared key gathered them all beside the first
+            groups.computeIfAbsent(kind == null ? frame : kind.id(), key -> new ArrayList<>()).add(frame);
         }
         List<WindowFrame> out = new ArrayList<>(from.size());
         for (List<WindowFrame> group : groups.values()) out.addAll(group);
@@ -203,6 +204,44 @@ public final class WindowRegistry {
         live.remove(frame);
         mru.remove(frame);
         changed();
+    }
+
+    /**
+     * Moves {@code frame} on the taskbar to just before {@code before}, or to the end when that is null — what
+     * dragging its entry along the bar does.
+     *
+     * <pre>{@code
+     * registry.moveInTaskbar(dragged, droppedBefore);   // droppedBefore null: the end of the bar
+     * }</pre>
+     *
+     * <p>An application's windows move together, since the taskbar keeps them together; a window with no
+     * application moves alone. Before a window of the same group, it stays where it is.</p>
+     */
+    public void moveInTaskbar(WindowFrame frame, @Nullable WindowFrame before) {
+        if (!live.contains(frame) || frame == before) return;
+        List<WindowFrame> moving = taskbarGroupOf(frame);
+        if (before != null && moving.contains(before)) return;
+        live.removeAll(moving);
+        int at = live.size();
+        if (before != null) {
+            // Before the first window of its group, which is where its entry is drawn from
+            at = live.indexOf(taskbarGroupOf(before).get(0));
+            if (at < 0) at = live.size();
+        }
+        live.addAll(at, moving);
+        changed();
+    }
+
+    /** The windows the taskbar keeps together with {@code frame}, in open order. */
+    private List<WindowFrame> taskbarGroupOf(WindowFrame frame) {
+        ApplicationKind kind = frame.application();
+        if (kind == null) return List.of(frame);
+        List<WindowFrame> group = new ArrayList<>();
+        for (WindowFrame each : live) {
+            ApplicationKind other = each.application();
+            if (other != null && other.id().equals(kind.id())) group.add(each);
+        }
+        return group;
     }
 
     /** Announces a change the registry did not make itself — a window hidden or shown. */

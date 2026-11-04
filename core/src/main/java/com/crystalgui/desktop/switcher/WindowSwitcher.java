@@ -5,8 +5,6 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.taskbar.Taskbar;
-import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.taskbar.WindowThumbnail;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
@@ -148,9 +146,6 @@ public class WindowSwitcher extends UIElement {
      */
     private int holdingMask;
 
-    /** The accent wash under the tiles. @see Taskbar#GLOW_CLASS */
-    private final UIElement glow = new UIElement();
-
     private long openedAt;
     private long lastInteraction;
     private boolean shown;
@@ -160,27 +155,12 @@ public class WindowSwitcher extends UIElement {
         this.desktop = desktop;
         addClass(SWITCHER_CLASS);
         panel.addClass(PANEL_CLASS);
-        // THE GLOW under the tiles: the bar's accent wash, so the switcher is the bar's material and
-        // not a second one. An INTERNAL child of the panel, added before any tile, so buildEntries --
-        // which adds and removes tiles by reference -- never sees it and it always paints first.
-        glow.addClass(Taskbar.GLOW_CLASS);
-        glow.setHitTest(false);
-        panel.append(glow);
         append(panel);
         setPanelShown(false);
 
         // A PRESS ON THE BACKDROP CANCELS. Target-only, so a press on a tile -- which is a descendant --
         // never reaches this and activates instead.
         onMouseDown.attachListener((element, event) -> cancel(), false, false);
-    }
-
-    /**
-     * The accent wash under the tiles, for {@link TaskbarDesigner} to retone the whole family at once.
-     * Package-private: a theme retones this through {@code --switcher-glow}, and the element itself is
-     * only reachable because the designer writes at IMPORTANT origin while it runs.
-     */
-    public UIElement glow() {
-        return glow;
     }
 
     /** Whether the switcher is cycling — true for the invisible part of the gesture as well. */
@@ -226,17 +206,13 @@ public class WindowSwitcher extends UIElement {
     private void begin(boolean forward, String commandId) {
         order.clear();
         order.addAll(desktop.registry().switcherOrder());
-        if (order.size() < 2) {
-            // NOTHING TO SWITCH TO. Opening on one window shows a panel whose only entry is the window
-            // already in front, which is a way of saying nothing at some expense.
-            order.clear();
-            return;
-        }
+        // One window still opens, as Windows' Alt+Tab does: it is how a minimised lone window comes back.
+        if (order.isEmpty()) return;
         open = true;
         shown = false;
         revealRequested = false;
-        // THE SECOND ENTRY, or the last one going backwards. @see the class note.
-        selected = forward ? 1 : order.size() - 1;
+        // THE SECOND ENTRY, or the last one going backwards; with one window, that one. @see the class note.
+        selected = Math.floorMod(forward ? 1 : -1, order.size());
         holdingMask = holdingMaskFor(commandId);
         openedAt = System.nanoTime();
         lastInteraction = openedAt;

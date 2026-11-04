@@ -478,7 +478,8 @@ Not done, in rough order of how likely you are to hit them:
 | `stroke-linejoin`, and `stroke-linecap: butt` with it | Every segment is stroked independently, so joins are whatever cap the segment ends carry. `drawStroke` promotes `butt` to round for exactly that reason — most segment ends are interior joints, not real path ends. Correct for a round-join set and wrong for a `butt` + `miter` one, which comes out round everywhere |
 | `stroke-dasharray` | Ignored; a dashed stroke draws solid |
 | `<text>` | Not drawn. Icon sets convert text to paths; hand-written SVG often does not |
-| Clip paths, masks, filters | Ignored — a clipped shape draws unclipped, a blur draws sharp |
+| Clip paths, masks, and filters other than a drop shadow | Ignored — a clipped shape draws unclipped, a blur draws sharp |
+| A drop shadow above icon size | Drawn by `SvgRasterCache` up to 128 device px (`feDropShadow`, or the blur–offset–flood–`in`–merge chain tools export, which is what `crystalgui:logo` and `crystalgui:start` carry). A larger draw skips it and logs once per file |
 | Patterns | Draw flat grey |
 | Gradient on a *stroke* | Collapses to one colour; strokes are not subdivided |
 | Group `opacity` | Multiplied into children rather than compositing the group as a unit |
@@ -659,3 +660,22 @@ Nothing registers a provider yet, so the feature costs nothing until something d
 is the first real consumer** — it is a `FileDecorationProvider` returning `decoration-dirty` for whatever
 `WorkingCopies` reports modified, which is now a class rather than a change to the row renderer. That is
 the whole point of the port.
+
+### Application icons: `crystalgui:frame-profiler`, `crystalgui:vfx-lab`, `harness:cues`
+
+Product icons for the engine's own standalone applications, declared on each `ApplicationKind` with
+`.icon(...)`. A window with no icon of its own is drawn with its application's (`WindowFrame.iconName`),
+so the taskbar, the previews, the switcher and the caption all pick it up from the kind.
+
+One recipe, so the three read as a set beside the logo: a 64-unit tile, `rx` 14, on a near-black
+`#33373F` to `#0E1013` gradient with one soft light at the top-left, and on it a picture of what the tool
+does in saturated colour rather than a pictogram of it.
+
+| Icon | What it draws |
+|---|---|
+| `frame-profiler` | Frame times as eleven bars over faint vertical rules and a dashed budget line: green, then two orange up to a red peak and one orange back down |
+| `vfx-lab` | An energy orb: a white-cyan core in a blue halo, ringed by two tilted ellipses, cyan and violet |
+| `harness:cues` | A hit spark: a white-hot core, twenty tapered streaks in white, gold, orange and red, and a faint shock ring. It ships with the harness, which owns the Cues scene |
+
+**Dashes are drawn as separate lines**: the pipeline reads no `stroke-dasharray`, so the profiler's budget
+line is twelve short segments.

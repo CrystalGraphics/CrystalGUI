@@ -109,6 +109,7 @@ public class VfxLab extends UIElement {
      * them; the next launch is a fresh lab. Minimised, or with the desktop closed, it keeps playing.
      */
     public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:vfx-lab", "VFX Lab")
+            .icon("crystalgui:vfx-lab")
             .keywords("vfx", "effects", "particles", "lab")
             .singleInstance()
             .standalone()
@@ -397,7 +398,8 @@ public class VfxLab extends UIElement {
 
         @Override
         public void activate() {
-            Desktop desktop = Desktop.ifPresent(window.document());
+            // The window's own desktop: a minimised one is detached, and has no document to find it by
+            Desktop desktop = window.desktop();
             if (desktop != null) desktop.activate(window, true);
         }
 

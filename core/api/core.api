@@ -3389,6 +3389,7 @@ com/crystalgui/core/command/Command
   method public iconFor (Lcom/crystalgui/core/command/CommandContext;)Ljava/lang/String;
   method public isCheckable ()Z
   method public isEnabled (Lcom/crystalgui/core/command/CommandContext;)Z
+  method public isShown (Lcom/crystalgui/core/command/CommandContext;)Z
   method public isToggled (Lcom/crystalgui/core/command/CommandContext;)Z
   method public labelFor (Lcom/crystalgui/core/command/CommandContext;)Ljava/lang/String;
   method public menu (Lcom/crystalgui/core/command/MenuId;Ljava/lang/String;I)Lcom/crystalgui/core/command/Command;
@@ -3396,6 +3397,7 @@ com/crystalgui/core/command/Command
   method public run (Ljava/lang/Runnable;)Lcom/crystalgui/core/command/Command;
   method public run (Ljava/util/function/Consumer;)Lcom/crystalgui/core/command/Command;
   method public runWithData (Ljava/util/function/Consumer;)Lcom/crystalgui/core/command/Command;
+  method public shownWhen (Ljava/util/function/Predicate;)Lcom/crystalgui/core/command/Command;
   method public toString ()Ljava/lang/String;
   method public toggledWhen (Ljava/util/function/Predicate;)Lcom/crystalgui/core/command/Command;
   method public toggledWhenExpression (Ljava/lang/String;)Lcom/crystalgui/core/command/Command;
@@ -3471,6 +3473,7 @@ com/crystalgui/core/command/MenuEntry$Submenu
 com/crystalgui/core/command/MenuId
   access public,final
   extends java/lang/Object
+  field public,static,final APPLICATION Lcom/crystalgui/core/command/MenuId;
   field public,static,final BLACKBOARD_CONTEXT Lcom/crystalgui/core/command/MenuId;
   field public,static,final DESKTOP_CONTEXT Lcom/crystalgui/core/command/MenuId;
   field public,static,final EDITOR_CONTEXT Lcom/crystalgui/core/command/MenuId;
@@ -3491,6 +3494,7 @@ com/crystalgui/core/command/MenuId
   field public,static,final MAIN_WINDOW Lcom/crystalgui/core/command/MenuId;
   field public,static,final PALETTE Lcom/crystalgui/core/command/MenuId;
   field public,static,final TASKBAR_CONTEXT Lcom/crystalgui/core/command/MenuId;
+  field public,static,final TASKBAR_ENTRY Lcom/crystalgui/core/command/MenuId;
   field public,static,final TOOL_WINDOW_OPTIONS Lcom/crystalgui/core/command/MenuId;
   field public,static,final TOOL_WINDOW_VIEW_MODE Lcom/crystalgui/core/command/MenuId;
   field public,static,final WINDOW_SYSTEM Lcom/crystalgui/core/command/MenuId;
@@ -4701,6 +4705,7 @@ com/crystalgui/desktop/Desktop
   method public cacheRoot ()Ljava/nio/file/Path;
   method public config ()Lcom/crystalgui/core/storage/ConfigStorage;
   method public deactivate ()V
+  method public desktopSettings ()Lcom/crystalgui/desktop/DesktopSettings;
   method public enterHudMode ()V
   method public exitHudMode ()V
   method public extensionStore (Ljava/lang/String;)Lcom/crystalgui/core/storage/ConfigStorage;
@@ -4720,6 +4725,7 @@ com/crystalgui/desktop/Desktop
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FII)V
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public persistTo (Lcom/crystalgui/core/storage/ConfigStorage;Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
+  method public pins ()Lcom/crystalgui/desktop/taskbar/TaskbarPins;
   method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public presentation (ZZ)Lcom/crystalgui/core/window/DesktopPresentation;
   method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
@@ -4739,9 +4745,11 @@ com/crystalgui/desktop/Desktop
   method public toggleShowDesktop ()V
   method public useLocalWorld (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public useStorage (Ljava/nio/file/Path;)Lcom/crystalgui/desktop/Desktop;
+  method public useWorkspace (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public visibleWindows ()Ljava/util/List;
   method public windowLayer ()Lcom/crystalgui/ui/dom/UIElement;
   method public windows ()Ljava/util/List;
+  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public workspaceStore (Ljava/lang/String;)Lcom/crystalgui/core/storage/ConfigStorage;
   method public,static animationsEnabled ()Z
   method public,static ifPresent (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/Desktop;
@@ -4752,12 +4760,18 @@ com/crystalgui/desktop/Desktop
 com/crystalgui/desktop/DesktopCommands
   access public,final
   extends java/lang/Object
+  field public,static,final COMBINE_ALWAYS Ljava/lang/String;
+  field public,static,final COMBINE_NEVER Ljava/lang/String;
+  field public,static,final COMBINE_WHEN_FULL Ljava/lang/String;
   field public,static,final FRAME_STATS Ljava/lang/String;
   field public,static,final FRAME_STATS_DETAIL Ljava/lang/String;
+  field public,static,final OPEN_APPLICATION Ljava/lang/String;
+  field public,static,final PIN_TO_TASKBAR Ljava/lang/String;
   field public,static,final SHOW_DESKTOP Ljava/lang/String;
   field public,static,final SWITCH_WINDOW Ljava/lang/String;
   field public,static,final SWITCH_WINDOW_BACK Ljava/lang/String;
   field public,static,final TASKBAR_DESIGNER Ljava/lang/String;
+  method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;)V
   method public,static register ()V
   method public,static resetForTesting ()V
 com/crystalgui/desktop/DesktopKinds
@@ -4773,6 +4787,7 @@ com/crystalgui/desktop/DesktopSession
   method public <init> (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/core/storage/ConfigStorage;)V
   method public read (Ljava/lang/String;)Ljava/util/List;
   method public readMruOrder (Ljava/lang/String;)Ljava/util/List;
+  method public readPins (Ljava/lang/String;)Ljava/util/List;
   method public save (Ljava/lang/String;)V
   method public toJson ()Ljava/lang/String;
   method public,static ahead ()V
@@ -4792,6 +4807,15 @@ com/crystalgui/desktop/DesktopSession$Placement
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/desktop/DesktopSettings
+  access public,final
+  extends java/lang/Object
+  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  field public,static,final FILE Ljava/lang/String;
+  field public,static,final TASKBAR_COMBINE Lcom/crystalgui/core/settings/Setting;
+  method public setTaskbarCombine (Lcom/crystalgui/desktop/taskbar/TaskbarCombine;)V
+  method public store ()Lcom/crystalgui/core/settings/Settings;
+  method public taskbarCombine ()Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
 com/crystalgui/desktop/app/Application
   access public,abstract,interface
   extends java/lang/Object
@@ -4810,11 +4834,13 @@ com/crystalgui/desktop/app/ApplicationKind
   method public icon ()Ljava/lang/String;
   method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public id ()Ljava/lang/String;
+  method public isPinnable ()Z
   method public isSingleInstance ()Z
   method public keywordList ()Ljava/util/List;
   method public keywords ([Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public launch (Ljava/util/function/Function;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public opens ([Lcom/crystalgui/document/DocumentKind$Matcher;)Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public preventPinning ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public requiresConnection ()Z
   method public singleInstance ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public standalone ()Lcom/crystalgui/desktop/app/ApplicationKind;
@@ -4828,6 +4854,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
+  method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
   method public autostart ()V
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
@@ -4865,6 +4892,7 @@ com/crystalgui/desktop/app/ServerWindowHost
 com/crystalgui/desktop/host/DesktopHost
   access public,final
   extends java/lang/Object
+  field public,static,final DEFAULT_THEME Ljava/lang/String;
   implements com/crystalgui/core/dispose/Disposable
   method public cacheRoot ()Ljava/nio/file/Path;
   method public config ()Lcom/crystalgui/core/storage/ConfigStorage;
@@ -4973,8 +5001,10 @@ com/crystalgui/desktop/launcher/Launcher
   field public,static,final EMPTY_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final ROW_CLASS Ljava/lang/String;
+  field public,static,final ROW_HEIGHT F
   field public,static,final ROW_NAME_CLASS Ljava/lang/String;
   field public,static,final ROW_RUNNING_CLASS Ljava/lang/String;
+  field public,static,final VISIBLE_ROWS I
   method public <init> ()V
   method public list ()Lcom/crystalgui/widget/collection/list/ListView;
   method public refill ()V
@@ -4984,9 +5014,8 @@ com/crystalgui/desktop/launcher/Launcher
 com/crystalgui/desktop/launcher/LauncherButton
   access public
   extends com/crystalgui/widget/control/Button
-  field public,static,final GLYPH_CLASS Ljava/lang/String;
+  field public,static,final MARK_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
-  field public,static,final PANE_CLASS Ljava/lang/String;
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V
@@ -5038,7 +5067,6 @@ com/crystalgui/desktop/switcher/WindowSwitcher
   field public,static,final TITLE_CLASS Ljava/lang/String;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
   method public cycle (ZLjava/lang/String;)V
-  method public glow ()Lcom/crystalgui/ui/dom/UIElement;
   method public handleKey (I)Z
   method public isOpen ()Z
   method public isVisible ()Z
@@ -5056,30 +5084,54 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final ENTRIES_CLASS Ljava/lang/String;
   field public,static,final ENTRY_CLASS Ljava/lang/String;
   field public,static,final EXITING_CLASS Ljava/lang/String;
-  field public,static,final GLOW_CLASS Ljava/lang/String;
   field public,static,final HIDDEN_CLASS Ljava/lang/String;
   field public,static,final ICONIC_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_PART Ljava/lang/String;
+  field public,static,final LAUNCH_CLASS Ljava/lang/String;
+  field public,static,final MULTIPLE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
+  field public,static,final REORDERING_CLASS Ljava/lang/String;
   field public,static,final START_CLASS Ljava/lang/String;
   method protected connected ()V
   method public <init> ()V
   method public entries ()Lcom/crystalgui/ui/dom/UIElement;
   method public entryFor (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/widget/control/Button;
+  method public pinEntryFor (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/widget/control/Button;
   method public previewsSuppressedForTesting ()Z
   method public refresh ()V
   method public setBarVisible (Z)V
   method public setPreviewsSuppressed (Z)V
   method public start ()Lcom/crystalgui/desktop/launcher/LauncherButton;
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/taskbar/Taskbar;
+com/crystalgui/desktop/taskbar/TaskbarCombine
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final ALWAYS Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
+  field public,static,final NEVER Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
+  field public,static,final WHEN_FULL Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
+  method public id ()Ljava/lang/String;
+  method public,static byId (Ljava/lang/String;)Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
+  method public,static values ()[Lcom/crystalgui/desktop/taskbar/TaskbarCombine;
 com/crystalgui/desktop/taskbar/TaskbarDesigner
   access public,final
   extends java/lang/Object
   field public,static,final WINDOW_CLASS Ljava/lang/String;
   method public,static open (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/window/WindowFrame;
+com/crystalgui/desktop/taskbar/TaskbarPins
+  access public,final
+  extends java/lang/Object
+  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  method public <init> ()V
+  method public ids ()Ljava/util/List;
+  method public isPinned (Lcom/crystalgui/desktop/app/ApplicationKind;)Z
+  method public move (Ljava/lang/String;Ljava/lang/String;)V
+  method public pin (Lcom/crystalgui/desktop/app/ApplicationKind;)V
+  method public restore (Ljava/util/List;)V
+  method public unpin (Lcom/crystalgui/desktop/app/ApplicationKind;)V
 com/crystalgui/desktop/taskbar/TaskbarPreviews
   access public,final
   extends java/lang/Object
@@ -5096,9 +5148,21 @@ com/crystalgui/desktop/taskbar/WindowPreview
   field public,static,final PREVIEW_CLASS Ljava/lang/String;
   field public,static,final TITLE_CLASS Ljava/lang/String;
   method public <init> ()V
+  method public frame ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public isShowingPlaceholder ()Z
   method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/taskbar/WindowPreview;
   method public syncThumbnail ()Z
+com/crystalgui/desktop/taskbar/WindowPreviewRow
+  access public,final
+  extends com/crystalgui/ui/dom/UIElement
+  field public,final onPicked Lcom/crystalgui/core/signal/Signal$Value;
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  field public,static,final ROW_CLASS Ljava/lang/String;
+  method public <init> ()V
+  method public clear ()V
+  method public setWindows (Ljava/util/List;)V
+  method public sync ()Z
+  method public windows ()Ljava/util/List;
 com/crystalgui/desktop/taskbar/WindowThumbnail
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -5149,6 +5213,7 @@ com/crystalgui/desktop/window/SystemMenu
   field public,static,final JUMP_LIST_CLASS Ljava/lang/String;
   field public,static,final RISING_CLASS Ljava/lang/String;
   method public,static discardFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public,static dismissJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
   method public,static showFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static showJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
 com/crystalgui/desktop/window/WindowChrome
@@ -5160,7 +5225,9 @@ com/crystalgui/desktop/window/WindowCommands
   access public,final
   extends java/lang/Object
   field public,static,final CLOSE Ljava/lang/String;
+  field public,static,final CLOSE_ALL Ljava/lang/String;
   field public,static,final FULLSCREEN Ljava/lang/String;
+  field public,static,final GROUP_CLOSE Ljava/lang/String;
   field public,static,final MAXIMIZE Ljava/lang/String;
   field public,static,final MINIMIZE Ljava/lang/String;
   field public,static,final MOVE Ljava/lang/String;
@@ -5320,6 +5387,7 @@ com/crystalgui/desktop/window/WindowIcon
   extends com/crystalgui/ui/dom/UIElement
   field public,static,final BRANDED_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
+  field public,static,final MONOGRAM_CLASS Ljava/lang/String;
   field public,static,final MONOGRAM_PART Ljava/lang/String;
   field public,static,final MONO_TILE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
@@ -5360,6 +5428,7 @@ com/crystalgui/desktop/window/WindowRegistry
   method public evictIfNeeded ()V
   method public hidden ()Ljava/util/List;
   method public hiddenCap ()I
+  method public moveInTaskbar (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public mruOrder ()Ljava/util/List;
   method public opened (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public setHiddenCap (I)V
@@ -8112,6 +8181,7 @@ com/crystalgui/render/CgUiPaintContext
   method public getCurrentTexture ()Lcom/crystalgraphics/api/texture/CgTexture;
   method public getFont ()Lcom/crystalgraphics/api/font/CgFont;
   method public getLayerOpacity ()F
+  method public getPictureTint ()I
   method public getPoseStack ()Lcom/crystalgraphics/api/PoseStack;
   method public getRenderer ()Lcom/crystalgui/render/CgUiRenderer;
   method public getScissorDepth ()I
@@ -8144,6 +8214,7 @@ com/crystalgui/render/CgUiPaintContext
   method public seal ()Lcom/crystalgui/render/UiFrame;
   method public segmentDrawn ([F)Z
   method public setColor (I)V
+  method public setPictureTint (I)V
   method public shapes ()Lcom/crystalgraphics/gl/render/CgShapeTable;
   method public snapXToDevicePixel (F)F
   method public snapYToDevicePixel (F)F
@@ -8292,6 +8363,7 @@ com/crystalgui/render/SvgRasterCache
   field public,static,final MAX_DEVICE_PX I
   method public accepts (Lcom/crystalgui/render/texture/svg/SvgDocument;FFF)Z
   method public draw (Lcom/crystalgui/render/texture/svg/SvgDocument;IFFFIZF)V
+  method public drawShadow (Lcom/crystalgui/render/texture/svg/SvgDocument;IFFF)V
 com/crystalgui/render/UiFrame
   access public,final
   extends java/lang/Object
@@ -8815,6 +8887,7 @@ com/crystalgui/render/texture/svg/SvgDocument
   method public render (Lcom/crystalgui/render/CgUiPaintContext;FFFI)V
   method public renderMonochrome (Lcom/crystalgui/render/CgUiPaintContext;FFFIF)V
   method public segmentCount ()I
+  method public shadowGroupEnd (I)I
   method public usesCurrentColor ()Z
   method public width ()F
   method public,static generation ()I
@@ -8827,7 +8900,7 @@ com/crystalgui/render/texture/svg/SvgDocument
 com/crystalgui/render/texture/svg/SvgDocument$DrawOp
   access public,final,record
   extends java/lang/Record
-  method public <init> (Z[F[I[I[F[IZIZFI[I)V
+  method public <init> (Z[F[I[I[F[IZIZFI[ILcom/crystalgui/render/texture/svg/SvgScene$DropShadow;)V
   method public argb ()I
   method public cap ()I
   method public colours ()[I
@@ -8840,6 +8913,7 @@ com/crystalgui/render/texture/svg/SvgDocument$DrawOp
   method public halfWidth ()F
   method public opaque ()Z
   method public segmentCaps ()[I
+  method public shadow ()Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
@@ -8927,6 +9001,19 @@ com/crystalgui/render/texture/svg/SvgScene
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/texture/svg/SvgScene$DropShadow
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (FFFFII)V
+  method public argb ()I
+  method public dx ()F
+  method public dy ()F
+  method public id ()I
+  method public sigmaX ()F
+  method public sigmaY ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/render/texture/svg/SvgScene$Fill
   access public,final,record
   extends java/lang/Record
@@ -8952,9 +9039,10 @@ com/crystalgui/render/texture/svg/SvgScene$Gradient
 com/crystalgui/render/texture/svg/SvgScene$Node
   access public,final,record
   extends java/lang/Record
-  method public <init> (Ljava/util/List;Lcom/crystalgui/render/texture/svg/SvgScene$Fill;Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;)V
+  method public <init> (Ljava/util/List;Lcom/crystalgui/render/texture/svg/SvgScene$Fill;Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;)V
   method public contours ()Ljava/util/List;
   method public fill ()Lcom/crystalgui/render/texture/svg/SvgScene$Fill;
+  method public shadow ()Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;
   method public stroke ()Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
@@ -9230,6 +9318,8 @@ com/crystalgui/style/GeneralGroup
   method public overlayPosition (Lcom/crystalgui/style/property/visual/DrawableAlign;)Lcom/crystalgui/style/GeneralGroup;
   method public overlaySize ()Lcom/crystalgui/style/property/visual/DrawableFit;
   method public overlaySize (Lcom/crystalgui/style/property/visual/DrawableFit;)Lcom/crystalgui/style/GeneralGroup;
+  method public overlayTint ()I
+  method public overlayTint (I)Lcom/crystalgui/style/GeneralGroup;
   method public paintOrder ()Lcom/crystalgui/style/property/visual/text/PaintOrder;
   method public paintOrder (Lcom/crystalgui/style/property/visual/text/PaintOrder;)Lcom/crystalgui/style/GeneralGroup;
   method public resize ()Lcom/crystalgui/style/property/visual/Resize;
@@ -9741,6 +9831,7 @@ com/crystalgui/style/property/StylePropertyRegistry
   field public,static,final OVERLAY_ORIGIN Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY_POSITION Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY_SIZE Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final OVERLAY_TINT Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERSCROLL_BEHAVIOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final PAINT_ORDER Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final RESIZE Lcom/crystalgui/style/property/StyleProperty;
@@ -12994,11 +13085,13 @@ com/crystalgui/ui/contract/WidgetContracts
 com/crystalgui/ui/data/UiDataKeys
   access public,final
   extends java/lang/Object
+  field public,static,final APPLICATION_KIND Lcom/crystalgui/core/data/DataKey;
   field public,static,final CLIPBOARD Lcom/crystalgui/core/data/DataKey;
   field public,static,final SELECTION Lcom/crystalgui/core/data/DataKey;
   field public,static,final SETTINGS_HOST Lcom/crystalgui/core/data/DataKey;
   field public,static,final STATUS_BAR Lcom/crystalgui/core/data/DataKey;
   field public,static,final UNDO_STACK Lcom/crystalgui/core/data/DataKey;
+  field public,static,final WINDOWS Lcom/crystalgui/core/data/DataKey;
 com/crystalgui/ui/dom/Attribute
   access public,final
   extends java/lang/Object
@@ -16951,6 +17044,7 @@ com/crystalgui/widget/overlay/Tooltip
   method public reposition ()V
   method public setDelay (F)Lcom/crystalgui/widget/overlay/Tooltip;
   method public setDescription (Ljava/lang/String;)Lcom/crystalgui/widget/overlay/Tooltip;
+  method public setEdgeOf (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Tooltip;
   method public setGap (F)Lcom/crystalgui/widget/overlay/Tooltip;
   method public setShortcut (Ljava/lang/String;)Lcom/crystalgui/widget/overlay/Tooltip;
   method public setSide (Lcom/crystalgui/ui/service/AnchoredPlacement$Side;)Lcom/crystalgui/widget/overlay/Tooltip;

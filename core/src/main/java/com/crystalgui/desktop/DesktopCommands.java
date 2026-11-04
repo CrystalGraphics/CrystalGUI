@@ -1,16 +1,25 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.taskbar.TaskbarCombine;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
+import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.display.FrameStatsOverlay;
 
 import javax.annotation.Nullable;
+
+import java.util.List;
 
 /**
  * The desktop's own commands — the ones that are about the <em>set</em> of windows rather than any one
@@ -41,6 +50,12 @@ public final class DesktopCommands {
     public static final String SWITCH_WINDOW = "desktop.switchWindow";
     public static final String SWITCH_WINDOW_BACK = "desktop.switchWindowBack";
     public static final String SHOW_DESKTOP = "desktop.showDesktop";
+    /** The prefix of the row that opens an application from its menu, followed by the application's id. */
+    public static final String OPEN_APPLICATION = "desktop.openApplication";
+    public static final String PIN_TO_TASKBAR = "desktop.pinToTaskbar";
+    public static final String COMBINE_ALWAYS = "desktop.combineAlways";
+    public static final String COMBINE_WHEN_FULL = "desktop.combineWhenFull";
+    public static final String COMBINE_NEVER = "desktop.combineNever";
     public static final String TASKBAR_DESIGNER = "desktop.taskbarDesigner";
     public static final String FRAME_STATS = "desktop.frameStats";
     public static final String FRAME_STATS_DETAIL = "desktop.frameStatsDetail";
@@ -74,6 +89,35 @@ public final class DesktopCommands {
                 .run(context -> cycle(context, false))
                 .enabledWhen(DesktopCommands::hasSomethingToSwitchTo));
 
+        // THE APPLICATION ITSELF, by its icon and name, first in its menu and in a running window's: Windows'
+        // jump list opens with it. A row made per menu, since its label is the application's.
+        registry.contributeMenu(MenuId.APPLICATION, DesktopCommands::applicationRow);
+        registry.contributeMenu(MenuId.TASKBAR_ENTRY, DesktopCommands::applicationRow);
+
+        // ONE ROW THAT NAMES WHAT IT WILL DO, Pin or Unpin, on a running window's entry and in the
+        // application's menu alike.
+        registry.register(Command.of(PIN_TO_TASKBAR, "Pin to taskbar")
+                .icon("crystalgui:general/action/pin")
+                .menu(MenuId.APPLICATION, WindowCommands.GROUP_CLOSE, 5)
+                .menu(MenuId.TASKBAR_ENTRY, WindowCommands.GROUP_CLOSE, 5)
+                .run(context -> {
+                    Desktop desktop = desktopFor(context);
+                    ApplicationKind kind = kindFor(context);
+                    if (desktop == null || kind == null) return;
+                    if (desktop.pins().isPinned(kind)) desktop.pins().unpin(kind);
+                    else desktop.pins().pin(kind);
+                })
+                // NO ROW for what a pin could not start again: a window without an installed, launchable
+                // application, or one that opts out -- Windows offers only Close on those
+                .shownWhen(DesktopCommands::canPin)
+                .enabledWhen(DesktopCommands::canPin)
+                .toggledWhen(context -> {
+                    Desktop desktop = desktopFor(context);
+                    ApplicationKind kind = kindFor(context);
+                    return desktop != null && kind != null && desktop.pins().isPinned(kind);
+                })
+                .whenToggled("crystalgui:general/action/pin", "Unpin from taskbar"));
+
         // NO CHORD -- W13c. The plan says this "earns its keybind exactly when floats and torn-out
         // editors multiply", and Win+D is unavailable for the reason Alt+Tab is: Super belongs to the
         // host, and a Minecraft client never sees it.
@@ -89,6 +133,12 @@ public final class DesktopCommands {
         // It TOGGLES on its key rather than opening a second one, because two designers would fight for
         // the same IMPORTANT slots on the same island and the loser's sliders would silently stop doing
         // anything -- which reads as the tool being broken rather than as there being two of it.
+        // COMBINE TASKBAR BUTTONS, Windows' three choices, one of them ticked
+        combineCommand(registry, COMBINE_ALWAYS, "Combine buttons: Always", TaskbarCombine.ALWAYS, 10);
+        combineCommand(registry, COMBINE_WHEN_FULL, "Combine buttons: When taskbar is full",
+                TaskbarCombine.WHEN_FULL, 20);
+        combineCommand(registry, COMBINE_NEVER, "Combine buttons: Never", TaskbarCombine.NEVER, 30);
+
         registry.register(Command.of(TASKBAR_DESIGNER, "Design Taskbar…")
                 .binding("Mod+Alt+T")
                 .menu(MenuId.TASKBAR_CONTEXT, "9_design", 10)
@@ -180,7 +230,65 @@ public final class DesktopCommands {
 
     private static boolean hasSomethingToSwitchTo(CommandContext context) {
         Desktop desktop = desktopFor(context);
-        return desktop != null && desktop.registry().size() > 1;
+        // One window is enough, as for Alt+Tab. A disabled chord falls through to Tab traversal.
+        return desktop != null && desktop.registry().size() > 0;
+    }
+
+    /** The row that opens the application a menu is about, under its own name and icon; none without one. */
+    private static List<MenuEntry> applicationRow(MenuId menu, CommandContext context) {
+        Desktop desktop = desktopFor(context);
+        ApplicationKind kind = kindFor(context);
+        if (desktop == null || kind == null || desktop.applications().byId(kind.id()) == null) return List.of();
+        return List.of(MenuEntry.Item.of(
+                Command.of(OPEN_APPLICATION + "." + kind.id(), kind.displayName())
+                        .icon(kind.icon())
+                        .run(() -> open(desktop, kind)),
+                WindowCommands.GROUP_CLOSE, 1));
+    }
+
+    private static void combineCommand(CommandRegistry registry, String id, String label, TaskbarCombine mode,
+                                       int order) {
+        registry.register(Command.of(id, label)
+                .menu(MenuId.TASKBAR_CONTEXT, "5_combine", order)
+                .run(context -> {
+                    Desktop desktop = desktopFor(context);
+                    if (desktop != null) desktop.desktopSettings().setTaskbarCombine(mode);
+                })
+                .enabledWhen(context -> desktopFor(context) != null)
+                .toggledWhen(context -> {
+                    Desktop desktop = desktopFor(context);
+                    return desktop != null && desktop.desktopSettings().taskbarCombine() == mode;
+                }));
+    }
+
+    /** Whether the application the command is about could be pinned: installed here, and pinnable. */
+    private static boolean canPin(CommandContext context) {
+        Desktop desktop = desktopFor(context);
+        ApplicationKind kind = kindFor(context);
+        if (desktop == null || kind == null) return false;
+        ApplicationKind installed = desktop.applications().byId(kind.id());
+        return installed != null && installed.isPinnable();
+    }
+
+    /** The application the command was invoked about, or null. @see UiDataKeys#APPLICATION_KIND */
+    @Nullable
+    private static ApplicationKind kindFor(CommandContext context) {
+        return context.data().get(UiDataKeys.APPLICATION_KIND);
+    }
+
+    /**
+     * Opens {@code kind} as a launcher does: a new instance, or the running one raised when it is single
+     * instance.
+     *
+     * <pre>{@code
+     * DesktopCommands.open(desktop, VfxLab.KIND);
+     * }</pre>
+     */
+    public static void open(Desktop desktop, ApplicationKind kind) {
+        // THE HOST'S WORKSPACE, or an application that needs a server is refused even with one connected
+        Workspace workspace = desktop.workspace();
+        Application running = desktop.applications().launch(kind, workspace);
+        if (running != null) running.activate();
     }
 
     /**

@@ -230,6 +230,11 @@ things it deliberately does not implement and why none of them matters for icons
 > 2.1 ms/frame cached against 4.2 ms drawing the cells directly, and no curve instances per frame at all
 > against 6,500. The testbed is the strip at the top of `--mode=cgui-svg-icon`; `plan/svg-fix/truth.py`
 > scores a capture; `-Dcrystalgui.svg.raster=false` draws everything direct for comparison.
+>
+> **A drop shadow is drawn there too, under its group**: an element's `filter` that is a drop shadow resolves to
+> `SvgScene.DropShadow`, shared by the nodes it covers; `drawShadow` blurs their coverage once with the backdrop's
+> passes into a texture of its own (a filter pass clears its whole target, so never an atlas slot) and draws it under
+> the flood colour. Above icon size it is skipped, with a log line.
 
 > **Two seams here are easy to get backwards, and both exist for the same reason: a document is shared.**
 > `currentColor` is left unresolved in the cached ops and bound at draw time, so one parsed icon backs a

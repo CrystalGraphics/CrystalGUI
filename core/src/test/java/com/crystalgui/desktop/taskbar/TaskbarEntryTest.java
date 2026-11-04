@@ -1,6 +1,8 @@
 package com.crystalgui.desktop.taskbar;
 
+import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -10,6 +12,8 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
+
+import java.util.List;
 
 import org.junit.After;
 import org.junit.Before;
@@ -259,6 +263,63 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
                 Math.round(box.worldY() + box.height() / 2f * uiScale()),
                 0, 0, CgMouseCodes.LEFT_BUTTON, false, 0f, 0L));
         settle();
+    }
+
+    /** Dragging an entry along the bar: the registry's order is what moves, a group as one, and an edge is reachable. */
+    @Test
+    public void anEntryMovesBeforeAnotherAndAnApplicationMovesWhole() {
+        ApplicationKind kind = ApplicationKind.of("test:pair", "Pair");
+        WindowFrame lone = desktop().addWindow(new WindowFrame("Lone"));
+        WindowFrame first = desktop().addWindow(new WindowFrame("Pair 1"));
+        first.setApplication(kind);
+        WindowFrame second = desktop().addWindow(new WindowFrame("Pair 2"));
+        second.setApplication(kind);
+        WindowFrame last = desktop().addWindow(new WindowFrame("Last"));
+        WindowRegistry registry = desktop().registry();
+
+        registry.moveInTaskbar(last, lone);
+        assertEquals(List.of(last, lone, first, second), registry.taskbarOrder());
+        registry.moveInTaskbar(second, lone);
+        assertEquals("the application's windows travel together", List.of(last, first, second, lone),
+                registry.taskbarOrder());
+
+        registry.moveInTaskbar(last, null);
+        assertEquals("null is the end of the bar", List.of(first, second, lone, last), registry.taskbarOrder());
+
+        registry.moveInTaskbar(first, second);
+        assertEquals("within its own group nothing moves", List.of(first, second, lone, last), registry.taskbarOrder());
+    }
+
+    /** The gesture: a press dragged past two neighbours moves the entry there, and its release is not a click. */
+    @Test
+    public void draggingAnEntryPastItsNeighboursReordersTheBar() {
+        WindowFrame a = desktop().addWindow(new WindowFrame("Alpha"));
+        WindowFrame b = desktop().addWindow(new WindowFrame("Bravo"));
+        WindowFrame c = desktop().addWindow(new WindowFrame("Charlie"));
+        settle();
+        WindowFrame activeBefore = desktop().activeWindow();
+        var from = entryOf(a).box();
+        var to = entryOf(c).box();
+        float y = from.worldY() + from.height() / 2f * uiScale();
+        float startX = from.worldX() + from.width() / 2f * uiScale();
+        float endX = to.worldX() + to.width() * uiScale() + 4f;
+        mouse(startX, y, CgMouseCodes.LEFT_BUTTON, true);
+        for (int step = 1; step <= 12; step++) mouse(startX + (endX - startX) * step / 12f, y, -1, false);
+        mouse(endX, y, CgMouseCodes.LEFT_BUTTON, false);
+
+        assertEquals(List.of(b, c, a), desktop().registry().taskbarOrder());
+        assertSame("the release that ended the drag clicked the entry", activeBefore, desktop().activeWindow());
+        assertEquals(WindowState.VISIBLE, a.state());
+    }
+
+    private Desktop desktop() {
+        return Desktop.of(document);
+    }
+
+    private void mouse(float x, float y, int button, boolean down) {
+        document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event(Math.round(x), Math.round(y), 0, 0,
+                button, down, 0f, -1L));
+        frame();
     }
 
     private void pressAt(UIElement target, int button) {

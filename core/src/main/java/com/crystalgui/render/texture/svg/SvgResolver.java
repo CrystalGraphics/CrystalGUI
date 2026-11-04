@@ -23,10 +23,11 @@ import java.util.Set;
  *
  * <h3>Deliberately NOT a general SVG resolver</h3>
  *
- * <p>usvg also resolves clip paths, masks, filters, patterns, text and nested {@code svg} viewports. None
- * of those is implemented here and none is needed to draw an icon — the shipped set of 51 IntelliJ icons
- * and the Feather chrome set use exactly the subset below. The gaps are recorded in {@code ICONS.md}
- * rather than left to be discovered.</p>
+ * <p>usvg also resolves clip paths, masks, filters, patterns, text and nested {@code svg} viewports. Of
+ * those only one filter is resolved, the drop shadow ({@link #shadowOf}); a filter that is anything else is
+ * ignored, and the rest are not implemented. None is needed to draw an icon — the shipped set of 51
+ * IntelliJ icons and the Feather chrome set use exactly the subset below. The gaps are recorded in
+ * {@code ICONS.md} rather than left to be discovered.</p>
  */
 final class SvgResolver {
 
@@ -54,6 +55,10 @@ final class SvgResolver {
     /** The same servers reduced to one colour each — what {@link SvgStyle} needs for strokes. */
     private final Map<String, Integer> gradientColours = new HashMap<>();
     private final List<SvgScene.Node> nodes = new ArrayList<>();
+    /** Each drop-shadow filter by id, in its own user units; a filter that is not one is absent. */
+    private final Map<String, ShadowPrototype> filters = new HashMap<>();
+    /** Numbers the filtered elements, so two with equal shadows stay two groups. */
+    private int filteredElements;
 
     /** Curve-flattening resolution, carried down to every shape — see {@link SvgPath#parse(String, int)}. */
     private final int steps;
@@ -108,11 +113,12 @@ final class SvgResolver {
 
         indexIds();
         collectGradients();
+        collectFilters();
 
         // The origin lands in the root transform rather than in a fix-up pass over the points, so nothing
         // downstream ever sees coordinates that are not already in the icon's own 0,0 space.
         SvgTransform root = new SvgTransform(1, 0, 0, 1, -originX, -originY);
-        resolveRange(0, tags.size(), SvgStyle.ROOT, root, 0);
+        resolveRange(0, tags.size(), SvgStyle.ROOT, root, 0, null);
         return new SvgScene(nodes, boxWidth, boxHeight);
     }
 
@@ -215,12 +221,124 @@ final class SvgResolver {
         return out;
     }
 
+    // ── Filters ─────────────────────────────────────────────────────────────────────────────────────
+
+    /** A drop shadow as its {@code <filter>} states it, in the referencing element's user units. */
+    private record ShadowPrototype(float dx, float dy, float sigmaX, float sigmaY, int argb) {
+    }
+
+    private void collectFilters() {
+        for (int i = 0; i < tags.size(); i++) {
+            SvgScanner.Tag tag = tags.get(i);
+            if (!tag.name().equals("filter") || tag.kind() != SvgScanner.Kind.OPEN) continue;
+            String id = tag.get("id");
+            if (id.isEmpty()) continue;
+            ShadowPrototype shadow = shadowOf(i, matchingClose(i));
+            if (shadow != null) filters.put(id, shadow);
+        }
+    }
+
+    /**
+     * The drop shadow the filter at {@code open} draws, or null when it draws anything else.
+     *
+     * <p>Two spellings: {@code feDropShadow} on its own, with the spec's defaults (offset 2, deviation 2,
+     * black), and the chain authoring tools export for one — a blur of the alpha, an offset, a flood, an
+     * {@code in} composite of the flood with the blur, and a merge ending in {@code SourceGraphic}, in any
+     * order. Both are the shadow of the element's alpha painted under it, which is all that is drawn.</p>
+     */
+    @Nullable
+    private ShadowPrototype shadowOf(int open, int close) {
+        List<Map<String, String>> primitives = new ArrayList<>();
+        List<String> names = new ArrayList<>();
+        String mergeLast = null;
+        for (int i = open + 1; i < close; i++) {
+            SvgScanner.Tag tag = tags.get(i);
+            if (tag.kind() == SvgScanner.Kind.CLOSE || !tag.name().startsWith("fe")) continue;
+            if (tag.name().equals("feMergeNode")) {
+                mergeLast = tag.get("in");
+                continue;
+            }
+            Map<String, String> declarations = new HashMap<>(tag.attributes());
+            declarations.putAll(SvgDocument.styleDeclarations(tag.get("style")));
+            primitives.add(declarations);
+            names.add(tag.name());
+        }
+
+        if (names.equals(List.of("feDropShadow"))) {
+            Map<String, String> drop = primitives.get(0);
+            float[] sigma = deviation(drop.get("stdDeviation"), 2f);
+            return new ShadowPrototype(SvgDocument.number(drop.get("dx"), 2f), SvgDocument.number(drop.get("dy"), 2f),
+                    sigma[0], sigma[1], flood(drop));
+        }
+
+        if (names.size() != 5 || !"SourceGraphic".equals(mergeLast)) return null;
+        Map<String, String> blur = null, offset = null, flood = null, composite = null;
+        for (int i = 0; i < names.size(); i++) {
+            Map<String, String> primitive = primitives.get(i);
+            switch (names.get(i)) {
+                case "feGaussianBlur" -> blur = primitive;
+                case "feOffset" -> offset = primitive;
+                case "feFlood" -> flood = primitive;
+                case "feComposite" -> composite = primitive;
+                case "feMerge" -> { }
+                default -> { return null; }
+            }
+        }
+        if (blur == null || offset == null || flood == null || composite == null) return null;
+        if (!"in".equals(composite.getOrDefault("operator", "over"))) return null;
+        // SourceGraphic blurred has the same alpha as SourceAlpha, and the flood replaces its colour
+        String source = blur.getOrDefault("in", "SourceGraphic");
+        if (!source.equals("SourceAlpha") && !source.equals("SourceGraphic")) return null;
+        float[] sigma = deviation(blur.get("stdDeviation"), 0f);
+        return new ShadowPrototype(SvgDocument.number(offset.get("dx"), 0f), SvgDocument.number(offset.get("dy"), 0f),
+                sigma[0], sigma[1], flood(flood));
+    }
+
+    /** {@code stdDeviation}: one number for both axes, or two. */
+    private static float[] deviation(@Nullable String raw, float fallback) {
+        if (raw == null || raw.isBlank()) return new float[]{fallback, fallback};
+        String[] parts = raw.trim().split("[\\s,]+");
+        float x = Math.max(0f, SvgDocument.number(parts[0], fallback));
+        float y = parts.length > 1 ? Math.max(0f, SvgDocument.number(parts[1], x)) : x;
+        return new float[]{x, y};
+    }
+
+    /** {@code flood-color} with {@code flood-opacity} folded in; black by default, as the spec says. */
+    private static int flood(Map<String, String> primitive) {
+        Integer colour = SvgColor.parseColor(primitive.get("flood-color"));
+        int argb = colour == null ? 0xFF000000 : colour;
+        String opacity = primitive.get("flood-opacity");
+        return opacity == null ? argb : SvgColor.withOpacity(argb, SvgDocument.number(opacity, 1f));
+    }
+
+    /**
+     * The shadow an element's own {@code filter} names, in absolute space; {@code inherited} when it names none.
+     * A filter nested inside a filtered group replaces the group's for its subtree rather than compounding it.
+     */
+    @Nullable
+    private SvgScene.DropShadow shadowFor(SvgScanner.Tag tag, SvgTransform transform,
+                                          @Nullable SvgScene.DropShadow inherited) {
+        String raw = tag.has("filter") ? tag.get("filter") : SvgDocument.styleDeclarations(tag.get("style")).get("filter");
+        if (raw == null) return inherited;
+        raw = raw.trim();
+        if (!raw.startsWith("url(#") || !raw.endsWith(")")) return inherited;
+        ShadowPrototype prototype = filters.get(raw.substring(5, raw.length() - 1).trim());
+        if (prototype == null) return inherited;
+        // An offset and a length, so the transform's linear part only
+        float dx = transform.applyX(prototype.dx(), prototype.dy()) - transform.applyX(0f, 0f);
+        float dy = transform.applyY(prototype.dx(), prototype.dy()) - transform.applyY(0f, 0f);
+        float scale = transform.lengthScale();
+        return new SvgScene.DropShadow(dx, dy, prototype.sigmaX() * scale, prototype.sigmaY() * scale,
+                prototype.argb(), filteredElements++);
+    }
+
     // ── The walk ────────────────────────────────────────────────────────────────────────────────────
 
-    private void resolveRange(int from, int to, SvgStyle style, SvgTransform transform, int depth) {
+    private void resolveRange(int from, int to, SvgStyle style, SvgTransform transform, int depth,
+                              @Nullable SvgScene.DropShadow shadow) {
         int i = from;
         while (i < to) {
-            i = resolveNode(i, style, transform, depth, false) + 1;
+            i = resolveNode(i, style, transform, depth, false, shadow) + 1;
         }
     }
 
@@ -229,9 +347,11 @@ final class SvgResolver {
      *
      * @param forced the node was reached through {@code <use>}, so a {@code <symbol>} or a member of
      *               {@code <defs>} is now genuinely part of the picture
+     * @param shadow the drop shadow of the filtered element this node is inside, if any
      * @return the index of the last token this node consumed
      */
-    private int resolveNode(int index, SvgStyle style, SvgTransform transform, int depth, boolean forced) {
+    private int resolveNode(int index, SvgStyle style, SvgTransform transform, int depth, boolean forced,
+                            @Nullable SvgScene.DropShadow shadow) {
         SvgScanner.Tag tag = tags.get(index);
         if (tag.kind() == SvgScanner.Kind.CLOSE) return index;
 
@@ -241,13 +361,14 @@ final class SvgResolver {
 
         SvgStyle childStyle = style.inherit(tag.attributes(), gradientColours);
         SvgTransform childTransform = SvgTransform.parse(tag.get("transform")).then(transform);
+        SvgScene.DropShadow childShadow = shadowFor(tag, childTransform, shadow);
 
         if (name.equals("use")) {
-            resolveUse(tag, childStyle, childTransform, depth);
+            resolveUse(tag, childStyle, childTransform, depth, childShadow);
             return end;
         }
         if (SHAPES.contains(name)) {
-            resolveShape(tag, childStyle, childTransform);
+            resolveShape(tag, childStyle, childTransform, childShadow);
             return end;
         }
         if (tag.kind() == SvgScanner.Kind.OPEN
@@ -255,12 +376,13 @@ final class SvgResolver {
             // <symbol> and <defs> reached through <use> descend as ordinary groups, and so does any
             // element we do not recognise -- an unknown container that swallowed its children would lose
             // whole regions of a file for a tag we simply had not heard of.
-            resolveRange(index + 1, end, childStyle, childTransform, depth);
+            resolveRange(index + 1, end, childStyle, childTransform, depth, childShadow);
         }
         return end;
     }
 
-    private void resolveUse(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform, int depth) {
+    private void resolveUse(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform, int depth,
+                            @Nullable SvgScene.DropShadow shadow) {
         if (depth >= MAX_USE_DEPTH) return;
         String href = tag.has("href") ? tag.get("href") : tag.get("xlink:href");
         if (!href.startsWith("#")) return;
@@ -274,7 +396,7 @@ final class SvgResolver {
         SvgTransform placed = (x != 0f || y != 0f)
                 ? new SvgTransform(1, 0, 0, 1, x, y).then(transform)
                 : transform;
-        resolveNode(target, style, placed, depth + 1, true);
+        resolveNode(target, style, placed, depth + 1, true, shadow);
     }
 
     /**
@@ -287,7 +409,8 @@ final class SvgResolver {
      * to be measured while the contours are still local. The transform then survives on the paint (see
      * {@link SvgScene.Gradient}) and is flattened into the contours, which is exactly usvg's split.</p>
      */
-    private void resolveShape(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform) {
+    private void resolveShape(SvgScanner.Tag tag, SvgStyle style, SvgTransform transform,
+                              @Nullable SvgScene.DropShadow shadow) {
         if (!style.fills() && !style.strokes()) return;
         List<SvgPath.Polyline> contours = SvgGeometry.of(tag, steps);
         if (contours.isEmpty()) return;
@@ -317,12 +440,12 @@ final class SvgResolver {
             stroke = new SvgScene.Stroke(new SvgScene.Solid(style.strokeArgb(), style.stroke().currentColor()),
                     halfWidth, style.cap());
         }
-        if (fill != null || stroke != null) nodes.add(new SvgScene.Node(contours, fill, stroke));
+        if (fill != null || stroke != null) nodes.add(new SvgScene.Node(contours, fill, stroke, shadow));
         if (strokeGradient != null) {
             // Painted as a fill of its own outline, after the element's fill: SVG's order for one element.
             List<SvgPath.Polyline> outline = SvgStroker.outline(contours, halfWidth, style.cap(), steps);
             if (!outline.isEmpty()) {
-                nodes.add(new SvgScene.Node(outline, new SvgScene.Fill(strokeGradient, false), null));
+                nodes.add(new SvgScene.Node(outline, new SvgScene.Fill(strokeGradient, false), null, shadow));
             }
         }
     }

@@ -4,6 +4,7 @@ import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.window.WindowState;
+import com.crystalgui.desktop.taskbar.TaskbarPins;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgraphics.serialization.format.CgFormats;
 
@@ -31,7 +32,8 @@ import java.util.Locale;
  *
  * <p>The taskbar reads open order and the switcher reads MRU, and a minimised window has left the
  * stacking order while keeping its place in the sequence. A record that kept only one would either move
- * every entry on the taskbar or offer the wrong window first after a restart.</p>
+ * every entry on the taskbar or offer the wrong window first after a restart. The pinned applications'
+ * order is the third, and the only one the user arranges by hand.</p>
  *
  * <h3>A window with no key is not persisted, and that is not a limitation</h3>
  *
@@ -54,6 +56,7 @@ public final class DesktopSession {
     private static final String KEY_VERSION = "version";
     private static final String KEY_WINDOWS = "windows";
     private static final String KEY_MRU = "mru";
+    private static final String KEY_PINS = "pins";
     private static final String KEY_KEY = "key";
     private static final String KEY_LEFT = "left";
     private static final String KEY_TOP = "top";
@@ -104,11 +107,12 @@ public final class DesktopSession {
         for (WindowFrame frame : desktop.registry().mruOrder()) {
             if (isPersistable(frame)) mru.add(frame.key());
         }
-        return CgFormats.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru));
+        List<String> pins = new ArrayList<>(desktop.pins().ids());
+        return CgFormats.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, pins));
     }
 
     /** The whole file. */
-    private record Saved(int version, List<Placement> windows, List<String> mru) {
+    private record Saved(int version, List<Placement> windows, List<String> mru, List<String> pins) {
 
         private static final CgCodec<String> MRU_ENTRY = CgCodecs.record(
                 CgCodecs.fieldOr(KEY_KEY, CgCodecs.STRING, (String key) -> key, ""), (String key) -> key);
@@ -117,6 +121,8 @@ public final class DesktopSession {
                 CgCodecs.fieldOr(KEY_VERSION, CgCodecs.INT, Saved::version, -1),
                 CgCodecs.fieldOr(KEY_WINDOWS, CgCodecs.listOf(Placement.CODEC), Saved::windows, List.of()),
                 CgCodecs.fieldOr(KEY_MRU, CgCodecs.listOf(MRU_ENTRY), Saved::mru, List.of()),
+                // A record from before pins were saved reads as none pinned, which is what it meant
+                CgCodecs.fieldOr(KEY_PINS, CgCodecs.listOf(CgCodecs.STRING), Saved::pins, List.of()),
                 Saved::new);
     }
 
@@ -226,6 +232,12 @@ public final class DesktopSession {
     public List<String> readMruOrder(String desktopId) {
         Saved saved = saved(desktopId);
         return saved == null ? List.of() : saved.mru();
+    }
+
+    /** The pinned application ids, in the bar's order. Empty when there is no record. @see TaskbarPins */
+    public List<String> readPins(String desktopId) {
+        Saved saved = saved(desktopId);
+        return saved == null ? List.of() : saved.pins();
     }
 
     /** The record's codecs made and the JSON reader loaded, by a read of an empty record: {@code CgUiStart}'s worker. */

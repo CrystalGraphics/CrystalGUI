@@ -833,10 +833,21 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         return icon;
     }
 
-    /** The icon this window declares, or null. @see #setIcon */
+    /**
+     * The icon this window is drawn with: its own, else its application's, else null for the monogram.
+     *
+     * <pre>{@code
+     * new WindowFrame("Lab").setApplication(VfxLab.KIND);   // drawn with the kind's icon
+     * frame.setIcon("mymod:inspector");                     // its own wins over the kind's
+     * }</pre>
+     *
+     * @see #setIcon
+     * @see ApplicationKind#icon(String)
+     */
     @Nullable
     public String iconName() {
-        return iconName;
+        if (iconName != null) return iconName;
+        return application == null ? null : application.icon();
     }
 
     /**
@@ -856,12 +867,13 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * strip's does, rather than to whatever was drawn before.</p>
      */
     private void refreshIcon() {
-        boolean declared = iconName != null && CgUiSvg.ofIcon(iconName) != null;
+        String name = iconName();
+        boolean declared = name != null && CgUiSvg.ofIcon(name) != null;
         if (!declared && toolWindow) {
             icon.setDisplayed(false);
             return;
         }
-        icon.show(declared ? iconName : null, getTitle());
+        icon.show(declared ? name : null, getTitle());
         icon.setDisplayed(true);
     }
 
@@ -1582,6 +1594,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public WindowFrame setApplication(@Nullable ApplicationKind application) {
         this.application = application;
+        // A window with no icon of its own is drawn with the kind's. @see #iconName
+        refreshIcon();
         if (owner != null) owner.registry().changed();
         return this;
     }
