@@ -37,10 +37,22 @@ public final class CompositorAnimation {
     private final LengthPercent originX, originY;
     private final long durationNanos;
     private final CgEasing easing;
+    private final long opacityNanos;
+    private final CgEasing opacityEasing;
     private final AtomicLong start = new AtomicLong();
 
     public CompositorAnimation(UIElement target, Transform from, Transform to, float fromOpacity, float toOpacity,
                                LengthPercent originX, LengthPercent originY, long durationNanos, CgEasing easing) {
+        this(target, from, to, fromOpacity, toOpacity, originX, originY, durationNanos, easing, durationNanos, easing);
+    }
+
+    /**
+     * As above, with the opacity on a clock of its own: a fade shorter than the motion, as Fluent's entrances (a
+     * dialog's scale over 250 ms, its fade over 83 ms, linear). Both start together; it ends with the longer.
+     */
+    public CompositorAnimation(UIElement target, Transform from, Transform to, float fromOpacity, float toOpacity,
+                               LengthPercent originX, LengthPercent originY, long durationNanos, CgEasing easing,
+                               long opacityNanos, CgEasing opacityEasing) {
         this.target = target;
         this.from = from;
         this.to = to;
@@ -50,6 +62,8 @@ public final class CompositorAnimation {
         this.originY = originY;
         this.durationNanos = durationNanos;
         this.easing = easing;
+        this.opacityNanos = opacityNanos;
+        this.opacityEasing = opacityEasing;
     }
 
     /** The element whose box it plays on. */
@@ -78,16 +92,19 @@ public final class CompositorAnimation {
 
     /** Eased progress at {@code now}: 0 before it starts, 1 once done. */
     public float progressAt(long now) {
+        return progress(now, durationNanos, easing);
+    }
+
+    private float progress(long now, long nanos, CgEasing curve) {
         long started = start.get();
         if (started == 0L) return 0f;
-        if (durationNanos <= 0L) return 1f;
-        double linear = Math.min(1.0, Math.max(0.0, (now - started) / (double) durationNanos));
-        return (float) easing.ease(linear);
+        if (nanos <= 0L) return 1f;
+        return (float) curve.ease(Math.min(1.0, Math.max(0.0, (now - started) / (double) nanos)));
     }
 
     public boolean isFinished(long now) {
         long started = start.get();
-        return started != 0L && now - started >= durationNanos;
+        return started != 0L && now - started >= Math.max(durationNanos, opacityNanos);
     }
 
     public Transform transformAt(long now) {
@@ -95,7 +112,7 @@ public final class CompositorAnimation {
     }
 
     public float opacityAt(long now) {
-        float t = progressAt(now);
+        float t = progress(now, opacityNanos, opacityEasing);
         return fromOpacity + (toOpacity - fromOpacity) * t;
     }
 }

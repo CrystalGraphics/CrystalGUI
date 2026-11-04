@@ -82,8 +82,14 @@ public final class WindowAnimator {
     // The GNOME source value is kept on each line below, so the distance from the reference stays
     // legible rather than being quietly forgotten.
 
-    /** {@code SHOW_WINDOW_ANIMATION_TIME} (150ms) — a window arriving. */
-    private static final long SHOW_NANOS = 125L * 1_000_000L;
+    /**
+     * A window arriving: Fluent's entrance, as WinUI's {@code ContentDialog} plays it ({@code ControlNormalAnimationDuration},
+     * 250 ms, for the scale; {@code ControlFasterAnimationDuration}, 83 ms linear, for the fade).
+     */
+    private static final long SHOW_NANOS = 250L * 1_000_000L;
+
+    /** @see #SHOW_NANOS */
+    private static final long SHOW_FADE_NANOS = 83L * 1_000_000L;
 
     /** {@code DESTROY_WINDOW_ANIMATION_TIME} (150ms) — a window closing. */
     private static final long DESTROY_NANOS = 125L * 1_000_000L;
@@ -95,25 +101,10 @@ public final class WindowAnimator {
     private static final long SIZE_NANOS = 250L * 1_000_000L;
 
     /**
-     * {@code EASE_OUT_EXPO} — GNOME's mode for a window arriving, and used here for that alone.
-     *
-     * <p>Its virtue is the snap: a window unfolding from a sliver wants to be most of the way there
-     * before you have registered it starting.</p>
+     * Fluent's "fast out, slow in", {@code cubic-bezier(0, 0, 0, 1)}: what Windows gives anything entering the scene,
+     * met by "extreme friction" as it arrives. From WinUI's {@code ControlFastOutSlowInKeySpline}.
      */
-    /**
-     * An opening window's curve — {@link #MOVING}'s twin, and deliberately NOT expo.
-     *
-     * <p>It was OUT_EXPO, on the standing rule that expo is kept "only for an opening window, whose
-     * whole journey is a scale within its own box". That exemption assumed an open is a SMALL scale
-     * change. This one runs from {@link #SHOW_SCALE_X} — one percent — to full size, which is a
-     * hundredfold growth: it travels further than the minimise the rule was written to protect.</p>
-     *
-     * <p>Expo's velocity at t=0 is 6.93x its average, so over {@link #SHOW_NANOS} at 120Hz the window
-     * reached 33% of its growth in the FIRST frame, 55% by the second and 97% by the halfway point,
-     * leaving nine frames to cover the last three percent. Reported exactly as it behaves: "it feels
-     * like the animation is 2 frames, one intermediate and the other the final state".</p>
-     */
-    private static final CgEasing ARRIVING = CgEasings.OUT_QUAD;
+    private static final CgEasing ARRIVING = CgEasings.cubicBezier(0.0, 0.0, 0.0, 1.0);
 
     /**
      * {@code EASE_OUT_QUAD} — a close, a size change, and (deviating from GNOME) a minimise.
@@ -135,14 +126,11 @@ public final class WindowAnimator {
     private static final CgEasing MOVING = CgEasings.OUT_QUAD;
 
     /**
-     * What a window grows FROM: {@code scale (0.01, 0.05)} about a {@code (0.5, 1.0)} pivot.
-     *
-     * <p>GNOME's, and it is drastic on purpose — a sliver at the bottom-centre that unfolds. The
-     * temptation is to soften it, and softening is what produced an open animation nobody could see:
-     * below about 0.85 the eye reads a scale as motion, and above it as a window that flickered.</p>
+     * What a window grows from, about its own centre: Windows' window opening is a small grow and a fade, not an
+     * unfold. Microsoft publishes no number for it; a ContentDialog's travel is 5% (it shrinks from 1.05), and this
+     * is the same 5% growing.
      */
-    private static final float SHOW_SCALE_X = 0.01f;
-    private static final float SHOW_SCALE_Y = 0.05f;
+    private static final float SHOW_SCALE = 0.95f;
 
     /** What a window shrinks INTO when it closes — {@code scale (0.8, 0.8)} about its own centre. */
     private static final float DESTROY_SCALE = 0.8f;
@@ -178,7 +166,6 @@ public final class WindowAnimator {
 
     private static final LengthPercent CORNER = LengthPercent.px(0f);
     private static final LengthPercent CENTRE = LengthPercent.percent(0.5f);
-    private static final LengthPercent BOTTOM = LengthPercent.percent(1f);
 
     // ── The switch ──────────────────────────────────────────────────────────────────────────────
 
@@ -243,11 +230,11 @@ public final class WindowAnimator {
 
     // ── Open and close ──────────────────────────────────────────────────────────────────────────
 
-    /** The window arrives: unfolds from a sliver at its own bottom edge, fading in. */
+    /** The window arrives: grows into place from its own centre as it fades in, Fluent's entrance. */
     public void playOpen() {
         if (!enabled) return;
-        start(Transform.scale(SHOW_SCALE_X, SHOW_SCALE_Y), NEUTRAL_SCALE,
-                0f, 1f, CENTRE, BOTTOM, SHOW_NANOS, ARRIVING, null);
+        start(Transform.scale(SHOW_SCALE), NEUTRAL_SCALE, 0f, 1f, CENTRE, CENTRE,
+                SHOW_NANOS, ARRIVING, SHOW_FADE_NANOS, CgEasings.LINEAR, null);
     }
 
     /**
@@ -515,6 +502,13 @@ public final class WindowAnimator {
     private void start(Transform from, Transform to, float fromOpacity, float toOpacity,
                        LengthPercent originX, LengthPercent originY,
                        long durationNanos, CgEasing easing, @Nullable Runnable then) {
+        start(from, to, fromOpacity, toOpacity, originX, originY, durationNanos, easing, durationNanos, easing, then);
+    }
+
+    /** As above, the opacity on a clock of its own. */
+    private void start(Transform from, Transform to, float fromOpacity, float toOpacity,
+                       LengthPercent originX, LengthPercent originY, long durationNanos, CgEasing easing,
+                       long opacityNanos, CgEasing opacityEasing, @Nullable Runnable then) {
         cancelCurrent();
         UIDocument window = frame.document();
         if (window == null) {
@@ -536,7 +530,7 @@ public final class WindowAnimator {
         // composite's transform and opacity, so a minimise draws the window once.
         WindowAnimation animation = new WindowAnimation(frame, this::frameIsLive,
                 from, to, fromOpacity, toOpacity,
-                originX, originY, durationNanos, easing, () -> {
+                originX, originY, durationNanos, easing, opacityNanos, opacityEasing, () -> {
                     current = null;
                     if (then != null) then.run();
                 });

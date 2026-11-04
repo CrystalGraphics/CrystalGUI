@@ -91,6 +91,8 @@ public final class WindowAnimation implements WindowMotion {
     private final float toOpacity;
     private final long durationNanos;
     private final CgEasing easing;
+    private final long opacityNanos;
+    private final CgEasing opacityEasing;
     private boolean clockStarted;
     private long virtualNow;
     private long lastRealNow;
@@ -137,6 +139,15 @@ public final class WindowAnimation implements WindowMotion {
     WindowAnimation(UIElement target, BooleanSupplier alive, Transform from, Transform to,
                     float fromOpacity, float toOpacity, LengthPercent originX, LengthPercent originY,
                     long durationNanos, CgEasing easing, @Nullable Runnable onDone) {
+        this(target, alive, from, to, fromOpacity, toOpacity, originX, originY, durationNanos, easing,
+                durationNanos, easing, onDone);
+    }
+
+    /** As above, the opacity on a clock of its own. @see CompositorAnimation */
+    WindowAnimation(UIElement target, BooleanSupplier alive, Transform from, Transform to,
+                    float fromOpacity, float toOpacity, LengthPercent originX, LengthPercent originY,
+                    long durationNanos, CgEasing easing, long opacityNanos, CgEasing opacityEasing,
+                    @Nullable Runnable onDone) {
         this.target = target;
         this.alive = alive;
         this.onDone = onDone;
@@ -160,10 +171,12 @@ public final class WindowAnimation implements WindowMotion {
         this.toOpacity = toOpacity;
         this.durationNanos = durationNanos;
         this.easing = easing;
+        this.opacityNanos = opacityNanos;
+        this.opacityEasing = opacityEasing;
         this.transform = new ActiveTransition<>(
                 StylePropertyRegistry.TRANSFORM, from, to, System.nanoTime(), 0L, durationNanos, easing);
         this.opacity = new ActiveTransition<>(
-                StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, System.nanoTime(), 0L, durationNanos, easing);
+                StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, System.nanoTime(), 0L, opacityNanos, opacityEasing);
 
         // THE ORIGIN IS PINNED FOR THE WHOLE ANIMATION, and it is PER ANIMATION.
         //
@@ -181,7 +194,7 @@ public final class WindowAnimation implements WindowMotion {
         this.originY = originY;
         UIDocument document = target.document();
         CompositorAnimation flight = new CompositorAnimation(target, from, to, fromOpacity, toOpacity,
-                originX, originY, durationNanos, easing);
+                originX, originY, durationNanos, easing, opacityNanos, opacityEasing);
         boolean played = document != null && document.animation().playOnCompositor(flight);
         this.compositor = played ? flight : null;
         this.playedBy = played ? document.animation() : null;
@@ -262,7 +275,7 @@ public final class WindowAnimation implements WindowMotion {
             transform = new ActiveTransition<>(
                     StylePropertyRegistry.TRANSFORM, from, to, real, 0L, durationNanos, easing);
             opacity = new ActiveTransition<>(
-                    StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, real, 0L, durationNanos, easing);
+                    StylePropertyRegistry.OPACITY, fromOpacity, toOpacity, real, 0L, opacityNanos, opacityEasing);
         } else if (delta > STALL_NANOS && stalledTicks++ < MAX_STALLED_TICKS) {
             // A STALL IS NOT A SLOW FRAME, IT IS NO FRAME -- so it advances the animation by nothing.
             //
@@ -278,7 +291,7 @@ public final class WindowAnimation implements WindowMotion {
         Transform value = transform.currentValue(now);
         write(value, opacity.currentValue(now));
 
-        if (!transform.isFinished(now)) return true;
+        if (!transform.isFinished(now) || !opacity.isFinished(now)) return true;
         finish();
         return false;
     }
