@@ -459,9 +459,15 @@ final class CgUiBackdrop {
             // target, which holds the UI alone -- read when this executes. @see UiGpu#sceneTarget
             CgFrameBuffer.blitFrom(UiGpu.get().sceneTarget(), storage.getId(), bx0, by0, bx0 + bw, by1,
                     0, th - bh, bw, th, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
-            CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
-            CgGL.glColorMask(false, false, false, true);
-            storage.clearColor(0f, 0f, 0f, 1f);
+            // ALPHA ONLY, so raw: CgFrameBuffer.clear opens all four channels before it clears, and through it
+            // this erased the scene it was meant to mark opaque -- glass over the world sampled black.
+            try (CgGlScope ignored = CgGlState.save(CgGlSlot.FBO, CgGlSlot.COLOR_MASK, CgGlSlot.SCISSOR)) {
+                CgGL.glBindFramebuffer(CgGL.GL_FRAMEBUFFER, storage.getId());
+                CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
+                CgGL.glColorMask(false, false, false, true);
+                CgGL.glClearColor(0f, 0f, 0f, 1f);
+                CgGL.glClear(CgGL.GL_COLOR_BUFFER_BIT);
+            }
         });
 
         // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE.
@@ -769,14 +775,14 @@ final class CgUiBackdrop {
      * <p>{@code dirU}/{@code dirV} pick the axis (one of them is 1, the other 0); the step is that many
      * SOURCE texels in UV, which is what "one texel apart" means whatever resolution the pass runs at.
      * {@code sigma} and {@code taps} are in the same texels. @see gui_blur.shader</p>
+     *
+     * <p>Also an icon's drop shadow's ({@link SvgRasterCache}), over its coverage.</p>
      */
     void blurPass(CgTexture source, CgGraphTexture target, float dirU, float dirV,
                           float sigma, int taps, int quadW, int quadH, float fracW, float fracH) {
         // PROPERTIES BEFORE THE BIND, and this is not style. withMaterial binds the material, and
         // binding VALIDATES the samplers it currently holds - which, on the frame after a resize, are
         // the textures the resize deleted. Maximising the window crashed with "CgTexture2D has been
-     *
-     * <p>Also an icon's drop shadow's ({@link SvgRasterCache}), over its coverage.</p>
         // deleted" from inside useMaterial, before a single line of this pass had run.
         //
         // applyProperties is buffered and replayed at bind time, so setting them first is both legal

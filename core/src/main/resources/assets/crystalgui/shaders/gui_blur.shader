@@ -22,10 +22,9 @@
 // PREMULTIPLIED ALPHA IS CARRIED THROUGH, NOT DISCARDED -- see the note on the alpha write below; it
 // is the single thing this pass most easily gets wrong, and the symptom does not look like alpha.
 //
-// EDGE CLAMPING IS THE OTHER HALF. Taps that fall outside the captured region must not drag its clear
-// colour inward. `_Bounds` is the sub-rect of the source that holds real content, and every tap is
-// clamped into it, so a tap that would leave simply re-reads the nearest real pixel. That is what
-// CLAMP_TO_EDGE would do if the content filled the texture, and the content never does.
+// THE EDGE IS THE OTHER HALF. Taps that fall outside the captured region must not drag its clear colour
+// inward. `_Bounds` is the sub-rect of the source that holds real content, and a tap past it is MIRRORED
+// back in (the CSS spec's edge mode), never clamped: a clamp re-reads one row for every tap beyond it.
 
 #type none
 #pragma cg_use quad
@@ -95,8 +94,12 @@ Pass {
     // so the blur targets came out part clear-black and part fallback-white. On screen that is a panel
     // with dark regions and blown-out ones -- indistinguishable from a sampling bug, and it cost six
     // rounds of looking at the sampling. The compile error was in the harness log from the first run.
+    // MIRRORED past the bounds, as CSS's backdrop-filter and Chromium do: clamping duplicated the edge row
+    // into every tap beyond it, so whatever lay on the screen's last row streaked along the taskbar's lip.
     vec4 cg_tap(vec2 uv) {
-        return texture(_MainTex, clamp(uv, _Bounds.xy, _Bounds.zw));
+        vec2 span = max(_Bounds.zw - _Bounds.xy, vec2(1e-6));
+        vec2 folded = abs(mod(uv - _Bounds.xy, 2.0 * span) - span);
+        return texture(_MainTex, _Bounds.zw - folded);
     }
 
     void vertex(out v2f o) {
