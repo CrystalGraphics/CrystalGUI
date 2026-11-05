@@ -22,6 +22,8 @@ import javax.annotation.Nullable;
  *   <li>Transitions component by component, but only between two {@code inset()}s whose units agree (a zero
  *       agrees with either); from {@code none} it snaps, so state both ends as insets.</li>
  *   <li>Clips painting only. Hit testing still sees the whole box, unlike the web's.</li>
+ *   <li>The box's own stroked {@code outline} rings the clip rather than the box, with the clip's corners, so a
+ *       panel revealed by its clip keeps its rim on every edge of what shows. The web's clips the outline away.</li>
  *   <li>One radius for all four corners; CSS's per-corner {@code round} lists are not read.</li>
  * </ul>
  *
