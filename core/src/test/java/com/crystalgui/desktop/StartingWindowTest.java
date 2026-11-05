@@ -1,6 +1,7 @@
 package com.crystalgui.desktop;
 
 import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.StartingMark;
@@ -23,7 +24,9 @@ public class StartingWindowTest extends UiDocumentTestBase {
 
     private Desktop desktop;
     private int built;
-    private final ApplicationKind kind = ApplicationKind.of("test:slow", "Slow").windowSize(400, 260).standalone();
+    private final ApplicationKind kind = ApplicationKind.of("test:slow", "Slow").windowSize(400, 260).standalone()
+            .startingWindow();
+    private final ApplicationKind quick = ApplicationKind.of("test:quick", "Quick").standalone();
 
     @Before
     public void openADesktop() {
@@ -38,6 +41,13 @@ public class StartingWindowTest extends UiDocumentTestBase {
             return new Running(kind, main);
         });
         desktop.applications().install(kind);
+        quick.launch(context -> {
+            WindowFrame main = new WindowFrame("Quick").setKey("test:quick").setApplication(quick);
+            main.markApplicationMain();
+            context.desktop().addWindow(main);
+            return new Running(quick, main);
+        });
+        desktop.applications().install(quick);
         desktop.persistTo(new InMemoryConfigStorage(), "starting");
         document.update(800f, 600f);
     }
@@ -99,6 +109,74 @@ public class StartingWindowTest extends UiDocumentTestBase {
         frames(4);
         assertEquals("it built an application nobody wanted any more", 0, built);
         assertTrue(desktop.registry().windows().isEmpty());
+    }
+
+    @Test
+    public void aDesktopClosedWhileStartingBuildsOnceItIsBack() {
+        desktop.applications().launchInStartingWindow(kind, null);
+        desktop.suspend();
+        frames(4);
+        assertEquals("it built with the desktop closed", 0, built);
+        desktop.resume();
+        frames(4);
+        assertEquals("the launch was lost with the desktop closed", 1, built);
+        assertFalse(desktop.isStarting(kind));
+    }
+
+    @Test
+    public void closedWhileItsMarkComesInItGoesAndBuildsNothing() throws InterruptedException {
+        Desktop.setAnimationsEnabled(true);
+        desktop.applications().launchInStartingWindow(kind, null);
+        WindowFrame starter = desktop.registry().windows().get(0);
+        frames(3);
+        UIElement close = null;
+        for (UIElement control : starter.controls().children()) {
+            if (control.hasClass(WindowFrame.CLOSE_CLASS)) close = control;
+        }
+        int[] at = centreOf(close);
+        click(at[0], at[1]);
+        for (int i = 0; i < 10; i++) {
+            Thread.sleep(40);
+            frame();
+        }
+        assertEquals("it built an application its window was closed on", 0, built);
+        assertTrue("the starting window would not close", desktop.registry().windows().isEmpty());
+    }
+
+    @Test
+    public void minimisedWhileItsMarkComesInItBuildsAndWaitsMinimised() throws InterruptedException {
+        Desktop.setAnimationsEnabled(true);
+        desktop.applications().launchInStartingWindow(kind, null);
+        WindowFrame starter = desktop.registry().windows().get(0);
+        frames(3);
+        starter.minimize();
+        // Past the 350 ms minimise, well short of the mark's 1.43 s
+        for (int i = 0; i < 15; i++) {
+            Thread.sleep(40);
+            frame();
+        }
+        assertEquals("it waited on a mark nobody can see", 1, built);
+        WindowFrame main = desktop.registry().windows().get(0);
+        assertEquals("test:slow", main.key());
+        assertEquals("the application opened over the minimise", WindowState.HIDDEN, main.state());
+    }
+
+    @Test
+    public void aStartingWindowClosingIsNoLongerStarting() {
+        Desktop.setAnimationsEnabled(true);
+        desktop.applications().launchInStartingWindow(kind, null);
+        WindowFrame starter = desktop.registry().windows().get(0);
+        frames(3);
+        starter.requestClose();
+        // Its mark may settle over the close's 125 ms, and a launch still waiting would build into it
+        assertFalse("a window playing its close still counts as starting", desktop.isStarting(kind));
+    }
+
+    @Test
+    public void anApplicationThatDoesNotOptInOpensWithNoStartingWindow() {
+        desktop.applications().launchInStartingWindow(quick, null);
+        assertFalse("a starting window it never asked for", desktop.isStarting(quick));
+        assertEquals("test:quick", desktop.registry().windows().get(0).key());
     }
 
     @Test

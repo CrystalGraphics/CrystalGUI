@@ -14,9 +14,11 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigStorage;
 import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -255,8 +257,9 @@ public final class ApplicationRegistry {
     }
 
     /**
-     * Launches {@code kind} behind its starting window, as a click on Start, a pin or a key does: the window opens on
-     * this frame and the application builds into it once that frame is on screen, however long it takes.
+     * Launches {@code kind} as a click on Start, a pin or a key does: behind its starting window when it opts in to one
+     * ({@link ApplicationKind#startingWindow}), which opens on this frame while the application builds into it,
+     * however long it takes; otherwise built and activated now, as {@link #launch}.
      *
      * <pre>{@code
      * desktop.applications().launchInStartingWindow(CrystalEditor.KIND, workspace);
@@ -275,7 +278,7 @@ public final class ApplicationRegistry {
         boolean refused = kind.factory() == null || (kind.requiresConnection() && workspace == null)
                 || desktop.config() == null;
         UIDocument document = desktop.document();
-        if (runsAlready || refused || document == null) {
+        if (!kind.hasStartingWindow() || runsAlready || refused || document == null) {
             Application launched = launch(kind, workspace);
             if (launched != null) launched.activate();
             return;
@@ -285,19 +288,43 @@ public final class ApplicationRegistry {
             return;
         }
         WindowFrame starter = desktop.openStartingWindow(kind);
-        int[] frames = {0};
-        long asked = System.nanoTime();
-        document.animation().every(starter, delta -> {
-            // ITS MARK ON SCREEN WHOLE BEFORE THE BUILD, which holds this document while it runs: begun sooner, the
-            // mark would stand still part way in
-            boolean shown = ++frames[0] >= STARTING_FRAMES && StartingMark.settled(starter);
-            if (!shown && System.nanoTime() - asked < STARTING_LONGEST_NANOS) return true;
-            if (!desktop.isStarting(kind)) return false;
-            Application launched = launch(kind, workspace);
-            // No main window took its place: a refusal, a failure, or an application with none
-            if (desktop.isStarting(kind)) desktop.endStartingWindow(kind, launched == null ? null : launched.mainWindow());
-            if (launched != null) launched.activate();
-            return false;
+        boolean[] launched = {false};
+        Connection[] waiting = {Connection.DISCONNECTED};
+        // ON THE DESKTOP, AGAIN ON EVERY CONNECT: a hook goes with its node, so one on the starter died with a minimise
+        // and one on the desktop dies with the desktop's close. Its mark comes in again on the reopen, so the wait
+        // starts over too.
+        waiting[0] = desktop.whileConnected(() -> {
+            UIDocument at = desktop.document();
+            if (launched[0] || at == null) return Connection.DISCONNECTED;
+            boolean[] stopped = {false};
+            int[] frames = {0};
+            long asked = System.nanoTime();
+            at.animation().every(desktop, delta -> {
+                if (stopped[0] || launched[0]) return false;
+                // CLOSED: the launch is over
+                if (!desktop.isStarting(kind)) {
+                    launched[0] = true;
+                    waiting[0].disconnect();
+                    return false;
+                }
+                // MINIMISED: no mark to wait for, so it builds now and its window waits minimised
+                boolean away = starter.state() == WindowState.HIDDEN || starter.isMinimizing();
+                // ITS MARK ON SCREEN WHOLE BEFORE THE BUILD, which holds this document while it runs: begun sooner,
+                // the mark would stand still part way in
+                boolean shown = away || ++frames[0] >= STARTING_FRAMES && StartingMark.settled(starter);
+                if (!shown && System.nanoTime() - asked < STARTING_LONGEST_NANOS) return true;
+                launched[0] = true;
+                waiting[0].disconnect();
+                if (!desktop.isStarting(kind)) return false;
+                Application application = launch(kind, workspace);
+                // No main window took its place: a refusal, a failure, or an application with none
+                if (desktop.isStarting(kind)) {
+                    desktop.endStartingWindow(kind, application == null ? null : application.mainWindow());
+                }
+                if (application != null && !away) application.activate();
+                return false;
+            });
+            return () -> stopped[0] = true;
         });
     }
 

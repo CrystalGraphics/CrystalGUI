@@ -1381,6 +1381,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** Driven by {@link Desktop#activate}, which is the only thing that may decide this. */
     public void setActive(boolean active) {
+        // Brought back before its minimise landed
+        if (active) minimizing = false;
         if (active) addClass(ACTIVE_CLASS);
         else removeClass(ACTIVE_CLASS);
     }
@@ -1670,8 +1672,20 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // then stayed because a guard said no is worse than no animation at all -- it says the close
         // happened. Both remaining outcomes are certain by the time anything is played.
         if (!canDiscard()) return true;
+        closing = true;
         animator.playClose(this::destroy);
         return true;
+    }
+
+    /** Set once a close it agreed to begins: it plays out and is destroyed, whatever is asked of it meanwhile. */
+    private boolean closing;
+
+    /**
+     * Whether it is closing: a close was agreed and its animation is playing, the window destroyed at its end. What
+     * asks "is this still here?" over those frames treats it as gone, as a starting window's launch does.
+     */
+    public boolean isClosing() {
+        return closing;
     }
 
     /**
@@ -1736,6 +1750,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         }
         if (state == WindowState.VISIBLE && parent() != null) return;
         if (owner == null) return;
+        minimizing = false;
         state = WindowState.VISIBLE;
         owner.reattach(this);
         // AFTER the reattach, because an animation writes styles and invalidateStyleMatch early-returns
@@ -2349,7 +2364,19 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // this animation's continuation, it sat still through the whole flight and blinked out after the
         // window had already landed in the taskbar. @see Dialog#setPresented
         presentOwnedDialogs(false);
+        minimizing = true;
         animator.playMinimize(this::hide);
+    }
+
+    /** From a minimise's press until the window is shown again. @see #isMinimizing */
+    private boolean minimizing;
+
+    /**
+     * Whether it is minimised or flying to the taskbar: a minimise was pressed and it has not been shown since. What
+     * asks "is this on screen?" during the flight treats it as gone, as a starting window's launch does.
+     */
+    public boolean isMinimizing() {
+        return minimizing && state != WindowState.DESTROYED;
     }
 
     /** The minimise flight, without the hide — so a test can ask where it is going. @see WindowAnimator */

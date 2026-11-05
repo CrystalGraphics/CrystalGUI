@@ -773,6 +773,8 @@ public class Desktop extends UIElement implements DataProvider {
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
         // show() puts a hidden one back -- and the animation is the only thing they share.
+        // A minimised starter's application waits minimised: activated, it would open over the minimise
+        if (starter != null && (starter.state() == WindowState.HIDDEN || starter.isMinimizing())) activate = false;
         if (starter == null) frame.playOpenAnimation();
         else replaceStarting(starter, frame);
         if (!activate) {
@@ -1593,7 +1595,7 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public WindowFrame openStartingWindow(ApplicationKind kind) {
         WindowFrame open = starting.get(kind.id());
-        if (open != null && open.state() != WindowState.DESTROYED) return open;
+        if (open != null && open.state() != WindowState.DESTROYED && !open.isClosing()) return open;
         WindowFrame frame = new WindowFrame(kind.displayName());
         if (kind.icon() != null) frame.setIcon(kind.icon());
         // ITS APPLICATION'S: the pin's slot on the bar, and its kind's size when nothing was recorded
@@ -1617,7 +1619,8 @@ public class Desktop extends UIElement implements DataProvider {
     /** Whether {@code kind}'s starting window is still waiting for its application: not closed, not replaced. */
     public boolean isStarting(ApplicationKind kind) {
         WindowFrame frame = starting.get(kind.id());
-        return frame != null && frame.state() != WindowState.DESTROYED;
+        // CLOSING COUNTS AS CLOSED: its mark may settle during the close's flight, and the build would reopen it
+        return frame != null && frame.state() != WindowState.DESTROYED && !frame.isClosing();
     }
 
     /**
@@ -1635,11 +1638,15 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** {@code successor} where {@code starter} was on the taskbar, then the starter gone. */
     private void replaceStarting(WindowFrame starter, WindowFrame successor) {
+        boolean minimised = starter.state() == WindowState.HIDDEN || starter.isMinimizing();
         registry.takePlace(successor, starter);
         Taskbar bar = taskbar();
         if (bar != null) bar.takePlace(successor, starter);
-        // NO CUT TO THE APPLICATION: its mark and backdrop leave over it, the loading screen's way out
+        // NO CUT TO THE APPLICATION: its mark and backdrop leave over it, the loading screen's way out -- on its restore,
+        // for one built minimised
         StartingMark.leaveOver(starter, successor);
+        // MINIMISED, it waits minimised: the build finished in the background, and a restore shows it ready
+        if (minimised) successor.hide();
         starter.destroy();
     }
 
@@ -1650,7 +1657,7 @@ public class Desktop extends UIElement implements DataProvider {
         WindowFrame starter = starting.get(kind.id());
         if (starter == null || starter == frame) return null;
         starting.remove(kind.id());
-        return starter.state() == WindowState.DESTROYED ? null : starter;
+        return starter.state() == WindowState.DESTROYED || starter.isClosing() ? null : starter;
     }
 
     /** The starting window's geometry, for an application's main window nothing recorded. */
@@ -1806,13 +1813,6 @@ public class Desktop extends UIElement implements DataProvider {
         onSuspendedChanged.emit(false);
     }
 
-    /** Puts the compositor back. @see #suspend() */
-    public void resume() {
-        if (!suspended) return;
-        suspended = false;
-        UIDocument document = suspendedIn;
-        suspendedIn = null;
-        if (document != null && parent() == null) document.append(this);
     /**
      * Plays the desktop off screen before its screen closes: the taskbar slides away and every window on it plays its
      * close, a pinned one excepted, since it stays over the game. Then {@code done}, which closes the screen; until
@@ -1856,6 +1856,13 @@ public class Desktop extends UIElement implements DataProvider {
         }
     }
 
+    /** Puts the compositor back. @see #suspend() */
+    public void resume() {
+        if (!suspended) return;
+        suspended = false;
+        UIDocument document = suspendedIn;
+        suspendedIn = null;
+        if (document != null && parent() == null) document.append(this);
         onSuspendedChanged.emit(true);
     }
 

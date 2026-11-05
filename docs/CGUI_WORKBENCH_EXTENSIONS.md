@@ -670,6 +670,30 @@ src/main/resources/META-INF/services/com.crystalgui.desktop.app.ApplicationKinds
 The manifest is **data**: `opens` is read by "open with" and by a launcher without anything being
 launched, so it cannot be derived by building an application and asking what it registered.
 
+### A starting window, for an application that takes time to build
+
+A launch builds the application on the click, on the desktop's thread, and nothing else moves until it is
+done. That is right for anything that opens in a frame. One that takes **0.2 s or more** — a workbench
+restoring its docks, an editor indexing a project, a tool loading assets — should declare a starting window,
+so the click is answered at once:
+
+```java
+public static final ApplicationKind KIND = ApplicationKind.of("mymod:recipes", "Recipe Editor")
+        .icon("mymod:logo")
+        .startingWindow()
+        .launch(context -> ...);
+```
+
+The window opens on the click, at the size and place the application last had, with the icon growing in
+(about 1.45 s); then the application builds into it, and the icon and backdrop fade out over it. An application
+that builds quickly may still opt in for the look; it costs it the icon's 1.45 s before it appears.
+
+- **Minimised meanwhile**, it builds at once and waits minimised; restoring it shows it ready.
+- **Closed meanwhile**, it never builds.
+- **The desktop closed meanwhile**, it builds once the desktop is back.
+
+Crystal Editor declares one. VFX Lab and the Frame Profiler, which open in a frame, do not.
+
 ---
 
 ## 13. Cheat sheet

@@ -80,6 +80,8 @@ public final class CrystalEditor {
      */
     public static final ApplicationKind KIND = ApplicationKind.of(ID, "Crystal Editor")
             .icon("crystalgui:logo")
+            // A workbench restoring a project's docks and documents: its build holds the desktop for a second
+            .startingWindow()
             .keywords("code", "editor", "ide", "workbench", "shader", "graph")
             // WHAT IT DECLARES ITSELF THE HANDLER FOR. Answerable with nothing running, which is the
             // requirement: "open with" is asked of an application that may never have been launched, so

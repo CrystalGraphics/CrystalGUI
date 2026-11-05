@@ -59,6 +59,7 @@ public final class ApplicationKind {
     private boolean singleInstance;
     private boolean preventPinning;
     private boolean requiresConnection = true;
+    private boolean startingWindow;
     @Nullable
     private Consumer<LaunchContext> autostart;
     private float windowWidth, windowHeight;
@@ -195,6 +196,39 @@ public final class ApplicationKind {
         check();
         this.requiresConnection = false;
         return this;
+    }
+
+    /**
+     * Opens a starting window at once when launched: the application's frame with its icon growing in, about 1.45 s,
+     * then the application built into it and revealed as the icon leaves. Android's starting window and Windows'
+     * splash. Without it, a launch builds the application on the click and shows its window when it is ready.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:editor", "My Editor")
+     *         .startingWindow()                    // its build holds the desktop for half a second
+     *         .launch(ctx -> ...);
+     * }</pre>
+     *
+     * <p><b>Opt in when the build takes 0.2 s or more</b> (a workbench, an editor indexing a project, a
+     * tool loading assets), so the click is answered on its frame rather than by a frozen desktop; or when the
+     * application simply wants the loading visuals. A quick one (a settings window, a log viewer) leaves it off:
+     * a starting window for one that opens in a frame only delays it by the icon's 1.45 s.</p>
+     *
+     * <ul>
+     *   <li>The build runs once the icon has come in, and holds the desktop while it runs, as any build does.</li>
+     *   <li>Minimised meanwhile, the application builds at once and waits minimised; closed, it never builds.</li>
+     *   <li>Its window takes the starting window's place, size and taskbar slot.</li>
+     * </ul>
+     */
+    public ApplicationKind startingWindow() {
+        check();
+        this.startingWindow = true;
+        return this;
+    }
+
+    /** @see #startingWindow() */
+    public boolean hasStartingWindow() {
+        return startingWindow;
     }
 
     /**

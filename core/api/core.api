@@ -4839,6 +4839,7 @@ com/crystalgui/desktop/app/ApplicationKind
   method public autostart (Ljava/util/function/Consumer;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public displayName ()Ljava/lang/String;
   method public handles (Lcom/crystalgui/fs/Resource;)Z
+  method public hasStartingWindow ()Z
   method public icon ()Ljava/lang/String;
   method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public id ()Ljava/lang/String;
@@ -4852,6 +4853,7 @@ com/crystalgui/desktop/app/ApplicationKind
   method public requiresConnection ()Z
   method public singleInstance ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public standalone ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public startingWindow ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public windowHeight ()F
   method public windowSize (FF)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public windowWidth ()F
@@ -4913,9 +4915,9 @@ com/crystalgui/desktop/host/DesktopHost
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public frame (F)V
   method public hidden ()V
+  method public leave (Ljava/lang/Runnable;)V
   method public setWindowMount (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/host/DesktopHost;
   method public shown ()V
-  method public leave (Ljava/lang/Runnable;)V
   method public windowMount ()Lcom/crystalgui/desktop/host/DesktopWindowMount;
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public,static create (Lcom/crystalgui/desktop/host/HostServices;)Lcom/crystalgui/desktop/host/DesktopHost;
@@ -4981,9 +4983,9 @@ com/crystalgui/desktop/host/HostSession
   method public preload ()V
   method public presentation (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)Lcom/crystalgui/core/window/DesktopPresentation;
   method public requestApplication ()V
+  method public requestHide (Ljava/lang/Runnable;)Z
   method public services ()Lcom/crystalgui/desktop/host/HostServices;
   method public shown ()V
-  method public requestHide (Ljava/lang/Runnable;)Z
   method public textInputArea ()[F
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public,static attachStages (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)V
@@ -5034,8 +5036,6 @@ com/crystalgui/desktop/launcher/LauncherButton
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V
-com/crystalgui/desktop/motion/WindowAnimation
-  access public,final
 com/crystalgui/desktop/motion/BoxFlights
   access public,final
   extends java/lang/Object
@@ -5043,6 +5043,8 @@ com/crystalgui/desktop/motion/BoxFlights
   method public,static outBack (D)Lcom/crystalgraphics/easing/CgEasing;
   method public,static play (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/service/CompositorAnimation;JLjava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
   method public,static play (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/service/CompositorAnimation;Ljava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
+com/crystalgui/desktop/motion/WindowAnimation
+  access public,final
   extends java/lang/Object
   implements com/crystalgui/desktop/motion/WindowMotion
   method public cancel ()V
@@ -5056,15 +5058,15 @@ com/crystalgui/desktop/motion/WindowAnimator
   method public currentTarget ()Lcom/crystalgui/style/property/visual/transform/Transform;
   method public isPlaying ()Z
   method public playClose (Ljava/lang/Runnable;)V
+  method public playLeave (Ljava/lang/Runnable;)V
   method public playMinimize (Ljava/lang/Runnable;)V
   method public playOpen ()V
-  method public playLeave (Ljava/lang/Runnable;)V
   method public playResize (FFFFFFFFLjava/lang/Runnable;)Z
   method public playRestore ()V
   method public playShrink (FFFFLjava/lang/Runnable;)Z
+  method public releaseLeave ()V
   method public,static isEnabled ()Z
   method public,static setEnabled (Z)V
-  method public releaseLeave ()V
 com/crystalgui/desktop/motion/WindowGeometryAnimation
   access public,final
   extends java/lang/Object
@@ -5108,30 +5110,32 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final ENTRIES_CLASS Ljava/lang/String;
   field public,static,final ENTRY_CLASS Ljava/lang/String;
   field public,static,final EXITING_CLASS Ljava/lang/String;
+  field public,static,final FLASH_HELD_CLASS Ljava/lang/String;
+  field public,static,final FLASH_OFF_CLASS Ljava/lang/String;
   field public,static,final HIDDEN_CLASS Ljava/lang/String;
   field public,static,final ICONIC_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_CLASS Ljava/lang/String;
   field public,static,final INDICATOR_PART Ljava/lang/String;
   field public,static,final LAUNCH_CLASS Ljava/lang/String;
+  field public,static,final LEAVING_CLASS Ljava/lang/String;
   field public,static,final MULTIPLE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
   field public,static,final REORDERING_CLASS Ljava/lang/String;
-  field public,static,final LEAVING_CLASS Ljava/lang/String;
+  field public,static,final RISING_CLASS Ljava/lang/String;
   field public,static,final START_CLASS Ljava/lang/String;
   field public,static,final TIP_CLASS Ljava/lang/String;
   method protected connected ()V
   method public <init> ()V
-  field public,static,final RISING_CLASS Ljava/lang/String;
+  method public comeOnScreen ()V
   method public entries ()Lcom/crystalgui/ui/dom/UIElement;
   method public entryFor (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/widget/control/Button;
+  method public leaveScreen (Ljava/lang/Runnable;)V
   method public pinEntryFor (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/widget/control/Button;
   method public previewsSuppressedForTesting ()Z
-  method public comeOnScreen ()V
   method public refresh ()V
   method public setBarVisible (Z)V
-  method public leaveScreen (Ljava/lang/Runnable;)V
   method public setPreviewsSuppressed (Z)V
   method public start ()Lcom/crystalgui/desktop/launcher/LauncherButton;
   method public takePlace (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
@@ -5321,11 +5325,11 @@ com/crystalgui/desktop/window/WindowFrame
   method public addCaptionAction (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Runnable;)Lcom/crystalgui/widget/control/Button;
   method public adoptChrome (Lcom/crystalgui/desktop/window/WindowChrome;)V
   method public adoptedChrome ()Lcom/crystalgui/ui/dom/UIElement;
+  method public animator ()Lcom/crystalgui/desktop/motion/WindowAnimator;
   method public application ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public applyResizeOrigin (FF)V
   method public attachOwned (Lcom/crystalgui/ui/dom/UIElement;)V
   method public badge ()Ljava/lang/String;
-  method public animator ()Lcom/crystalgui/desktop/motion/WindowAnimator;
   method public boxHeight ()F
   method public boxWidth ()F
   method public boxX ()F
@@ -5353,10 +5357,12 @@ com/crystalgui/desktop/window/WindowFrame
   method public isAnimating ()Z
   method public isApplicationMain ()Z
   method public isBeingEvicted ()Z
+  method public isClosing ()Z
   method public isDemandingAttention ()Z
   method public isFullscreen ()Z
   method public isMaximized ()Z
   method public isMinimizeControl (Lcom/crystalgui/ui/dom/UIElement;)Z
+  method public isMinimizing ()Z
   method public isPinned ()Z
   method public isPlaced ()Z
   method public isSized ()Z
