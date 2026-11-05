@@ -2894,8 +2894,10 @@ public final class CgUiPaintContext {
 
     /**
      * Draws a finished target into an arbitrary rect, through the active {@link PoseStack}: a captured layer drawn
-     * somewhere else and at another size — a window's snapshot in a taskbar preview. Tinted by {@link #getColor()},
-     * which for one texture is exactly group opacity, since a photograph has already resolved every overlap.
+     * somewhere else and at another size — a window's snapshot in a taskbar preview. Tinted by {@link #getColor()}.
+     *
+     * <p>Fade one with {@link #pushLayerOpacity}, never the tint's alpha: the texture is premultiplied, so an
+     * alpha-only tint keeps its full colour while covering less, and the picture brightens instead of fading.</p>
      *
      * <p>Same material and flipped V as {@link #blitLayer}, for the same reasons.</p>
      */

@@ -5188,6 +5188,7 @@ com/crystalgui/desktop/taskbar/WindowPreview
   method public frame ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public isShowingPlaceholder ()Z
   method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/taskbar/WindowPreview;
+  method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;J)Lcom/crystalgui/desktop/taskbar/WindowPreview;
   method public syncThumbnail ()Z
 com/crystalgui/desktop/taskbar/WindowPreviewRow
   access public,final
@@ -5207,15 +5208,15 @@ com/crystalgui/desktop/taskbar/WindowThumbnail
   field public,static,final PLACEHOLDER_CLASS Ljava/lang/String;
   field public,static,final THUMBNAIL_CLASS Ljava/lang/String;
   method public <init> ()V
-  method public applySize (FF)V
-  method public fittedSize ()[F
-  method public forgetApplied ()V
   method public hasPicture ()Z
   method public isShowingPlaceholder ()Z
   method public paintDecoration (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
+  method public paintsDynamically ()Z
   method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/taskbar/WindowThumbnail;
-  method public setSizingSuppressed (Z)V
+  method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;J)Lcom/crystalgui/desktop/taskbar/WindowThumbnail;
+  method public setHeightFixed (Z)Lcom/crystalgui/desktop/taskbar/WindowThumbnail;
   method public syncSize ()Z
+  method public targetWidth ()F
 com/crystalgui/desktop/window/SnapZones
   access public,final
   extends java/lang/Object

@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.taskbar;
 
+import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowIcon;
@@ -9,108 +10,133 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
 
 /**
- * A picture of a window, drawn at whatever size this element happens to be: the window's surface.
+ * A live picture of a window: the window's surface, scaled into this element's box.
  *
  * <pre>{@code
- * WindowThumbnail thumbnail = new WindowThumbnail().setFrame(window);
- * panel.append(thumbnail);
- * thumbnail.syncSize();          // per frame: the box takes the window's shape, fitted into the sheet's maximum
+ * // A box of the window's own shape, fitted into the sheet's size, as a switcher tile's
+ * WindowThumbnail tile = new WindowThumbnail().setFrame(window);
+ * tile.syncSize();          // per frame: follows a window resized while it is shown
+ *
+ * // The sheet's height for every window and a width that follows it, as a taskbar preview's
+ * WindowThumbnail cell = new WindowThumbnail().setHeightFixed(true).setFrame(window);
  * }</pre>
  *
- * <h3>It draws the window's surface</h3>
+ * <p>It draws {@link WindowFrame#surface()}, the texture the window is composited from, so it costs one quad and
+ * shows the window a frame behind at most. A minimised window keeps its surface ({@link WindowFrame#keepsSurface}),
+ * so its picture is the one it last painted; a window that has never painted shows its icon tile instead
+ * ({@link #isShowingPlaceholder}).</p>
  *
- * <p>DWM hands a taskbar a thumbnail by letting it draw the window's redirection surface, and so does this
- * (render-graph G7): a window is drawn into a texture of its own, {@link WindowFrame#surface()}, and the thumbnail
- * draws that texture's border box scaled into its own. It is live -- a window whose editor scrolls shows it scrolling,
- * a frame behind at most -- and costs one textured quad, where a second layout of the window and a second walk of it
- * used to be the price.</p>
- *
- * <p><b>A minimised window keeps its surface</b> ({@link WindowFrame#keepsSurface}): hiding detaches it, so nothing
- * paints it, and the picture stays the one it last painted, at rest -- the flight that minimised it was its
- * composite's, never its surface's. A window that has never painted has no picture, and shows {@link #placeholder}.</p>
- *
- * <h3>The BOX is the window fitted into a maximum, rather than the picture letterboxed inside a fixed one</h3>
- *
- * <p>Windows' model: the taskbar asks for a thumbnail no larger than a maximum on <b>each axis</b> and the window
- * answers with its own shape scaled to fit. So both of a thumbnail's dimensions vary, and nothing is letterboxed.
- * The sheet gives the maximum as a square, and {@link #syncSize} does the fitting; the fit-and-centre in
- * {@link #paintDecoration} is the fallback for a box something else has constrained.</p>
+ * <ul>
+ *   <li>The picture is drawn on whole device pixels at a fixed device size, so a thumbnail that moves samples
+ *       the same texels every frame. Off the pixel grid, a 4x minified window shimmers as it slides.</li>
+ *   <li>The box's size is written inline: a sheet rule sets the maximum, read once from the first layout, and
+ *       nothing else may size the box. A sheet {@code transition} on {@code width} animates the box while the
+ *       picture is drawn at its final size, centred and clipped, so a widening box never rescales it.</li>
+ * </ul>
  */
 public class WindowThumbnail extends UIElement {
 
-    /**
-     * Its own kind, and every concrete node needs one.
-     *
-     * <p>No shipped rule names this tag — the sheet keys on the classes — but a subclass that
-     * declares none INHERITS {@code UIElement.NAME}, so it would report {@code element} and match
-     * every bare {@code element} rule there ever is. That is the {@code ToolWindowFrame} trap
-     * from the other side, and {@code NodeKindsCoverageTest} is what makes it a compile-time
-     * question rather than an unstyled widget somebody reports.</p>
-     */
+    /** Its own kind: a subclass declaring none would report {@code element} and match every bare rule. */
     public static final Name NAME = Name.of("windowthumbnail");
 
     /** On the element, so a theme can letterbox, border or round the picture. */
     public static final String THUMBNAIL_CLASS = "__thumbnail__";
 
+    /** On the icon tile drawn in place of a picture. @see #isShowingPlaceholder */
+    public static final String PLACEHOLDER_CLASS = "__placeholder__";
+
     @Nullable
     private WindowFrame frame;
 
-    /** On the icon tile drawn in place of a picture. @see #placeholder */
-    public static final String PLACEHOLDER_CLASS = "__placeholder__";
-
-    /**
-     * What is drawn when there is NO picture — the window's icon tile, large, centred on the letterbox
-     * colour. Windows' own answer for a window it has no bitmap of.
-     *
-     * <p>The preview used to COLLAPSE its thumbnail for this case, on the argument that an empty box
-     * reads as a window that renders nothing. It cost two things. A header-only panel read as broken
-     * ("minimised windows have no previews"), because a window restored HIDDEN at startup has never been
-     * painted and so has no photograph, and that is now the ordinary way a session opens. And the
-     * collapse made {@link #fittedSize} answer null for such a window, which the preview's placement
-     * treats as "not measured yet" — so a panel moved onto that entry deferred its placement every frame
-     * for good, and the hover logic behind that wait never ran again. A pictureless window now has a
-     * SHAPE like any other, so nothing downstream needs a special case for it.</p>
-     *
-     * <p>Built in the constructor and shown or hidden, never added later — the taffyChildIndex rule.</p>
-     */
+    /** Built here and shown or hidden, never added later: the taffyChildIndex rule. */
     private final WindowIcon placeholder = new WindowIcon();
     private boolean placeholderShown;
 
-    /** The card a pictureless window fits to, as a ratio: landscape, like most windows. */
+    /** Whether the box keeps the sheet's height and fits only its width to the window. */
+    private boolean heightFixed;
+
+    /** The picture's size, the window fitted into the maximum: what is drawn, whatever the box is mid-way to. */
+    private float fitWidth = Float.NaN;
+    private float fitHeight = Float.NaN;
+
+    /** The shape a pictureless window fits to: landscape, like most windows. */
     private static final float PLACEHOLDER_ASPECT_W = 5f;
     private static final float PLACEHOLDER_ASPECT_H = 3f;
+
+    /** The size last written, so an unchanged one writes nothing. */
+    private float appliedWidth = Float.NaN;
+    private float appliedHeight = Float.NaN;
+
+    /** The window fading out, its picture's size, and the fade's start and length. @see #setFrame(WindowFrame, long) */
+    @Nullable
+    private WindowFrame fadeFrom;
+    private float fadeFromWidth, fadeFromHeight;
+    private long fadeStart, fadeNanos;
+
+    /** The sheet's box, read before anything is written: the fitted mode's maximum on each axis. */
+    private float maxWidth = Float.NaN;
+    private float maxHeight = Float.NaN;
 
     public WindowThumbnail() {
         super(NAME);
         addClass(THUMBNAIL_CLASS);
-        // NOTHING IN HERE IS INTERACTIVE: a click belongs to the preview panel around it, which activates the window.
+        // A click belongs to the panel around it.
         setHitTest(false);
         placeholder.addClass(PLACEHOLDER_CLASS);
         placeholder.setDisplayed(false);
         append(placeholder);
     }
 
+    /**
+     * Whether the box keeps the sheet's height for every window and fits only its width (Windows' taskbar
+     * previews), rather than taking the window's shape on both axes (the default, its switcher tiles). A window
+     * wider than the sheet's width is fitted to it and centred vertically.
+     */
+    public WindowThumbnail setHeightFixed(boolean heightFixed) {
+        this.heightFixed = heightFixed;
+        return this;
+    }
+
     /** The window this shows, or null for none. */
     public WindowThumbnail setFrame(@Nullable WindowFrame frame) {
+        return setFrame(frame, 0L);
+    }
+
+    /**
+     * Shows another window, cross-fading from the one shown over {@code fadeNanos}: the old picture fades out at
+     * its own size while the new one fades in at its own. Zero, or no old picture, switches at once.
+     *
+     * <pre>{@code
+     * thumbnail.setFrame(next, 150_000_000L);   // a preview moving to another entry, over its slide
+     * }</pre>
+     */
+    public WindowThumbnail setFrame(@Nullable WindowFrame frame, long fadeNanos) {
+        fadeFrom = null;
+        if (fadeNanos > 0L && this.frame != null && this.frame != frame && this.frame.surface() != null
+                && !Float.isNaN(fitWidth)) {
+            fadeFrom = this.frame;
+            fadeFromWidth = fitWidth;
+            fadeFromHeight = fitHeight;
+            fadeStart = System.nanoTime();
+            this.fadeNanos = fadeNanos;
+            repaint();
+        }
         this.frame = frame;
         placeholder.show(frame == null ? null : frame.iconName(), frame == null ? null : frame.getTitle());
         syncSize();
         return this;
     }
 
-    /** Whether the placeholder tile is what is on show — for a test, which cannot see the paint. */
+    /** Whether the icon tile is on show in place of a picture. */
     public boolean isShowingPlaceholder() {
         return placeholderShown;
     }
 
-    /**
-     * Shows the tile exactly when there is no picture. Per frame, from {@link #syncSize}: a window can
-     * be minimised while its own preview is up, and a photograph can arrive on the next paint.
-     */
     private void syncPlaceholder() {
         boolean show = frame != null && !hasPicture();
         if (show == placeholderShown) return;
@@ -118,107 +144,36 @@ public class WindowThumbnail extends UIElement {
         placeholder.setDisplayed(show);
     }
 
-    /** The size currently written, so an unchanged one writes nothing. */
-    private float appliedWidth = Float.NaN;
-    private float appliedHeight = Float.NaN;
-
     /**
-     * The box the sheet gave this element before anything was written to it — the MAXIMUM a thumbnail
-     * may be on either axis.
+     * Brings the box and the placeholder up to date with the window. Cheap and idempotent, so call it per frame
+     * while shown: a window can be resized or minimised under its own thumbnail.
      *
-     * <p>Captured from the first measurement rather than read out of the cascade, because a
-     * {@code TaffyDimension} does not give its pixels back and the alternative is naming the number in
-     * Java, where the sheet should own it. Safe because it is only ever read before this class has
-     * written a size: after that the measurement is the FITTED size and no longer the bound.</p>
-     */
-    private float maxWidth = Float.NaN;
-    private float maxHeight = Float.NaN;
-
-    /**
-     * Gives the box the window's own proportions, so the picture fills it instead of letterboxing.
-     *
-     * <p>Idempotent and cheap enough to call per frame, which is what a preview does: a window can be
-     * resized while its own preview is up, and the box should follow it.</p>
-     *
-     * <h4>Windows' own model: a MAX BOX, and the window fitted inside it on BOTH axes</h4>
-     *
-     * <p>The taskbar sends {@code WM_DWMSENDICONICTHUMBNAIL} carrying a maximum x and a maximum y, and
-     * the window answers with a bitmap no larger than that; the user-facing knob, {@code MaxThumbSizePx},
-     * is a single maximum rather than a width or a height. So a tall window comes back full-height and
-     * narrow, a wide one full-width and short, and <b>both dimensions vary from window to window</b> —
-     * which is why Windows' previews are visibly different sizes and never letterboxed.</p>
-     *
-     * <p>Fixing the height and deriving only the width, which is what this did first, is a different
-     * model and produces a different bug: it makes every thumbnail the same height, so the panel's
-     * proportions come from the window while its size does not, and a tall window ends up with a sliver
-     * of a panel. The box is fitted into the sheet's square instead, and BOTH sizes are written.</p>
-     *
-     * <h4>Explicit sizes, and not {@code aspect-ratio}, which is the obvious way and does not work</h4>
-     *
-     * <p>Taffy will happily derive a width from a definite height and a ratio — the box comes out the
-     * right shape. What it does not do is count that derived width as the item's contribution to its
-     * PARENT's intrinsic size, so the panel went on sizing to its header and a wide thumbnail simply
-     * overflowed it. A definite size is counted.</p>
-     *
-     * @return whether the size changed, so a caller placing the panel knows to measure it again
+     * @return whether the box's size changed, so a caller placing a panel around it measures again
      */
     public boolean syncSize() {
-        // Display, not sizing, so it is not held off with the size: a morph that is holding the box at
-        // the old window's shape must still stop drawing a picture the new window does not have.
         syncPlaceholder();
-        if (sizingSuppressed) return false;
-        float[] fitted = fittedSize();
-        if (fitted == null) return false;
-        if (Math.abs(fitted[0] - appliedWidth) < 0.5f && Math.abs(fitted[1] - appliedHeight) < 0.5f) {
-            return false;
-        }
-        appliedWidth = fitted[0];
-        appliedHeight = fitted[1];
-        applySize(fitted[0], fitted[1]);
+        if (!fit()) return false;
+        // Height fixed: never narrower than square, so a tall window's panel keeps room for its header.
+        float width = heightFixed ? Math.max(fitWidth, Math.min(maxWidth, maxHeight)) : fitWidth;
+        float height = heightFixed ? maxHeight : fitHeight;
+        if (Math.abs(width - appliedWidth) < 0.5f && Math.abs(height - appliedHeight) < 0.5f) return false;
+        appliedWidth = width;
+        appliedHeight = height;
+        // Explicit sizes, not aspect-ratio: Taffy does not count a ratio-derived width toward the parent's size.
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(height));
         return true;
     }
 
     /**
-     * Stops {@link #syncSize} writing, so a transition can drive the box instead.
-     *
-     * <p>A preview MORPHS its thumbnail when it moves from one entry to another, and the two writers
-     * would otherwise fight every frame: the animation writing the intermediate size and this writing
-     * the destination straight back over it.</p>
+     * The width {@link #syncSize} last wrote: where a box under a width transition is going, before its layout
+     * gets there. NaN before the first.
      */
-    public void setSizingSuppressed(boolean suppressed) {
-        this.sizingSuppressed = suppressed;
+    public float targetWidth() {
+        return appliedWidth;
     }
 
-    private boolean sizingSuppressed;
-
-    /**
-     * Forgets what was last written, so the next {@link #syncSize} writes whatever it fits to.
-     *
-     * <p>For a morph CANCELLED part-way: the animation writes the same INLINE slot as {@link #applySize}
-     * without telling this class, so after a cancel the box holds an intermediate size while the record
-     * here still says the morph's start. A later window that happens to fit to that recorded size would
-     * then be skipped as "unchanged" and drawn in a box of the wrong shape.</p>
-     */
-    public void forgetApplied() {
-        appliedWidth = Float.NaN;
-        appliedHeight = Float.NaN;
-    }
-
-    /** Writes the box, at INLINE so a transition writing the same slot can take over from it. */
-    public void applySize(float width, float height) {
-        appliedWidth = width;
-        appliedHeight = height;
-        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(height));
-    }
-
-    /**
-     * The window's shape scaled to fit the maximum, or null when there is nothing to measure yet.
-     *
-     * <p>Separate from applying it, so a transition can ask where the box is GOING without the box
-     * jumping there.</p>
-     */
-    @Nullable
-    public float[] fittedSize() {
+    /** Fits the window's shape into the sheet's maximum, into {@link #fitWidth}; false while there is nothing to measure. */
+    private boolean fit() {
         float sourceWidth;
         float sourceHeight;
         Box live = liveBox();
@@ -230,24 +185,25 @@ public class WindowThumbnail extends UIElement {
             sourceWidth = picture.pictureWidth();
             sourceHeight = picture.pictureHeight();
         } else if (frame != null) {
-            // NO PICTURE STILL HAS A SHAPE: the placeholder card. Answering null here is what made a
-            // pictureless window stall the preview's placement for good. @see #placeholder
+            // A pictureless window still has a shape, or the panel around it could never be placed.
             sourceWidth = PLACEHOLDER_ASPECT_W;
             sourceHeight = PLACEHOLDER_ASPECT_H;
         } else {
-            return null;
+            return false;
         }
-        if (sourceWidth <= 0f || sourceHeight <= 0f) return null;
+        if (sourceWidth <= 0f || sourceHeight <= 0f) return false;
 
         if (Float.isNaN(maxWidth)) {
             Box box = box();
-            if (box == null || box.width() <= 0f || box.height() <= 0f) return null;
+            if (box == null || box.width() <= 0f || box.height() <= 0f) return false;
             maxWidth = box.width();
             maxHeight = box.height();
         }
 
         float scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
-        return new float[] { sourceWidth * scale, sourceHeight * scale };
+        fitWidth = sourceWidth * scale;
+        fitHeight = sourceHeight * scale;
+        return true;
     }
 
     /** The window's box while it is on screen; null for a minimised one, which is detached. */
@@ -260,34 +216,112 @@ public class WindowThumbnail extends UIElement {
         return src != null && src.width() > 0f && src.height() > 0f ? src : null;
     }
 
-    /** @see #liveBox */
-    private boolean hasLive() {
-        return liveBox() != null;
+    /** Whether there is anything to draw: a window on screen, or one that kept its picture when minimised. */
+    public boolean hasPicture() {
+        return liveBox() != null || (frame != null && frame.surface() != null);
     }
+
+    /** Painted every frame of a cross-fade: the tree sees no change in it. */
+    @Override
+    public boolean paintsDynamically() {
+        return fadeFrom != null || super.paintsDynamically();
+    }
+
+    /** The two pictures' rects in this box during a cross-fade, {@code x, y, width, height}: scratch, per paint. */
+    private final float[] oldRect = new float[4], newRect = new float[4];
 
     /**
-     * Whether there is anything to draw: a window on screen, whose surface comes with its first paint, or one that
-     * kept its picture when it was minimised.
+     * Draws the window's surface at its fitted size, centred on whole device pixels, clipped to this box.
+     *
+     * <p>A cross-fade draws the old picture OPAQUE where the new one will cover it and fading only where it will
+     * not, then the new one fading in over both: two pictures each part-transparent let the panel's glass through
+     * their overlap and washed it out.</p>
      */
-    public boolean hasPicture() {
-        return hasLive() || (frame != null && frame.surface() != null);
-    }
-
-    /** Draws the window's surface, fitted and centred, clipped to this box. */
     @Override
     public void paintDecoration(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
+        if (box.width() <= 0f || box.height() <= 0f) return;
         Surface picture = frame == null ? null : frame.surface();
-        if (picture == null || box.width() <= 0f || box.height() <= 0f) return;
-        float sourceWidth = picture.pictureWidth(), sourceHeight = picture.pictureHeight();
-        if (sourceWidth <= 0f || sourceHeight <= 0f) return;
-        float scale = Math.min(box.width() / sourceWidth, box.height() / sourceHeight);
-        float width = sourceWidth * scale, height = sourceHeight * scale;
-        ctx.pushScissor(0f, 0f, box.width(), box.height());
+        boolean hasNew = false;
+        if (picture != null && picture.pictureWidth() > 0f && picture.pictureHeight() > 0f) {
+            if (Float.isNaN(fitWidth)) {
+                float scale = Math.min(box.width() / picture.pictureWidth(), box.height() / picture.pictureHeight());
+                place(ctx, box, picture.pictureWidth() * scale, picture.pictureHeight() * scale, newRect);
+            } else {
+                place(ctx, box, fitWidth, fitHeight, newRect);
+            }
+            hasNew = true;
+        }
+        float in = 1f;
+        if (fadeFrom != null) {
+            in = (float) CgEasings.OUT_QUAD.ease(System.nanoTime() - fadeStart, fadeNanos);
+            Surface old = fadeFrom.surface();
+            if (in >= 1f || old == null) {
+                fadeFrom = null;
+                in = 1f;
+            } else {
+                place(ctx, box, fadeFromWidth, fadeFromHeight, oldRect);
+                drawOld(ctx, box, old, hasNew, 1f - in);
+            }
+        }
+        if (hasNew) draw(ctx, box, picture, newRect, in, 0f, 0f, box.width(), box.height());
+    }
+
+    /** The old picture: opaque under the new one's rect, fading by {@code out} in the bands outside it. */
+    private void drawOld(CgUiPaintContext ctx, Box box, Surface old, boolean hasNew, float out) {
+        float ox0 = oldRect[0], oy0 = oldRect[1], ox1 = ox0 + oldRect[2], oy1 = oy0 + oldRect[3];
+        float ix0 = hasNew ? Math.max(ox0, newRect[0]) : 0f, iy0 = hasNew ? Math.max(oy0, newRect[1]) : 0f;
+        float ix1 = hasNew ? Math.min(ox1, newRect[0] + newRect[2]) : 0f;
+        float iy1 = hasNew ? Math.min(oy1, newRect[1] + newRect[3]) : 0f;
+        if (ix1 <= ix0 || iy1 <= iy0) {
+            draw(ctx, box, old, oldRect, out, ox0, oy0, ox1, oy1);
+            return;
+        }
+        draw(ctx, box, old, oldRect, 1f, ix0, iy0, ix1, iy1);
+        draw(ctx, box, old, oldRect, out, ox0, oy0, ox1, iy0);
+        draw(ctx, box, old, oldRect, out, ox0, iy1, ox1, oy1);
+        draw(ctx, box, old, oldRect, out, ox0, iy0, ix0, iy1);
+        draw(ctx, box, old, oldRect, out, ix1, iy0, ox1, iy1);
+    }
+
+    /** {@code width x height} centred in the box, on whole device pixels, into {@code out}. */
+    private static void place(CgUiPaintContext ctx, Box box, float width, float height, float[] out) {
+        float x = (box.width() - width) / 2f, y = (box.height() - height) / 2f;
+        if (ctx.isPoseAxisAligned()) {
+            // The origin snapped and the size rounded once, in device pixels: snapping both edges instead lets
+            // the width flip a pixel as the box slides, which changes the scale and the texels sampled.
+            Matrix4f m = ctx.targetPose();
+            float sx = Math.abs(m.m00()), sy = Math.abs(m.m11());
+            if (sx > 1e-6f && sy > 1e-6f) {
+                x = ctx.snapXToDevicePixel(x);
+                y = ctx.snapYToDevicePixel(y);
+                width = Math.max(1f, Math.round(width * sx)) / sx;
+                height = Math.max(1f, Math.round(height * sy)) / sy;
+            }
+        }
+        out[0] = x;
+        out[1] = y;
+        out[2] = width;
+        out[3] = height;
+    }
+
+    /** {@code picture} into {@code rect} at {@code opacity}, clipped to {@code (x0, y0)-(x1, y1)} and the box. */
+    private static void draw(CgUiPaintContext ctx, Box box, Surface picture, float[] rect, float opacity,
+                             float x0, float y0, float x1, float y1) {
+        x0 = Math.max(x0, 0f);
+        y0 = Math.max(y0, 0f);
+        x1 = Math.min(x1, box.width());
+        y1 = Math.min(y1, box.height());
+        if (x1 <= x0 || y1 <= y0 || opacity <= 0f) return;
+        // Layer opacity, never the tint's alpha: the surface is premultiplied, so an alpha-only tint keeps the
+        // full colour while covering less, and a cross-fade's overlap comes out brighter than either picture.
+        float previous = ctx.pushLayerOpacity(opacity);
+        ctx.pushScissor(x0, y0, x1 - x0, y1 - y0);
         try {
-            picture.drawPicture(ctx, (box.width() - width) / 2f, (box.height() - height) / 2f, width, height);
+            picture.drawPicture(ctx, rect[0], rect[1], rect[2], rect[3]);
         } finally {
             ctx.popScissor();
+            ctx.popLayerOpacity(previous);
         }
     }
 }

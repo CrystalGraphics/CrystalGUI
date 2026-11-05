@@ -21,24 +21,20 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * <b>A document with no picture is an ordinary document to the preview</b> — and the panel survives a move
- * that is abandoned.
+ * <b>A document with no picture is an ordinary document to the preview.</b>
  *
  * <p>A document restored HIDDEN at startup has never been painted, so it has no photograph, and that is
- * now how a session ordinarily opens. Three faults hid behind that one case, each reported separately
+ * now how a session ordinarily opens. Two faults hid behind that one case, each reported separately
  * and each invisible while every document on the strip had a picture:</p>
  * <ul>
  *   <li>its preview was a bare header — "minimised windows have no previews";</li>
  *   <li>moving the panel onto it stalled placement for good ({@code fittedSize()} answered null, which the
  *       placement read as "not measured yet"), so the panel stayed where — and as tall as — the previous
- *       document had left it, and the hover logic behind the pending placement never ran again;</li>
- *   <li>the move had already switched the thumbnail's sizing off, and only a COMPLETED morph switched it
- *       back on, so every later preview kept whatever box it had — a wide document drawn letterboxed in a
- *       tall one's.</li>
+ *       document had left it, and the hover logic behind the pending placement never ran again.</li>
  * </ul>
  *
- * <p><b>Animations ON</b>, deliberately: the morph and its hand-back are the mechanism under test, and
- * with animations off the continuation runs synchronously and none of this can happen. Timings are real
+ * <p><b>Animations ON</b>, deliberately: the slide and its deferred placement are what is under test, and
+ * with animations off the continuation runs synchronously. Timings are real
  * time, as {@code TaskbarPreviews} advances on {@code System.nanoTime()}.</p>
  */
 public class PreviewPicturelessTest extends UiDocumentTestBase {
@@ -139,14 +135,6 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         return Math.abs(panelCentre - entryCentre);
     }
 
-    private void assertFitted(WindowPreview p, String what) {
-        float[] fit = p.fittedThumbnailSize();
-        assertNotNull(what + ": nothing to fit to", fit);
-        var thumb = p.thumbnailBox();
-        assertEquals(what + ": the picture is not the width it fits to", fit[0], thumb.width(), 0.5f);
-        assertEquals(what + ": the picture is not the height it fits to", fit[1], thumb.height(), 0.5f);
-    }
-
     @Test
     public void aWindowWithNoPictureShowsItsIconOnACardAndTheHeaderMatchesIt() {
         // A LONG title on purpose: longer than the card is wide, so it has to elide. The title is `width: 0;
@@ -197,6 +185,8 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
     public void movingOntoAPicturelessWindowStillMovesThePanel() {
         WindowFrame wide = open("Wide", 320f, 160f);
         WindowFrame hidden = openHidden("Never painted");
+        // The strip slides to make room for the new entry: a pointer placed before it settles is left behind.
+        frames(400);
 
         hover(wide);
         frames(700);
@@ -212,30 +202,6 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         frames(700);
         assertSame("the hover logic stopped running after the pictureless document", wide, desktop.taskbar().previewedWindow());
         assertFalse(panel().isShowingPlaceholder());
-        assertFitted(panel(), "back on a document with a picture");
         assertTrue(offCentreBy(wide) < 3f);
-    }
-
-    @Test
-    public void anAbandonedMoveDoesNotFreezeThePicture() {
-        WindowFrame wide = open("Wide", 320f, 160f);
-        WindowFrame tall = open("Tall", 200f, 300f);
-
-        hover(tall);
-        frames(700);
-        assertFitted(panel(), "the tall document");
-
-        // Start a move and walk away before its morph is created.
-        hover(wide);
-        frames(40);
-        leave();
-        frames(600);
-
-        hover(wide);
-        frames(700);
-        assertSame(wide, desktop.taskbar().previewedWindow());
-        assertFitted(panel(), "after an abandoned move");
-        var thumb = panel().thumbnailBox();
-        assertTrue("a wide document came back in a tall box", thumb.width() > thumb.height());
     }
 }

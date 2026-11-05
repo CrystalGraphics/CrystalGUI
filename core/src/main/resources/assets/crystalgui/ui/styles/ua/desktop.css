@@ -1396,6 +1396,12 @@ tooltip.__taskbar-tip__::part(label) {
     opacity: 0;
 }
 
+/* A first appearance takes its width at once; only a move between entries widens. */
+.__window-preview__.__placing__ > .__thumbnail__,
+.__preview-row__.__placing__ .__thumbnail__ {
+    transition: none;
+}
+
 /* OPENING AND CLOSING, WinUI's menu flyout (MenuPopupThemeTransition): it slides up from half its height
  * below while the bottom half is cut away, so the visible edge stays on the bar and the panel comes out of
  * it; 250ms on (0, 0, 0, 1), with no fade. Closing fades over 83ms, linear. The placing state above is
@@ -1643,33 +1649,24 @@ menu.__jump-list__ menuitem {
     color: var(--preview-close-hover-fg, #FFFFFF);
 }
 
-/* The picture. THIS IS A MAXIMUM, not a size -- Windows' MaxThumbSizePx, which is one number bounding
- * both axes rather than a width or a height. WindowThumbnail measures this square once and then writes
- * the window's own shape scaled to fit inside it, so BOTH of a thumbnail's dimensions vary from window
- * to window: a tall window comes back full-height and narrow, a wide one full-width and short, and the
- * panel is built around whatever came back.
- *
- * Which is why there are no min/max-width bounds here any more. They were an attempt at the same idea
- * with the height held fixed, and holding the height fixed is precisely the thing that does not work: it
- * makes the panel's PROPORTIONS follow the window while its SIZE does not, so a tall window gets a
- * sliver of a panel and a bound generous enough to prevent that letterboxes everything else. */
+/* The picture's cell: ONE HEIGHT FOR EVERY WINDOW and a width that follows it, as Windows' previews.
+ * These are the MAXIMUM: WindowThumbnail reads them once and writes the window's width at this height, or
+ * this width for a window wider than it, centred. The width transitions while the picture is drawn at its
+ * final scale, so a move never rescales it. A tall window's cell is never narrower than it is high, so its
+ * header keeps room; the bars either side are the panel's own glass, so the cell has no fill. */
 .__window-preview__ > .__thumbnail__ {
     width: 92px;
-    height: 92px;
+    height: 56px;
     flex-shrink: 0;
-    /* NOT STRETCHED, which is what defeated the aspect ratio entirely. A flex column stretches its
-     * children across the cross axis by default, so the box was forced to the panel's width and
-     * `aspect-ratio` never got to decide anything -- the picture went on being letterboxed inside a box
-     * that was the wrong shape for a different reason than before. Sizing to itself is what lets the
-     * ratio pick the width, and it is then the thumbnail that decides how wide the PANEL is. */
     align-self: center;
-    background-color: var(--preview-thumbnail-bg, #26282B);
+    /* TaskbarPreviews.SWITCH_NANOS: the slide and the cross-fade take as long */
+    transition: width 300ms ease-out;
     /* Centres the PLACEHOLDER below; the picture itself is painted, not laid out. */
     justify-content: center;
     align-items: center;
 }
 
-/* NO PICTURE: the window's icon tile, large, on the letterbox colour — Windows' own icon thumbnail
+/* NO PICTURE: the window's icon tile, large, centred in the cell — Windows' own icon thumbnail
  * for a window it has no bitmap of. A window restored HIDDEN at startup has never been painted and so
  * has no photograph; drawing nothing for it made the panel read as broken, and collapsing the box
  * for it starved the preview's placement (WindowThumbnail.placeholder). The tile's own drawing is
