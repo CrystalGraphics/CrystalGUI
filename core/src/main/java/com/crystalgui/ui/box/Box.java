@@ -710,15 +710,20 @@ public final class Box {
      * "there is nothing to scroll".</p>
      */
     public float maxScrollLeft() {
-        return atLeastZero(scrollWidth() - clientWidth());
+        return scrollRange(scrollWidth() - clientWidth());
     }
 
     public float maxScrollTop() {
-        return atLeastZero(scrollHeight() - clientHeight());
+        return scrollRange(scrollHeight() - clientHeight());
     }
 
-    private static float atLeastZero(float value) {
-        return value > 0f ? value : 0f;
+    /**
+     * Overflow under half a pixel is none, as the web's, whose {@code scrollWidth} and {@code clientWidth} are whole
+     * pixels: a layout's rounding put a box a fraction of a pixel past its scroller, and a full-width scrollbar showed
+     * for nothing to scroll.
+     */
+    private static float scrollRange(float value) {
+        return value >= 0.5f ? value : 0f;
     }
 
     /**

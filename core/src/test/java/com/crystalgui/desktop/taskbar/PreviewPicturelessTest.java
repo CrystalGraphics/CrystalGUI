@@ -143,6 +143,8 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
         // width at IMPORTANT, cannot shrink, and shoves the close button out past the panel's edge. Only
         // "Crystal Editor" was long enough to show it; "Geometry" and "Welcome" fit beside the buttons.
         WindowFrame hidden = openHidden("A never-painted document with a long title");
+        // The strip slides to make room for the new entry: a pointer placed before it settles is left behind.
+        frames(400);
         hover(hidden);
         frames(700);
 

@@ -1,5 +1,6 @@
 package com.crystalgui.widget.dnd;
 
+import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.ui.dom.ResizeHandles;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -287,6 +288,8 @@ public final class Resizer extends UIElement {
         if (min != null && min.getType() == TaffyDimension.Type.LENGTH) {
             desired = Math.max(desired, min.getValue());
         }
+        // WHAT IT SAYS IT NEEDS, past its own min-*: a window's content, a split's panes. @see MinimumSize
+        if (node instanceof MinimumSize sized) desired = Math.max(desired, sized.minimumSize(!horizontal));
         if (max != null && max.getType() == TaffyDimension.Type.LENGTH) {
             desired = Math.min(desired, max.getValue());
         }

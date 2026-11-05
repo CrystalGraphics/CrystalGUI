@@ -89,6 +89,36 @@ no height at all, so a click aimed at it landed on whatever was behind. The old 
 because a Taffy leaf with no measure function fell back to whatever the sheet said, and the shipped
 sheets give every field a height. It is the widget a THEME sizes that breaks.
 
+### A widget states how small it can get
+
+A window is never resized below what its content needs — Windows' `WM_GETMINMAXINFO`, answered by the
+content. `WindowFrame.minimumSize` is its caption and borders plus `LayoutMinimum.of(content)`, never under the
+sheet's `min-width`/`min-height` (the floor for content that states nothing), and a drag, the keyboard's Size
+mode, `resizeTo`, a snap and a restore all stop there. A work area smaller than it wins, and the content scrolls.
+
+```css
+.my-app-root { min-width: 400px; min-height: 270px; }   /* the common case: stated in the sheet */
+```
+
+```java
+class Board extends UIElement implements MinimumSize {  // a floor that depends on what is open inside
+    public float minimumSize(boolean vertical) { return SplitView.minimumOf(inner, vertical); }
+}
+```
+
+What `LayoutMinimum` folds for content that states neither: a flex container's children added up along its
+main axis with its gaps, the largest across it, inside its padding and border; a child that neither grows nor
+shrinks, at the size layout gave it (a toolbar's content-sized buttons); text at its line height, and as wide as its
+longest word, its whole line under `white-space: nowrap`, or nothing with `text-overflow: ellipsis`. A box that
+scrolls or clips forces nothing — what is inside it scrolls.
+
+A window's content fills its width as a page does (`ScrollerView.setFitsCrossAxis`), rather than growing to its longest
+line: text that may wrap wraps, and only what cannot shrink overflows. The minimum is the fold's alone, never read
+back from a layout that overflowed — such a floor vanishes once the window widens past it, and a drag flickers.
+
+Overflow under half a pixel is none (`Box.maxScrollLeft`), as on the web, whose scroll sizes are whole pixels: a
+layout's rounding no longer shows a scrollbar with nothing to scroll.
+
 ### A listener on a shadow host can never see its own parts
 
 `event.getTarget()` is retargeted before the listener runs, and a listener attached to the host is
@@ -1008,8 +1038,9 @@ panel.generalStyle(g -> g.resize(Resize.BOTH));   // or in CSS: resize: both;
 - The resulting size is written at **`INLINE`** origin — the spec says the UA replaces declarations in
   the style attribute *"without `!important`"*, so an author's `!important` still wins. Every other
   code-driven geometry write in this engine uses `IMPORTANT`; this is the deliberate exception.
-- **No clamping in the resizer**: `min-width`/`max-width`/`min-height`/`max-height` are the spec's only
-  constraints and Taffy already applies them.
+- **The resizer clamps to two things**: the element's own `min-*`/`max-*`, and what it answers as a
+  `MinimumSize` — a window's is its content's minimum plus its chrome (see § 0, *A widget states how small it
+  can get*).
 - **Eight handles** — four edges, four corners. *Not* a divergence: the spec says only that the UA
   "presents a bidirectional resizing mechanism" and never prescribes one corner grabber. Which handles
   exist follows the resizable axes, so `horizontal` gets the two side edges and no corners.

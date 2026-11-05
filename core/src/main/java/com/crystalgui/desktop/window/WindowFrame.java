@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.widget.layout.LayoutMinimum;
+import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.window.WindowClamp;
@@ -90,7 +92,7 @@ import java.util.function.BooleanSupplier;
  * this clamp starts), and the fix belongs with W6's maximise/restore geometry rather than in a special
  * case here.</p>
  */
-public class WindowFrame extends UIElement implements Disposable, DataProvider, Surface.Owner {
+public class WindowFrame extends UIElement implements Disposable, DataProvider, Surface.Owner, MinimumSize {
 
     /** The cascade identity `ua/desktop.css` names. @see com.crystalgui.ui.dom.Name */
     public static final Name NAME = Name.of("window");
@@ -511,7 +513,11 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // its document when the viewport is smaller than it; a window here does the same for its content.
         // ScrollerView's bars are overlays and it takes no focus, so nothing about layout, click-focus
         // or the frame's focus delegate changes for content that fits.
-        content = new ScrollerView();
+        ScrollerView scroller = new ScrollerView();
+        content = scroller;
+        // A PAGE, NOT A SIDEWAYS SCROLLER: the content fills the window's width rather than its longest line, so a
+        // line that cannot wrap is clipped by the minimum size, not laid out past the window with a scrollbar.
+        scroller.setFitsCrossAxis(true);
         content.addClass(CONTENT_CLASS);
         append(content);
 
@@ -700,6 +706,35 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** Where a window's content goes. The named accessor a composite owes its callers. */
     public UIElement content() {
         return content;
+    }
+
+    /**
+     * The smallest this window may be resized to: Windows' {@code WM_GETMINMAXINFO}, answered by its content. Its
+     * chrome (caption, borders) plus what its content needs with nothing overflowing ({@link LayoutMinimum}), and never
+     * under the sheet's own {@code min-width}/{@code min-height}, the floor for content that states nothing.
+     *
+     * <pre>{@code
+     * .my-app-root { min-width: 400px; min-height: 270px; }    // stated in the sheet, or
+     * class Board extends UIElement implements MinimumSize { ... }  // answered by the content itself
+     * }</pre>
+     *
+     * <p>A drag, the keyboard's Size mode, {@link #resizeTo}, a snap and a restore all stop here. A work area smaller
+     * than it wins: the window is clamped to the screen and its content scrolls.</p>
+     */
+    @Override
+    public float minimumSize(boolean vertical) {
+        float floor = LayoutMinimum.stated(this, vertical);
+        Box self = box(), inner = content.box();
+        float need = 0f;
+        // FROM THE FOLD ALONE, never from what is laid out now: a floor read off an overflow vanishes once the window
+        // widens past it, and a drag then flickered between the two answers.
+        for (UIElement child : content.children()) {
+            if (child.isDisplayed()) need = Math.max(need, LayoutMinimum.of(child, vertical));
+        }
+        if (need <= 0f) return floor;
+        float chrome = self == null || inner == null ? 0f
+                : vertical ? self.height() - inner.height() : self.width() - inner.width();
+        return Math.max(floor, chrome + need);
     }
 
     /**
@@ -2152,8 +2187,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** Where a restored window rests. @see #restore */
     private void applyRestoredRect() {
-        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
-                l -> l.width(restoreWidth).height(restoreHeight));
+        float w = Math.max(restoreWidth, minimumSize(false)), h = Math.max(restoreHeight, minimumSize(true));
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(w).height(h));
         // AFTER the flag is clear and after any animation, because applyPosition deliberately does
         // nothing while maximised OR mid-resize -- letting the clamp write a position during either
         // would fight the rect being animated on every layout pass.
@@ -2241,7 +2276,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public WindowFrame resizeTo(float width, float height) {
         sized = true;
-        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(height));
+        float w = Math.max(width, minimumSize(false)), h = Math.max(height, minimumSize(true));
+        StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(w).height(h));
         return this;
     }
 
