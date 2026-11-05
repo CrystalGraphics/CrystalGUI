@@ -32,7 +32,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 |---|---|
 | traffic between client and server | CrystalGraphics' `CgNetworkChannel` — `CrystalGraphicsForge.Network`, `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`, `NetworkChannel1710` — and `CgNetwork`, the connections their lifecycles drive |
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
-| a permission or "who is this player" | `WorkspaceHostModern.McRoles`; legacy `Game.canSendCommands`; 1.7.10 `CgUiWorkspaceHost` |
+| a permission or "who is this player" | CrystalGraphics' `CgPlayerQuery.isOperator` (`PlayerQueryModern`, `PlayerQueryLegacy`, `PlayerQuery1710`) |
 | client input, HUD, a screen | `mc.modern.client` (`CgUiInput`, `CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
 | a member renamed across versions | legacy `Game` / `client.ClientGame`; the controller's `replacements.string` |
 | a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
@@ -183,9 +183,9 @@ Worked examples to copy — each is the complete pattern:
   `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`,
   `NetworkChannel1710`, each with a lifecycle forwarding joins, ticks and connects into `CgNetwork`;
   framing, routing and connections all in CrystalGraphics core, sessions in CrystalGUI's.
-- **A permission** — `WorkspaceRoles.isOperator(actorId)`: `WorkspaceHostModern.McRoles` (one class,
-  directives for `isOp(GameProfile)` → `isOp(NameAndId)` at 1.21.9), legacy `CgUiWorkspaceHost` via
-  `Game.canSendCommands`, 1.7.10 `CgUiWorkspaceHost`.
+- **A permission, or the server itself** — CrystalGraphics', not CrystalGUI's: `CgPlayers.isOperator`
+  (`PlayerQueryModern` has the directives for `isOp(GameProfile)` → `isOp(NameAndId)` at 1.21.9) and `CgServers`
+  (`ServersModern`, `ServersLegacy`, `Servers1710`). The engine's `ServerWorkspaceHost` reads them; no CrystalGUI host does.
 
 ## 4. Writing version-dependent code
 

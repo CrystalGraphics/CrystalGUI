@@ -12,7 +12,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgraphics.net.CgNetwork;
-import com.crystalgui.mc.modern.net.WorkspaceHostModern;
+import com.crystalgraphics.mc.modern.platform.ServersModern;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
@@ -46,7 +46,7 @@ final class HostModern implements HostServices {
     public Path localWorldDirectory() {
         Minecraft mc = Minecraft.getInstance();
         IntegratedServer server = mc == null ? null : mc.getSingleplayerServer();
-        return server == null ? null : WorkspaceHostModern.worldRoot(server);
+        return server == null ? null : ServersModern.worldRoot(server);
     }
 
     /**

@@ -7,14 +7,11 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientLifecycleEvents;
-import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 //? if >=26.1 {
 /*import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
 *///?} else {
 import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
 //?}
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerLifecycleEvents;
-import net.fabricmc.fabric.api.event.lifecycle.v1.ServerTickEvents;
 
 // 26.3 ships SDL3 and no GLFW.
 //? if >=26.3 {
@@ -56,7 +53,6 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
         CrystalGuiCore.LOGGER.info("[cgui] {}: {}", CrashVariant.label(NAME),
                 CrashVariant.report(CrystalGUIFabricCommon.class));
         LifecycleCrystalGUI.bootstrap();
-        Events.registerCommon();
     }
 
     // -- Events -----------------------------------------------------------------
@@ -66,14 +62,6 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
 
         private Events() {}
 
-        /** Both sides. A dedicated server runs this and no client class may be touched from it. */
-        static void registerCommon() {
-            ServerLifecycleEvents.SERVER_STARTING.register(LifecycleCrystalGUI::serverStarting);
-            ServerLifecycleEvents.SERVER_STARTED.register(LifecycleCrystalGUI::serverStarted);
-            ServerLifecycleEvents.SERVER_STOPPING.register(server -> LifecycleCrystalGUI.serverStopping());
-            ServerTickEvents.END_SERVER_TICK.register(server -> LifecycleCrystalGUI.serverTick());
-        }
-
         static void registerClient() {
             LifecycleCrystalGUI.bootstrapClient();
             //? if >=26.1 {
@@ -81,7 +69,6 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
             *///?} else {
             CgUiKeybinds.all().forEach(KeyBindingHelper::registerKeyBinding);
             //?}
-            ClientTickEvents.END_CLIENT_TICK.register(client -> LifecycleCrystalGUI.clientTick());
 
             ClientLifecycleEvents.CLIENT_STARTED.register(
                     client -> Input.install(Windows.handle(client)));

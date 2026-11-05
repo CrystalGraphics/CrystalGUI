@@ -11,7 +11,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.HostThread;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgraphics.net.CgNetwork;
-import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
+import com.crystalgui.mc.v1710.net.ServerTasks1710;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
@@ -106,7 +106,7 @@ final class Host1710 implements HostServices {
         return null;
     }
 
-    /** 1.7.10's server has no task queue of its own: {@link CgUiWorkspaceHost} drains this one on its tick. */
+    /** 1.7.10's server has no task queue of its own: {@link ServerTasks1710} drains this one on its tick. */
     @Override
     public HostThread.Binding serverThread() {
         return SERVER_THREAD;
@@ -115,12 +115,12 @@ final class Host1710 implements HostServices {
     private static final HostThread.Binding SERVER_THREAD = new HostThread.Binding() {
         @Override
         public void execute(Runnable work) {
-            CgUiWorkspaceHost.SERVER_TASKS.execute(work);
+            ServerTasks1710.QUEUE.execute(work);
         }
 
         @Override
         public boolean isCurrent() {
-            return CgUiWorkspaceHost.SERVER_TASKS.isCurrent();
+            return ServerTasks1710.QUEUE.isCurrent();
         }
 
         @Override

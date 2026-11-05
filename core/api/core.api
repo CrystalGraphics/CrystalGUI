@@ -443,7 +443,7 @@ com/crystalgui/app/machine/MachineExample
   access public,final
   extends java/lang/Object
   field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
-  method public,static registerServer ()Ljava/lang/Runnable;
+  method public,static registerServer ()V
   method public,static requestPanel (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)V
 com/crystalgui/app/machine/MachineModel
   access public,final
@@ -6730,6 +6730,15 @@ com/crystalgui/fs/server/ServerWorkspace
   method public service ()Lcom/crystalgui/fs/server/WorkspaceService;
   method public stat (Lcom/crystalgui/fs/CgPath;)Lcom/crystalgui/fs/provider/CgFileEntry;
   method public write (Lcom/crystalgui/fs/CgPath;[BLjava/lang/String;)Ljava/lang/String;
+com/crystalgui/fs/server/ServerWorkspaceHost
+  access public,final
+  extends java/lang/Object
+  field public,static,final INSTANCE Lcom/crystalgui/fs/server/ServerWorkspaceHost;
+  implements com/crystalgui/fs/server/WorkspaceHost$Host
+  method public actorFor (Ljava/lang/Object;)Lcom/crystalgui/fs/server/WorkspaceActor;
+  method public permission ()Lcom/crystalgui/fs/server/WorkspacePermission;
+  method public root ()Ljava/nio/file/Path;
+  method public scripting ()Lcom/crystalgui/fs/server/WorkspaceService$ScriptingPolicy;
 com/crystalgui/fs/server/WatchHub
   access public,final
   extends java/lang/Object
@@ -7407,6 +7416,14 @@ com/crystalgui/graph/port/PortTypeRegistry
   method public,static ids ()Ljava/util/Set;
   method public,static register (Lcom/crystalgui/graph/port/PortType;)V
   method public,static require (Ljava/lang/String;)Lcom/crystalgui/graph/port/PortType;
+com/crystalgui/lifecycle/CgUiCommonLifecycle
+  access public,final
+  extends java/lang/Object
+  field public,static,final INSTANCE Lcom/crystalgui/lifecycle/CgUiCommonLifecycle;
+  implements com/crystalgraphics/lifecycle/CgLifecycleListener
+  method public onInit ()V
+  method public onServerStarting (Ljava/lang/Object;)V
+  method public onServerStopping ()V
 com/crystalgui/lifecycle/CgUiLifecycle
   access public,final
   extends java/lang/Object
@@ -8164,14 +8181,27 @@ com/crystalgui/probe/ServerSmoke
   extends java/lang/Object
   field public,static,final CLASSDIR_PROPERTY Ljava/lang/String;
   field public,static,final CLASSLOG_PROPERTY Ljava/lang/String;
+  field public,static,final FOOTPRINT Lcom/crystalgraphics/platform/CgService;
   field public,static,final PROPERTY Ljava/lang/String;
   field public,static,final REPORT_PROPERTY Ljava/lang/String;
   method public,static enabled ()Z
+  method public,static engineHost ()Lcom/crystalgui/probe/ServerSmoke$Host;
   method public,static run (Lcom/crystalgui/probe/ServerSmoke$Host;)V
+com/crystalgui/probe/ServerSmoke$Footprint
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/Class;Ljava/util/List;Ljava/util/List;)V
+  method public alsoNeverLoaded ()Ljava/util/List;
+  method public anchor ()Ljava/lang/Class;
+  method public clientPackages ()Ljava/util/List;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/probe/ServerSmoke$Host
   access public,abstract,interface
   extends java/lang/Object
   method public alsoNeverLoaded ()Ljava/util/List;
+  method public anchor ()Ljava/lang/Class;
   method public gameClientClasses ()Ljava/util/List;
   method public,abstract clientPackages ()Ljava/util/List;
   method public,abstract connectionsRegistered ()Z

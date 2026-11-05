@@ -25,6 +25,10 @@ import java.util.zip.ZipFile;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
+import com.crystalgraphics.net.CgNetwork;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.CgService;
+import com.crystalgraphics.platform.service.CgServers;
 import com.crystalgraphics.asset.kind.CgGameplayKinds;
 import com.crystalgraphics.asset.load.CgVfxAssets;
 import com.crystalgraphics.cue.CgCueDefinition;
@@ -172,6 +176,82 @@ public final class ServerSmoke {
 
         /** Stops the server cleanly. Called only on a pass — a failure halts instead. */
         void halt();
+
+        /**
+         * A class in the container the client packages ship in: its class loader and code source are what they are
+         * enumerated from, and it is excluded from the never-loaded set. Defaults to the host's own class.
+         */
+        default Class<?> anchor() {
+            return getClass();
+        }
+    }
+
+    /**
+     * Where a platform's client-only classes are: what only it knows about its own jar. Provided once at init;
+     * the engine's smoke asks the server through {@code CgServers} for the rest.
+     *
+     * <pre>{@code
+     * CgPlatform.provide(ServerSmoke.FOOTPRINT, new ServerSmoke.Footprint(MyLifecycle.class,
+     *         Arrays.asList("com.me.mc.client", "com.me.mc.probe"), Arrays.asList("com.me.mc.ClientProxy")));
+     * }</pre>
+     *
+     * @param anchor         a class in the same container as the client packages
+     * @param clientPackages packages whose every class is client-only
+     * @param alsoNeverLoaded client-only classes outside those packages; each must still exist
+     */
+    public record Footprint(Class<?> anchor, List<String> clientPackages, List<String> alsoNeverLoaded) {
+    }
+
+    /** The slot a platform fills; absent, the smoke audits no client package of its own. */
+    public static final CgService<Footprint> FOOTPRINT = CgService.of("crystalgui:smoke_footprint",
+            new Footprint(ServerSmoke.class, Collections.emptyList(), Collections.emptyList()));
+
+    /** The smoke over the engine's own answers: {@link CgServers} for the server, the platform's {@link #FOOTPRINT}. */
+    public static Host engineHost() {
+        return new Host() {
+            private final Footprint footprint = CgPlatform.get(FOOTPRINT);
+
+            @Override
+            public String label() {
+                return CgServers.version();
+            }
+
+            @Override
+            public boolean isDedicatedServer() {
+                return CgServers.dedicated();
+            }
+
+            @Override
+            public boolean connectionsRegistered() {
+                return CgNetwork.isInstalled();
+            }
+
+            @Override
+            public List<String> clientPackages() {
+                return footprint.clientPackages();
+            }
+
+            @Override
+            public List<String> alsoNeverLoaded() {
+                return footprint.alsoNeverLoaded();
+            }
+
+            /** Naming this from a common path is the commonest spelling of the bug. */
+            @Override
+            public List<String> gameClientClasses() {
+                return Collections.singletonList("net.minecraft.client.Minecraft");
+            }
+
+            @Override
+            public void halt() {
+                CgServers.halt();
+            }
+
+            @Override
+            public Class<?> anchor() {
+                return footprint.anchor();
+            }
+        };
     }
 
     public static boolean enabled() {
@@ -418,7 +498,7 @@ public final class ServerSmoke {
      */
     private static void checkTheNamedOnesStillExist(Host host, List<String> named, List<String> lines,
                                                     List<String> failures) {
-        ClassLoader loader = host.getClass().getClassLoader();
+        ClassLoader loader = host.anchor().getClassLoader();
         List<String> missing = new ArrayList<>();
         for (String name : named) {
             String resource = name.replace('.', '/') + ".class";
@@ -442,7 +522,7 @@ public final class ServerSmoke {
         // THE ANCHOR EXCLUDES ITSELF, which is what lets a probe package be enumerated at all: it
         // holds the client-only probes AND this smoke, and this smoke is running, so asserting its
         // own package was never loaded would fail against itself.
-        String anchor = host.getClass().getName();
+        String anchor = host.anchor().getName();
         int nested = anchor.indexOf('$');
         String anchorClass = nested < 0 ? anchor : anchor.substring(0, nested);
 
@@ -494,7 +574,7 @@ public final class ServerSmoke {
     @Nullable
     private static Path codeSourceRoot(Host host) {
         try {
-            CodeSource source = host.getClass().getProtectionDomain().getCodeSource();
+            CodeSource source = host.anchor().getProtectionDomain().getCodeSource();
             if (source == null || source.getLocation() == null) return null;
             URI uri = source.getLocation().toURI();
             // LaunchWrapper names the class entry, jar:file:/…/mod.jar!/com/…/X.class; the jar is the root.
@@ -597,7 +677,7 @@ public final class ServerSmoke {
         try {
             Method find = ClassLoader.class.getDeclaredMethod("findLoadedClass", String.class);
             find.setAccessible(true);
-            for (ClassLoader loader = host.getClass().getClassLoader();
+            for (ClassLoader loader = host.anchor().getClassLoader();
                  loader != null; loader = loader.getParent()) {
                 if (find.invoke(loader, name) != null) return Boolean.TRUE;
             }

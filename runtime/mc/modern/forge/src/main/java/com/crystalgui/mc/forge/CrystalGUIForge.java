@@ -23,25 +23,6 @@ import net.minecraftforge.client.event.ScreenEvent;
 //?} else {
 /*import net.minecraftforge.client.event.GuiScreenEvent;
 *///?}
-// Forge 25-27 keep ticks in FML's own package.
-//? if >=1.14.4 {
-import net.minecraftforge.event.TickEvent;
-//?} else {
-/*import net.minecraftforge.fml.common.gameevent.TickEvent;
-*///?}
-//? if >=1.18 {
-import net.minecraftforge.event.server.ServerStartedEvent;
-import net.minecraftforge.event.server.ServerStartingEvent;
-import net.minecraftforge.event.server.ServerStoppingEvent;
-//?} elif >=1.17 {
-/*import net.minecraftforge.fmlserverevents.FMLServerStartedEvent;
-import net.minecraftforge.fmlserverevents.FMLServerStartingEvent;
-import net.minecraftforge.fmlserverevents.FMLServerStoppingEvent;
-*///?} else {
-/*import net.minecraftforge.fml.event.server.FMLServerStartedEvent;
-import net.minecraftforge.fml.event.server.FMLServerStartingEvent;
-import net.minecraftforge.fml.event.server.FMLServerStoppingEvent;
-*///?}
 //? if >=1.21.6 {
 /*import net.minecraftforge.eventbus.api.bus.BusGroup;
 *///?} else {
@@ -141,27 +122,12 @@ public final class CrystalGUIForge implements VariantEntry {
 
         private Events() {}
 
-        /**
-         * Both buses, from the entry point rather than from an annotation.
-         *
-         * <p>No {@code Dist} on the common half: a dedicated server has to open connections and tick
-         * the workspace, and a client-only subscriber would leave it with neither — silently.</p>
-         */
+        /** The client's buses, from the entry point rather than from an annotation. */
         public static void register(FMLJavaModLoadingContext context) {
-            // Forge 56's EventBus 7: every event carries its own bus, ticks come as Pre and Post, and a
-            // mod-bus event hands out one bus per mod's bus group.
+            // Forge 56's EventBus 7 hands out one bus per mod's bus group
             //? if >=1.21.6 {
-            /*ServerStartingEvent.BUS.addListener(Events::onServerStarting);
-            ServerStartedEvent.BUS.addListener(Events::onServerStarted);
-            ServerStoppingEvent.BUS.addListener(Events::onServerStopping);
-            TickEvent.ServerTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.serverTick());
-            BusGroup modBus = context.getModBusGroup();
+            /*BusGroup modBus = context.getModBusGroup();
             *///?} else {
-            IEventBus forgeBus = MinecraftForge.EVENT_BUS;
-            forgeBus.addListener(Events::onServerStarting);
-            forgeBus.addListener(Events::onServerStarted);
-            forgeBus.addListener(Events::onServerStopping);
-            forgeBus.addListener(Events::onServerTick);
             IEventBus modBus = context.getModEventBus();
             //?}
 
@@ -169,38 +135,6 @@ public final class CrystalGUIForge implements VariantEntry {
             // method of `Events` would resolve it when a dedicated server links this class.
             if (FMLEnvironment.dist == Dist.CLIENT) ClientBus.register(modBus);
         }
-
-        //? if >=1.18 {
-        private static void onServerStarting(ServerStartingEvent event) {
-            LifecycleCrystalGUI.serverStarting(event.getServer());
-        }
-
-        private static void onServerStarted(ServerStartedEvent event) {
-            LifecycleCrystalGUI.serverStarted(event.getServer());
-        }
-
-        private static void onServerStopping(ServerStoppingEvent event) {
-            LifecycleCrystalGUI.serverStopping();
-        }
-        //?} else {
-        /*private static void onServerStarting(FMLServerStartingEvent event) {
-            LifecycleCrystalGUI.serverStarting(event.getServer());
-        }
-
-        private static void onServerStarted(FMLServerStartedEvent event) {
-            LifecycleCrystalGUI.serverStarted(event.getServer());
-        }
-
-        private static void onServerStopping(FMLServerStoppingEvent event) {
-            LifecycleCrystalGUI.serverStopping();
-        }
-        *///?}
-
-        //? if <1.21.6 {
-        private static void onServerTick(TickEvent.ServerTickEvent event) {
-            if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.serverTick();
-        }
-        //?}
 
         /** Client-only, and a class of its own so a dedicated server never links one of these types. */
         public static final class ClientBus {
@@ -212,7 +146,6 @@ public final class CrystalGUIForge implements VariantEntry {
             //? if >=1.21.6 {
             /*static void register(BusGroup modBus) {
                 registerKeyMappings(modBus);
-                TickEvent.ClientTickEvent.Post.BUS.addListener(event -> LifecycleCrystalGUI.clientTick());
                 ScreenEvent.MouseButtonPressed.Pre.BUS.addListener(ClientBus::onMousePressed);
                 ScreenEvent.MouseButtonReleased.Pre.BUS.addListener(ClientBus::onMouseReleased);
                 ScreenEvent.MouseScrolled.Pre.BUS.addListener(ClientBus::onMouseScrolled);
@@ -224,7 +157,6 @@ public final class CrystalGUIForge implements VariantEntry {
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
-                forgeBus.addListener(ClientBus::onClientTick);
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonPressed.Pre.class,
                         e -> { if (onMousePressed(e)) e.setCanceled(true); });
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonReleased.Pre.class,
@@ -243,7 +175,6 @@ public final class CrystalGUIForge implements VariantEntry {
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onClientSetup);
-                forgeBus.addListener(ClientBus::onClientTick);
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseClickedEvent.Pre.class,
                         e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
                 forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseReleasedEvent.Pre.class,
@@ -262,7 +193,6 @@ public final class CrystalGUIForge implements VariantEntry {
             static void register(IEventBus modBus) {
                 IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onClientSetup);
-                forgeBus.addListener(ClientBus::onClientTick);
                 forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseClickedEvent.Pre.class,
                         e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
                 forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseReleasedEvent.Pre.class,
@@ -277,12 +207,6 @@ public final class CrystalGUIForge implements VariantEntry {
                         e -> { if (LifecycleCrystalGUI.offerKey(0, e.getCodePoint(), true)) e.setCanceled(true); });
             }
             *///?}
-
-            //? if <1.21.6 {
-            private static void onClientTick(TickEvent.ClientTickEvent event) {
-                if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
-            }
-            //?}
 
             // Forge 64 (26.1) moved its mod-bus events onto a static BUS of their own.
             //? if >=26.1 {
