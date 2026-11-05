@@ -5033,6 +5033,7 @@ com/crystalgui/desktop/launcher/LauncherButton
   extends com/crystalgui/widget/control/Button
   field public,static,final MARK_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  field public,static,final POINTED_CLASS Ljava/lang/String;
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V
@@ -5122,6 +5123,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final INDICATOR_PART Ljava/lang/String;
   field public,static,final LAUNCH_CLASS Ljava/lang/String;
   field public,static,final LEAVING_CLASS Ljava/lang/String;
+  field public,static,final MEASURING_CLASS Ljava/lang/String;
   field public,static,final MENU_OPEN_CLASS Ljava/lang/String;
   field public,static,final MULTIPLE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
@@ -5212,11 +5214,13 @@ com/crystalgui/desktop/taskbar/WindowThumbnail
   method public <init> ()V
   method public hasPicture ()Z
   method public isShowingPlaceholder ()Z
+  method public naturalWidth ()F
   method public paintDecoration (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
   method public paintsDynamically ()Z
   method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/taskbar/WindowThumbnail;
   method public setFrame (Lcom/crystalgui/desktop/window/WindowFrame;J)Lcom/crystalgui/desktop/taskbar/WindowThumbnail;
   method public setHeightFixed (Z)Lcom/crystalgui/desktop/taskbar/WindowThumbnail;
+  method public setSqueeze (F)V
   method public syncSize ()Z
   method public targetWidth ()F
 com/crystalgui/desktop/window/SnapZones
@@ -5325,6 +5329,7 @@ com/crystalgui/desktop/window/WindowFrame
   implements com/crystalgui/core/data/DataProvider
   implements com/crystalgui/core/dispose/Disposable
   implements com/crystalgui/render/Surface$Owner
+  implements com/crystalgui/widget/layout/MinimumSize
   method protected connected ()V
   method protected focusDelegate ()Lcom/crystalgui/ui/dom/UIElement;
   method public <init> (Ljava/lang/String;)V
@@ -5382,6 +5387,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public maximizeButton ()Lcom/crystalgui/widget/control/Button;
   method public minimize ()V
   method public minimizeButton ()Lcom/crystalgui/widget/control/Button;
+  method public minimumSize (Z)F
   method public moveTo (FF)Lcom/crystalgui/desktop/window/WindowFrame;
   method public onUserResize (IIFF)V
   method public overlaySlot ()Lcom/crystalgui/ui/dom/UIElement;
@@ -16688,6 +16694,11 @@ com/crystalgui/widget/layout/ContextToolbar
   method public shown ()Lcom/crystalgui/ui/dom/UIElement;
   method public toggleOverflow ()V
   method public,static separator ()Lcom/crystalgui/ui/dom/UIElement;
+com/crystalgui/widget/layout/LayoutMinimum
+  access public,final
+  extends java/lang/Object
+  method public,static of (Lcom/crystalgui/ui/dom/UIElement;Z)F
+  method public,static stated (Lcom/crystalgui/ui/dom/UIElement;Z)F
 com/crystalgui/widget/layout/MinimumSize
   access public,abstract,interface
   extends java/lang/Object
@@ -17065,6 +17076,7 @@ com/crystalgui/widget/overlay/Popover
   method protected continuesChain ()Z
   method protected hasContentToShow ()Z
   method protected onOpened ()V
+  method protected,final setCrossAlign (Lcom/crystalgui/ui/service/AnchoredPlacement$CrossAlign;)V
   method protected,final setPreferredSide (Lcom/crystalgui/ui/service/AnchoredPlacement$Side;F)V
   method protected,final shadow ()Lcom/crystalgui/ui/dom/ShadowRoot;
   method public <init> ()V
@@ -17194,6 +17206,7 @@ com/crystalgui/widget/scroll/ScrollerView
   method public horizontalScroller ()Lcom/crystalgui/widget/scroll/Scroller;
   method public isScrollbarsVisible ()Z
   method public refreshScrollers ()V
+  method public setFitsCrossAxis (Z)Lcom/crystalgui/widget/scroll/ScrollerView;
   method public setFitsMainAxis (Z)Lcom/crystalgui/widget/scroll/ScrollerView;
   method public setScroll (FF)Lcom/crystalgui/widget/scroll/ScrollerView;
   method public setScrollbarsVisible (Z)Lcom/crystalgui/widget/scroll/ScrollerView;
