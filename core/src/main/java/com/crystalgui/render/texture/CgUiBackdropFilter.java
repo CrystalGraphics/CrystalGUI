@@ -5,7 +5,7 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 
 import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.shader.CgShaderBindings;
+import com.crystalgraphics.api.material.CgMaterialValues;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -62,11 +62,11 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     private float drawX, drawY, drawWidth, drawHeight;
     private final Runnable quadBody = this::quadBody;
     // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
-    // names CgShaderBindings, so resolving it loads a CrystalGraphics CORE class. A dedicated server
+    // names CgMaterialValues, so resolving it loads a CrystalGraphics CORE class. A dedicated server
     // builds drawables and never paints, which is what headlessTest asserts by running without core.
-    private java.util.function.Consumer<CgShaderBindings> propertyWriter;
+    private java.util.function.Consumer<CgMaterialValues> propertyWriter;
 
-    private java.util.function.Consumer<CgShaderBindings> propertyWriter() {
+    private java.util.function.Consumer<CgMaterialValues> propertyWriter() {
         if (propertyWriter == null) propertyWriter = this::writeProperties;
         return propertyWriter;
     }
@@ -212,7 +212,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawCtx.getColor()).submit();
     }
 
-    private void writeProperties(CgShaderBindings b) {
+    private void writeProperties(CgMaterialValues b) {
         b.sampler("_MainTex", 0, drawBackdrop.blurred());
         b.sampler("_SharpTex", 1, drawBackdrop.sharp());
         b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
