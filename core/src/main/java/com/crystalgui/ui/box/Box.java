@@ -994,6 +994,8 @@ public final class Box {
         boolean inside = box.contains(worldX, worldY);
         // WHEN THE BOX CLIPS, nothing it paints lies outside it -- the rectangle and, as the painter masks, the corners.
         if (!inside && box.clips()) return null;
+        // ...AND ITS clip-path, as the web's: what is cut away is neither drawn nor hit, the box or anything in it.
+        if (!box.insideClipPath(worldX, worldY)) return null;
         Box hit = null;
         if (asContext) {
             StackingOrder order = box.stackingOrder();
@@ -1113,6 +1115,22 @@ public final class Box {
         worldToLocal.transform(p);
         if (p.x < 0f || p.y < 0f || p.x >= width || p.y >= height) return false;
         return insideCorners(p.x, p.y);
+    }
+
+    /**
+     * Whether a world point is inside this box's {@code clip-path}, its rounded corners included; true with none. The
+     * rect is the painter's, resolved by the same call that clips the drawing.
+     */
+    private boolean insideClipPath(float worldX, float worldY) {
+        float[] r = tree.hitClipPath;
+        if (!BoxPainter.clipRect(this, node.computedStyle(), r)) return true;
+        Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
+        worldToLocal.transform(p);
+        float x = p.x - r[0], y = p.y - r[1], w = r[2], h = r[3];
+        if (x < 0f || y < 0f || x >= w || y >= h) return false;
+        float rx = Math.min(r[4], w / 2f), ry = Math.min(r[5], h / 2f);
+        return !outsideCorner(x, y, rx, ry) && !outsideCorner(w - x, y, rx, ry)
+                && !outsideCorner(w - x, h - y, rx, ry) && !outsideCorner(x, h - y, rx, ry);
     }
 
     /**

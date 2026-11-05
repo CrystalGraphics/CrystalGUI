@@ -369,7 +369,7 @@ public final class BoxPainter {
      * The box's {@code clip-path} as {@code left, top, width, height, rx, ry} in its own space, or false for none.
      * The radii are {@code round} resolved against the clip's width and height, unclamped.
      */
-    private static boolean clipRect(Box box, ComputedStyle style, float[] into) {
+    static boolean clipRect(Box box, ComputedStyle style, float[] into) {
         ClipPath clip = style.get(StylePropertyRegistry.CLIP_PATH);
         if (clip == null || clip.isNone()) return false;
         float w = box.width(), h = box.height();
