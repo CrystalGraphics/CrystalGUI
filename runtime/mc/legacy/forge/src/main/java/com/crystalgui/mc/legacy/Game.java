@@ -1,7 +1,5 @@
 package com.crystalgui.mc.legacy;
 
-import com.mojang.authlib.GameProfile;
-
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
@@ -44,15 +42,6 @@ public final class Game {
         *///?} else {
         PlayerList list = server.getPlayerList();
         return list == null ? Collections.<EntityPlayerMP>emptyList() : list.getPlayers();
-        //?}
-    }
-
-    /** Whether this profile may use commands: an operator, or the owner of a cheats-enabled world. */
-    public static boolean canSendCommands(MinecraftServer server, GameProfile profile) {
-        //? if <1.9 {
-        /*return server.getConfigurationManager() != null && server.getConfigurationManager().canSendCommands(profile);
-        *///?} else {
-        return server.getPlayerList() != null && server.getPlayerList().canSendCommands(profile);
         //?}
     }
 
