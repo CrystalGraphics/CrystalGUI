@@ -17,8 +17,8 @@ public enum FocusSource {
     /** Tab traversal. Rings, and scrolls the target into view — you cannot see where you tabbed to
      *  otherwise. */
     KEYBOARD(true, true),
-    /** {@code requestFocus} from code. Treated as keyboard-equivalent, matching {@code element.focus()}
-     *  in a browser. */
+    /** {@code requestFocus} from code, as {@code element.focus()} in a browser: scrolls into view, and rings
+     *  unless the user's last interaction was a pointer press. */
     PROGRAMMATIC(true, true),
     /**
      * A mouse click. No ring — you already know what you clicked, which is the whole reason

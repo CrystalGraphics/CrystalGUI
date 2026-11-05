@@ -1012,6 +1012,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private boolean checkingKey;
 
     private boolean keyboardEvent(Keyboard.Event event) {
+        // A shortcut is not keyboard navigation: Ctrl+C after a click leaves the next scripted focus unringed.
+        if (event.pressed() && !isChord(modifiers())) document.focus().keyPressed();
         if (!CLAIMS_CHECK || !event.pressed()) return decideKey(event);
         // Asked before dispatch: a claim reads live state, which the press itself changes.
         boolean claimed = KeyClaims.of(document).claims(event.key(), event.character(), modifiers());
