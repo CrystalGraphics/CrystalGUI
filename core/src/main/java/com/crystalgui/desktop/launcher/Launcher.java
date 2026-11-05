@@ -1,7 +1,9 @@
 package com.crystalgui.desktop.launcher;
 
+import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.property.ObservableList;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -11,6 +13,7 @@ import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
@@ -70,6 +73,10 @@ public class Launcher extends Popover {
     public Launcher() {
         super(NAME);
         addClass("__launcher__");
+        // OVER ITS BUTTON, opening upward off the bar and centred on Start, as Windows 11's. The bar is at the
+        // desktop's foot, so naming the side saves relying on the flip; the clamp keeps it on screen at an edge.
+        setPreferredSide(AnchoredPlacement.Side.TOP, 6f);
+        setCrossAlign(AnchoredPlacement.CrossAlign.CENTER);
 
         search.setPlaceholder("Search apps");
         search.onQueryChanged.connect(this::refilter);
@@ -86,7 +93,24 @@ public class Launcher extends Popover {
         // REFILLED ON EVERY OPEN, never cached: an application registers when its jar's service runs,
         // and a list built once would be a snapshot of whatever had loaded the first time this opened.
         onConnected(this::refill);
+
+        // AN APPLICATION STARTING CLOSES IT, however it was asked for: a row's press hides first, but the row's own
+        // menu (Open) launches without passing through here, and the menu stayed up over the window it opened.
+        whileConnected(() -> {
+            Desktop desktop = Desktop.ifPresent(document());
+            if (desktop == null) return Connection.DISCONNECTED;
+            running = desktop.applications().running().size();
+            return desktop.applications().onDidChange.connect(() -> {
+                int now = desktop.applications().running().size();
+                boolean started = now > running;
+                running = now;
+                if (started && isOpen()) hide();
+            });
+        });
     }
+
+    /** How many applications ran when last looked, to tell one starting from the list merely changing. */
+    private int running;
 
     public SearchField searchField() {
         return search;
@@ -163,7 +187,10 @@ public class Launcher extends Popover {
 
     private void launchAt(@Nullable Integer index) {
         if (index == null || index < 0 || index >= shown.size()) return;
-        ApplicationKind kind = shown.get(index);
+        launch(shown.get(index));
+    }
+
+    private void launch(ApplicationKind kind) {
         Desktop desktop = Desktop.ifPresent(document());
         if (desktop == null) return;
         // HIDE FIRST. Launching raises a window, and a popover still open over the thing it just
@@ -179,6 +206,17 @@ public class Launcher extends Popover {
         public UIElement createTemplate() {
             AppRow row = new AppRow();
             row.addClass(ROW_CLASS);
+            // A SINGLE LEFT PRESS LAUNCHES, as Start does and the command palette's rows: the list's own activation is
+            // Enter or a double-click. Read from the row at press time, as a template is a different row each bind.
+            row.onMouseDown.attachListener((el, event) -> {
+                if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON || row.kind == null) return;
+                // The row's context menu is its child, so a press on one of ITS items bubbles here: only a press on the row.
+                for (UIElement at = event.getTarget() instanceof UIElement t ? t : null; at != null && at != row; at = at.parentElement()) {
+                    if (at instanceof Popover) return;
+                }
+                event.stopPropagation();
+                launch(row.kind);
+            }, false, true);
             // OPEN AND PIN, the application's own menu, as Windows' Start offers on a right-click
             ContextMenu.attach(row, CommandRegistry.global(), pressed -> ContextMenu.of(MenuId.APPLICATION));
             row.append(new WindowIcon());

@@ -146,6 +146,16 @@ public class WindowPreview extends UIElement {
         return box == null || Float.isNaN(target) ? Float.NaN : target - box.width();
     }
 
+    /** The picture's width at the sheet's size, NaN before it has been sized. @see WindowThumbnail#setSqueeze */
+    float naturalThumbnailWidth() {
+        return thumbnail.naturalWidth();
+    }
+
+    /** Holds the picture to a share of the sheet's size; {@link #syncThumbnail} applies it. */
+    void setSqueeze(float share) {
+        thumbnail.setSqueeze(share);
+    }
+
     /** The picture's box, or {@code null} before the panel's first layout. */
     @Nullable
     Box thumbnailBox() {

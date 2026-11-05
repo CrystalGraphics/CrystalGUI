@@ -147,6 +147,9 @@ public class Taskbar extends UIElement {
      * listener hands its argument straight to a switch — {@code NullPointerException} out of
      * {@code resolveTouched}, on the frame an arriving entry settled. @see TaskbarEntryMotion
      */
+    /** An arriving entry while it is measured: invisible, since it has no box to carry an opacity yet. */
+    public static final String MEASURING_CLASS = "__measuring__";
+
     public static final String ANIMATING_CLASS = "__animating__";
 
     /**

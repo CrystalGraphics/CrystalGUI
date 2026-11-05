@@ -367,11 +367,17 @@ public class Tooltip extends UIElement {
             // ENTERED BY A CLICK, NOT BY THE HAND: a press that rebuilt what is under a still pointer -- a Hide that
             // became a Show -- counts as pressed here, and the tip waits for the pointer to leave, as a browser's does.
             UIDocument window = anchor.document();
+            if (!pointerOver(anchor)) return;
             if (window != null && !window.input().pointerMovedSincePress()) {
                 tooltip.pressedSinceEnter = true;
                 return;
             }
             tooltip.showAfterDelay(anchor);
+        }, false, false);
+        // A DESCENDANT THAT OVERHANGS THE ANCHOR, a menu or launcher parented to its button, is hover on the anchor
+        // too, so the tip is withdrawn once the pointer is over the anchor's own box no longer.
+        anchor.onMouseMove.attachListener((el, event) -> {
+            if ((tooltip.isShown() || tooltip.pendingAnchor == anchor) && !pointerOver(anchor)) tooltip.hide();
         }, false, false);
         anchor.onMouseLeave.attachListener((el, event) -> {
             tooltip.pressedSinceEnter = false;
@@ -385,6 +391,14 @@ public class Tooltip extends UIElement {
             tooltip.hide();
         }, true, false);
         return tooltip;
+    }
+
+    /** Whether the pointer is inside {@code anchor}'s own box, which is not implied by hovering it: its descendants count. */
+    private static boolean pointerOver(UIElement anchor) {
+        UIDocument window = anchor.document();
+        if (window == null) return false;
+        ReadOnlyVec2f pointer = window.input().pointer();
+        return anchor.containsSurfacePoint(pointer.x(), pointer.y());
     }
 
     /** Detaches a tooltip created by {@link #attach}, hiding it and removing it from its anchor.
@@ -885,6 +899,11 @@ public class Tooltip extends UIElement {
             // Same rule as the placement ticker: an anchor that has gone sends no leave, and a wait
             // that fired against one would put a tip over whatever took its place.
             if (target == null || !target.isConnected()) {
+                cancelPendingShow();
+                delayTickerRunning = false;
+                return false;
+            }
+            if (!pointerOver(target)) {
                 cancelPendingShow();
                 delayTickerRunning = false;
                 return false;

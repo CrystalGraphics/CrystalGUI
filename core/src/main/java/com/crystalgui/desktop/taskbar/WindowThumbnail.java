@@ -80,6 +80,8 @@ public class WindowThumbnail extends UIElement {
 
     /** The sheet's box, read before anything is written: the fitted mode's maximum on each axis. */
     private float maxWidth = Float.NaN;
+    /** The share of the sheet's size the picture is held to: below 1 when a row of cards would outrun the screen. */
+    private float squeeze = 1f;
     private float maxHeight = Float.NaN;
 
     public WindowThumbnail() {
@@ -154,14 +156,27 @@ public class WindowThumbnail extends UIElement {
         syncPlaceholder();
         if (!fit()) return false;
         // Height fixed: never narrower than square, so a tall window's panel keeps room for its header.
-        float width = heightFixed ? Math.max(fitWidth, Math.min(maxWidth, maxHeight)) : fitWidth;
-        float height = heightFixed ? maxHeight : fitHeight;
+        float width = heightFixed ? Math.max(fitWidth, Math.min(maxWidth, maxHeight) * squeeze) : fitWidth;
+        float height = heightFixed ? maxHeight * squeeze : fitHeight;
         if (Math.abs(width - appliedWidth) < 0.5f && Math.abs(height - appliedHeight) < 0.5f) return false;
         appliedWidth = width;
         appliedHeight = height;
         // Explicit sizes, not aspect-ratio: Taffy does not count a ratio-derived width toward the parent's size.
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(width).height(height));
         return true;
+    }
+
+    /**
+     * Holds the picture to {@code share} of the sheet's size, aspect kept: how a row of many cards fits the screen.
+     * Takes effect on the next {@link #syncSize}.
+     */
+    public void setSqueeze(float share) {
+        this.squeeze = share;
+    }
+
+    /** The width {@link #syncSize} last wrote, as it would be unsqueezed; NaN before the first. */
+    public float naturalWidth() {
+        return appliedWidth / squeeze;
     }
 
     /**
@@ -200,7 +215,7 @@ public class WindowThumbnail extends UIElement {
             maxHeight = box.height();
         }
 
-        float scale = Math.min(maxWidth / sourceWidth, maxHeight / sourceHeight);
+        float scale = Math.min(maxWidth * squeeze / sourceWidth, maxHeight * squeeze / sourceHeight);
         fitWidth = sourceWidth * scale;
         fitHeight = sourceHeight * scale;
         return true;

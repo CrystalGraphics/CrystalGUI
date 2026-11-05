@@ -142,6 +142,7 @@ final class TaskbarEntryMotion implements WindowMotion {
             // because Taffy does not shrink-to-fit an absolutely positioned box the way CSS does, and
             // max-content alone would be measured in flow, which is the row jumping apart for a frame.
             span = -1f;
+            entry.addClass(Taskbar.MEASURING_CLASS);
             StyleGroup.inlinePipeline(entry.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.ABSOLUTE).widthMaxContent());
         } else {
@@ -204,6 +205,7 @@ final class TaskbarEntryMotion implements WindowMotion {
             capturePadding();
             StyleGroup.inlinePipeline(entry.getStyle().getLayoutGroup(),
                     l -> l.positionType(TaffyPosition.RELATIVE).widthAuto());
+            entry.removeClass(Taskbar.MEASURING_CLASS);
             // A MEASURE THAT CAME BACK EMPTY is a layout this animation does not understand -- settle at
             // full size rather than ramping from zero to zero and leaving the entry invisible.
             if (span <= 0f) {
@@ -267,6 +269,7 @@ final class TaskbarEntryMotion implements WindowMotion {
             StyleGroup.inlinePipeline(entry.getStyle().getLayoutGroup(),
                     l -> l.maxWidthAuto().widthAuto().positionType(TaffyPosition.RELATIVE));
             entry.removeClass(Taskbar.ANIMATING_CLASS);
+            entry.removeClass(Taskbar.MEASURING_CLASS);
             setOpacity(null);
             entry.setHitTest(true);
         }

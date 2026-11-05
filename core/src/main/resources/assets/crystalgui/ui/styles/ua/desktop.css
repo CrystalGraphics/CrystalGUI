@@ -266,9 +266,15 @@ taskbar .__start-button__:active {
     background-color: var(--taskbar-entry-active-bg);
 }
 
+/* ITS MENU UP, lit as an entry is with its jump list open (the active entry hovered), however the pointer is placed. */
+taskbar .__start-button__.__menu-open__ {
+    background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
+    transition: background-color 250ms ease-out;
+}
+
 /* START'S MARK GOES BLUE, as Windows 10's does, and only start's: overlay-tint multiplies the logo's own
  * colours, so at rest it is exactly the logo. */
-taskbar .__start-button__:hover::part(pre-icon) {
+taskbar .__start-button__.__pointed__::part(pre-icon) {
     overlay-tint: var(--taskbar-start-hover-tint, #D4E2FF);
 }
 
@@ -315,6 +321,21 @@ launcher .__app-row__ {
     padding-left: 6px;
     padding-right: 6px;
     border-radius: var(--radius-control, 4px);
+}
+
+/* HOVER AND POINTER, as an entry's and a jump-list row's: a row is a button, and says so under the cursor. */
+launcher .__app-row__ {
+    cursor: pointer;
+    background-color: transparent;
+    transition: background-color 140ms ease-out;
+}
+
+launcher .__app-row__:hover {
+    background-color: var(--taskbar-entry-hover-bg, #FFFFFF29);
+}
+
+launcher .__app-row__:active {
+    background-color: var(--taskbar-entry-active-bg, #FFFFFF1A);
 }
 
 /* The tile at a list's size; a window icon has no size of its own. */
@@ -420,6 +441,12 @@ taskbar .__entry__.__iconic__ {
  * handed straight to the overflow listener's switch. @see Taskbar#ANIMATING_CLASS */
 taskbar .__entry__.__animating__ {
     overflow: clip;
+}
+
+/* MEASURED UNSEEN: the arriving entry is laid out out of flow at its natural width for a frame or two, and a new
+ * entry has no box to take an opacity until it has been laid out, so the sheet hides it. @see TaskbarEntryMotion */
+taskbar .__entry__.__measuring__ {
+    opacity: 0;
 }
 
 /* LIT GLASS, NOT A GREY CHIP. The bar behind these is a live blurred backdrop, and an OPAQUE fill on
@@ -1573,6 +1600,8 @@ menu.__jump-list__ menuitem {
     height: 16px;
     margin-bottom: 6px;
     flex-shrink: 0;
+    /* A squeezed card (WindowPreviewRow) can be narrower than the icon and close, which are cut rather than spilling. */
+    overflow: clip;
     /* NO WIDTH HERE. WindowPreview writes one, equal to the thumbnail's MEASURED width, so the header can
      * never be the child that sizes the panel -- see matchHeaderToThumbnail for why neither `width: 100%`
      * nor `width: 0; min-width: 100%` achieved that. The title inside is `width: 0; flex-grow: 1`, so it
