@@ -7,6 +7,7 @@ import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.HostThread;
+import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -35,10 +36,11 @@ import javax.annotation.Nullable;
  * HostSession.install(new MyHostServices(), CrystalEditor.KIND);
  * }</pre>
  *
- * <p>Then a host's screen is four calls and owns nothing:</p>
+ * <p>Then a host's screen is five calls and owns nothing:</p>
  *
  * <pre>{@code
  * void onScreenShown()  { HostSession.session().shown(); }
+ * void onEscape()       { if (!HostSession.session().requestHide(() -> closeLater = true)) closeNow(); }
  * void onScreenHidden() { HostSession.session().hidden(); }
  * void onFrame() {
  *     HostSession.session().frame(HostSession.session().frameDelta());
@@ -263,6 +265,8 @@ public final class HostSession {
      * <p>Safe to call on a resize, which is how a game re-initialises a screen.</p>
      */
     public void shown() {
+        closing = null;
+        left = false;
         refreshHost();
         if (host == null) build();
         else post(host::shown);
@@ -277,10 +281,47 @@ public final class HostSession {
      * across would open a window the next time the desktop appeared for some unrelated reason.</p>
      */
     public void hidden() {
+        closing = null;
+        left = false;
         launchPending = false;
         DesktopHost built = host;
         if (built != null) post(built::hidden);
     }
+
+    /**
+     * Asks to close the surface: the desktop plays itself off screen, then {@code close} runs, here on the host's
+     * thread from a later {@link #frame}. What a screen's Escape or close key calls instead of closing; {@code close}
+     * is the real close, which then reports {@link #hidden}. False, having run nothing, when the surface should close
+     * now: nothing is built, or animations are off. Asked again while it plays, true and nothing more.
+     *
+     * <pre>{@code
+     * public void onClose() {
+     *     if (!HostSession.session().requestHide(() -> closeReady = true)) super.onClose();   // tick() closes it
+     * }
+     * }</pre>
+     *
+     * <p>Hosts must keep calling {@link #frame} while it plays, or {@code close} waits out its longest second.</p>
+     */
+    public boolean requestHide(Runnable close) {
+        DesktopHost built = host;
+        if (built == null || !WindowAnimator.isEnabled()) return false;
+        if (closing != null) return true;
+        left = false;
+        closing = close;
+        closingSince = System.nanoTime();
+        refreshHost();
+        post(() -> built.leave(() -> left = true));
+        return true;
+    }
+
+    /** The close a {@link #requestHide} is waiting to run, and since when. Host thread. */
+    @Nullable
+    private volatile Runnable closing;
+    private volatile long closingSince;
+    /** The desktop has played itself off screen. Written on the document's thread. */
+    private volatile boolean left;
+    /** How long a close waits for the desktop: past it, the surface closes whatever is still playing. */
+    private static final long LEAVE_LONGEST_NANOS = 1_000_000_000L;
 
     /**
      * One host tick — <b>before anything reads {@link #workspace()}</b>.
@@ -289,6 +330,12 @@ public final class HostSession {
      * no connection to build against. Costs a boolean read once there is a window.</p>
      */
     public void frame(float deltaSeconds) {
+        Runnable close = closing;
+        if (close != null && (left || System.nanoTime() - closingSince > LEAVE_LONGEST_NANOS)) {
+            closing = null;
+            left = false;
+            close.run();
+        }
         DesktopHost built = host;
         if (built == null) return;
         refreshHost();

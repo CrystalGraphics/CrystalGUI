@@ -167,6 +167,19 @@ taskbar {
     min-height: 34px;
 }
 
+/* LEAVING, out of flow at the desktop's foot: the work area takes its row at once, and the bar slides off over it. */
+taskbar.__leaving__ {
+    position: absolute;
+    left: 0px;
+    bottom: 0px;
+}
+
+/* RISING IN WITH THE BAR, a button is drawn at rest into a surface the motion moves whole, so its icon is drawn
+ * exactly as it is at rest throughout. */
+taskbar .__rising__ {
+    will-change: transform;
+}
+
 /* THE DESKTOP'S GLASS: one material for the bar and everything that floats over the desktop -- the jump
  * list, the hover preview, the switcher and the launcher. Written once so they cannot drift apart.
  *

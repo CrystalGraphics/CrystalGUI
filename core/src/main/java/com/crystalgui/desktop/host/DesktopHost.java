@@ -205,6 +205,20 @@ public final class DesktopHost implements Disposable {
         // it restores them onto is the attached one.
         desktop().exitHudMode();
         desktop().resume();
+        // Again on every resize, which re-opens a game's screen: the desktop comes in only from off screen.
+        if (!onScreen) desktop().arrive();
+        onScreen = true;
+    }
+
+    /** Whether the surface is up: from its building, as it is built when first shown. */
+    private boolean onScreen = true;
+
+    /**
+     * The surface is about to go: the desktop plays itself off screen, then {@code done}, which closes it.
+     * @see Desktop#leave
+     */
+    public void leave(Runnable done) {
+        desktop().leave(done);
     }
 
     /**
@@ -218,6 +232,7 @@ public final class DesktopHost implements Disposable {
      * window by window.</p>
      */
     public void hidden() {
+        onScreen = false;
         if (desktop().hasPinnedWindows()) {
             desktop().enterHudMode();
             return;

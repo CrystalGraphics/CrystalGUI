@@ -254,6 +254,36 @@ public final class WindowAnimator {
                 CENTRE, CENTRE, DESTROY_NANOS, MOVING, then);
     }
 
+    /**
+     * The window goes with the desktop closing: its close, played while it stays open, then {@code then}. It stays
+     * gone until {@link #releaseLeave} or its next animation, so the frames before the screen closes do not show it.
+     */
+    public void playLeave(Runnable then) {
+        if (!enabled) {
+            then.run();
+            return;
+        }
+        WindowAnimation leaving = start(NEUTRAL_SCALE, Transform.scale(DESTROY_SCALE), 1f, 0f,
+                CENTRE, CENTRE, DESTROY_NANOS, MOVING, then);
+        if (leaving != null) held = leaving.holdingEnd();
+    }
+
+    /** Back at rest after {@link #playLeave}, at once: the desktop opened again before anything else played. */
+    public void releaseLeave() {
+        if (held == current) current = null;
+        releaseHeld();
+    }
+
+    /** A {@link #playLeave} still holding the window gone. */
+    @Nullable
+    private WindowAnimation held;
+
+    private void releaseHeld() {
+        if (held == null) return;
+        held.release();
+        held = null;
+    }
+
     // ── Minimise and restore ────────────────────────────────────────────────────────────────────
 
     /**
@@ -499,21 +529,24 @@ public final class WindowAnimator {
      * <p>Runs {@code then} immediately when the window is not in a tree: there is nothing to draw and
      * nothing to tick, and a continuation that never fired would strand a close forever.</p>
      */
-    private void start(Transform from, Transform to, float fromOpacity, float toOpacity,
+    @Nullable
+    private WindowAnimation start(Transform from, Transform to, float fromOpacity, float toOpacity,
                        LengthPercent originX, LengthPercent originY,
                        long durationNanos, CgEasing easing, @Nullable Runnable then) {
-        start(from, to, fromOpacity, toOpacity, originX, originY, durationNanos, easing, durationNanos, easing, then);
+        return start(from, to, fromOpacity, toOpacity, originX, originY, durationNanos, easing, durationNanos, easing, then);
     }
 
     /** As above, the opacity on a clock of its own. */
-    private void start(Transform from, Transform to, float fromOpacity, float toOpacity,
+    @Nullable
+    private WindowAnimation start(Transform from, Transform to, float fromOpacity, float toOpacity,
                        LengthPercent originX, LengthPercent originY, long durationNanos, CgEasing easing,
                        long opacityNanos, CgEasing opacityEasing, @Nullable Runnable then) {
         cancelCurrent();
+        releaseHeld();
         UIDocument window = frame.document();
         if (window == null) {
             if (then != null) then.run();
-            return;
+            return null;
         }
         // A WINDOW ANIMATES ITS LIVE CONTENTS, NOT A PHOTOGRAPH OF THEM -- measured, not assumed.
         //
@@ -536,6 +569,7 @@ public final class WindowAnimator {
                 });
         current = animation;
         window.animation().afterLayout(frame, animation);
+        return animation;
     }
 
     /** A window stops being worth writing to once it is destroyed. @see WindowAnimation */

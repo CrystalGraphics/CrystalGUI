@@ -347,8 +347,26 @@ public final class WindowAnimation implements WindowMotion {
         // is how the cascade-driven version came to have an INLINE identity transform outranking the
         // class meant to start the next gesture. A detached window needs none of that: its box is
         // destroyed and the overrides go with it.
+        // HELD, its end goes on the box: a flight the compositor played wrote nothing there, and stopping it shows the
+        // window at rest.
+        if (holds) write(transform.toValue(), toOpacity);
         if (onDone != null) onDone.run();
-        if (target.isConnected()) clearSlots();
+        if (target.isConnected() && !holds) clearSlots();
+    }
+
+    /** Whether it stays at its end once over, until {@link #release}. */
+    private boolean holds;
+
+    /** Stays at its end once over, until {@link #release}: a window leaving the screen while it still shows. */
+    WindowAnimation holdingEnd() {
+        holds = true;
+        return this;
+    }
+
+    /** Hands it back to the sheet, held or still playing, without its completion. */
+    void release() {
+        if (over) clearSlots();
+        else cancel();
     }
 
     /**

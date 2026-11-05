@@ -2,12 +2,10 @@ package com.crystalgui.desktop.window;
 
 import com.crystalgraphics.easing.CgEasing;
 import com.crystalgraphics.easing.CgEasings;
-import com.crystalgui.core.signal.Connection;
+import com.crystalgui.desktop.motion.BoxFlights;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
-import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
 import com.crystalgui.ui.service.CompositorAnimation;
@@ -89,8 +87,8 @@ public final class StartingMark extends UIElement {
         if (settles) {
             whileConnected(() -> {
                 in = new CompositorAnimation(this, scaled(ENTER_SCALE), REST, 0f, 1f, CENTRE, CENTRE,
-                        IN_NANOS, settleEased(outBack(OVERSHOOT), PEAK, (double) RISE_NANOS / IN_NANOS, SETTLE_SEEN), FADE_NANOS, CgEasings.LINEAR);
-                return play(this, in, IN_DELAY, null);
+                        IN_NANOS, settleEased(BoxFlights.outBack(OVERSHOOT), PEAK, (double) RISE_NANOS / IN_NANOS, SETTLE_SEEN), FADE_NANOS, CgEasings.LINEAR);
+                return BoxFlights.play(this, in, IN_DELAY, null);
             });
         }
     }
@@ -113,9 +111,9 @@ public final class StartingMark extends UIElement {
         cover.append(leaving);
         successor.content().append(cover);
         // Stopped with the cover, should the application's window close before they end
-        leaving.whileConnected(() -> play(leaving, new CompositorAnimation(leaving, at, scaled(LEAVE_SCALE),
+        leaving.whileConnected(() -> BoxFlights.play(leaving, new CompositorAnimation(leaving, at, scaled(LEAVE_SCALE),
                 opacity, 0f, CENTRE, CENTRE, OUT_NANOS, stage(0.1, 0.8), OUT_NANOS, stage(0.1, 0.7)), null));
-        cover.whileConnected(() -> play(cover, new CompositorAnimation(cover, Transform.IDENTITY, Transform.IDENTITY,
+        cover.whileConnected(() -> BoxFlights.play(cover, new CompositorAnimation(cover, Transform.IDENTITY, Transform.IDENTITY,
                 1f, 0f, CENTRE, CENTRE, OUT_NANOS, stage(0.35, 1.0)), () -> leave(cover)));
     }
 
@@ -148,14 +146,6 @@ public final class StartingMark extends UIElement {
         return Transform.scale(scale);
     }
 
-    /** Easing.net's out-back with overshoot {@code s}: past 1 and back, further the larger {@code s}. */
-    private static CgEasing outBack(double s) {
-        return t -> {
-            double u = t - 1.0;
-            return 1.0 + (s + 1.0) * u * u * u + s * u * u;
-        };
-    }
-
     /**
      * {@code curve} retimed: its part before {@code peak} over the flight's first {@code split}, the rest over the
      * remainder through {@link #SETTLE}, so it comes down from the peak sooner and eases into rest, played up to
@@ -172,7 +162,7 @@ public final class StartingMark extends UIElement {
 
     /** The first share of the settle that leaves it within {@link #REST_WITHIN} of rest. */
     private static double settleSeen() {
-        CgEasing curve = outBack(OVERSHOOT);
+        CgEasing curve = BoxFlights.outBack(OVERSHOOT);
         for (int i = 0; i <= 1000; i++) {
             double x = i / 1000.0;
             if ((1.0 - ENTER_SCALE) * (curve.ease(settling(curve, PEAK, x)) - 1.0) <= REST_WITHIN) return x;
@@ -186,46 +176,5 @@ public final class StartingMark extends UIElement {
             double x = Math.min(1.0, Math.max(0.0, (t - from) / (to - from)));
             return x * x * (3.0 - 2.0 * x);
         };
-    }
-
-    /**
-     * Plays {@code flight} on {@code on}'s box, after each layout so its first frame already shows the start. Then
-     * {@code done}, unless it is disconnected first.
-     */
-    private static Connection play(UIElement on, CompositorAnimation flight, @Nullable Runnable done) {
-        return play(on, flight, 0L, done);
-    }
-
-    /** As above, its clock starting {@code delayNanos} after its first frame, held at its start until then. */
-    private static Connection play(UIElement on, CompositorAnimation flight, long delayNanos, @Nullable Runnable done) {
-        UIDocument document = on.document();
-        if (document == null || !WindowAnimator.isEnabled()) return Connection.DISCONNECTED;
-        boolean[] over = {false};
-        document.animation().afterLayout(on, delta -> {
-            if (over[0]) return false;
-            long now = System.nanoTime();
-            flight.startAt(now + delayNanos);
-            write(on, flight.transformAt(now), flight.opacityAt(now), flight);
-            if (!flight.isFinished(now)) return true;
-            over[0] = true;
-            write(on, null, null, flight);
-            if (done != null) done.run();
-            return false;
-        });
-        return () -> {
-            if (over[0]) return;
-            over[0] = true;
-            write(on, null, null, flight);
-        };
-    }
-
-    private static void write(UIElement on, @Nullable Transform transform, @Nullable Float opacity,
-                              CompositorAnimation flight) {
-        Box box = on.box();
-        if (box == null) return;
-        box.setTransform(transform);
-        box.setOpacity(opacity);
-        if (transform == null) box.setTransformOrigin(null, null);
-        else box.setTransformOrigin(flight.originX(box.width()), flight.originY(box.height()));
     }
 }

@@ -446,6 +446,23 @@ public final class CgUiScreen extends Screen {
         if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) onClose();
     }
 
+    /** Set once the desktop has played itself off screen: the next tick closes, outside the frame being drawn. */
+    private volatile boolean closeReady;
+
+    /** Escape and the close key: the desktop plays itself off first. @see HostSession#requestHide */
+    @Override
+    public void onClose() {
+        if (!HostSession.session().requestHide(() -> closeReady = true)) super.onClose();
+    }
+
+    @Override
+    public void tick() {
+        super.tick();
+        if (!closeReady) return;
+        closeReady = false;
+        super.onClose();
+    }
+
     /** @see #keyPressed */
     @Override
     public boolean shouldCloseOnEsc() {

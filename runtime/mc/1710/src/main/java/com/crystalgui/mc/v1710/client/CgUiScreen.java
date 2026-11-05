@@ -114,8 +114,9 @@ public final class CgUiScreen extends GuiScreen {
         return HostSession.isInstalled() && HostSession.session().isBuilt();
     }
 
+    /** Escape: the desktop plays itself off first, and the frame after it has, this closes. @see HostSession#requestHide */
     void requestClose() {
-        closeRequested = true;
+        if (!HostSession.session().requestHide(() -> closeRequested = true)) closeRequested = true;
     }
 
     /** Quits the editor at game shutdown. Not called on close — see the class note. */
@@ -301,7 +302,7 @@ public final class CgUiScreen extends GuiScreen {
         // the window had already dealt with and stayed open on one nobody wanted.
         boolean consumed = CgUiInput.pumpKeyboard(HostSession.session().input());
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
-            closeRequested = true;
+            requestClose();
         }
     }
 
@@ -310,7 +311,7 @@ public final class CgUiScreen extends GuiScreen {
      * one nothing wanted. @see #handleKeyboardInput
      */
     void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
-        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) closeRequested = true;
+        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) requestClose();
     }
 
     /** <b>The mouse pump.</b> Once per event, same contract as above. */

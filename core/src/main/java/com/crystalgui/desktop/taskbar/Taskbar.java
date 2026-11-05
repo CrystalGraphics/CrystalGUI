@@ -213,7 +213,7 @@ public class Taskbar extends UIElement {
         });
         // An application installed late gives its pin a button
         whileConnected(() -> desktop().applications().onDidChange.connect(this::refresh));
-        onConnected(this::refresh);
+        onConnected(this::arrive);
         // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
         // below still centres its island as if the edge were not there.
         UIElement edge = new UIElement();
@@ -419,7 +419,8 @@ public class Taskbar extends UIElement {
                 // ...AND THE ROW OPENS FOR IT, the collapse in reverse. Only for an entry built HERE: this
                 // loop runs on every activation and every title change, so anything keyed on the frame
                 // rather than on the entry being new would restart the arrival over and over.
-                if (WindowAnimator.isEnabled()) {
+                // Not while the bar comes on screen: the entries rise into it with it.
+                if (WindowAnimator.isEnabled() && !arriving) {
                     TaskbarEntryMotion open = TaskbarEntryMotion.opening(entry, () -> entering.remove(key));
                     if (open.start()) entering.put(key, open);
                 }
@@ -983,11 +984,84 @@ public class Taskbar extends UIElement {
     /** Hides the whole strip — what fullscreen (W13) does, and the reason the work area is a layout box
      * rather than a subtraction somebody has to remember. */
     public void setBarVisible(boolean visible) {
-        // `setDisplayed`, the engine's own attribute, where the old engine wrote `display` at IMPORTANT.
-        // The M6.0 rule: this selector engine has no attribute selectors, so HTML's `[hidden] { display:
-        // none }` cannot be written -- the box tree gives a hidden node no box instead, exactly as it
-        // gives none to `display: none`, which is what the IMPORTANT write effectively did anyway.
-        setDisplayed(visible);
+        if (visible == barShown) return;
+        barShown = visible;
+        stopMotion();
+        if (visible) {
+            removeClass(LEAVING_CLASS);
+            setDisplayed(true);
+            playEnter();
+            return;
+        }
+        // OUT OF FLOW WHILE IT LEAVES, so the work area takes the bar's row at once and the bar slides away over it.
+        addClass(LEAVING_CLASS);
+        motion = TaskbarMotion.leave(this, false, this::gone);
+    }
+
+    /**
+     * The desktop is closing: the bar slides off and stays off until {@link #comeOnScreen}, then {@code done}, at once
+     * when it is not on screen or animations are off.
+     */
+    public void leaveScreen(Runnable done) {
+        stopMotion();
+        if (!barShown || box() == null) {
+            done.run();
+            return;
+        }
+        motion = TaskbarMotion.leave(this, true, done);
+    }
+
+    /** The desktop is opening again: the bar comes in, its buttons rising into it. */
+    public void comeOnScreen() {
+        if (barShown) playEnter();
+        else stopMotion();
+    }
+
+    /** On a button while it rises in with the bar, which the sheet gives a picture of its own. */
+    public static final String RISING_CLASS = "__rising__";
+
+    /** On the bar while it slides off screen, which the sheet takes out of flow. */
+    public static final String LEAVING_CLASS = "__leaving__";
+
+    /** Whether the bar is meant to be on screen: false from the moment it starts leaving. */
+    private boolean barShown = true;
+    /** True for the refresh of the bar coming on screen, whose entries rise in with it rather than opening the row. */
+    private boolean arriving;
+    @Nullable
+    private TaskbarMotion motion;
+
+    /** Joined the tree: brought up to date, and comes on screen. */
+    private void arrive() {
+        arriving = barShown && WindowAnimator.isEnabled();
+        try {
+            refresh();
+        } finally {
+            arriving = false;
+        }
+        stopMotion();
+        // LEFT THE TREE WHILE LEAVING, whose end never ran.
+        if (!barShown) gone();
+        else playEnter();
+    }
+
+    private void playEnter() {
+        stopMotion();
+        List<UIElement> buttons = new ArrayList<>();
+        buttons.add(start);
+        buttons.addAll(entryRow());
+        motion = TaskbarMotion.enter(this, buttons);
+    }
+
+    private void gone() {
+        removeClass(LEAVING_CLASS);
+        // `setDisplayed`, the engine's own attribute: the box tree gives a hidden node no box.
+        setDisplayed(false);
+    }
+
+    private void stopMotion() {
+        if (motion == null) return;
+        motion.stop();
+        motion = null;
     }
 
     /** The window a hover preview is currently showing, or null. @see TaskbarPreviews */

@@ -279,6 +279,11 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** The open/close/minimise/maximise transitions. @see WindowAnimator */
     private final WindowAnimator animator = new WindowAnimator(this);
 
+    /** What plays its open, close, minimise and maximise: for the desktop, which plays them all as it opens and closes. */
+    public WindowAnimator animator() {
+        return animator;
+    }
+
     /**
      * Its surface (render-graph G7): what a thumbnail, a preview and the switcher draw. Kept while the window is hidden,
      * so a minimised window still has its picture -- a texture, which does not run, so keeping one does not undo the

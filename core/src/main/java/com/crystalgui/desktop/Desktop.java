@@ -1813,6 +1813,49 @@ public class Desktop extends UIElement implements DataProvider {
         UIDocument document = suspendedIn;
         suspendedIn = null;
         if (document != null && parent() == null) document.append(this);
+    /**
+     * Plays the desktop off screen before its screen closes: the taskbar slides away and every window on it plays its
+     * close, a pinned one excepted, since it stays over the game. Then {@code done}, which closes the screen; until
+     * {@link #arrive} everything stays gone, so the frames before the close show none of it.
+     *
+     * <pre>{@code
+     * desktop.leave(() -> closeTheScreen());   // Escape pressed
+     * // the screen opens again:
+     * desktop.resume();
+     * desktop.arrive();
+     * }</pre>
+     *
+     * <p>{@code done} runs at once with animations off, and on the document's thread otherwise.</p>
+     */
+    public void leave(Runnable done) {
+        List<WindowFrame> going = new ArrayList<>();
+        for (WindowFrame frame : registry.windows()) {
+            if (frame.state() == WindowState.VISIBLE && !frame.isPinned()) going.add(frame);
+        }
+        int[] left = {going.size() + 1};
+        Runnable one = () -> {
+            if (--left[0] == 0) done.run();
+        };
+        taskbar.leaveScreen(one);
+        for (WindowFrame frame : going) frame.animator().playLeave(one);
+    }
+
+    /**
+     * Plays the desktop onto the screen as it opens: the taskbar comes in and every window on it plays its open. A
+     * window already moving, one the HUD put away and is restoring, keeps its own.
+     */
+    public void arrive() {
+        taskbar.comeOnScreen();
+        for (WindowFrame frame : registry.windows()) {
+            if (frame.state() != WindowState.VISIBLE) continue;
+            WindowAnimator animator = frame.animator();
+            animator.releaseLeave();
+            // Pinned: it stayed over the game, and never left.
+            if (frame.isPinned() || animator.isPlaying()) continue;
+            animator.playOpen();
+        }
+    }
+
         onSuspendedChanged.emit(true);
     }
 
