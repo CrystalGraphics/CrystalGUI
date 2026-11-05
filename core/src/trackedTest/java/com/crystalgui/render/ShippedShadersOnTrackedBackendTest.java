@@ -44,7 +44,7 @@ public class ShippedShadersOnTrackedBackendTest {
     @BeforeClass
     public static void install() {
         compiler = new ShadercGlslCompiler();
-        bare = new ShadercGlslCompiler(null, false);
+        bare = new ShadercGlslCompiler(null, false, false);   // Vulkan's own rules, nothing auto-bound
         CgTrackedGLBackend gl = new CgTrackedGLBackend(new CgNullRHI(64, 64), new ExplicitBindingCheck(compiler, bare), true);
         CgGL.init(gl);
         CgCapabilities.init(new CgTrackedGLContext());
