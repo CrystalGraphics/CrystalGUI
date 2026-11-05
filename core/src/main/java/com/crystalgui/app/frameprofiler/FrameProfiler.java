@@ -53,14 +53,12 @@ public final class FrameProfiler {
      * The command, and the frame readout's door — idempotent, from the application layer's
      * {@code ApplicationKinds} service, because the desktop may not name an application.
      *
-     * <p>F9 everywhere: the harness scene's own key for it, so the gesture learned profiling a scene is
-     * the gesture in game, beside F7 and F8 for the readout.</p>
+     * <p>No key of its own: the launcher and the taskbar open it. F7 and F8 are the readout's.</p>
      */
     public static synchronized void register() {
         if (registered) return;
         registered = true;
         CommandRegistry.global().register(Command.of(OPEN_COMMAND, "Frame Profiler")
-                .binding("F9")
                 .run(context -> {
                     UIElement source = UIElement.sourceOf(context);
                     Desktop desktop = source == null ? null : Desktop.ifPresent(source.document());

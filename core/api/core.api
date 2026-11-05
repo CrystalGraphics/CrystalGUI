@@ -442,6 +442,7 @@ com/crystalgui/app/machine/MachineDemo
 com/crystalgui/app/machine/MachineExample
   access public,final
   extends java/lang/Object
+  field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
   method public,static registerServer ()Ljava/lang/Runnable;
   method public,static requestPanel (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)V
 com/crystalgui/app/machine/MachineModel

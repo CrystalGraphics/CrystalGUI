@@ -348,7 +348,7 @@ public final class ApplicationRegistry {
      * list and never from the button.
      *
      * <pre>{@code
-     * desktop.applications().activateOrLaunch(VfxLab.KIND, workspace);   // F6
+     * desktop.applications().activateOrLaunch(VfxLab.KIND, workspace);
      * }</pre>
      *
      * <p>Of several running, the one whose window was active most recently. None running, it launches behind a

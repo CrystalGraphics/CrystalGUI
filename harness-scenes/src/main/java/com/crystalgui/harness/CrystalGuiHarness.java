@@ -45,7 +45,7 @@ public final class CrystalGuiHarness implements HarnessExtension {
 
         reg.register(
             SceneDescriptor.builder("vfx-lab")
-                .description("VFX Lab over an empty world: search effects, spawn in front of the camera, drag parameters live (F6 in any 3D scene)")
+                .description("VFX Lab over an empty world: search effects, spawn in front of the camera, drag parameters live (in the launcher of every 3D scene)")
                 .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
                 .category(SceneDescriptor.Category.SCENE)
                 .needsFbo(false)

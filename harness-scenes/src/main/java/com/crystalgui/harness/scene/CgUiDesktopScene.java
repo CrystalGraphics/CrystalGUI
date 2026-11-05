@@ -183,8 +183,8 @@ import org.joml.Vector2f;
  *
  * <p>The desktop is the one the harness keeps over every 3D scene ({@code HarnessUi}, {@code HostSession}), opened at
  * the scene's start over an empty world, as a game's sits over its world: Escape closes it to game mode, where only
- * <b>pinned</b> windows paint over the world and keep ticking, and Escape opens it again. F6 opens VFX Lab on it, as in
- * any 3D scene. F7 and F8 are the frame readout and F9 the Frame Profiler, the commands every desktop has.</p>
+ * <b>pinned</b> windows paint over the world and keep ticking, and Escape opens it again. VFX Lab and the Frame Profiler
+ * are in its launcher. F7 and F8 are the frame readout, the commands every desktop has.</p>
  *
  * <p>The readout window is deliberately a <em>live</em> one rather than text painted over the scene: it
  * is the only way to watch the clamp arithmetic while dragging, and it doubles as content that proves a
@@ -949,6 +949,12 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private static final int PROFILER_SHOT_AT = Integer.getInteger("crystalgui.harness.desktop.profiler.at", 180);
 
     private FrameProfilerPanel profilerPanel;
+
+    /** What {@code profiler.open} does: close the profiler if it is in front, else open it. */
+    private void toggleProfiler() {
+        if (profilerWindow == desktop.activeWindow()) profilerWindow.requestClose();
+        else FrameProfiler.openOn(desktop);
+    }
     private boolean profilerShotDone;
     private HarnessContext shotContext;
 
@@ -1578,18 +1584,18 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                     + sparkExpected + ", following " + model.isFollowing() + ", spark row " + (sparkRow != null));
             shot("32-from-readout");
             FrameStatsOverlay.toggleOn(document);
-        // F9 IS profiler.open: pressed with the profiler in front it closes it; again, it comes back.
+        // profiler.open toggles: run with the profiler in front it closes it; again, it comes back.
         } else if (at == 397) {
             desktop.raise(profilerWindow);
         } else if (at == 399) {
-            log("F9 with the profiler in front (active " + (desktop.activeWindow() == profilerWindow) + ")");
-            key(CgKeyCodes.KEY_F9);
+            log("profiler.open with the profiler in front (active " + (desktop.activeWindow() == profilerWindow) + ")");
+            toggleProfiler();
         } else if (at == 420) {
             // A CLOSE ANIMATES before the window hides: read it well after the press.
-            log("F9: showing " + (profilerWindow.state() != WindowState.HIDDEN));
-            key(CgKeyCodes.KEY_F9);
+            log("profiler.open: showing " + (profilerWindow.state() != WindowState.HIDDEN));
+            toggleProfiler();
         } else if (at == 440) {
-            log("F9 again: showing " + (profilerWindow.state() != WindowState.HIDDEN));
+            log("profiler.open again: showing " + (profilerWindow.state() != WindowState.HIDDEN));
         } else if (at == 442) {
             // BACK TO THE DEFAULTS, through the store: the page is closed, so its button cannot be pressed.
             for (Setting<?> setting : ProfilerSettings.all()) {

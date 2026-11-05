@@ -2,8 +2,15 @@ package com.crystalgui.app.machine;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
+import com.crystalgraphics.net.CgNetwork;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.machine.ui.MachinePanel;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.ServerWindows;
@@ -11,16 +18,14 @@ import com.crystalgui.net.window.ServerWindows;
 /**
  * <b>The worked example, wired</b> — one machine on a server, a panel a client can ask for.
  *
- * <p>A host supplies a key and a tick, and nothing else:</p>
+ * <p>A host calls {@link #registerServer} once; the client asks from the launcher, where {@link #KIND} lists it:</p>
  *
  * <pre>{@code
  * // server init, after the window protocol is registered
- * Runnable tick = MachineExample.registerServer();
- * myLoader.onServerTick(tick);
+ * MachineExample.registerServer();
  *
- * // client, when the host's own key was pressed and no screen is up
+ * // client: the desktop lists MachineExample.KIND; or by hand
  * MachineExample.requestPanel(myConnections.client());
- * myHost.openDesktop();
  * }</pre>
  *
  * <p>Everything that made this an example — that there is exactly one model, that it advances with the
@@ -38,26 +43,38 @@ public final class MachineExample {
 
     private static boolean registered;
 
+    /**
+     * The launcher's entry: asks the server for the panel, which lands as a tab of the Crystal Editor, and
+     * brings the editor forward. Needs a connection, so a standalone desktop lists it unavailable.
+     */
+    public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:machine-example", "Machine Example")
+            .keywords("machine", "example", "server", "panel")
+            .singleInstance()
+            .launch(context -> {
+                requestPanel(CgNetwork.client());
+                Application editor = context.desktop().applications()
+                        .activateOrLaunch(CrystalEditor.KIND, context.workspace());
+                return new Forward(editor);
+            });
+
     private MachineExample() {
     }
 
     /**
-     * Declares the panel a client may ask for, and hands back the tick the host must drive.
+     * Declares the panel a client may ask for, and ticks the machine from {@link CgEngineLifecycle#onServerTick}:
+     * it advances with the world, so it needs no session, no player list and no flush.
      *
      * <p>Idempotent — four loaders share this and only one of them is ever the caller.</p>
-     *
-     * @return the machine's tick. <b>The host drives it from its own server tick</b>: the machine
-     *         advances with the world, so it needs no session, no player list and no flush
      */
-    public static synchronized Runnable registerServer() {
+    public static synchronized void registerServer() {
         if (!registered) {
             registered = true;
             ServerWindows.openable(MachinePanel.TYPE, (viewer, args) -> {
                 MachineTrace.log(MachineTrace.SERVER, "a client asked for a panel");
                 return MACHINE;
             }, Presentation.EDITOR_TAB);
+            CgEngineLifecycle.onServerTick(MACHINE::tick);
         }
-        return MACHINE::tick;
     }
 
     /**
@@ -75,5 +92,33 @@ public final class MachineExample {
         ClientWindows.requestOpen(MachinePanel.TYPE, null, granted ->
                 MachineTrace.log(MachineTrace.CLIENT,
                         granted ? "the server is opening one" : "the server said no"));
+    }
+
+    /** The editor the panel lands in, standing for the request: closing the request closes nothing. */
+    private record Forward(Application editor) implements Application {
+
+        @Override
+        public ApplicationKind kind() {
+            return KIND;
+        }
+
+        @Override
+        public WindowFrame mainWindow() {
+            return editor.mainWindow();
+        }
+
+        @Override
+        public boolean open(Resource resource) {
+            return false;
+        }
+
+        @Override
+        public void activate() {
+            editor.activate();
+        }
+
+        @Override
+        public void dispose() {
+        }
     }
 }
