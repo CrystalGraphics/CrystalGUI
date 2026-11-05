@@ -5062,6 +5062,7 @@ com/crystalgui/desktop/motion/WindowAnimator
   method public playLeave (Ljava/lang/Runnable;)V
   method public playMinimize (Ljava/lang/Runnable;)V
   method public playOpen ()V
+  method public playResize (FFFFFFFFLcom/crystalgui/ui/dom/UIElement;Ljava/lang/Runnable;)Z
   method public playResize (FFFFFFFFLjava/lang/Runnable;)Z
   method public playRestore ()V
   method public playShrink (FFFFLjava/lang/Runnable;)Z
@@ -5074,6 +5075,7 @@ com/crystalgui/desktop/motion/WindowGeometryAnimation
   implements com/crystalgui/desktop/motion/WindowMotion
   method public <init> (Lcom/crystalgui/ui/dom/UIElement;Ljava/util/function/BooleanSupplier;FFFFFFFFZZJLcom/crystalgraphics/easing/CgEasing;Ljava/lang/Runnable;)V
   method public cancel ()V
+  method public followSizeOf (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/motion/WindowGeometryAnimation;
   method public frame (F)Z
 com/crystalgui/desktop/motion/WindowMotion
   access public,abstract,interface
@@ -5312,6 +5314,7 @@ com/crystalgui/desktop/window/WindowFrame
   field public,static,final PINNED_CLASS Ljava/lang/String;
   field public,static,final PIN_CLASS Ljava/lang/String;
   field public,static,final PIN_TOOLTIP Ljava/lang/String;
+  field public,static,final RESIZING_CLASS Ljava/lang/String;
   field public,static,final RESTORE_TOOLTIP Ljava/lang/String;
   field public,static,final SETTINGS_ACTION_CLASS Ljava/lang/String;
   field public,static,final TITLE_BAR_CLASS Ljava/lang/String;

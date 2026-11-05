@@ -307,8 +307,10 @@ public final class ApplicationRegistry {
                     waiting[0].disconnect();
                     return false;
                 }
+                // FLYING TO THE TASKBAR: the build replaces this window, and replacing it mid-flight cuts the flight
+                if (starter.isMinimizing() && starter.state() != WindowState.HIDDEN) return true;
                 // MINIMISED: no mark to wait for, so it builds now and its window waits minimised
-                boolean away = starter.state() == WindowState.HIDDEN || starter.isMinimizing();
+                boolean away = starter.state() == WindowState.HIDDEN;
                 // ITS MARK ON SCREEN WHOLE BEFORE THE BUILD, which holds this document while it runs: begun sooner,
                 // the mark would stand still part way in
                 boolean shown = away || ++frames[0] >= STARTING_FRAMES && StartingMark.settled(starter);

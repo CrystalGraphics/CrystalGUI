@@ -793,6 +793,13 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     color: var(--window-fg, #DFE1E5);
 }
 
+/* WHILE A MAXIMISE, RESTORE OR SNAP PLAYS, the animation sizes the window, unclamped: leaving fullscreen starts at the
+ * whole screen with the taskbar's row already taken back. @see WindowFrame#RESIZING_CLASS */
+.__window__.__resizing__ {
+    max-width: auto;
+    max-height: auto;
+}
+
 /* The caption. 18px against 10px text — two more than `dialog`'s bar, because a window's is a
  * furniture strip you grab rather than a header you read, and 16 left the close glyph touching both
  * edges of it.

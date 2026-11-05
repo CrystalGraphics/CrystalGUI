@@ -500,6 +500,13 @@ public final class WindowAnimator {
 
     public boolean playResize(float fromLeft, float fromTop, float fromWidth, float fromHeight,
                        float toLeft, float toTop, float toWidth, float toHeight, Runnable settle) {
+        return playResize(fromLeft, fromTop, fromWidth, fromHeight, toLeft, toTop, toWidth, toHeight, null, settle);
+    }
+
+    /** As above, the size ending at {@code toSizeOf}'s box as it is each frame. @see WindowGeometryAnimation#followSizeOf */
+    public boolean playResize(float fromLeft, float fromTop, float fromWidth, float fromHeight,
+                       float toLeft, float toTop, float toWidth, float toHeight, @Nullable UIElement toSizeOf,
+                       Runnable settle) {
         if (!enabled) return false;
         if (fromWidth <= 0f || fromHeight <= 0f || toWidth <= 0f || toHeight <= 0f) return false;
         UIDocument window = frame.document();
@@ -513,7 +520,7 @@ public final class WindowAnimator {
                 true, true, SIZE_NANOS, MOVING, () -> {
                     current = null;
                     settle.run();
-                });
+                }).followSizeOf(toSizeOf);
         current = animation;
         // BEFORE layout, unlike a transform flight: it writes a rect and reads no geometry, so the frame lays
         // out once with it. After layout, every step laid the window out again, and again for the hover it moved.

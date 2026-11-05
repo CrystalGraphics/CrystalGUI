@@ -766,9 +766,13 @@ public class Desktop extends UIElement implements DataProvider {
         // the size and place it is meant to be, not fly in at a default and jump. @see #persistTo
         // AN APPLICATION'S STARTING WINDOW GIVES WAY to its main window: the same place, already open, no second flight
         WindowFrame starter = startingFor(frame);
-        if (!applyPersistedGeometry(frame)) {
-            if (starter != null) takeGeometry(frame, starter);
-            else if (!frame.isSized() && frame.isApplicationMain()) sizeByDefault(frame);
+        if (starter != null) {
+            // ITS STARTER'S, NOT THE RECORD'S: the starter opened at the record, and a resize or maximise made while it
+            // loaded is the newer word. The record is spent, or it would apply to the next window under this key.
+            if (frame.key() != null) pendingPlacements.remove(frame.key());
+            takeGeometry(frame, starter);
+        } else if (!applyPersistedGeometry(frame) && !frame.isSized() && frame.isApplicationMain()) {
+            sizeByDefault(frame);
         }
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,

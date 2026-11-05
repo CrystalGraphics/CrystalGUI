@@ -1382,7 +1382,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** Driven by {@link Desktop#activate}, which is the only thing that may decide this. */
     public void setActive(boolean active) {
         // Brought back before its minimise landed
-        if (active) minimizing = false;
+        if (active) {
+            minimizing = false;
+            setLeaving(false);
+        }
         if (active) addClass(ACTIVE_CLASS);
         else removeClass(ACTIVE_CLASS);
     }
@@ -1665,6 +1668,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
             // and CLOSE rather than MINIMIZE, because that is the animation this window is playing.
             cascadeHideOwnedToolWindows(Departure.CLOSE);
             presentOwnedDialogs(false);
+            setLeaving(true);
             animator.playClose(this::hide);
             return true;
         }
@@ -1673,6 +1677,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // happened. Both remaining outcomes are certain by the time anything is played.
         if (!canDiscard()) return true;
         closing = true;
+        setLeaving(true);
         animator.playClose(this::destroy);
         return true;
     }
@@ -1751,6 +1756,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         if (state == WindowState.VISIBLE && parent() != null) return;
         if (owner == null) return;
         minimizing = false;
+        setLeaving(false);
         state = WindowState.VISIBLE;
         owner.reattach(this);
         // AFTER the reattach, because an animation writes styles and invalidateStyleMatch early-returns
@@ -2015,7 +2021,21 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         fullscreen = false;
         removeClass(FULLSCREEN_CLASS);
         if (!maximizedBeforeFullscreen) restore();
+        else shrinkIntoWorkArea();
         if (owner != null) owner.fullscreenChanged();
+    }
+
+    /**
+     * Back to maximised from fullscreen: the taskbar takes its row back at once, so the size eases into the work area as
+     * it shrinks rather than cutting to it, then rests at the maximised rule again.
+     */
+    private void shrinkIntoWorkArea() {
+        UIElement area = resizeContainingBlock();
+        Box areaBox = area == null ? null : area.box();
+        Box self = box();
+        if (areaBox == null || self == null) return;
+        animateGeometry(0f, 0f, self.width(), self.height(), 0f, 0f, areaBox.width(), areaBox.height(), area,
+                this::applyMaximizedRect);
     }
 
     /** @see #isFullscreen() */
@@ -2059,8 +2079,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         maximizeTooltip.setText(RESTORE_TOOLTIP);
         UIElement area = resizeContainingBlock();
         Box areaBox = area == null ? null : area.box();
+        // TO THE WORK AREA AS IT IS EACH FRAME, not as it was measured now: fullscreen takes the taskbar's row away
+        // while this plays, and a size fixed here stopped at the bar's edge and jumped the rest at the end.
         if (areaBox != null && animateGeometry(restoreLeft, restoreTop, restoreWidth, restoreHeight,
-                0f, 0f, areaBox.width(), areaBox.height(), this::applyMaximizedRect)) {
+                0f, 0f, areaBox.width(), areaBox.height(), area, this::applyMaximizedRect)) {
             // The animation writes px rects on the way and finishes by applying the rule below, which is
             // what makes a maximised window follow the work area afterwards.
             return;
@@ -2090,7 +2112,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // to have the area's origin taken back off. @see plan/engine-port.md 6.4
         if (areaBox != null && self != null && animateGeometry(self.x(), self.y(),
                 self.width(), self.height(),
-                restoreLeft, restoreTop, restoreWidth, restoreHeight, this::applyRestoredRect)) {
+                restoreLeft, restoreTop, restoreWidth, restoreHeight, null, this::applyRestoredRect)) {
             return;
         }
         applyRestoredRect();
@@ -2166,19 +2188,32 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     private boolean animateGeometry(float fromLeft, float fromTop, float fromWidth, float fromHeight,
                                     float toLeft, float toTop, float toWidth, float toHeight,
-                                    Runnable settle) {
-        geometryAnimating = true;
+                                    @Nullable UIElement toSizeOf, Runnable settle) {
+        setGeometryAnimating(true);
         boolean started = animator.playResize(fromLeft, fromTop, fromWidth, fromHeight,
-                toLeft, toTop, toWidth, toHeight, () -> {
-                    geometryAnimating = false;
+                toLeft, toTop, toWidth, toHeight, toSizeOf, () -> {
+                    setGeometryAnimating(false);
                     settle.run();
                 });
-        if (!started) geometryAnimating = false;
+        if (!started) setGeometryAnimating(false);
         return started;
     }
 
     /** True while a maximise or restore-down is playing. @see #animateGeometry */
     private boolean geometryAnimating;
+
+    /**
+     * On the window while a maximise, restore or snap plays: the sheet lifts its work-area clamp, since the animation
+     * decides the size then. Fullscreen's exit starts at the whole screen while the taskbar has its row back already,
+     * and the clamp cut the first frame to the work area.
+     */
+    public static final String RESIZING_CLASS = "__resizing__";
+
+    private void setGeometryAnimating(boolean animating) {
+        geometryAnimating = animating;
+        if (animating) addClass(RESIZING_CLASS);
+        else removeClass(RESIZING_CLASS);
+    }
 
     /**
      * Where the window was last <b>asked</b> to be, which is not always where it is.
@@ -2252,7 +2287,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         this.snappedZone = zone;
         Box box = box();
         if (box != null && animateGeometry(placedLeft, placedTop, box.width(), box.height(),
-                left, top, width, height, () -> applySnappedRect(left, top, width, height))) {
+                left, top, width, height, null, () -> applySnappedRect(left, top, width, height))) {
             return this;
         }
         applySnappedRect(left, top, width, height);
@@ -2365,7 +2400,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // window had already landed in the taskbar. @see Dialog#setPresented
         presentOwnedDialogs(false);
         minimizing = true;
+        setLeaving(true);
         animator.playMinimize(this::hide);
+    }
+
+    /**
+     * A window minimising or closing has gone from the press, as every window manager treats it, so it takes no pointer
+     * while its animation plays. A frame can stall before the flight moves it, and a click on its spot meanwhile is
+     * for the window under it: landing on this one's minimise restored it and minimised it again. Shown or activated
+     * again, it takes the pointer back.
+     */
+    private void setLeaving(boolean leaving) {
+        setHitTest(!leaving);
     }
 
     /** From a minimise's press until the window is shown again. @see #isMinimizing */

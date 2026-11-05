@@ -78,6 +78,38 @@ public class StartingWindowTest extends UiDocumentTestBase {
         assertEquals(400f, main.recordedWidth(), 0.5f);
     }
 
+    /**
+     * A resize or maximise made while it loads is kept by the application's window, over the placement the starting
+     * window itself opened at.
+     */
+    @Test
+    public void geometryChangedWhileItLoadsOutlivesTheRecord() {
+        // A record for the application: it opened and closed once
+        desktop.applications().launchInStartingWindow(kind, null);
+        frames(4);
+        desktop.registry().windows().get(0).requestClose();
+        frames(2);
+        assertTrue(desktop.registry().windows().isEmpty());
+
+        desktop.applications().launchInStartingWindow(kind, null);
+        WindowFrame starter = desktop.registry().windows().get(0);
+        starter.resizeTo(300f, 220f);
+        frame();
+        frames(4);
+        WindowFrame main = desktop.registry().windows().get(0);
+        assertEquals("test:slow", main.key());
+        assertEquals("the record put back the size it had before the resize", 300f, main.recordedWidth(), 0.5f);
+        main.requestClose();
+        frames(2);
+
+        desktop.applications().launchInStartingWindow(kind, null);
+        desktop.registry().windows().get(0).maximize();
+        frames(4);
+        main = desktop.registry().windows().get(0);
+        assertEquals("test:slow", main.key());
+        assertTrue("the record put back the window it had before the maximise", main.isMaximized());
+    }
+
     @Test
     public void aMarkSeenLeavesOverTheApplicationsWindowAndIsGoneAfter() throws InterruptedException {
         Desktop.setAnimationsEnabled(true);
@@ -150,8 +182,15 @@ public class StartingWindowTest extends UiDocumentTestBase {
         WindowFrame starter = desktop.registry().windows().get(0);
         frames(3);
         starter.minimize();
+        // The build replaces the window, so it waits for the flight to land rather than cutting it
+        for (int i = 0; i < 3; i++) {
+            Thread.sleep(40);
+            frame();
+        }
+        assertEquals("the build cut the minimise's flight short", 0, built);
+        assertTrue("the starting window went before its flight landed", starter.animator().isPlaying());
         // Past the 350 ms minimise, well short of the mark's 1.43 s
-        for (int i = 0; i < 15; i++) {
+        for (int i = 0; i < 12; i++) {
             Thread.sleep(40);
             frame();
         }
