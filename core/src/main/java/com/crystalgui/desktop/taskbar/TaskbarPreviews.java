@@ -18,7 +18,10 @@ import com.crystalgui.widget.control.Button;
 
 import javax.annotation.Nullable;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import java.util.function.Supplier;
 
@@ -208,7 +211,7 @@ public final class TaskbarPreviews {
     void watch(Button entry, Supplier<List<WindowFrame>> windows) {
         entry.onMouseEnter.attachListener((element, event) -> {
             List<WindowFrame> shown = windows.get();
-            if (suppressed || shown.isEmpty()) return;
+            if (isSuppressed() || shown.isEmpty()) return;
             hovered = shown.size() == 1 ? shown.get(0) : null;
             hoveredGroup = shown.size() > 1 ? shown : null;
             hoveredEntry = entry;
@@ -239,21 +242,25 @@ public final class TaskbarPreviews {
      * merely busy: they occupy the same space above the same entry, so the panel sits over the menu it
      * is supposed to have been replaced by.</p>
      *
-     * <p>Dismissing once is not enough, which is why this is a flag rather than a call. The pointer does
+     * <p>Dismissing once is not enough, which is why this is held rather than a call. The pointer does
      * not leave the entry when the menu opens, so nothing takes the panel down again — the hover is
      * still live, the delay elapses under the open menu, and it comes straight back.</p>
+     *
+     * <p>HELD PER REASON: each jump list and a drag hold their own, and previews come back when the last lets go.
+     * One flag let the list a right-click light-dismissed lift the hold of the list that same press opened.</p>
      */
-    void setSuppressed(boolean nowSuppressed) {
-        if (suppressed == nowSuppressed) return;
-        suppressed = nowSuppressed;
-        if (suppressed) dismiss();
+    void setSuppressed(Object by, boolean held) {
+        boolean was = isSuppressed();
+        if (held) suppressedBy.add(by);
+        else suppressedBy.remove(by);
+        if (!was && isSuppressed()) dismiss();
     }
 
     boolean isSuppressed() {
-        return suppressed;
+        return !suppressedBy.isEmpty();
     }
 
-    private boolean suppressed;
+    private final Set<Object> suppressedBy = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /** Takes the panel down at once — a click, a closed window, a rebuilt strip. */
     void dismiss() {
@@ -368,6 +375,8 @@ public final class TaskbarPreviews {
 
     /** @return whether there is still anything to watch */
     private boolean update() {
+        // NOTHING NEW WHILE HELD, whatever hover was already counting down
+        if (isSuppressed()) return false;
         if (pendingPlacement) {
             pendingPlacement = false;
             placeAndPlay(pendingEntering);

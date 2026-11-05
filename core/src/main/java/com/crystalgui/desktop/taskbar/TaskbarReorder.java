@@ -125,7 +125,7 @@ final class TaskbarReorder {
         live = true;
         swallow = true;
         originalBefore = nextAfter(entry);
-        taskbar.previewsSuppressed(true);
+        taskbar.previewsSuppressed(this, true);
         Box box = entry.box();
         // ABOVE ITS NEIGHBOURS, which it passes over
         if (box != null) box.setZIndex(1);
@@ -139,7 +139,7 @@ final class TaskbarReorder {
 
     private void finish(boolean cancelled) {
         live = false;
-        taskbar.previewsSuppressed(false);
+        taskbar.previewsSuppressed(this, false);
         if (cancelled && entry != null) taskbar.move(entry, originalBefore);
         // From where it is drawn to its slot. A slide, not a last position: the frame hook adds the offset to that
         if (entry != null) {

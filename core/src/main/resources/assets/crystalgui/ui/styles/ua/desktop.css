@@ -459,6 +459,15 @@ taskbar .__entry__.__active__:hover {
     background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
 }
 
+/* ITS JUMP LIST OPEN, any entry is lit as the active one hovered, as Windows': the pointer has gone to the list. */
+taskbar .__entry__.__menu-open__ {
+    color: var(--taskbar-entry-active-fg, #FFFFFF);
+    background: none;
+    background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
+    /* Eased in slower than a hover, which is what makes it read as the list taking the entry; back at hover's pace. */
+    transition: background-color 250ms ease-out, color 250ms ease-out;
+}
+
 /* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to
  * prevent. Only the label dims: the tile keeps its colour, because the window still exists and its
  * icon is how you find it again. */

@@ -15,6 +15,7 @@ import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
@@ -28,6 +29,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -35,6 +37,8 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -214,9 +218,10 @@ public class Taskbar extends UIElement {
         // An application installed late gives its pin a button
         whileConnected(() -> desktop().applications().onDidChange.connect(this::refresh));
         onConnected(this::arrive);
+        // A PRESS ON BARE BAR FOCUSES THE BAR, unringed and never a Tab stop itself, so Tab goes on to Start, as Windows'.
+        setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
         // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
         // below still centres its island as if the edge were not there.
-        UIElement edge = new UIElement();
         edge.addClass(EDGE_CLASS);
         edge.setHitTest(false);
         append(edge);
@@ -275,9 +280,9 @@ public class Taskbar extends UIElement {
         return entry instanceof Entry known ? known.shown() : List.of();
     }
 
-    /** Holds the hover previews down while an entry is being dragged. */
-    void previewsSuppressed(boolean suppressed) {
-        previews.setSuppressed(suppressed);
+    /** Holds the hover previews down while an entry is being dragged, by {@code drag}. */
+    void previewsSuppressed(Object drag, boolean suppressed) {
+        previews.setSuppressed(drag, suppressed);
     }
 
     /** The start button, and through it the launcher. */
@@ -302,9 +307,14 @@ public class Taskbar extends UIElement {
      * phase</b>, so the jump list's own handler — attached first — was silencing the preview's dismissal
      * outright. Depending on the order two listeners happen to be registered in is exactly the coupling
      * that produced a preview sitting on top of the menu that replaced it.</p>
+     *
+     * <pre>{@code
+     * taskbar.setPreviewsSuppressed(menu, true);    // as the jump list opens
+     * taskbar.setPreviewsSuppressed(menu, false);   // as it closes: previews return once nothing else holds them
+     * }</pre>
      */
-    public void setPreviewsSuppressed(boolean suppressed) {
-        previews.setSuppressed(suppressed);
+    public void setPreviewsSuppressed(Object by, boolean suppressed) {
+        previews.setSuppressed(by, suppressed);
     }
 
     /**
@@ -398,7 +408,7 @@ public class Taskbar extends UIElement {
         // THE WINDOW THE ACTIVE ONE IS REPRESENTED BY, which for a tool window is its owner: a tool
         // window has no entry of its own, so comparing against it directly lights nothing and the
         // application the panel belongs to reads as unfocused while its own panel is in front.
-        WindowFrame focused = desktop.activeWindow();
+        WindowFrame focused = jumpListsUp.isEmpty() ? desktop.activeWindow() : null;
         WindowFrame active = focused == null ? null : focused.taskbarSubject();
         int index = 0;
         for (Object key : wanted) {
@@ -807,7 +817,19 @@ public class Taskbar extends UIElement {
             event.stopPropagation();
             // ALREADY UP: a second right-click on its own entry leaves it, as Windows does
             if (SystemMenu.isJumpListOpen(entry.subject(), element)) return;
-            SystemMenu.showJumpList(entry.subject(), element);
+            Menu jumpList = SystemMenu.showJumpList(entry.subject(), element);
+            // LIT WHILE ITS LIST IS UP, as Windows': the pointer leaves the entry for the list, and the entry still says whose it is.
+            // AND NO ENTRY ACTIVE MEANWHILE: Windows' list takes the foreground, so the app you were in shows only as running.
+            if (jumpList == null) return;
+            entry.addClass(MENU_OPEN_CLASS);
+            jumpListsUp.add(jumpList);
+            refresh();
+            jumpList.onClosed.connect(() -> {
+                entry.removeClass(MENU_OPEN_CLASS);
+                // Per list: the one a right-click light-dismisses closes after the one it opened
+                jumpListsUp.remove(jumpList);
+                refresh();
+            });
         }, false, false);
         previews.watch(entry, entry::shown);
         // DRAG TO REORDER, from a left press. Never from the keyboard: Space and Enter arrive as a synthesized
@@ -1041,7 +1063,7 @@ public class Taskbar extends UIElement {
         }
         // OUT OF FLOW WHILE IT LEAVES, so the work area takes the bar's row at once and the bar slides away over it.
         addClass(LEAVING_CLASS);
-        motion = TaskbarMotion.leave(this, false, this::gone);
+        motion = TaskbarMotion.leave(this, edge, buttons(), false, this::gone);
     }
 
     /**
@@ -1054,7 +1076,7 @@ public class Taskbar extends UIElement {
             done.run();
             return;
         }
-        motion = TaskbarMotion.leave(this, true, done);
+        motion = TaskbarMotion.leave(this, edge, buttons(), true, done);
     }
 
     /** The desktop is opening again: the bar comes in, its buttons rising into it. */
@@ -1063,11 +1085,17 @@ public class Taskbar extends UIElement {
         else stopMotion();
     }
 
+    /** On an entry while its jump list is open, which the sheet lights as the active entry hovered. */
+    public static final String MENU_OPEN_CLASS = "__menu-open__";
+
     /** On a button while it rises in with the bar, which the sheet gives a picture of its own. */
     public static final String RISING_CLASS = "__rising__";
 
     /** On the bar while it slides off screen, which the sheet takes out of flow. */
     public static final String LEAVING_CLASS = "__leaving__";
+
+    /** The jump lists open, while which no entry shows as active. */
+    private final Set<Menu> jumpListsUp = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /** Whether the bar is meant to be on screen: false from the moment it starts leaving. */
     private boolean barShown = true;
@@ -1075,6 +1103,8 @@ public class Taskbar extends UIElement {
     private boolean arriving;
     @Nullable
     private TaskbarMotion motion;
+    /** The light along the bar's top, which draws in and out with it. */
+    private final UIElement edge = new UIElement();
 
     /** Joined the tree: brought up to date, and comes on screen. */
     private void arrive() {
@@ -1092,10 +1122,15 @@ public class Taskbar extends UIElement {
 
     private void playEnter() {
         stopMotion();
+        motion = TaskbarMotion.enter(this, edge, buttons());
+    }
+
+    /** The start button, then the entries: the order they rise in. */
+    private List<UIElement> buttons() {
         List<UIElement> buttons = new ArrayList<>();
         buttons.add(start);
         buttons.addAll(entryRow());
-        motion = TaskbarMotion.enter(this, buttons);
+        return buttons;
     }
 
     private void gone() {

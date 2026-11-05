@@ -52,7 +52,12 @@ public final class BoxFlights {
      * }</pre>
      */
     public static Connection hold(UIElement on, CompositorAnimation flight, @Nullable Runnable done) {
-        return play(on, flight, 0L, true, done);
+        return hold(on, flight, 0L, done);
+    }
+
+    /** As above, its clock starting {@code delayNanos} after its first frame, held at its start until then. */
+    public static Connection hold(UIElement on, CompositorAnimation flight, long delayNanos, @Nullable Runnable done) {
+        return play(on, flight, delayNanos, true, done);
     }
 
     private static Connection play(UIElement on, CompositorAnimation flight, long delayNanos, boolean holds,

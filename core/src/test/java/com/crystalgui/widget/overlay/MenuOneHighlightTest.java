@@ -45,11 +45,11 @@ public class MenuOneHighlightTest extends UiDocumentTestBase {
         for (int i = 0; i < 4; i++) frame();
 
         // THE REAL ROUTE: hovering a row with a submenu schedules it, exactly as a sweep does.
-        document.input().send(parent, new MouseEvent.Enter(parent, ORIGIN));
+        pointAt(parent);
         for (int i = 0; i < 240 && !child.isOpen(); i++) frame();
         assertTrue("the submenu is up", child.isOpen());
 
-        document.input().send(plain, new MouseEvent.Enter(plain, ORIGIN));
+        pointAt(plain);
         for (int i = 0; i < 4; i++) frame();
 
         assertFalse("the submenu closed behind the pointer", child.isOpen());
@@ -72,13 +72,20 @@ public class MenuOneHighlightTest extends UiDocumentTestBase {
         menu.showAt(10f, 10f, null);
         for (int i = 0; i < 4; i++) frame();
 
-        document.input().send(close, new MouseEvent.Enter(close, ORIGIN));
+        pointAt(close);
         frame();
         assertTrue("the enabled row took focus", close.isFocused());
 
-        document.input().send(restore, new MouseEvent.Enter(restore, ORIGIN));
+        pointAt(restore);
         frame();
         assertFalse("the row the pointer left is no longer focused", close.isFocused());
         assertTrue("focus parked on the menu, as on open", menu.isFocused());
+    }
+
+    /** The pointer moves onto {@code row} and it hears the enter: a menu lights nothing under a pointer still since it opened. */
+    private void pointAt(MenuItem row) {
+        int[] at = centreOf(row);
+        move(at[0], at[1]);
+        document.input().send(row, new MouseEvent.Enter(row, ORIGIN));
     }
 }

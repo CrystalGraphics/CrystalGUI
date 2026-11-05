@@ -5039,6 +5039,7 @@ com/crystalgui/desktop/launcher/LauncherButton
 com/crystalgui/desktop/motion/BoxFlights
   access public,final
   extends java/lang/Object
+  method public,static hold (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/service/CompositorAnimation;JLjava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
   method public,static hold (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/service/CompositorAnimation;Ljava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
   method public,static outBack (D)Lcom/crystalgraphics/easing/CgEasing;
   method public,static play (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/service/CompositorAnimation;JLjava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
@@ -5119,6 +5120,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final INDICATOR_PART Ljava/lang/String;
   field public,static,final LAUNCH_CLASS Ljava/lang/String;
   field public,static,final LEAVING_CLASS Ljava/lang/String;
+  field public,static,final MENU_OPEN_CLASS Ljava/lang/String;
   field public,static,final MULTIPLE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
@@ -5136,7 +5138,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   method public previewsSuppressedForTesting ()Z
   method public refresh ()V
   method public setBarVisible (Z)V
-  method public setPreviewsSuppressed (Z)V
+  method public setPreviewsSuppressed (Ljava/lang/Object;Z)V
   method public start ()Lcom/crystalgui/desktop/launcher/LauncherButton;
   method public takePlace (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/taskbar/Taskbar;
@@ -5259,7 +5261,7 @@ com/crystalgui/desktop/window/SystemMenu
   method public,static dismissJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
   method public,static isJumpListOpen (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)Z
   method public,static showFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public,static showJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)V
+  method public,static showJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Menu;
 com/crystalgui/desktop/window/WindowChrome
   access public,abstract,interface
   extends java/lang/Object
@@ -14140,6 +14142,7 @@ com/crystalgui/ui/input/keymap/Keymap
   method public unbind (Ljava/lang/String;)Lcom/crystalgui/ui/input/keymap/Keymap;
   method public,static acceleratorFor (Lcom/crystalgui/ui/input/keymap/KeymapScope;Ljava/lang/String;)Lcom/crystalgui/ui/input/keymap/KeyChord;
   method public,static acceleratorsFrom (Lcom/crystalgui/ui/input/keymap/KeymapScope;)Ljava/util/Map;
+  method public,static sharingChords ()Lcom/crystalgui/ui/input/keymap/Keymap;
 com/crystalgui/ui/input/keymap/KeymapResolver
   access public,final
   extends java/lang/Object
