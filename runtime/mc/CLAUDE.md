@@ -26,8 +26,8 @@ drifted across two loaders by the time anyone compared them.
 > deliberately dropped the `1201` suffixes, so `CgUiScreen`, `CgUiHud` and `ClientProbe` are bare. An
 > adapter whose core counterpart shares its name cannot import it, and a fully-qualified name at a call
 > site is the thing to avoid — so `WorkspaceHostModern` adapts `fs.server.WorkspaceHost`,
-> `ServerSmokeModern` adapts `probe.ServerSmoke`, `HostModern`/`Host1710` answer `HostServices`, and
-> `MachineExample1710` wires `app.machine.MachineExample`. **Never a prefix** — not `Mc1710Host`, and
+> `ServerSmokeModern` adapts `probe.ServerSmoke`, and `HostModern`/`Host1710` answer `HostServices`.
+> **Never a prefix** — not `Mc1710Host`, and
 > not `ModernHost`.
 
 > **Packages: every loader tree owns a segment under `com.crystalgui.mc`, and none of them owns the

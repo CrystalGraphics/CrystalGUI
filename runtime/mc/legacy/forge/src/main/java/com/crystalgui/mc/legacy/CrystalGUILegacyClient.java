@@ -5,7 +5,6 @@ import com.crystalgraphics.mc.shared.VariantEntry;
 import com.crystalgui.mc.legacy.client.CgUiHud;
 import com.crystalgui.mc.legacy.client.CgUiInput;
 import com.crystalgui.mc.legacy.client.CgUiScreen;
-import com.crystalgui.mc.legacy.example.MachineExampleClientLegacy;
 import com.crystalgui.mc.legacy.probe.CgUiAutoTest;
 import com.crystalgui.mc.legacy.probe.CgUiConnectionProbe;
 import com.crystalgui.mc.legacy.probe.CgUiDesktopProbe;
@@ -26,7 +25,6 @@ public final class CrystalGUILegacyClient implements VariantEntry {
             CgUiAutoTest.register();
             CgUiConnectionProbe.register();
             CgUiDesktopProbe.register();
-            MachineExampleClientLegacy.registerClient();
         });
     }
 }

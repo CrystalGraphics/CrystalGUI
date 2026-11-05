@@ -70,7 +70,7 @@ public final class ServerSmokeModern {
         @Override
         public List<String> alsoNeverLoaded() {
             // Client-side content that does not live in the client package.
-            return Collections.singletonList("com.crystalgui.mc.modern.example.MachineExampleClientModern");
+            return Collections.emptyList();
         }
 
         /** Naming this from a common path is the commonest spelling of the bug. */

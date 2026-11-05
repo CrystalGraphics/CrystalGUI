@@ -11,12 +11,9 @@ import net.minecraft.client.KeyMapping;
 *///?}
 
 /**
- * The two keys that open the desktop. Vanilla {@code KeyMapping}s, so they live here; each loader only
- * registers them and calls {@link #tick()} once a client tick.
- *
- * <p>Two keys and two different things: F6 asks for the EDITOR and brings it forward whatever state it
- * was left in, F7 asks for the DESKTOP and touches no window, so one left with everything minimised
- * comes back that way.</p>
+ * The key that opens the desktop, Left Alt. A vanilla {@code KeyMapping}, so it lives here; each loader only
+ * registers it and calls {@link #tick()} once a client tick. It touches no window, so a desktop left with
+ * everything minimised comes back that way; the editor is launched from the desktop.
  */
 public final class CgUiKeybinds {
 
@@ -28,18 +25,15 @@ public final class CgUiKeybinds {
     public static final String CATEGORY = "key.categories.crystalgui";
     //?}
 
-    public static final KeyMapping OPEN_EDITOR =
-            new KeyMapping("key.crystalgui.open", CgUiInput.hostKey(CgKeyCodes.KEY_F6), CATEGORY);
-
     public static final KeyMapping OPEN_DESKTOP =
-            new KeyMapping("key.crystalgui.desktop", CgUiInput.hostKey(CgKeyCodes.KEY_F7), CATEGORY);
+            new KeyMapping("key.crystalgui.desktop", CgUiInput.hostKey(CgKeyCodes.KEY_LMENU), CATEGORY);
 
     /**
      * Every mapping a loader must register. Content adds to it through {@link #add}; a loader only
      * iterates, so the set is declared once rather than enumerated per loader.
      */
     private static final List<KeyMapping> ALL = new CopyOnWriteArrayList<>(
-            java.util.Arrays.asList(OPEN_EDITOR, OPEN_DESKTOP));
+            java.util.Arrays.asList(OPEN_DESKTOP));
 
     private CgUiKeybinds() {}
 
@@ -51,15 +45,7 @@ public final class CgUiKeybinds {
         return ALL;
     }
 
-    /**
-     * Both are asked, never else-if: {@code consumeClick()} CONSUMES the press, so a chain that stops at
-     * the first hit leaves the other key's press queued and it fires on the next unrelated keystroke.
-     */
     public static void tick() {
-        // CONSUMED EITHER WAY, so a press cannot sit queued and fire on the next unrelated keystroke.
-        boolean editor = OPEN_EDITOR.consumeClick();
-        boolean desktop = OPEN_DESKTOP.consumeClick();
-        if (editor) CgUiScreen.openEditor();
-        else if (desktop) CgUiScreen.openDesktop();
+        if (OPEN_DESKTOP.consumeClick()) CgUiScreen.openDesktop();
     }
 }

@@ -16,7 +16,6 @@ compiles against one loader and is used by three.
 | `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds`, and `ClientGame` — the client state Minecraft moved (26.2 put the screen, the overlay and the HUD's hidden flag on `mc.gui`), spelled once |
 | `com.crystalgui.mc.modern.net` | `Connections`, `Peer`, `WorkspaceHostModern` — where the served workspace is |
 | `com.crystalgui.mc.modern.probe` | Every adapter over `core`'s probes: `CgUiAutoTest`, `ClientProbe`, `ConnectionProbeModern`, `ServerSmokeModern`. **`serverSmoke` enumerates this package as client-only**, the smoke itself excepted — so a probe added here is checked without anyone listing it |
-| `com.crystalgui.mc.modern.example` | `MachineExampleModern` and its client half — a key and a tick over `app.machine.MachineExample`; the worked example, not engine code |
 | `com.crystalgui.mc.modern.lang` (`src/lang`) | `ScriptServiceModern` — the language jar's half: Minecraft's bytes and names for scripts |
 
 ## Key design points

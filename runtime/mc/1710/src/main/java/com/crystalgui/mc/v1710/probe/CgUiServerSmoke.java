@@ -72,10 +72,9 @@ public final class CgUiServerSmoke {
         @Override
         public List<String> alsoNeverLoaded() {
             return Arrays.asList(
-                    // Client-side content outside that package. CommonProxy exists so both are
+                    // Client-side content outside that package. CommonProxy exists so it is
                     // unreachable from common code.
-                    "com.crystalgui.mc.v1710.ClientProxy",
-                    "com.crystalgui.mc.v1710.example.MachineExampleClient1710");
+                    "com.crystalgui.mc.v1710.ClientProxy");
         }
 
         /** Naming this from a common path is the commonest spelling of the bug. */

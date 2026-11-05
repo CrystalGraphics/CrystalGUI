@@ -63,7 +63,7 @@ public final class CgUiInput {
      * {@code KeyMapping} default or a synthetic press.
      *
      * <pre>{@code
-     * new KeyMapping("key.crystalgui.open", CgUiInput.hostKey(CgKeyCodes.KEY_F6), CATEGORY);
+     * new KeyMapping("key.crystalgui.desktop", CgUiInput.hostKey(CgKeyCodes.KEY_LMENU), CATEGORY);
      * }</pre>
      */
     public static int hostKey(int cgKey) {

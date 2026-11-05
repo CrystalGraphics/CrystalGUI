@@ -10,8 +10,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.client.CgUiScreen;
-import com.crystalgui.mc.modern.example.MachineExampleClientModern;
-import com.crystalgui.mc.modern.example.MachineExampleModern;
+import com.crystalgui.app.machine.MachineExample;
 import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.mc.modern.probe.CgUiAutoTest;
 import com.crystalgui.mc.modern.probe.ClientProbe;
@@ -49,7 +48,7 @@ public final class LifecycleCrystalGUI {
         // Without it a client has no ClientWindows, and every requestOpen is refused locally.
         WindowProtocol.register();
         CgNetwork.onPeerClosed(WorkspaceHostModern::forget);
-        MachineExampleModern.registerCommon();
+        MachineExample.registerServer();
     }
 
     /**
@@ -62,7 +61,6 @@ public final class LifecycleCrystalGUI {
         // exists would throw rather than open anything.
         CgUiScreen.install();
         CgUiHud.attachStages();
-        MachineExampleClientModern.registerClient();
 
         // THE CONNECTION PROBE RIDES THE TICK HOOKS, and is registered from HERE rather than called
         // from serverTick() -- that method runs on a dedicated server, and this probe is a client

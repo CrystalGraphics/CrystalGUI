@@ -6,7 +6,7 @@ import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgraphics.mc.shared.FmlEvents;
 import com.crystalgraphics.mc.shared.VariantEntry;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.mc.legacy.example.MachineExampleLegacy;
+import com.crystalgui.app.machine.MachineExample;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.legacy.net.CgUiWorkspaceHost;
 import com.crystalgui.mc.legacy.probe.CgUiServerSmoke;
@@ -49,7 +49,7 @@ public final class CrystalGUILegacy implements VariantEntry {
         CgUiWorkspaceHost.register();
         WindowProtocol.register();
         CgNetwork.onPeerClosed(CgUiWorkspaceHost::forget);
-        MachineExampleLegacy.registerCommon();
+        MachineExample.registerServer();
     }
 
     /**

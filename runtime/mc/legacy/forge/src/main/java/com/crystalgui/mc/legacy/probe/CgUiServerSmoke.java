@@ -76,10 +76,9 @@ public final class CgUiServerSmoke {
         @Override
         public List<String> alsoNeverLoaded() {
             return Arrays.asList(
-                    // Client-side content outside those packages: the client entry is what keeps both
+                    // Client-side content outside those packages: the client entry is what keeps it
                     // unreachable from common code.
-                    root + ".CrystalGUILegacyClient",
-                    root + ".example.MachineExampleClientLegacy");
+                    root + ".CrystalGUILegacyClient");
         }
 
         /** Naming this from a common path is the commonest spelling of the bug. */

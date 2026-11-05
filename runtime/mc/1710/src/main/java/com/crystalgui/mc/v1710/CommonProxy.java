@@ -1,7 +1,7 @@
 package com.crystalgui.mc.v1710;
 
 import com.crystalgui.mc.v1710.ClientProxy;
-import com.crystalgui.mc.v1710.example.MachineExample1710;
+import com.crystalgui.app.machine.MachineExample;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.mc.v1710.net.CgUiWorkspaceHost;
 import com.crystalgui.net.window.WindowProtocol;
@@ -45,7 +45,7 @@ public class CommonProxy {
         CgNetwork.onPeerClosed(CgUiWorkspaceHost::forget);
         // The worked example's SERVER half.
         // Common code on purpose: it imports no screen, which is the property that lets it run on a
-        // dedicated server. @see MachineExample1710
-        MachineExample1710.registerCommon();
+        // dedicated server. @see MachineExample
+        MachineExample.registerServer();
     }
 }
