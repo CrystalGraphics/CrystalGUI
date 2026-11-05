@@ -391,6 +391,8 @@ taskbar .__entry__ {
     color: var(--taskbar-entry-fg, #9DA0A8);
     /* WinUI's ControlFasterAnimationDuration, what Button fades its pointer-over brush in. */
     transition: background-color 140ms ease-out, color 140ms ease-out;
+    /* The arrow, as Windows' taskbar: over the sheet-wide `button { cursor: pointer }`. */
+    cursor: default;
 }
 
 /* AN ENTRY WITH NO LABEL is an icon, and is shaped like one.

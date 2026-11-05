@@ -37,8 +37,6 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.IdentityHashMap;
 import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.Set;
@@ -408,7 +406,7 @@ public class Taskbar extends UIElement {
         // THE WINDOW THE ACTIVE ONE IS REPRESENTED BY, which for a tool window is its owner: a tool
         // window has no entry of its own, so comparing against it directly lights nothing and the
         // application the panel belongs to reads as unfocused while its own panel is in front.
-        WindowFrame focused = jumpListsUp.isEmpty() ? desktop.activeWindow() : null;
+        WindowFrame focused = desktop.activeWindow();
         WindowFrame active = focused == null ? null : focused.taskbarSubject();
         int index = 0;
         for (Object key : wanted) {
@@ -818,18 +816,11 @@ public class Taskbar extends UIElement {
             // ALREADY UP: a second right-click on its own entry leaves it, as Windows does
             if (SystemMenu.isJumpListOpen(entry.subject(), element)) return;
             Menu jumpList = SystemMenu.showJumpList(entry.subject(), element);
-            // LIT WHILE ITS LIST IS UP, as Windows': the pointer leaves the entry for the list, and the entry still says whose it is.
-            // AND NO ENTRY ACTIVE MEANWHILE: Windows' list takes the foreground, so the app you were in shows only as running.
+            // LIT WHILE ITS LIST IS UP, as Windows': the pointer leaves the entry for the list, and the entry still says whose
+            // it is. Its pill stays the one it had: the window you were in is still the one you are in.
             if (jumpList == null) return;
             entry.addClass(MENU_OPEN_CLASS);
-            jumpListsUp.add(jumpList);
-            refresh();
-            jumpList.onClosed.connect(() -> {
-                entry.removeClass(MENU_OPEN_CLASS);
-                // Per list: the one a right-click light-dismisses closes after the one it opened
-                jumpListsUp.remove(jumpList);
-                refresh();
-            });
+            jumpList.onClosed.connect(() -> entry.removeClass(MENU_OPEN_CLASS));
         }, false, false);
         previews.watch(entry, entry::shown);
         // DRAG TO REORDER, from a left press. Never from the keyboard: Space and Enter arrive as a synthesized
@@ -1093,9 +1084,6 @@ public class Taskbar extends UIElement {
 
     /** On the bar while it slides off screen, which the sheet takes out of flow. */
     public static final String LEAVING_CLASS = "__leaving__";
-
-    /** The jump lists open, while which no entry shows as active. */
-    private final Set<Menu> jumpListsUp = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /** Whether the bar is meant to be on screen: false from the moment it starts leaving. */
     private boolean barShown = true;
