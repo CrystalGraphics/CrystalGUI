@@ -997,7 +997,8 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     protected void bindKeys() {
     }
 
-    /** Every class that has had {@link #registerCommands} run for it. */
+    /** Whether {@link #bindKeys} has run: the keymap outlives a detach, so a re-attach must not bind it again. */
+    private boolean keysBound;
 
     void runCommandHooks() {
         // KEYED TO THE REGISTRY, never to a static set on this class. A static latch outlives
@@ -1006,7 +1007,10 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         // just a key that stopped working. `contribute` records the contributor ON the registry, so
         // clearing one clears the other.
         CommandRegistry.global().contribute(getClass(), this::registerCommands);
-        bindKeys();
+        if (!keysBound) {
+            keysBound = true;
+            bindKeys();
+        }
     }
 
     /** This node was linked under {@code parent}: take its document, its shadowness, its observer. */
