@@ -125,6 +125,10 @@ editor scheme's.
 | `--activitybar-item-focused-fg` | `var(--fg-on-accent)` | base.css |
 | `--activitybar-item-hover-bg` | `#46484b` | crystal-dark.css |
 | `--activitybar-separator` | `var(--border-strong)` | base.css |
+| `--attention` | `#C4621A` | crystal-dark.css |
+| `--attention-clear` | `#C4621A00` | crystal-dark.css |
+| `--attention-held` | `#C4621ACC` | crystal-dark.css |
+| `--attention-mark` | `#F7A04A` | crystal-dark.css |
 | `--balloon-bg` | `var(--surface-base)` | base.css |
 | `--balloon-border` | `var(--border-base)` | base.css |
 | `--balloon-hover-bg` | `var(--hover-bg)` | base.css |
@@ -734,8 +738,10 @@ editor scheme's.
 | `--taskbar-entry-active-bg` | `#FFFFFF33` | crystal-dark.css |
 | `--taskbar-entry-active-fg` | `var(--fg)` | base.css |
 | `--taskbar-entry-active-hover-bg` | `#FFFFFF4D` | crystal-dark.css |
-| `--taskbar-entry-attention-bg` | `var(--accent-soft)` | base.css |
-| `--taskbar-entry-attention-fg` | `var(--fg)` | base.css |
+| `--taskbar-entry-attention-bg` | `var(--attention)` | base.css |
+| `--taskbar-entry-attention-fg` | `var(--fg-on-accent)` | base.css |
+| `--taskbar-entry-attention-held-bg` | `var(--attention-held)` | base.css |
+| `--taskbar-entry-attention-off-bg` | `var(--attention-clear)` | base.css |
 | `--taskbar-entry-badge-bg` | `var(--error)` | base.css |
 | `--taskbar-entry-badge-fg` | `var(--fg-on-accent)` | base.css |
 | `--taskbar-entry-fg` | `var(--fg)` | base.css |
@@ -747,6 +753,7 @@ editor scheme's.
 | `--taskbar-glass-tint` | `#20202013` | crystal-dark.css |
 | `--taskbar-indicator` | `var(--fg-secondary)` | base.css |
 | `--taskbar-indicator-active` | `var(--accent)` | base.css |
+| `--taskbar-indicator-attention` | `var(--attention-mark)` | base.css |
 | `--taskbar-indicator-hidden` | `var(--fg-disabled)` | base.css |
 | `--taskbar-start-hover-tint` | `#D4E2FF` | crystal-dark.css |
 | `--taskbar-start-pressed-tint` | `#B7CDF7` | crystal-dark.css |

@@ -75,6 +75,13 @@ theme {
      * glyph, where the body colour is too dark to read at 10px; success had none because nothing drew one
      * until the Run panel's live mark. This is the green IntelliJ puts over its Run tool window. */
     --success-icon: #5FAD65;
+    /* ATTENTION: what Windows flashes a taskbar button that wants looking at -- the one thing asking rather than
+     * reporting, so a colour that is none of the severities. A fill and a brighter mark on it. */
+    --attention: #C4621A;
+    --attention-mark: #F7A04A;
+    /* The same orange at no alpha, what a pulse fades to; and at four fifths, what it holds at once over */
+    --attention-clear: #C4621A00;
+    --attention-held: #C4621ACC;
 
     --link: #4A88C7;
 

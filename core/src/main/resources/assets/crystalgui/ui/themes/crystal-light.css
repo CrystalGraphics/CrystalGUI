@@ -69,6 +69,12 @@ theme {
     /* Darker than dark's, the same relationship the other three have between the pair: a filled mark has
      * to hold its own against a light surface, where dark's #5FAD65 washes out. */
     --success-icon: #3E8E45;
+    /* ATTENTION: as dark's, the same orange -- a filled tile under white, which reads on either surface. */
+    --attention: #C4621A;
+    --attention-mark: #F7A04A;
+    /* The same orange at no alpha, what a pulse fades to; and at four fifths, what it holds at once over */
+    --attention-clear: #C4621A00;
+    --attention-held: #C4621ACC;
 
     --link: #2A6DB0;
 

@@ -444,7 +444,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, LAUNCH_CLASS, false);
                 setClass(entry, ACTIVE_CLASS, frame == active);
                 setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);
-                setClass(entry, ATTENTION_CLASS, frame.isDemandingAttention());
+                setAttention(entry, frame.isDemandingAttention());
                 applyBadge(entry, frame.badge());
                 applyProgress(entry, frame.progress());
                 entry.tooltip.setText("");
@@ -455,7 +455,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, LAUNCH_CLASS, true);
                 setClass(entry, ACTIVE_CLASS, false);
                 setClass(entry, HIDDEN_CLASS, false);
-                setClass(entry, ATTENTION_CLASS, false);
+                setAttention(entry, false);
                 applyBadge(entry, null);
                 applyProgress(entry, -1f);
                 entry.tooltip.setText(entry.kind.displayName());
@@ -478,7 +478,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, LAUNCH_CLASS, false);
                 setClass(entry, ACTIVE_CLASS, lit);
                 setClass(entry, HIDDEN_CLASS, allHidden);
-                setClass(entry, ATTENTION_CLASS, attention);
+                setAttention(entry, attention);
                 applyBadge(entry, badge);
                 applyProgress(entry, progress);
                 entry.tooltip.setText("");
@@ -974,6 +974,52 @@ public class Taskbar extends UIElement {
             entry.setPreIcon(tile);
         }
         tile.show(iconName, entry.getText());
+    }
+
+    /** On an attention entry between its pulses: the sheet fades it out. @see #setAttention */
+    public static final String FLASH_OFF_CLASS = "__flash-off__";
+    /** On an attention entry once its pulses are over: the sheet settles it to the tint it holds. */
+    public static final String FLASH_HELD_CLASS = "__flash-held__";
+    /**
+     * Windows' flash, measured (FlashWindowEx, seven toggles at the 530 ms caret blink time): four pulses, one every
+     * four blinks, each lit for 750 ms of it, then held lit at four fifths. The sheet's transitions are its rise and
+     * fall: lit over 700 ms, unlit over 850 ms, held over 600 ms.
+     */
+    private static final long FLASH_PERIOD_NANOS = 4L * 530_000_000L, FLASH_LIT_NANOS = 750_000_000L,
+            FLASH_SETTLE_NANOS = 1_000_000_000L;
+    private static final int PULSES = 4;
+
+    /**
+     * Lights {@code entry} for a window wanting attention, pulsing it as Windows' {@code FlashWindowEx} does a window
+     * that finished in the background, then holding it lit; off, its pulsing stops with it.
+     */
+    private void setAttention(UIElement entry, boolean on) {
+        boolean was = entry.hasClass(ATTENTION_CLASS);
+        setClass(entry, ATTENTION_CLASS, on);
+        if (!on) {
+            entry.removeClass(FLASH_OFF_CLASS);
+            entry.removeClass(FLASH_HELD_CLASS);
+        }
+        if (!on || was) return;
+        UIDocument document = entry.document();
+        if (document == null || !WindowAnimator.isEnabled()) {
+            entry.addClass(FLASH_HELD_CLASS);
+            return;
+        }
+        long start = System.nanoTime();
+        document.animation().every(entry, delta -> {
+            if (!entry.hasClass(ATTENTION_CLASS)) return false;
+            long since = System.nanoTime() - start;
+            long pulse = since / FLASH_PERIOD_NANOS, into = since % FLASH_PERIOD_NANOS;
+            if (pulse >= PULSES - 1 && into >= FLASH_SETTLE_NANOS || pulse >= PULSES) {
+                entry.removeClass(FLASH_OFF_CLASS);
+                entry.addClass(FLASH_HELD_CLASS);
+                return false;
+            }
+            // The last pulse is not put out: it settles from lit to held
+            setClass(entry, FLASH_OFF_CLASS, pulse < PULSES - 1 && into >= FLASH_LIT_NANOS);
+            return true;
+        });
     }
 
     private static void setClass(UIElement element, String cls, boolean on) {

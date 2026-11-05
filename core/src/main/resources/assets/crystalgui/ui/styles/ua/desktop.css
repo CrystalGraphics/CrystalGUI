@@ -543,24 +543,37 @@ taskbar .__entry__::part(label) {
  * a window nobody knows about. Win32 flashes the button, X11 raises the urgency hint, macOS bounces
  * the icon; here it is a class the entry carries until the window is activated.
  *
- * A SOFT accent fill with the full accent on the pill, where this used to flood the whole entry in
- * the accent. The flood was the loudest thing on the desktop, and on a bar whose every other state is
- * a step on one grey it read as an error rather than as a knock; Windows' own flash settles to a tint.
+ * Windows' flash, measured off FlashWindowEx: four slow pulses of orange, one every 2.12 s, each rising over
+ * about 700 ms and fading over 850, then held at four fifths until the window is activated. Taskbar times the
+ * three states (lit, __flash-off__, __flash-held__); each rule's transition is how its state is reached.
  *
  * AFTER the hidden rule and before nothing, because a background-opened window is very often also a
  * hidden one and the attention state is the more urgent thing to say. Same tie-break the disabled/hover
  * pair already pays for: both are one class, so the later rule wins. */
 taskbar .__entry__.__attention__ {
-    color: var(--taskbar-entry-attention-fg, #DFE1E5);
+    color: var(--taskbar-entry-attention-fg, #FFFFFF);
     background: none;
-    background-color: var(--taskbar-entry-attention-bg, #2E436E);
-    transition: background-color 600ms ease-in-out;
+    background-color: var(--taskbar-entry-attention-bg, #C4621A);
+    /* The rise: decelerating */
+    transition: background-color 700ms cubic-bezier(0, 0, 0.2, 1);
 }
 
 taskbar .__entry__.__attention__ .__indicator__ {
     width: 16px;
     transform: translate(-8px, 0);
-    background-color: var(--taskbar-indicator-active, #3574F0);
+    background-color: var(--taskbar-indicator-attention, #F7A04A);
+}
+
+/* Between pulses: the same orange at no alpha, so the fade does not pass through a dark half-colour; accelerating. */
+taskbar .__entry__.__attention__.__flash-off__ {
+    background-color: var(--taskbar-entry-attention-off-bg, #C4621A00);
+    transition: background-color 850ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Once the pulses are over: held at four fifths of the pulse until the window is looked at. */
+taskbar .__entry__.__attention__.__flash-held__ {
+    background-color: var(--taskbar-entry-attention-held-bg, #C4621ACC);
+    transition: background-color 600ms ease-in-out;
 }
 
 /* An unsaved count, an error count — the badge/colour split FileDecoration already draws. The window
