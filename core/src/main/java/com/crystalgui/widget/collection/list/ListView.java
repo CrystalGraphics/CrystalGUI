@@ -359,15 +359,16 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
      * The node answers {@code -1} unless something overrides it — 6.2 mistook that for a content-size
      * accessor and got {@code -1} back — and this is the first override in the engine.</p>
      *
-     * <p>{@code -1} for an axis this list does not virtualise, which is the contract's own way of
-     * saying "ask the boxes": a list that does not scroll sideways has nothing the children do not
-     * already say.</p>
+     * <p>Sideways, a list that does not scroll sideways answers its own client width: nothing in it
+     * overflows by design. Asking the boxes instead read its rows, whose pixel widths are written after a
+     * layout ({@link #rowWidth}), so on the frame the list narrowed they were still the old width and a
+     * fast resize flashed a horizontal scrollbar.</p>
      */
     @Override
     public float scrollExtent(boolean horizontal) {
         if (!horizontal) return sizeStrategy.totalSize(model.size());
-        if (!horizontalScrolling) return -1f;
         Box box = box();
+        if (!horizontalScrolling) return box == null ? 0f : box.clientWidth();
         // THE CONTENT BOX, NOT clientWidth: clientWidth is the PADDING box, so it includes the scrollbar
         // gutter the scroller reserves (ScrollerView.V_GUTTER_CLASS) and every row came out exactly as
         // wide as the viewport plus that gutter -- which is the band running under the bar this was

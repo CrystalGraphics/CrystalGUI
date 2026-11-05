@@ -83,8 +83,9 @@ public class CollectionBatchPortTest extends UiDocumentTestBase {
 
         assertEquals("ten thousand rows of 20px is the extent, whatever is realised",
                 200_000f, list.scrollExtent(false), 1f);
-        assertEquals("this list does not virtualise sideways, so it must defer to the boxes",
-                -1f, list.scrollExtent(true), 0.001f);
+        // Not the boxes: its rows' widths are written after a layout, and lag a resize. @see ListViewTest
+        assertEquals("a list that does not scroll sideways is exactly as wide as its client box",
+                list.box().clientWidth(), list.scrollExtent(true), 0.001f);
 
         long realised = list.children().stream().filter(c -> c.hasClass(ListView.ROW_CLASS)).count();
         assertTrue("the fixture realised " + realised + " of 10,000 rows -- if it realised them all "

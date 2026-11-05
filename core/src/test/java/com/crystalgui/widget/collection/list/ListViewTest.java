@@ -73,6 +73,20 @@ public class ListViewTest extends UiDocumentTestBase {
 
     // ── The property the widget exists for ──────────────────────────────────
 
+    /**
+     * A list that does not scroll sideways never overflows sideways, even on the frame it narrows: its rows' widths are
+     * written after a layout, so for that frame they are the old width, and a fast resize flashed a horizontal bar.
+     */
+    @Test
+    public void narrowingOnOneFrameShowsNoSidewaysOverflow() {
+        build(10);
+        list.layout(l -> l.width(60));
+        frame();
+        var box = list.box();
+        assertTrue("a list that does not scroll sideways overflowed sideways: " + box.scrollWidth() + " > "
+                + box.clientWidth(), box.scrollWidth() <= box.clientWidth() + 0.5f);
+    }
+
     @Test
     public void onlyTheVisibleWindowIsRealised() {
         build(100_000);
