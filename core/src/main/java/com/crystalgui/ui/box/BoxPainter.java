@@ -119,7 +119,11 @@ public final class BoxPainter {
                 int outer = ctx.enterNode(moved);
                 try {
                     Matrix4f inner = new Matrix4f(base).translateLocal(-x, -y, 0f);
-                    if (!paintSurface(box, ctx, inner, asContext, opacity)) paintBoxIn(box, ctx, inner, asContext, opacity, false);
+                    // GLASS IN IT: drawn into the target as any box, where its backdrop is the frame behind it -- a
+                    // surface holds only the box, so a filter inside one blurs nothing
+                    if (box.hasBackdrop() || !paintSurface(box, ctx, inner, asContext, opacity)) {
+                        paintBoxIn(box, ctx, inner, asContext, opacity, false);
+                    }
                 } finally {
                     ctx.enterNode(outer);
                 }

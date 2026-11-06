@@ -32,9 +32,16 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  * them vertically.</p>
  *
  * <ul>
- *   <li>A measured leaf, text, needs the height it is laid out at, and its min-content width unless it elides or
- *       states a width: a sentence that neither wraps nor elides holds the window open.</li>
- *   <li>A child that neither grows nor shrinks along its parent's main axis needs the size layout gave it: a row of
+ *   <li><b>Height is only ever stated.</b> It adds up only in a layout that fills its window (a child grows: a toolbar,
+ *       a pane, a status bar keep their lines, and a band that may give way says {@code flex-shrink}); flowing content
+ *       scrolls, and the largest single floor wins. Windows asks nothing of a window's height beyond what its application
+ *       declares, and a window's content scrolls vertically, so heights (a text line, a control's sheet height, a
+ *       content-sized row) hold nothing open; a {@code min-height} or a {@link MinimumSize} does.</li>
+ *   <li><b>Flowing content scrolls sideways too:</b> a column with no growing child asks nothing of the width, so its
+ *       rows, toolbars and long lines hold nothing open; a layout that fills its window pins them.</li>
+ *   <li>A measured leaf, text, needs its min-content width unless it elides or states a width: a sentence that
+ *       neither wraps nor elides holds the window open.</li>
+ *   <li>A child that neither grows nor shrinks along its parent's main axis needs the width layout gave it: a row of
  *       content-sized buttons cannot be narrower than they are.</li>
  *   <li>A box that clips or scrolls ({@code overflow} other than visible) contributes only what it states: what is
  *       inside it scrolls, so it forces nothing.</li>
@@ -56,7 +63,7 @@ public final class LayoutMinimum {
         Overflow overflow = style.get(StylePropertyRegistry.OVERFLOW);
         if (overflow != null && overflow != Overflow.VISIBLE) return stated;
         if (element instanceof Measurable measured && box.children().isEmpty()) {
-            return Math.max(stated, vertical ? box.height() : textWidth(measured, style));
+            return vertical ? stated : Math.max(stated, textWidth(measured, style));
         }
         return Math.max(stated, folded(box, style, vertical));
     }
@@ -96,8 +103,14 @@ public final class LayoutMinimum {
             // A grid's tracks are its own business: its children's largest is a floor it cannot go under
             along = false;
         }
+        // Height stacks only in a layout that fills (a child grows: toolbar, pane, status bar keep their lines).
+        // Flowing content scrolls, and the sheet's per-control min-heights would add up to a screenful.
+        if (vertical && along && !anyGrows(box)) along = false;
+        // A flowing column scrolls sideways too: its rows' widths hold nothing open, as its heights do not
+        boolean stacked = display == TaffyDisplay.BLOCK || display == TaffyDisplay.FLEX && isColumn(style);
         float sum = 0f;
         int counted = 0;
+        if (!vertical && stacked && !anyGrows(box)) return edges(box, false);
         for (Box child : box.children()) {
             UIElement node = child.node();
             if (node == null || !node.isDisplayed()) continue;
@@ -107,10 +120,18 @@ public final class LayoutMinimum {
             counted++;
         }
         if (along && counted > 1) sum += gap(style, vertical, box) * (counted - 1);
+        return sum + edges(box, vertical);
+    }
+
+    private static boolean isColumn(ComputedStyle style) {
+        FlexDirection direction = style.get(LayoutProperties.FLEX_DIRECTION);
+        return direction == FlexDirection.COLUMN || direction == FlexDirection.COLUMN_REVERSE;
+    }
+
+    private static float edges(Box box, boolean vertical) {
         FloatRect padding = box.padding(), border = box.border();
-        float edges = vertical ? padding.top + padding.bottom + border.top + border.bottom
+        return vertical ? padding.top + padding.bottom + border.top + border.bottom
                 : padding.left + padding.right + border.left + border.right;
-        return sum + edges;
     }
 
     /**
@@ -119,6 +140,8 @@ public final class LayoutMinimum {
      * basis: a toolbar's content-sized buttons and labels, which state no width yet cannot be narrower.
      */
     private static float fixed(UIElement node, Box box, boolean vertical, boolean alongParent) {
+        // A height is the sheet's sizing of a control, not a floor: only min-height and MinimumSize hold height open
+        if (vertical && !alongParent) return 0f;
         ComputedStyle style = node.computedStyle();
         if (alongParent) {
             Float shrink = style.get(LayoutProperties.FLEX_SHRINK);
@@ -128,6 +151,17 @@ public final class LayoutMinimum {
         }
         TaffyDimension size = style.get(vertical ? LayoutProperties.HEIGHT : LayoutProperties.WIDTH);
         return size == null || size.getType() != TaffyDimension.Type.LENGTH ? 0f : size.getValue();
+    }
+
+    /** Whether a child grows along the box's main axis: the box is a layout filling its window, not flowing content. */
+    private static boolean anyGrows(Box box) {
+        for (Box child : box.children()) {
+            UIElement node = child.node();
+            if (node == null || !node.isDisplayed()) continue;
+            Float grow = node.computedStyle().get(LayoutProperties.FLEX_GROW);
+            if (grow != null && grow > 0f) return true;
+        }
+        return false;
     }
 
     private static float margins(Box box, boolean vertical) {

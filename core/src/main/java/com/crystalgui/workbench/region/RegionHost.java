@@ -188,6 +188,11 @@ public class RegionHost extends UIElement implements MinimumSize {
         return mounted.isEmpty() ? 0f : SplitView.minimumOf(mounted.get(0), vertical);
     }
 
+    @Override
+    public float layoutFloor(boolean vertical) {
+        return minimumSize(vertical);
+    }
+
     /** Empties both halves. */
     public void clear() {
         showing.clear();

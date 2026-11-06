@@ -1477,6 +1477,21 @@ public class UIElement extends UINode implements EventTarget, Styleable {
     }
 
     /**
+     * The smallest, in pixels, layout may squeeze this element to on an axis: a floor the box tree applies as its
+     * {@code min-width}/{@code min-height} when it is not stated higher. Zero (none) by default.
+     *
+     * <pre>{@code
+     * @Override public float layoutFloor(boolean vertical) { return minimumSize(vertical); }   // a split, a dock
+     * }</pre>
+     *
+     * <p>For a composite whose parts state floors of their own: without it a flex parent squeezes it below them and
+     * they overflow, clipped, losing their rounded corners. Read when the style is applied, not every frame.</p>
+     */
+    public float layoutFloor(boolean vertical) {
+        return 0f;
+    }
+
+    /**
      * Whether a leading edge may move this node's origin — i.e. whether it is out of flow.
      *
      * <p>{@code false} keeps the trailing three handles — bottom, right and the corner — which is

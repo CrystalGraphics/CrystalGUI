@@ -422,8 +422,18 @@ public class SplitView extends UIElement implements MinimumSize {
     }
 
     private UIElement addPaneInternal(int index, float weight) {
-        UIElement element = newPart(PANE_CLASS);
-        panes.add(index, new Pane(element, weight));
+        // A pane that is overflow-hidden with a zero basis may shrink to nothing in Taffy, so it states what its
+        // content needs along the split's axis, or the content overhangs and is clipped, losing its rounded corners.
+        Pane[] self = new Pane[1];
+        UIElement element = new UIElement() {
+            @Override
+            public float layoutFloor(boolean vertical) {
+                return vertical == isVertical() && self[0] != null ? cssLimitPx(self[0], 0f, vertical, true, 0f) : 0f;
+            }
+        };
+        element.addClass(PANE_CLASS);
+        self[0] = new Pane(element, weight);
+        panes.add(index, self[0]);
 
         if (panes.size() == 1) {
             appendStructural(element);
@@ -782,6 +792,11 @@ public class SplitView extends UIElement implements MinimumSize {
             }
         }
         return Math.max(size, ownMinimum(this, vertical));
+    }
+
+    @Override
+    public float layoutFloor(boolean vertical) {
+        return minimumSize(vertical);
     }
 
     /**

@@ -169,6 +169,9 @@ public final class Box {
 
     /** {@link #retainable} for this box alone, ignoring what it hosts. Style-derived, so cached. */
     boolean selfRetainable;
+
+    /** Whether this box or anything it hosts filters what is behind it. @see #hasBackdrop */
+    boolean hasBackdrop, selfBackdrop;
     float wasM00, wasM01, wasM10, wasM11, wasM30 = Float.NaN, wasM31;
     @Nullable ComputedStyle wasStyle;
 
@@ -575,6 +578,14 @@ public final class Box {
     /** @see #innerRevision */
     public long innerRevision() {
         return innerRevision;
+    }
+
+    /**
+     * Whether this box or anything under it has a {@code backdrop-filter}. Such a box cannot be drawn into a surface of
+     * its own: the filter captures what the target holds behind it, and a surface holds nothing but the box.
+     */
+    public boolean hasBackdrop() {
+        return hasBackdrop;
     }
 
     /** @see #retainable */

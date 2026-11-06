@@ -1022,6 +1022,11 @@ public class DockArea extends UIElement implements MinimumSize {
         return floor;
     }
 
+    @Override
+    public float layoutFloor(boolean vertical) {
+        return minimumSize(vertical);
+    }
+
     private void rebuild() {
         tracing = TRACE && TRACE_CLAIMED.compareAndSet(false, true);
         phase("begin");

@@ -72,14 +72,14 @@ public class WindowMinimumSizeTest extends UiDocumentTestBase {
     }
 
     @Test
-    public void aColumnAddsUpItsChildrenAndGapsWithNoMinimumOfItsOwn() {
+    public void aColumnTakesItsTallestStatedFloorNotTheirSum() {
         UIElement root = new UIElement().layout(l -> l.gapRow(10f));
         root.append(new UIElement().layout(l -> l.minHeight(100f)));
-        root.append(new UIElement().layout(l -> l.height(60f)));     // fixed and not shrinking: a floor too
+        root.append(new UIElement().layout(l -> l.minHeight(60f)));
         WindowFrame frame = open(root);
         float chromeH = chrome(frame, true);
-        assertEquals(100f + 60f + 10f + chromeH, frame.minimumSize(true), 0.5f);
-        assertEquals(170f + chromeH, shrunk(frame)[1], 0.5f);
+        assertEquals(100f + chromeH, frame.minimumSize(true), 0.5f);
+        assertEquals(100f + chromeH, shrunk(frame)[1], 0.5f);
     }
 
     /** A label keeps its line, a scrolling list between two gives up everything: a header, a tree, a hint. */
@@ -97,12 +97,12 @@ public class WindowMinimumSizeTest extends UiDocumentTestBase {
         WindowFrame frame = open(root);
         float lines = header.box().height() + hint.box().height();
         assertTrue("the labels laid out no line", lines > 1f);
-        // Never under the sheet's 48px floor, which two short lines and a caption can come in under
+        // A layout that fills keeps its fixed lines; never under the sheet's 48px floor
         assertEquals(Math.max(48f, lines + chrome(frame, true)), frame.minimumSize(true), 0.5f);
         assertTrue("the list's 600px of rows held the window open", frame.minimumSize(true) < 200f);
     }
 
-    /** A toolbar of content-sized controls states no width, yet cannot be narrower than its controls laid side by side. */
+    /** In a layout that fills its window, a toolbar of content-sized controls states no width, yet cannot be narrower than its controls laid side by side. */
     @Test
     public void aRowOfContentSizedControlsHoldsTheWidth() {
         UIElement root = new UIElement();
@@ -112,6 +112,7 @@ public class WindowMinimumSizeTest extends UiDocumentTestBase {
         toolbar.append(speed);
         toolbar.append(target);
         root.append(toolbar);
+        root.append(new UIElement().layout(l -> l.height(0f).flexGrow(1f).flexShrink(1f)));    // a pane: the layout fills its window
         WindowFrame frame = open(root);
         float labels = play.box().width() + speed.box().width() + target.box().width();
         assertTrue("the labels laid out no width", labels > 20f);
@@ -129,6 +130,7 @@ public class WindowMinimumSizeTest extends UiDocumentTestBase {
         UIText sentence = new UIText("Not recording. Press Record to capture CrystalGraphics and CrystalGUI.");
         StyleGroup.inlinePipeline(sentence.getStyle().getGeneralGroup(), g -> g.whiteSpace(WhiteSpace.NOWRAP));
         root.append(sentence);
+        root.append(new UIElement().layout(l -> l.height(0f).flexGrow(1f).flexShrink(1f)));    // a pane: the layout fills its window
         WindowFrame frame = open(root);
         float line = sentence.measure(new Measurable.Constraints(Float.NaN, Float.NaN, Float.NaN, Float.NaN,
                 Measurable.Fit.MAX_CONTENT, Measurable.Fit.MAX_CONTENT)).width();
@@ -154,6 +156,17 @@ public class WindowMinimumSizeTest extends UiDocumentTestBase {
         var content = frame.content().box();
         assertEquals("the content grew to its longest line", content.contentBoxWidth(), root.box().width(), 0.5f);
         assertEquals("a window whose text can wrap scrolled sideways", 0f, content.maxScrollLeft(), 0.001f);
+    }
+
+    /** Flowing content scrolls sideways as it does vertically: its wide rows hold the width open for nothing. */
+    @Test
+    public void aFlowingColumnsWideRowsHoldNoWidthOpen() {
+        UIElement root = new UIElement();
+        UIElement row = new UIElement().layout(l -> l.flexDirection(FlexDirection.ROW).gapColumn(8f));
+        for (int i = 0; i < 4; i++) row.append(new UIText("A label that cannot shrink " + i));
+        root.append(row);
+        WindowFrame frame = open(root);
+        assertEquals("the sheet's min-width", 120f, frame.minimumSize(false), 0.5f);
     }
 
     @Test

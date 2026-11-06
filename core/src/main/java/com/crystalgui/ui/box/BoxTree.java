@@ -760,6 +760,20 @@ public final class BoxTree {
         taffy.markDirty(root.taffyId);
     }
 
+    /** Raises {@code box}'s Taffy minimums to its element's {@link UIElement#layoutFloor}, so a flex parent cannot squeeze it below its parts. */
+    private static void applyLayoutFloor(Box box, ComputedStyle computed) {
+        if (box.mirrorRoot) return;
+        float w = box.node.layoutFloor(false), h = box.node.layoutFloor(true);
+        if (w > 0f) {
+            TaffyDimension own = computed.get(LayoutProperties.MIN_WIDTH);
+            box.bridge.setMinWidth(TaffyDimension.length(Math.max(w, own != null && own.isLength() ? own.getValue() : 0f)));
+        }
+        if (h > 0f) {
+            TaffyDimension own = computed.get(LayoutProperties.MIN_HEIGHT);
+            box.bridge.setMinHeight(TaffyDimension.length(Math.max(h, own != null && own.isLength() ? own.getValue() : 0f)));
+        }
+    }
+
     /**
      * Brings {@code box}'s applied style up to its computed one, then its children's. {@code changedOnly} stops at
      * a box whose style did not move: its children's answers are keyed on its, so they hold too unless they
@@ -774,6 +788,7 @@ public final class BoxTree {
         if (computed != box.appliedStyle || hosted != box.appliedHosted) {
             box.appliedHosted = hosted;
             BoxStyle.apply(box.bridge, computed, hosted, box.mirrorRoot);
+            applyLayoutFloor(box, computed);
             // AND ANY PIN IS GONE WITH IT. `BoxStyle.apply` writes width, height and the minimums and
             // maximums straight from the source's computed style, so re-applying a style silently
             // undoes `pinMirrorSize` -- which then early-outs, because the SOURCE's size has not
@@ -965,13 +980,16 @@ public final class BoxTree {
 
         long inner = Math.max(box.contentRevision, box.hostedRevision);
         boolean retainable = box.selfRetainable;
+        boolean backdrop = box.selfBackdrop;
         for (int ci = 0; ci < box.hosted.size(); ci++) {
             Box child = box.hosted.get(ci);
             inner = Math.max(inner, Math.max(child.placeRevision, child.innerRevision));
             retainable &= child.retainable;
+            backdrop |= child.hasBackdrop;
         }
         box.innerRevision = inner;
         box.retainable = retainable;
+        box.hasBackdrop = backdrop;
     }
 
     /**
@@ -1041,8 +1059,8 @@ public final class BoxTree {
         // A subtree is keepable only while nothing in it paints out of state the tree cannot see, and
         // `backdrop-filter` never is -- what it composites is behind the element and outside this tree
         // altogether. @see UIElement#paintsDynamically
-        box.selfRetainable = !box.node.paintsDynamically()
-                && style.get(StylePropertyRegistry.BACKDROP_FILTER) == null;
+        box.selfBackdrop = style.get(StylePropertyRegistry.BACKDROP_FILTER) != null;
+        box.selfRetainable = !box.node.paintsDynamically() && !box.selfBackdrop;
         return true;
     }
 

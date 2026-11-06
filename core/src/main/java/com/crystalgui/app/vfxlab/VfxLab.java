@@ -111,7 +111,6 @@ public class VfxLab extends UIElement {
     public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:vfx-lab", "VFX Lab")
             .icon("crystalgui:vfx-lab")
             .keywords("vfx", "effects", "particles", "lab")
-            .windowSize(960, 560)
             .singleInstance()
             .standalone()
             .launch(context -> new Instance(context.desktop()));
@@ -254,8 +253,6 @@ public class VfxLab extends UIElement {
         panes.addPane();
         panes.paneContent(0, effects).paneContent(1, viewport).paneContent(2, side);
         panes.setWeights(0.2f, 0.55f, 0.25f);
-        panes.setPaneSizeLimits(0, 120f, 360f);
-        panes.setPaneSizeLimits(2, 200f, 520f);
 
         UIElement status = new UIElement();
         status.addClass("lab-status");
