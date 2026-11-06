@@ -1,5 +1,7 @@
 package com.crystalgui.mc.v1710.probe;
 
+import com.crystalgraphics.platform.input.CgInputStage;
+import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.v1710.client.CgUiHud;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
@@ -119,12 +121,16 @@ public final class CgUiDesktopProbe {
 
         @Override
         public boolean offerMouse(int button, boolean pressed) {
-            return CgUiHud.offerMouse(button, pressed, 0f);
+            Minecraft mc = Minecraft.getMinecraft();
+            return CgInputStage.SCREEN.mouseButton(new CgSystemInput.Mouse.Event(Mouse.getX(),
+                    mc.displayHeight - Mouse.getY(), 0, 0, button, pressed, 0f, System.currentTimeMillis()));
         }
 
         @Override
         public void offerKey(int platformKey, char typed, boolean pressed) {
-            CgUiHud.offerKey(platformKey, typed, pressed);
+            long millis = System.currentTimeMillis();
+            if (typed != 0) CgInputStage.SCREEN.character(new CgSystemInput.Keyboard.Event(typed, 0, true, false, millis));
+            else CgInputStage.SCREEN.key(new CgSystemInput.Keyboard.Event((char) 0, platformKey, pressed, false, millis));
         }
 
         /** LWJGL2's code, which is not GLFW's. */

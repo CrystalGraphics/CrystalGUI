@@ -2,11 +2,9 @@ package com.crystalgui.mc.modern.client;
 
 import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.host.ScreenOverlay;
-import com.crystalgui.ui.input.HostPointer;
 
 import net.minecraft.client.Minecraft;
 
@@ -41,16 +39,6 @@ public final class CgUiHud {
             return mc != null && CgMinecraftClient.screen(mc) != null;
         }
 
-        /**
-         * 1.20 posts no screen event for a move, so the pointer is offered once per frame from here —
-         * the per-frame drain 1.7.10 gets from pumping the event queue itself. Without it hover never
-         * updates and a drag runs on wherever the pointer was when a button last changed.
-         */
-        @Override
-        public void beforePaint() {
-            offerMove();
-        }
-
         @Override
         public void enter() {
             CgHostPaint.enter();
@@ -71,50 +59,5 @@ public final class CgUiHud {
     /** The pinned windows on CrystalGraphics' HUD and screen stages, which its hosts fire. Once, on a client. */
     public static void attachStages() {
         HostSession.attachStages(HOST);
-    }
-
-    // ── Input, offered to the compositor ────────────────────────────────────────────────────────
-
-    /**
-     * @param button the host's numbering, or -1 for none
-     * @return whether the desktop consumed it and the foreign screen must not see it
-     */
-    public static boolean offerMouse(int button, boolean pressed, float platformWheel) {
-        // Signed here, not by the loaders: this path consumes a scroll over any window and cancels the
-        // screen event, so it -- not CgUiScreen.mouseScrolled -- is what a scroll in our own screen
-        // reaches.
-        return HostSession.isInstalled() && HostSession.session().offerMouse(HOST, pointerGrabbed(),
-                pointerX(), pointerY(), CgPlatform.input().translateMouseCodes(button), pressed,
-                CgUiInput.wheel(platformWheel));
-    }
-
-    /** The pointer's position, delivered and never consumed. @see ScreenOverlay#offerMouse */
-    public static void offerMove() {
-        if (!HostSession.isInstalled()) return;
-        HostSession.session().offerMouse(HOST, pointerGrabbed(), pointerX(), pointerY(),
-                HostPointer.NO_BUTTON, false, 0f);
-    }
-
-    /** @return whether the desktop consumed it */
-    public static boolean offerKey(int hostKey, char typed, boolean pressed) {
-        return HostSession.isInstalled() && HostSession.session().offerKey(
-                CgPlatform.input().translateKeyboardCodes(hostKey), typed, pressed);
-    }
-
-    /** Whether the game holds the pointer; no mouse handler counts as held. */
-    private static boolean pointerGrabbed() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.mouseHandler == null || mc.mouseHandler.isMouseGrabbed();
-    }
-
-    /** Raw surface pixels, top-down -- what ScreenOverlay documents it wants. */
-    private static int pointerX() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.mouseHandler == null ? 0 : (int) mc.mouseHandler.xpos();
-    }
-
-    private static int pointerY() {
-        Minecraft mc = Minecraft.getInstance();
-        return mc == null || mc.mouseHandler == null ? 0 : (int) mc.mouseHandler.ypos();
     }
 }

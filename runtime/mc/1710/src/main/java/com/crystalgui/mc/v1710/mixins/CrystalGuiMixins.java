@@ -23,7 +23,7 @@ import java.util.Set;
  * {
  *   "package": "com.crystalgui.mc.v1710.mixins",
  *   "plugin":  "com.crystalgui.mc.v1710.mixins.CrystalGuiMixins",
- *   "client":  ["MixinGuiScreen"]
+ *   "client":  []
  * }
  * </pre>
  *

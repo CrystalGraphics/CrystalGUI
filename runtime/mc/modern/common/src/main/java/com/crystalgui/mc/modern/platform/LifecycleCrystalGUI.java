@@ -59,16 +59,4 @@ public final class LifecycleCrystalGUI {
             ConnectionProbe.arm();
         }
     }
-
-    // -- Pinned windows. ScreenOverlay in core/ makes every decision; these only carry it. ------------
-
-    /** @return whether the desktop consumed it and the foreign screen must not see it */
-    public static boolean offerMouse(int button, boolean pressed, float wheel) {
-        return CgUiHud.offerMouse(button, pressed, wheel);
-    }
-
-    /** @return whether the desktop consumed it */
-    public static boolean offerKey(int hostKey, char typed, boolean pressed) {
-        return CgUiHud.offerKey(hostKey, typed, pressed);
-    }
 }

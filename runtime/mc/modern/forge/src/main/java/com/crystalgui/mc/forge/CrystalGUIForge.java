@@ -18,16 +18,9 @@ import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 import net.minecraftforge.fml.DeferredWorkQueue;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?}
-//? if >=1.18 {
-import net.minecraftforge.client.event.ScreenEvent;
-//?} else {
-/*import net.minecraftforge.client.event.GuiScreenEvent;
-*///?}
 //? if >=1.21.6 {
 /*import net.minecraftforge.eventbus.api.bus.BusGroup;
 *///?} else {
-import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.eventbus.api.EventPriority;
 import net.minecraftforge.eventbus.api.IEventBus;
 //?}
 //? if >=1.17 {
@@ -141,70 +134,17 @@ public final class CrystalGUIForge implements VariantEntry {
 
             private ClientBus() {}
 
-            // A cancelling listener returns whether it consumed the event: Forge 56+ takes that as a
-            // Predicate, and older Forge is told through setCanceled.
             //? if >=1.21.6 {
             /*static void register(BusGroup modBus) {
                 registerKeyMappings(modBus);
-                ScreenEvent.MouseButtonPressed.Pre.BUS.addListener(ClientBus::onMousePressed);
-                ScreenEvent.MouseButtonReleased.Pre.BUS.addListener(ClientBus::onMouseReleased);
-                ScreenEvent.MouseScrolled.Pre.BUS.addListener(ClientBus::onMouseScrolled);
-                ScreenEvent.KeyPressed.Pre.BUS.addListener(ClientBus::onKeyPressed);
-                ScreenEvent.KeyReleased.Pre.BUS.addListener(ClientBus::onKeyReleased);
-                ScreenEvent.CharacterTyped.Pre.BUS.addListener(ClientBus::onCharTyped);
             }
             *///?} elif >=1.19 {
             static void register(IEventBus modBus) {
-                IEventBus forgeBus = MinecraftForge.EVENT_BUS;
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonPressed.Pre.class,
-                        e -> { if (onMousePressed(e)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseButtonReleased.Pre.class,
-                        e -> { if (onMouseReleased(e)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseScrolled.Pre.class,
-                        e -> { if (onMouseScrolled(e)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyPressed.Pre.class,
-                        e -> { if (onKeyPressed(e)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyReleased.Pre.class,
-                        e -> { if (onKeyReleased(e)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.CharacterTyped.Pre.class,
-                        e -> { if (onCharTyped(e)) e.setCanceled(true); });
             }
-            //?} elif >=1.18 {
-            /*// Forge 38-40 name the screen events ScreenEvent.*Event and register keys in client setup.
-            static void register(IEventBus modBus) {
-                IEventBus forgeBus = MinecraftForge.EVENT_BUS;
+            //?} else {
+            /*static void register(IEventBus modBus) {
                 modBus.addListener(ClientBus::onClientSetup);
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseClickedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseReleasedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), false, 0f)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.MouseScrollEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerMouse(-1, false, (float) e.getScrollDelta())) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyboardKeyPressedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, true)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyboardKeyReleasedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, false)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, ScreenEvent.KeyboardCharTypedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerKey(0, e.getCodePoint(), true)) e.setCanceled(true); });
-            }
-            *///?} else {
-            /*// Forge 25-37 name them GuiScreenEvent.*Event.
-            static void register(IEventBus modBus) {
-                IEventBus forgeBus = MinecraftForge.EVENT_BUS;
-                modBus.addListener(ClientBus::onClientSetup);
-                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseClickedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), true, 0f)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseReleasedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerMouse(e.getButton(), false, 0f)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.MouseScrollEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerMouse(-1, false, (float) e.getScrollDelta())) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.KeyboardKeyPressedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, true)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.KeyboardKeyReleasedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerKey(e.getKeyCode(), (char) 0, false)) e.setCanceled(true); });
-                forgeBus.addListener(EventPriority.NORMAL, false, GuiScreenEvent.KeyboardCharTypedEvent.Pre.class,
-                        e -> { if (LifecycleCrystalGUI.offerKey(0, e.getCodePoint(), true)) e.setCanceled(true); });
             }
             *///?}
 
@@ -242,60 +182,6 @@ public final class CrystalGUIForge implements VariantEntry {
                 CgUiKeybinds.all().forEach(ClientRegistry::registerKeyBinding);
             }
             *///?}
-
-            // Forge 59 (1.21.9) carries the input as Minecraft's own event object, through getInfo().
-            //? if >=1.21.9 {
-            /*private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(event.getInfo().button(), true, 0f);
-            }
-
-            private static boolean onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f);
-            }
-
-            private static boolean onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-                return LifecycleCrystalGUI.offerKey(event.getInfo().key(), (char) 0, true);
-            }
-
-            private static boolean onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
-                return LifecycleCrystalGUI.offerKey(event.getInfo().key(), (char) 0, false);
-            }
-
-            private static boolean onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
-                return LifecycleCrystalGUI.offerKey(0, (char) event.getInfo().codepoint(), true);
-            }
-            *///?} elif >=1.19 {
-            private static boolean onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f);
-            }
-
-            private static boolean onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f);
-            }
-
-            private static boolean onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-                return LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, true);
-            }
-
-            private static boolean onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
-                return LifecycleCrystalGUI.offerKey(event.getKeyCode(), (char) 0, false);
-            }
-
-            private static boolean onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
-                return LifecycleCrystalGUI.offerKey(0, event.getCodePoint(), true);
-            }
-            //?}
-
-            //? if >=1.20.2 {
-            /*private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getDeltaY());
-            }
-            *///?} elif >=1.19 {
-            private static boolean onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-                return LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDelta());
-            }
-            //?}
-
         }
     }
 }

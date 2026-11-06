@@ -28,30 +28,11 @@ server must never load.
 The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
 mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
 
-## Input is GLFW's callbacks, chained
+## Input is CrystalGraphics'
 
-Fabric API has neither a character event nor any non-screen input event, so typing could not reach a
-pinned window and HUD mode heard nothing. `Events.Input` installs four GLFW callbacks at
-`CLIENT_STARTED`, each capturing the previous one by setting `null` first -- GLFW hands the old
-callback to the SETTER and offers no getter. **Not forwarding is the cancellation**: what the overlay
-consumes, Minecraft never sees. One path covers the HUD and a screen alike, so the `ScreenMouseEvents`
-/ `ScreenKeyboardEvents` handlers were retired.
-
-> **Characters go on `glfwSetCharModsCallback`, NOT `glfwSetCharCallback`.**
-> `InputConstants.setupKeyboardCallbacks` installs Minecraft's on the mods variant, and GLFW fires
-> **both** for one keystroke -- so hooking the plain one puts you beside Minecraft's handler instead of
-> in front of it. Declining to forward then suppresses nothing, and the character lands in chat and in
-> the focused editor at the same time. Key, mouse-button and scroll are the slots Minecraft uses, which
-> is why only typing doubles and everything else looks correct.
-
-### From 26.3: SDL's event filter
-
-26.3 windows through SDL3 and ships no GLFW. The same chain is `SDL_SetEventFilter`, installed at
-`CLIENT_STARTED` after reading any filter already set with `SDL_GetEventFilter`: returning false drops
-an event before Minecraft polls it. Keys arrive as SDL scancodes and buttons count from 1; the host
-translates both. Characters are `SDL_EVENT_TEXT_INPUT`, which SDL sends only while text input is started
--- `CgUiScreen` starts it while the desktop is up, as Minecraft's own text boxes do on focus. A filter can
-be called for an event pushed from another thread; it acts only on the render thread's.
+Fabric API has neither a character event nor any non-screen input event, so CrystalGraphics' Fabric node chains the
+window's callbacks (SDL's event filter from 26.3) and fires `CgInputStage.SCREEN` (`ScreenInputFabric`, and
+`CrystalGraphics/docs/INPUT.md`). This loader registers nothing for input: the desktop is a listener on that stage.
 
 ## Toolchain, sources and checks
 

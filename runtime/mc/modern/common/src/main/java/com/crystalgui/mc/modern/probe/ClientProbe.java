@@ -2,10 +2,10 @@ package com.crystalgui.mc.modern.probe;
 
 import com.crystalgraphics.mc.modern.platform.HostKeys;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
+import com.crystalgraphics.mc.modern.platform.ScreenInputModern;
 import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.client.CgUiInput;
 import com.crystalgui.mc.modern.client.CgUiScreen;
@@ -140,12 +140,13 @@ public final class ClientProbe {
 
         @Override
         public boolean offerMouse(int button, boolean pressed) {
-            return LifecycleCrystalGUI.offerMouse(HostKeys.button(button), pressed, 0f);
+            return ScreenInputModern.mouseButton(HostKeys.button(button), pressed);
         }
 
         @Override
         public void offerKey(int platformKey, char typed, boolean pressed) {
-            LifecycleCrystalGUI.offerKey(platformKey, typed, pressed);
+            if (typed != 0) ScreenInputModern.character(typed);
+            else ScreenInputModern.key(platformKey, pressed);
         }
 
         @Override

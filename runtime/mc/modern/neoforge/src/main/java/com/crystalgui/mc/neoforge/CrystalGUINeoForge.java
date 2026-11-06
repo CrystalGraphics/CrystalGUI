@@ -9,8 +9,6 @@ import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
-import net.neoforged.neoforge.client.event.ScreenEvent;
-import net.neoforged.neoforge.common.NeoForge;
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
@@ -73,54 +71,11 @@ public final class CrystalGUINeoForge implements VariantEntry {
 
             static void register(IEventBus modBus) {
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
-
-                NeoForge.EVENT_BUS.addListener(ClientBus::onMousePressed);
-                NeoForge.EVENT_BUS.addListener(ClientBus::onMouseReleased);
-                NeoForge.EVENT_BUS.addListener(ClientBus::onMouseScrolled);
-                NeoForge.EVENT_BUS.addListener(ClientBus::onKeyPressed);
-                NeoForge.EVENT_BUS.addListener(ClientBus::onKeyReleased);
-                NeoForge.EVENT_BUS.addListener(ClientBus::onCharTyped);
             }
 
             private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
                 LifecycleCrystalGUI.bootstrapClient();
                 CgUiKeybinds.all().forEach(event::register);
-            }
-
-            private static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
-                if (LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f)) event.setCanceled(true);
-            }
-
-            private static void onMouseReleased(ScreenEvent.MouseButtonReleased.Pre event) {
-                if (LifecycleCrystalGUI.offerMouse(event.getButton(), false, 0f)) event.setCanceled(true);
-            }
-
-            private static void onMouseScrolled(ScreenEvent.MouseScrolled.Pre event) {
-                if (LifecycleCrystalGUI.offerMouse(-1, false, (float) event.getScrollDeltaY())) event.setCanceled(true);
-            }
-
-            // The key in Minecraft's numbering: from 26.3 getKey(), the scancode -- getKeycode() is SDL's keycode.
-            private static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
-                //? if >=26.3 {
-                /*int key = event.getKey();
-                *///?} else {
-                int key = event.getKeyCode();
-                //?}
-                if (LifecycleCrystalGUI.offerKey(key, (char) 0, true)) event.setCanceled(true);
-            }
-
-            private static void onKeyReleased(ScreenEvent.KeyReleased.Pre event) {
-                //? if >=26.3 {
-                /*int key = event.getKey();
-                *///?} else {
-                int key = event.getKeyCode();
-                //?}
-                if (LifecycleCrystalGUI.offerKey(key, (char) 0, false)) event.setCanceled(true);
-            }
-
-            private static void onCharTyped(ScreenEvent.CharacterTyped.Pre event) {
-                // An int from NeoForge 21.9; a char before it, where the cast is a no-op.
-                if (LifecycleCrystalGUI.offerKey(0, (char) event.getCodePoint(), true)) event.setCanceled(true);
             }
         }
     }
