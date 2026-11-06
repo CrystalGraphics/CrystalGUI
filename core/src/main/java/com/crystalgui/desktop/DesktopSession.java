@@ -6,7 +6,7 @@ import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.taskbar.TaskbarPins;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 
 import javax.annotation.Nullable;
 
@@ -119,7 +119,7 @@ public final class DesktopSession {
             if (isPersistable(frame)) mru.add(frame.key());
         }
         List<String> pins = new ArrayList<>(desktop.pins().ids());
-        return CgFormats.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, pins));
+        return CgFiles.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, pins));
     }
 
     /** The whole file. */
@@ -265,7 +265,7 @@ public final class DesktopSession {
 
     /** The record's codecs made and the JSON reader loaded, by a read of an empty record: {@code CgUiStart}'s worker. */
     public static void ahead() {
-        CgFormats.JSON.fromText(Saved.CODEC, "{}");
+        CgFiles.JSON.fromText(Saved.CODEC, "{}");
     }
 
     /** The file, or null when there is none, it will not parse, or it is another version's. */
@@ -274,7 +274,7 @@ public final class DesktopSession {
         String raw = storage.read(fileNameFor(desktopId));
         if (raw == null || raw.isEmpty()) return null;
         try {
-            Saved saved = CgFormats.JSON.fromText(Saved.CODEC, raw);
+            Saved saved = CgFiles.JSON.fromText(Saved.CODEC, raw);
             return saved.version() == VERSION ? saved : null;
         } catch (RuntimeException malformed) {
             // A record that will not parse is a record that describes nothing. Discarded rather than

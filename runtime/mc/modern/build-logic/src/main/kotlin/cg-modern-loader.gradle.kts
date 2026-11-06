@@ -128,7 +128,7 @@ dependencies {
     // load, so without them the UI classes do not load at all. plan/platform-mc1201.md 4.3.
     "compileOnly"(project(":taffy"))
     "runtimeOnly"(project(":taffy"))
-    // CgFormats.YAML's library: the shipped jar carries it relocated, a dev run takes it from here.
+    // CgFiles.YAML's library: the shipped jar carries it relocated, a dev run takes it from here.
     "runtimeOnly"("org.yaml:snakeyaml:2.7")
 
     // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. ON `lang` AND NOT ON

@@ -49,7 +49,7 @@ import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgContentHash;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgraphics.serialization.format.CgTextFormat;
 import com.crystalgraphics.sequence.CgSequencePlayer;
 import com.crystalgraphics.sequence.CgSequenceTarget;
@@ -788,9 +788,9 @@ public final class ServerSmoke {
         boolean ok = false;
         try {
             Map<String, Object> want = nbtSample();
-            Object tag = CgFormats.toNbt(NBT_SAMPLE, want);
-            Map<String, Object> first = CgFormats.fromNbt(NBT_SAMPLE, tag);
-            Map<String, Object> second = CgFormats.fromNbt(NBT_SAMPLE, tag);
+            Object tag = CgFiles.toNbt(NBT_SAMPLE, want);
+            Map<String, Object> first = CgFiles.fromNbt(NBT_SAMPLE, tag);
+            Map<String, Object> second = CgFiles.fromNbt(NBT_SAMPLE, tag);
             ok = sameSample(want, first) && sameSample(want, second);
             detail = "tag " + tag.getClass().getSimpleName() + ": " + tag + (ok ? "" : " read back as " + first
                     + " then " + second);
@@ -818,8 +818,8 @@ public final class ServerSmoke {
 
     /** JSON through this Minecraft's own Gson, YAML through the SnakeYAML CrystalGraphics carries relocated. */
     private static void checkTextFormats(List<String> lines, List<String> failures) {
-        for (CgTextFormat format : Arrays.asList(CgFormats.JSON, CgFormats.YAML)) {
-            String name = format == CgFormats.JSON ? "JSON" : "YAML";
+        for (CgTextFormat format : Arrays.asList(CgFiles.JSON, CgFiles.YAML)) {
+            String name = format == CgFiles.JSON ? "JSON" : "YAML";
             String detail = "";
             boolean ok = false;
             try {
@@ -838,10 +838,10 @@ public final class ServerSmoke {
                     CgCodecs.comment("ours").field("level", CgCodecs.INT, (Integer level) -> level), (Integer level) -> level);
             Path file = Files.createTempFile("cgui-smoke", ".yml");
             Files.write(file, "# theirs\nlevel: 1\n".getBytes(StandardCharsets.UTF_8));
-            CgFormats.YAML.write(file, commented, 9);
+            CgFiles.YAML.write(file, commented, 9);
             String text = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
             Files.delete(file);
-            kept = text.contains("# theirs") && CgFormats.YAML.fromText(commented, text) == 9;
+            kept = text.contains("# theirs") && CgFiles.YAML.fromText(commented, text) == 9;
             detail = kept ? "" : text.replace('\n', '|');
         } catch (Throwable failed) {
             detail = String.valueOf(failed);

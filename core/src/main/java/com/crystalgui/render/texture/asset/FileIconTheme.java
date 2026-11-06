@@ -2,7 +2,7 @@ package com.crystalgui.render.texture.asset;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgraphics.util.io.CgIO;
 
 import com.crystalgui.core.CrystalGuiCore;
@@ -320,7 +320,7 @@ public final class FileIconTheme {
             return EMPTY;
         }
         try {
-            return CgFormats.JSON.fromText(CODEC, json);
+            return CgFiles.JSON.fromText(CODEC, json);
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("FileIconTheme: failed to parse '{}': {}",
                     themePath, malformed.getMessage());

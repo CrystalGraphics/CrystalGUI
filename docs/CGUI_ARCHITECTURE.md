@@ -472,7 +472,7 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
 
 com.crystalgui.serialization   style codecs only. The codecs themselves (CgCodec, CgDynamicOps, CgPlainOps,
                                CgStateMap, CgContentHash) are CrystalGraphics' com.crystalgraphics.serialization,
-                               and JSON (CgJsonOps, CgFormats.JSON) its .format
+                               and JSON (CgJsonOps, CgFiles.JSON) its .format
   .style                       StyleValueCodecs, InlineStyleCodec
 
 com.crystalgui.net             ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux, SheetRef,

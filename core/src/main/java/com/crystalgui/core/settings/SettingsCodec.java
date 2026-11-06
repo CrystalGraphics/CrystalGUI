@@ -2,7 +2,7 @@ package com.crystalgui.core.settings;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgui.core.CrystalGuiCore;
 
 import javax.annotation.Nullable;
@@ -49,7 +49,7 @@ public final class SettingsCodec {
      * is paid here rather than by making the storage layer learn every value type.</p>
      */
     public static String toJson(SettingsModel model) {
-        return CgFormats.JSON.toText(MODEL, model);
+        return CgFiles.JSON.toText(MODEL, model);
     }
 
     /**
@@ -63,7 +63,7 @@ public final class SettingsCodec {
     public static SettingsModel fromJson(@Nullable String json) {
         if (json == null || json.trim().isEmpty()) return new SettingsModel();
         try {
-            return CgFormats.JSON.fromText(MODEL, json);
+            return CgFiles.JSON.fromText(MODEL, json);
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn(
                     "Preferences file could not be read; continuing with the defaults", malformed);
