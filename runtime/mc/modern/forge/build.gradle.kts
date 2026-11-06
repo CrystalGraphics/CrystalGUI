@@ -26,6 +26,7 @@ import cgbuildlogic.useForgeApi
 import cgbuildlogic.uniminedDevRun
 import cgbuildlogic.useModernMinecraft
 import cgbuildlogic.backportedMojmap
+import cgbuildlogic.shaderToolchainRun
 import cgbuildlogic.usesUniminedMinecraft
 import net.neoforged.moddevgradle.dsl.NeoForgeExtension
 import net.neoforged.moddevgradle.legacyforge.dsl.LegacyForgeExtension
@@ -94,6 +95,7 @@ legacyForge?.apply {
             client()
             gameDirectory = project.file("runs/client")
             renderDocRun(this)
+            shaderToolchainRun(this)
         }
         create("server") {
             server()
