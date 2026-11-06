@@ -175,7 +175,8 @@ taskbar .__rising__ {
 }
 
 /* THE DESKTOP'S GLASS: one material for the bar and everything that floats over the desktop -- the jump
- * list, the hover preview, the switcher and the launcher. Written once so they cannot drift apart.
+ * list, the hover preview, the switcher, the launcher, and a window frame and a failure box. Written once so
+ * they cannot drift apart; a consumer whose empty-backdrop colour differs sets `--glass-fallback`.
  *
  * ACRYLIC: the world shows through, blurred and darkened. Every lens term is off -- `ior 1` is the
  * off-switch for refraction, `bezel 0` frosts to the edge (a 1px bezel left the bottom row sharp),
@@ -190,11 +191,13 @@ menu.__jump-list__,
 taskbar > .__window-preview__,
 .__preview-row__,
 .__window-switcher__ > .__switcher-panel__,
-launcher {
+launcher,
+.__window__,
+window.__failure__ {
     backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
                      specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
                      glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--taskbar-bg, #2B2D30));
+                     chromatic(0) fallback(var(--glass-fallback, var(--taskbar-bg, #2B2D30)));
 }
 
 /* The bar's keyboard ring: white over the glass, where the system blue sinks into a blue sky. */
@@ -827,12 +830,9 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     max-width: 100%;
     max-height: 100%;
     resize: both;
-    /* Glass: the desktop blurred behind a translucent fill, as the taskbar and the failure box. */
+    /* Glass: the desktop's (see THE DESKTOP'S GLASS) over a translucent fill. */
     background: var(--failure-bg, #16171A66);
-    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--window-bg, #191A1C));
+    --glass-fallback: var(--window-bg, #191A1C);
     color: var(--window-fg, #DFE1E5);
 }
 
@@ -1994,10 +1994,7 @@ window.__failure__ {
     resize: none;
     background: var(--failure-bg, #16171A66);
     outline: 0px #00000000;
-    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--window-bg, #191A1C));
+    --glass-fallback: var(--window-bg, #191A1C);
 }
 
 /* The window's caption: translucent so the glass reads through it. */
