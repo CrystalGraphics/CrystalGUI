@@ -5,11 +5,13 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.service.CgHostWindow;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.desktop.host.HostSession;
 //? if >=26.1 {
 /*import com.crystalgui.lifecycle.CgUiLifecycle;
@@ -120,7 +122,7 @@ public final class CgUiScreen extends Screen {
     }
 
     static float uiScale() {
-        return HostSession.session().services().uiScale();
+        return HostServices.DEFAULT_UI_SCALE;
     }
 
     // ── Minecraft's screen lifecycle ────────────────────────────────────────────────────────────
@@ -319,11 +321,11 @@ public final class CgUiScreen extends Screen {
     }
 
     private static int surfaceWidth() {
-        return HostSession.session().services().surfaceWidth();
+        return CgHostWindow.width();
     }
 
     private static int surfaceHeight() {
-        return HostSession.session().services().surfaceHeight();
+        return CgHostWindow.height();
     }
 
     // ── Input ───────────────────────────────────────────────────────────────────────────────────

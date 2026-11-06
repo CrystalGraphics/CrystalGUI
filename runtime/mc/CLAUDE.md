@@ -9,7 +9,7 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 
 | Seam | A loader answers |
 |---|---|
-| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, how to give the current screen a key the desktop left (`reinjectKey`), and the game's client and server threads (`clientThread`, `serverThread`: what `HostThread.CLIENT`/`SERVER` run work on; null where the client thread is the one the desktop is framed on, or there is no integrated server) |
+| `desktop.host.HostServices` | how to give the current screen a key the desktop left (`reinjectKey`), and, only where a host is not a Minecraft client, its `desktopId` and `connection`. The directories, window, language and connection are read from CrystalGraphics' `CgGameDirectory`, `CgHostWindow`, `CgI18n` and `CgNetwork`, and the game's threads from `CgGameThreads` (what `CgHostThread.CLIENT`/`SERVER` run work on) |
 | `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides), and which arm paints on CrystalGraphics' `HUD` and `SCREEN` stages (`attachStages`) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |

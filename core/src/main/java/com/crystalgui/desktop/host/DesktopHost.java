@@ -48,13 +48,15 @@ import com.crystalgui.ui.dom.UIDocument;
  * <h3>The workspace follows the wire, and is rebound rather than rebuilt</h3>
  *
  * <p>A reconnect is a different connection carrying the same workspace, so {@link #frame} re-asks
- * {@link HostServices#connection()} and rebinds the workspace when it has moved - keeping the object
+ * the game's connection and rebinds the workspace when it has moved - keeping the object
  * every window already holds. Rebuilding it instead would fix the routing and leave every retained
  * window pointing at the old client, with all its callbacks on the wrong object.</p>
  */
 public final class DesktopHost implements Disposable {
 
-    private final HostServices services;
+    private final HostSnapshot services;
+    /** True when this host copies the snapshot itself; a session's is refreshed at its host entries. */
+    private final boolean ownsSnapshot;
     private final UIDocument document;
     private final ConfigStorage config;
 
@@ -76,7 +78,8 @@ public final class DesktopHost implements Disposable {
     /** The theme a desktop opens in when nothing has chosen one. */
     public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
 
-    private DesktopHost(HostServices services) {
+    private DesktopHost(HostSnapshot services, boolean ownsSnapshot) {
+        this.ownsSnapshot = ownsSnapshot;
         this.services = services;
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
         FontFamilyCache.useLocale(services.locale());
@@ -84,7 +87,7 @@ public final class DesktopHost implements Disposable {
         // THE SCALE, ONCE. It lives on the box tree's root transform, which is the matrix layout
         // composes, painting reads and hit-testing inverts -- so there is no second place it can be
         // applied and no window in which the three can disagree.
-        this.document.boxes().setUiScale(services.uiScale());
+        this.document.boxes().setUiScale(HostServices.DEFAULT_UI_SCALE);
         // NOT INSTALLED FOR YOU. Without the sheets the surface matches no selector at all, and without a
         // theme every token falls back to the sheet's literal: until an editor opened and installed one,
         // the bar drew in those fallbacks.
@@ -109,8 +112,13 @@ public final class DesktopHost implements Disposable {
         this.mount = new DesktopWindowMount(document);
     }
 
+    /** A host over a snapshot its session refreshes. */
+    static DesktopHost create(HostSnapshot snapshot) {
+        return new DesktopHost(snapshot, false);
+    }
+
     public static DesktopHost create(HostServices services) {
-        return new DesktopHost(services);
+        return new DesktopHost(new HostSnapshot(services), true);
     }
 
     /** The surface everything is drawn on. */
@@ -168,6 +176,7 @@ public final class DesktopHost implements Disposable {
      * and on some of them it is not even the same call every frame.</p>
      */
     public void frame(float deltaSeconds) {
+        if (ownsSnapshot) services.refresh();
         // Re-asked like the connection: a change of the game's language reaches this frame's text.
         FontFamilyCache.useLocale(services.locale());
         CgProtocolConnection<Object> live = services.connection();

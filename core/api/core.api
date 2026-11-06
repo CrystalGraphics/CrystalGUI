@@ -2887,37 +2887,6 @@ com/crystalgui/core/async/ActiveJob
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
-com/crystalgui/core/async/HostThread
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final CLIENT Lcom/crystalgui/core/async/HostThread;
-  field public,static,final RENDER Lcom/crystalgui/core/async/HostThread;
-  field public,static,final SERVER Lcom/crystalgui/core/async/HostThread;
-  field public,static,final UNAVAILABLE Ljava/lang/String;
-  method public call (Ljava/util/function/Supplier;)Lcom/crystalgraphics/job/reply/CgReply;
-  method public isAvailable ()Z
-  method public isCurrent ()Z
-  method public run (Ljava/lang/Runnable;)V
-  method public,static bind (Lcom/crystalgui/core/async/HostThread;Lcom/crystalgui/core/async/HostThread$Binding;)V
-  method public,static drainFrames ()V
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/core/async/HostThread;
-  method public,static values ()[Lcom/crystalgui/core/async/HostThread;
-com/crystalgui/core/async/HostThread$Binding
-  access public,abstract,interface
-  extends java/lang/Object
-  method public isAvailable ()Z
-  method public,abstract execute (Ljava/lang/Runnable;)V
-  method public,abstract isCurrent ()Z
-com/crystalgui/core/async/HostThread$Queue
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/core/async/HostThread$Binding
-  method public <init> ()V
-  method public <init> (Ljava/util/function/BooleanSupplier;)V
-  method public drain ()V
-  method public execute (Ljava/lang/Runnable;)V
-  method public isAvailable ()Z
-  method public isCurrent ()Z
 com/crystalgui/core/async/JobScheduler
   access public,final
   extends java/lang/Object
@@ -4950,18 +4919,9 @@ com/crystalgui/desktop/host/HostServices
   access public,abstract,interface
   extends java/lang/Object
   field public,static,final DEFAULT_UI_SCALE F
-  method public,abstract clientThread ()Lcom/crystalgui/core/async/HostThread$Binding;
-  method public,abstract connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
-  method public,abstract desktopId ()Ljava/lang/String;
-  method public,abstract installationDirectory ()Ljava/nio/file/Path;
-  method public,abstract localWorldDirectory ()Ljava/nio/file/Path;
-  method public,abstract locale ()Ljava/util/Locale;
+  method public connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
+  method public desktopId ()Ljava/lang/String;
   method public,abstract reinjectKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)V
-  method public,abstract serverThread ()Lcom/crystalgui/core/async/HostThread$Binding;
-  method public,abstract surfaceHeight ()I
-  method public,abstract surfaceWidth ()I
-  method public,abstract uiScale ()F
-  method public,static gameLocale (Ljava/lang/String;)Ljava/util/Locale;
 com/crystalgui/desktop/host/HostSession
   access public,final
   extends java/lang/Object
@@ -13791,7 +13751,7 @@ com/crystalgui/ui/dom/UINode
   method public,final contains (Lcom/crystalgui/ui/dom/UINode;)Z
   method public,final depth ()I
   method public,final document ()Lcom/crystalgui/ui/dom/UIDocument;
-  method public,final extract (Lcom/crystalgui/core/async/HostThread;Ljava/util/function/Supplier;Ljava/util/function/Consumer;)Lcom/crystalgui/core/signal/Connection;
+  method public,final extract (Lcom/crystalgraphics/job/CgHostThread;Ljava/util/function/Supplier;Ljava/util/function/Consumer;)Lcom/crystalgui/core/signal/Connection;
   method public,final extract (Ljava/util/function/Supplier;Ljava/util/function/Consumer;)Lcom/crystalgui/core/signal/Connection;
   method public,final find (Ljava/lang/String;Ljava/lang/Class;)Lcom/crystalgui/ui/dom/UIElement;
   method public,final fireFrozen ()V

@@ -1,8 +1,6 @@
 package com.crystalgui.mc.v1710;
 
-import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.mc.v1710.net.ServerTasks1710;
 import com.crystalgui.probe.ServerSmoke;
 
 import java.util.Arrays;
@@ -38,7 +36,6 @@ public class CommonProxy {
         CgPlatform.provide(ServerSmoke.FOOTPRINT, new ServerSmoke.Footprint(CommonProxy.class,
                 Arrays.asList("com.crystalgui.mc.v1710.client", "com.crystalgui.mc.v1710.probe"),
                 Arrays.asList("com.crystalgui.mc.v1710.ClientProxy")));
-        CgEngineLifecycle.onServerTick(ServerTasks1710::drain);
     }
 }
 }

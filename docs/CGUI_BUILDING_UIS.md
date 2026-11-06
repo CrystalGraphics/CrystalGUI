@@ -908,7 +908,7 @@ child list, and the server's next insert lands one index off — silently.
 
 A CrystalGUI window may run on a thread of its own, and the game does not: its world, its player and its
 inventories live on the game's threads, and touching them from anywhere else races the game. So UI code
-never reaches into the game directly. It asks a **`HostThread`** to do the work there, and gets the answer
+never reaches into the game directly. It asks a **`CgHostThread`** (CrystalGraphics, `com.crystalgraphics.job`) to do the work there, and gets the answer
 back where the UI runs.
 
 ### Showing something that changes: `extract`
@@ -932,8 +932,8 @@ leaves.
 
 ```java
 extract(() -> List.copyOf(player().getInventory().items), slots::show);       // a copy, never the live list
-extract(HostThread.SERVER, () -> level().getDayTime(), clock::setTime);       // the integrated server's world
-extract(HostThread.RENDER, () -> camera().position(), compass::point);        // where frames are drawn
+extract(CgHostThread.SERVER, () -> level().getDayTime(), clock::setTime);       // the integrated server's world
+extract(CgHostThread.RENDER, () -> camera().position(), compass::point);        // where frames are drawn
 ```
 
 ### Doing something, or asking once: `run` and `call`
@@ -941,9 +941,9 @@ extract(HostThread.RENDER, () -> camera().position(), compass::point);        //
 From a click handler, or anything else in UI code:
 
 ```java
-drop.onPressed.connect(() -> HostThread.CLIENT.run(() -> player().drop(stack, false)));
+drop.onPressed.connect(() -> CgHostThread.CLIENT.run(() -> player().drop(stack, false)));
 
-HostThread.SERVER.call(() -> level().getBlockState(pos))                       // runs on the server thread...
+CgHostThread.SERVER.call(() -> level().getBlockState(pos))                       // runs on the server thread...
         .then(state -> label.setText(state.getBlock().getName().getString())); // ...answered on the UI's
 ```
 
@@ -951,7 +951,7 @@ HostThread.SERVER.call(() -> level().getBlockState(pos))                       /
 
 ### The threads
 
-| `HostThread` | What lives there | 1.7.10, Forge 1.8–1.12 | Modern |
+| `CgHostThread` | What lives there | 1.7.10, Forge 1.8–1.12 | Modern |
 |---|---|---|---|
 | `CLIENT` (the default) | the client world, the player, inventories, screens | the main thread, which also draws | Minecraft's own task queue |
 | `SERVER` | the authoritative world, in single player | the integrated server's thread | the integrated server's task queue |
@@ -969,8 +969,8 @@ HostThread.SERVER.call(() -> level().getBlockState(pos))                       /
 - **An extract's use runs only when the answer changes** (by `equals`), so reading every frame is cheap
   for the UI.
 - **`SERVER` is single player only.** Connected to a server there is no server thread on the client:
-  `HostThread.SERVER.isAvailable()` is false, an extract reads nothing, `run` drops the work with a
-  warning and `call` fails with `HostThread.UNAVAILABLE`. A UI that needs the server's truth in
+  `CgHostThread.SERVER.isAvailable()` is false, an extract reads nothing, `run` drops the work with a
+  warning and `call` fails with `CgHostThread.UNAVAILABLE`. A UI that needs the server's truth in
   multiplayer is a [networked UI](#4-a-networked-ui).
 
 ---

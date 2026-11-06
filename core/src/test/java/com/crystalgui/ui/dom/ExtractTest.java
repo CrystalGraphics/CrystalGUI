@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgui.core.async.FakeGameThreads;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.UiFrame;
@@ -18,7 +19,7 @@ public class ExtractTest {
 
     @After
     public void unbind() {
-        HostThread.bind(HostThread.SERVER, null);
+        FakeGameThreads.bind(CgHostThread.SERVER, null);
     }
 
     /** Frames the document and paints nothing: what a driver needs to run a frame with no GL. */
@@ -60,12 +61,12 @@ public class ExtractTest {
 
     @Test
     public void onAnotherThreadItIsReadThereAndUsedAtTheNextFrame() {
-        HostThread.Queue server = new HostThread.Queue();
-        HostThread.bind(HostThread.SERVER, server);
+        CgHostThread.Queue server = new CgHostThread.Queue();
+        FakeGameThreads.bind(CgHostThread.SERVER, server);
         UIDocument document = new UIDocument();
         AtomicInteger reads = new AtomicInteger();
         List<String> used = new ArrayList<>();
-        document.extract(HostThread.SERVER, () -> "day " + reads.incrementAndGet(), used::add);
+        document.extract(CgHostThread.SERVER, () -> "day " + reads.incrementAndGet(), used::add);
 
         document.frame(0.016f, 100f, 100f);
         document.frame(0.016f, 100f, 100f);
@@ -79,7 +80,7 @@ public class ExtractTest {
     }
 
     /** A server thread is not the frame thread: drained here, the next frame would read in place. */
-    private static void drainOnItsOwnThread(HostThread.Queue queue) {
+    private static void drainOnItsOwnThread(CgHostThread.Queue queue) {
         Thread thread = new Thread(queue::drain, "server");
         thread.start();
         try {

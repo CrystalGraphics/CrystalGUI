@@ -6,7 +6,7 @@ import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -179,9 +179,7 @@ public final class HostSession {
     private HostSession(HostServices services, @Nullable ApplicationKind primaryKind) {
         this.services = services;
         this.primaryKind = primaryKind;
-        // The game's threads, as UI code reaches them. @see HostThread
-        HostThread.bind(HostThread.CLIENT, services.clientThread());
-        HostThread.bind(HostThread.SERVER, services.serverThread());
+        // The game's threads, as UI code reaches them. @see CgHostThread
     }
 
     /**
@@ -256,7 +254,7 @@ public final class HostSession {
         refreshHost();
         build();
         DesktopHost built = host;
-        post(() -> built.document().update(services.surfaceWidth(), services.surfaceHeight()));
+        post(() -> built.document().update(snapshot.surfaceWidth(), snapshot.surfaceHeight()));
     }
 
     /**
@@ -381,8 +379,6 @@ public final class HostSession {
         painted = false;
         if (current == this) {
             current = null;
-            HostThread.bind(HostThread.CLIENT, null);
-            HostThread.bind(HostThread.SERVER, null);
         }
     }
 
@@ -636,7 +632,7 @@ public final class HostSession {
     private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds,
                        @Nullable CgStageFrame stage) {
         // EVERY ARM, painted or not: work and answers for the frame thread must not wait for a desktop to show.
-        HostThread.drainFrames();
+        CgHostThread.drainFrames();
         Desktop desktop = desktop();
         if (desktop == null || document() == null || driver == null) return;
         DesktopPresentation now;
@@ -678,7 +674,7 @@ public final class HostSession {
         if (desktop == null || document == null || owner == null || host == null) return;
         host.enter();
         try {
-            if (owner.frame(stagedDelta, services.surfaceWidth(), services.surfaceHeight(),
+            if (owner.frame(stagedDelta, snapshot.surfaceWidth(), snapshot.surfaceHeight(),
                     new DesktopPainter(desktop, document, stagedPresentation))) {
                 painted = true;
             }

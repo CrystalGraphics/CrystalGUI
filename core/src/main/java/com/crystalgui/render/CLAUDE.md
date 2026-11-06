@@ -186,7 +186,7 @@ did. Under a node the
   **The tests run with `-Dcrystalgui.font.systemFonts=false`** (`core/build.gradle.kts`), so no result
   depends on the machine's fonts; `FontFamilyCache.useSystemFonts` hands a test its own. A Han
   character takes the language its own text shows (kana → Japanese, Hangul → Korean), else the
-  player's: `HostServices.locale()`, pushed into `FontFamilyCache.useLocale` by `DesktopHost` each frame.
+  player's: `CgI18n.locale()`, pushed into `FontFamilyCache.useLocale` by `DesktopHost` each frame.
 
 ### Drawables — `render/texture/`
 

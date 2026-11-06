@@ -2,7 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
@@ -327,7 +327,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      */
     public boolean frame(float deltaSeconds, int width, int height, Painter<F> painter) {
         // This thread is where documents are framed: work and answers queued for it run first.
-        HostThread.drainFrames();
+        CgHostThread.drainFrames();
         if (compositor == null) {
             Runnable delivery = document.readExtracts();
             run(() -> {

@@ -5,11 +5,12 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.window.SystemMenu;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -167,9 +168,9 @@ public final class DesktopProbe {
                 break;
             case GAME_THREADS:
                 // FROM UI CODE, as a mod would: each game thread runs the work and answers here.
-                HostThread.CLIENT.call(() -> Thread.currentThread().getName()).then(name -> clientAnswer = name);
-                if (HostThread.SERVER.isAvailable()) {
-                    HostThread.SERVER.call(() -> Thread.currentThread().getName()).then(name -> serverAnswer = name);
+                CgHostThread.CLIENT.call(() -> Thread.currentThread().getName()).then(name -> clientAnswer = name);
+                if (CgHostThread.SERVER.isAvailable()) {
+                    CgHostThread.SERVER.call(() -> Thread.currentThread().getName()).then(name -> serverAnswer = name);
                 } else {
                     serverAnswer = "(no integrated server)";
                 }
@@ -369,7 +370,7 @@ public final class DesktopProbe {
     /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
     private static void parkPointerOver(Host host, WindowFrame frame) {
         if (frame.box() == null || !HostSession.isInstalled()) return;
-        float scale = HostSession.session().services().uiScale();
+        float scale = HostServices.DEFAULT_UI_SCALE;
         int x = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
         int y = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
         host.movePointerTo(x, y);
