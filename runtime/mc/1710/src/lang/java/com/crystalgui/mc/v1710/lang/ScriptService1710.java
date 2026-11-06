@@ -1,9 +1,9 @@
 package com.crystalgui.mc.v1710.lang;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.MappingCoordinates.Source;
@@ -128,7 +128,7 @@ public final class ScriptService1710 implements ScriptService {
      */
     @Override
     public Path cacheRoot() {
-        return StorageLayout.cacheIn(gameDirectory.toPath());
+        return CrystalGuiStorage.LAYOUT.cacheIn(gameDirectory.toPath());
     }
 
     @Override

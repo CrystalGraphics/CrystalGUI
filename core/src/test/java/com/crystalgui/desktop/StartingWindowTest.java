@@ -1,6 +1,6 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -48,7 +48,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
             return new Running(quick, main);
         });
         desktop.applications().install(quick);
-        desktop.persistTo(new InMemoryConfigStorage(), "starting");
+        desktop.persistTo(new CgInMemoryConfigStorage(), "starting");
         document.update(800f, 600f);
     }
 

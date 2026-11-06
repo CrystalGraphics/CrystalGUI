@@ -7,7 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgraphics.job.reply.CgReplyError;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
@@ -91,7 +91,7 @@ public class WorkspaceDocumentsTest {
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
-        workspace = Workspace.of(clientSide).setStorage(new InMemoryConfigStorage());
+        workspace = Workspace.of(clientSide).setStorage(new CgInMemoryConfigStorage());
         DocumentKinds kinds = new DocumentKinds();
         kinds.register(DocumentKind.of("test:java", "Java")
                 .files(DocumentKind.FilePatterns.extension("java"),

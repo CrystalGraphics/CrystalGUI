@@ -1,8 +1,9 @@
 package com.crystalgui.language;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
 import com.crystalgui.language.engine.bridge.TypeBytes;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.java.classpath.PlatformTypeBytes;
@@ -45,7 +46,7 @@ public final class LanguageHost {
         boolean registryAlreadyRead = LanguageRegistry.isBootstrapped();
         // First: the engine source asks this service where it may write.
         CgPlatform.provide(ScriptServices.SERVICE, service);
-        DownloadLocations.useCacheRoot(service.cacheRoot());
+        CrystalGuiDownloads.LOCATIONS.useCacheRoot(service.cacheRoot());
         if (registryAlreadyRead) {
             CrystalGuiCore.LOGGER.error("[cgui-lang] the language registry was read BEFORE this mod "
                     + "installed its ScriptService, so the engines built during that read captured no "

@@ -1,9 +1,9 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -140,8 +140,8 @@ public final class FrameProfiler {
     public static WindowFrame openOn(Desktop desktop) {
         // THE SAME FILE A LAUNCH READS, for a window opened by key rather than through the registry.
         // A no-op when the desktop's autostart already loaded it.
-        ConfigStorage config = desktop.config();
-        if (config != null) ProfilerSettings.useStorage(config.scoped(StorageLayout.APPS).scoped(ID));
+        CgConfigStorage config = desktop.config();
+        if (config != null) ProfilerSettings.useStorage(config.scoped(CrystalGuiStorage.APPS).scoped(ID));
         WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
         if (existing != null) {
             // ACTIVATE, not raise: a minimised profiler is hidden, and raising a hidden window reorders it and

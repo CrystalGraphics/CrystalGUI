@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.taskbar;
 
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.app.Application;
@@ -41,7 +41,7 @@ public class EntryArrivalTest extends UiDocumentTestBase {
         Desktop desktop = Desktop.of(document);
         ApplicationKind ce = kindOf("t:ce", "Editor"), fp = kindOf("t:fp", "Profiler"), lab = kindOf("t:lab", "VFX Lab"), cues = kindOf("t:cues", "Cues");
         for (var k : new ApplicationKind[]{ce, fp, lab, cues}) desktop.applications().install(k);
-        desktop.persistTo(new InMemoryConfigStorage(), "pins");
+        desktop.persistTo(new CgInMemoryConfigStorage(), "pins");
         desktop.pins().pin(ce);
         for (int i = 0; i < 10; i++) frame();
         DesktopCommands.open(desktop, cues);

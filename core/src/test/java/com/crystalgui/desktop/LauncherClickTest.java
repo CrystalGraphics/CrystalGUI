@@ -156,7 +156,7 @@ public class LauncherClickTest extends UiDocumentTestBase {
     @Test
     public void aPressOnTheRowsContextMenuDoesNotLaunchIt() {
         int[] launched = { 0 };
-        desktop.persistTo(new com.crystalgui.core.storage.InMemoryConfigStorage(), "pins");
+        desktop.persistTo(new com.crystalgraphics.storage.config.CgInMemoryConfigStorage(), "pins");
         desktop.applications().install(ApplicationKind.of("test:alpha", "Alpha").standalone().launch(context -> {
             launched[0]++;
             WindowFrame frame = new WindowFrame("Alpha");

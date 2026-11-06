@@ -21,8 +21,8 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.motion.WindowAnimator;
@@ -82,7 +82,7 @@ public class ApplicationRetentionTest {
 
     private UIDocument surface;
     private Desktop desktop;
-    private ConfigStorage storage;
+    private CgConfigStorage storage;
     private boolean animationsWere;
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
@@ -126,7 +126,7 @@ public class ApplicationRetentionTest {
 
         surface = new UIDocument();
         desktop = Desktop.of(surface);
-        storage = new InMemoryConfigStorage();
+        storage = new CgInMemoryConfigStorage();
     }
 
     /**

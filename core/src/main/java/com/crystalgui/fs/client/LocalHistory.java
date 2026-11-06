@@ -1,6 +1,6 @@
 package com.crystalgui.fs.client;
 
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.fs.Resource;
 
 import org.jetbrains.annotations.Nullable;
@@ -49,22 +49,22 @@ public final class LocalHistory {
     /** Above this a file gets no history at all. The first size tier. */
     public static final long MAX_FILE_BYTES = 5L * 1024 * 1024;
 
-    private final ConfigStorage storage;
+    private final CgConfigStorage storage;
     private final LongSupplier clockMillis;
     private final int entriesPerFile;
     private final long maxAgeMillis;
     private final int maxFiles;
 
-    public LocalHistory(ConfigStorage storage) {
+    public LocalHistory(CgConfigStorage storage) {
         this(storage, System::currentTimeMillis, DEFAULT_ENTRIES_PER_FILE, DEFAULT_MAX_AGE_MILLIS);
     }
 
-    public LocalHistory(ConfigStorage storage, LongSupplier clockMillis, int entriesPerFile,
+    public LocalHistory(CgConfigStorage storage, LongSupplier clockMillis, int entriesPerFile,
                         long maxAgeMillis) {
         this(storage, clockMillis, entriesPerFile, maxAgeMillis, DEFAULT_MAX_FILES);
     }
 
-    public LocalHistory(ConfigStorage storage, LongSupplier clockMillis, int entriesPerFile,
+    public LocalHistory(CgConfigStorage storage, LongSupplier clockMillis, int entriesPerFile,
                         long maxAgeMillis, int maxFiles) {
         this.storage = Objects.requireNonNull(storage, "storage");
         this.clockMillis = clockMillis;
@@ -91,7 +91,7 @@ public final class LocalHistory {
     /**
      * Drops the least recently written files once there are more than {@link #maxFiles}.
      *
-     * <p>Reads rather than stats: {@link ConfigStorage} exposes no modification time, and each file
+     * <p>Reads rather than stats: {@link CgConfigStorage} exposes no modification time, and each file
      * already carries its newest entry's timestamp on its last line. Only on the write that crosses the
      * cap, so the read is off the common path — and only correct because this store holds nothing but
      * history, which is what the per-workspace directory bought.</p>

@@ -1,5 +1,6 @@
 package com.crystalgui.fs.server;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import java.nio.file.Path;
 
 import javax.annotation.Nullable;
@@ -7,7 +8,6 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.net.CgPeer;
 import com.crystalgraphics.platform.service.CgServers;
 import com.crystalgraphics.world.CgPlayers;
-import com.crystalgui.core.storage.StorageLayout;
 
 /**
  * {@link WorkspaceHost.Host} over the running server: where its workspace is, who is asking and what they may do,
@@ -53,7 +53,7 @@ public final class ServerWorkspaceHost implements WorkspaceHost.Host {
     @Nullable
     public Path root() {
         Path base = CgServers.directory();
-        return base == null ? null : StorageLayout.projectsIn(base).resolve(PROJECT_DIR);
+        return base == null ? null : CrystalGuiStorage.projectsIn(base).resolve(PROJECT_DIR);
     }
 
     @Override

@@ -1,6 +1,6 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import org.junit.Test;
 
 import java.util.Arrays;
@@ -14,14 +14,14 @@ import static org.junit.Assert.assertTrue;
 public class DesktopSessionTest {
 
     private static List<DesktopSession.Placement> read(String json) {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         storage.write(DesktopSession.fileNameFor("main"), json);
         return new DesktopSession(null, storage).read("main");
     }
 
     @Test
     public void aRecordAsTheDesktopWritesItComesBack() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         storage.write(DesktopSession.fileNameFor("main"), "{\"version\":1,"
                 + "\"windows\":[{\"key\":\"editor\",\"left\":10.0,\"top\":20.0,\"width\":300.0,\"height\":200.0,"
                 + "\"maximized\":true},{\"key\":\"log\",\"left\":0,\"top\":0,\"width\":120,\"height\":80,\"hidden\":true}],"

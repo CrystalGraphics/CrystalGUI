@@ -117,6 +117,7 @@ Guides below are relative to `core/src/main/java/com/crystalgui/` and load thems
 | Work on layout / Taffy | `ui/box/CLAUDE.md`, and `style/CLAUDE.md` § *`BoxStyle`* — the defaults diverge from CSS |
 | Work on events, focus, hover, drag | `ui/service/CLAUDE.md` |
 | Serialize a tree / send UI over a wire | `net/CLAUDE.md` · `docs/CGUI_SERVER_AND_SERIALIZATION.md` |
+| Keep files, a cache or a download (CrystalGraphics owns the plumbing) | `core/storage/CLAUDE.md` · `CrystalGraphics/docs/STORAGE.md` |
 | Understand a frame | [Frame lifecycle](#frame-lifecycle) |
 | Debug "my selector doesn't match" or "my layout is wrong by default" | [Load-bearing invariants](#load-bearing-invariants) |
 | Work on a Minecraft host | `runtime/mc/CLAUDE.md` — loader modules are wiring, never logic |

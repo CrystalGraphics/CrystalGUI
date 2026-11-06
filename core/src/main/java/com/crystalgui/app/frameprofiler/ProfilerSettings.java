@@ -10,7 +10,7 @@ import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsModel;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.trace.UiTrace;
 
 import javax.annotation.Nullable;
@@ -136,7 +136,7 @@ public final class ProfilerSettings {
 
     private static final Settings SETTINGS = new Settings();
     @Nullable
-    private static volatile ConfigStorage storage;
+    private static volatile CgConfigStorage storage;
     private static boolean listening;
 
     private ProfilerSettings() {
@@ -161,7 +161,7 @@ public final class ProfilerSettings {
      * Loads {@code settings.json} from {@code appStorage} and applies it — once per process; a second
      * desktop's storage is ignored, since the ring it would configure is the same one.
      */
-    public static synchronized void useStorage(ConfigStorage appStorage) {
+    public static synchronized void useStorage(CgConfigStorage appStorage) {
         if (storage != null || appStorage == null) return;
         storage = appStorage;
         SettingsModel loaded = SettingsCodec.fromJson(appStorage.read(FILE));
@@ -196,7 +196,7 @@ public final class ProfilerSettings {
     }
 
     /** The profiler's autostart: load, apply, and start recording if asked to. */
-    public static void atLaunch(ConfigStorage appStorage) {
+    public static void atLaunch(CgConfigStorage appStorage) {
         useStorage(appStorage);
         if (get(RECORD_AT_LAUNCH)) {
             for (String prefix : channels()) CgTrace.enable(prefix);
@@ -219,7 +219,7 @@ public final class ProfilerSettings {
     }
 
     private static void save() {
-        ConfigStorage target = storage;
+        CgConfigStorage target = storage;
         if (target == null) return;
         try {
             target.write(FILE, SettingsCodec.toJson(SETTINGS.layer(SettingsLayer.USER)));

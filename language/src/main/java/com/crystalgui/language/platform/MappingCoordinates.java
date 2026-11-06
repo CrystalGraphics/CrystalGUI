@@ -1,7 +1,8 @@
 package com.crystalgui.language.platform;
 
-import com.crystalgui.core.cache.DownloadLocations;
-import com.crystalgui.core.cache.Downloads;
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloads;
 
 import java.io.FileNotFoundException;
 import java.io.IOException;
@@ -85,8 +86,8 @@ public final class MappingCoordinates {
         }
 
         /** The transfer that fetches this file: its URL and digest, unless it knows better. */
-        default Downloads.Request request() throws IOException {
-            return Downloads.from(url()).verifying(digest());
+        default CgDownloads.Request request() throws IOException {
+            return CgDownloads.from(url()).verifying(digest());
         }
 
         /** The digest a cached copy is checked against at launch, known without the network; or null. */
@@ -115,17 +116,17 @@ public final class MappingCoordinates {
                 }
 
                 @Override
-                public Downloads.Request request() throws IOException {
-                    return Downloads.located(id);
+                public CgDownloads.Request request() throws IOException {
+                    return CrystalGuiDownloads.located(id);
                 }
 
                 @Override
                 public String pinnedDigest() {
-                    return DownloadLocations.get().pinOf(id);
+                    return CrystalGuiDownloads.LOCATIONS.pinOf(id);
                 }
 
-                private DownloadLocations.Location where() throws IOException {
-                    DownloadLocations.Location where = DownloadLocations.get().find(id);
+                private CgDownloadLocations.Location where() throws IOException {
+                    CgDownloadLocations.Location where = CrystalGuiDownloads.LOCATIONS.find(id);
                     if (where == null) throw new FileNotFoundException("download/locations.json lists no " + id);
                     return where;
                 }

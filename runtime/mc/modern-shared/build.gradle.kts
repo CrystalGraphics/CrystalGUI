@@ -28,6 +28,7 @@ dependencies {
     // compileOnly: every modern host supplies all four at run time -- Minecraft ships gson.
     compileOnly(project(":language"))
     compileOnly(project(":core"))
+    compileOnly("com.crystalgraphics:core:1.0.0")
     compileOnly("com.google.code.gson:gson:2.2.4")
     compileOnly("com.google.code.findbugs:jsr305:3.0.2")
 }

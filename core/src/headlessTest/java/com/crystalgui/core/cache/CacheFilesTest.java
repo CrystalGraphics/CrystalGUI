@@ -1,5 +1,6 @@
 package com.crystalgui.core.cache;
 
+import com.crystalgraphics.storage.cache.CgCacheFiles;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -37,9 +38,9 @@ public class CacheFilesTest {
     @Test
     public void aVerifiedFileIsInstalledAndReadsBack() throws IOException {
         Path target = folder.getRoot().toPath().resolve("nested/hello.txt");
-        assertTrue(CacheFiles.install(target, bytes("hello"), HELLO_MD5));
+        assertTrue(CgCacheFiles.install(target, bytes("hello"), HELLO_MD5));
         assertEquals("hello", new String(Files.readAllBytes(target), StandardCharsets.UTF_8));
-        assertTrue(CacheFiles.isValid(target, HELLO_MD5));
+        assertTrue(CgCacheFiles.isValid(target, HELLO_MD5));
     }
 
     /**
@@ -52,7 +53,7 @@ public class CacheFilesTest {
     @Test
     public void badBytesAreNotInstalledAndTheTemporaryIsRemoved() throws IOException {
         Path target = folder.getRoot().toPath().resolve("hello.txt");
-        assertFalse(CacheFiles.install(target, bytes("not hello"), HELLO_MD5));
+        assertFalse(CgCacheFiles.install(target, bytes("not hello"), HELLO_MD5));
         assertFalse("a file was installed despite failing its digest", Files.exists(target));
         assertFalse("the .part survived a failed verify",
                 Files.exists(target.resolveSibling("hello.txt.part")));
@@ -70,24 +71,24 @@ public class CacheFilesTest {
     public void anEmptyFileIsNeverValid() throws IOException {
         Path empty = folder.newFile("empty.jar").toPath();
         assertEquals(0, Files.size(empty));
-        assertFalse(CacheFiles.isValid(empty, null));
+        assertFalse(CgCacheFiles.isValid(empty, null));
     }
 
     /** A file that has gone bad since it was written is re-fetchable, not wedged. */
     @Test
     public void aCorruptedCacheEntryFailsItsDigest() throws IOException {
         Path target = folder.getRoot().toPath().resolve("hello.txt");
-        assertTrue(CacheFiles.install(target, bytes("hello"), HELLO_MD5));
+        assertTrue(CgCacheFiles.install(target, bytes("hello"), HELLO_MD5));
         Files.write(target, "tampered".getBytes(StandardCharsets.UTF_8));
-        assertFalse(CacheFiles.isValid(target, HELLO_MD5));
+        assertFalse(CgCacheFiles.isValid(target, HELLO_MD5));
         // And re-installing over it works, which is what "retry rather than wedge" actually requires.
-        assertTrue(CacheFiles.install(target, bytes("hello"), HELLO_MD5));
-        assertTrue(CacheFiles.isValid(target, HELLO_MD5));
+        assertTrue(CgCacheFiles.install(target, bytes("hello"), HELLO_MD5));
+        assertTrue(CgCacheFiles.isValid(target, HELLO_MD5));
     }
 
     @Test
     public void aMissingFileIsInvalidRatherThanAnError() {
-        assertFalse(CacheFiles.isValid(folder.getRoot().toPath().resolve("absent"), null));
-        assertFalse(CacheFiles.isValid(folder.getRoot().toPath().resolve("absent"), HELLO_MD5));
+        assertFalse(CgCacheFiles.isValid(folder.getRoot().toPath().resolve("absent"), null));
+        assertFalse(CgCacheFiles.isValid(folder.getRoot().toPath().resolve("absent"), HELLO_MD5));
     }
 }

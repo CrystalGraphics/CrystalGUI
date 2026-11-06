@@ -1,8 +1,9 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.LocalConfigStorage;
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.core.storage.CrystalGuiStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgraphics.storage.config.CgLocalConfigStorage;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Backup;
@@ -27,7 +28,7 @@ import static org.junit.Assert.assertTrue;
 /**
  * {@code plan/crystalgui/fs-rewrite/fs-storage-layout.md} — the {@code crystalgui/} tree.
  *
- * <p>A real directory rather than {@code InMemoryConfigStorage}, because the thing under test is
+ * <p>A real directory rather than {@code CgInMemoryConfigStorage}, because the thing under test is
  * <em>nesting</em>: the in-memory store scopes by key prefix, so it would answer every question here
  * correctly and prove nothing about the layout on disk.</p>
  */
@@ -51,8 +52,8 @@ public class StorageTreeTest {
     private static final Resource COLLIDING_B = file("proj:BB/Main.java");
 
     /** A config store over a real directory, reached the way a host reaches it. */
-    private ConfigStorage rootStore() throws IOException {
-        return new LocalConfigStorage(StorageLayout.configIn(folder.newFolder("install").toPath()));
+    private CgConfigStorage rootStore() throws IOException {
+        return new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(folder.newFolder("install").toPath()));
     }
 
     // ── The tree ────────────────────────────────────────────────────────────────────────────────
@@ -60,19 +61,19 @@ public class StorageTreeTest {
     @Test
     public void scopingTwiceMakesTwoRealDirectories() throws IOException {
         Path root = folder.newFolder("install").toPath();
-        ConfigStorage config = new LocalConfigStorage(StorageLayout.configIn(root));
-        config.scoped(StorageLayout.PROJECTS).scoped("abc123").write("session.json", "{}");
+        CgConfigStorage config = new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(root));
+        config.scoped(CrystalGuiStorage.PROJECTS).scoped("abc123").write("session.json", "{}");
 
         assertTrue("the record goes where the tree says",
-                Files.isRegularFile(StorageLayout.configIn(root)
+                Files.isRegularFile(CrystalGuiStorage.LAYOUT.configIn(root)
                         .resolve("projects").resolve("abc123").resolve("session.json")));
     }
 
     @Test
     public void aScopeIsNotVisibleToTheStoreAboveIt() throws IOException {
-        ConfigStorage config = rootStore();
+        CgConfigStorage config = rootStore();
         config.write("settings.json", "{}");
-        config.scoped(StorageLayout.PROJECTS).scoped("abc123").write("session.json", "{}");
+        config.scoped(CrystalGuiStorage.PROJECTS).scoped("abc123").write("session.json", "{}");
 
         // list() skipping directories is what lets projects/ sit beside settings.json without the
         // settings store ever seeing it -- load-bearing now rather than incidental.
@@ -81,7 +82,7 @@ public class StorageTreeTest {
 
     @Test
     public void aSlashedNameIsWrittenWhereListCannotFindIt() throws IOException {
-        ConfigStorage config = rootStore();
+        CgConfigStorage config = rootStore();
         config.write("projects/abc123/session.json", "{}");
 
         // The trap S5 documents: write() creates parent directories, so this WORKS and is invisible.
@@ -97,12 +98,12 @@ public class StorageTreeTest {
         Path installation = folder.getRoot().toPath();
         Path world = installation.resolve("saves").resolve("New World");
         for (Path root : List.of(installation, world)) {
-            assertEquals(root.resolve("crystalgui"), StorageLayout.rootIn(root));
+            assertEquals(root.resolve("crystalgui"), CrystalGuiStorage.LAYOUT.rootIn(root));
             assertEquals(root.resolve("crystalgui").resolve("workspace-config"),
-                    StorageLayout.configIn(root));
-            assertEquals(root.resolve("crystalgui").resolve("cache"), StorageLayout.cacheIn(root));
+                    CrystalGuiStorage.LAYOUT.configIn(root));
+            assertEquals(root.resolve("crystalgui").resolve("cache"), CrystalGuiStorage.LAYOUT.cacheIn(root));
             assertEquals(root.resolve("crystalgui").resolve("projects"),
-                    StorageLayout.projectsIn(root));
+                    CrystalGuiStorage.projectsIn(root));
         }
     }
 
@@ -113,7 +114,7 @@ public class StorageTreeTest {
         assertEquals("the pair must actually collide, or this test proves nothing",
                 COLLIDING_A.toString().hashCode(), COLLIDING_B.toString().hashCode());
 
-        ConfigStorage store = rootStore();
+        CgConfigStorage store = rootStore();
         Backup backup = new Backup(store);
         backup.save(COLLIDING_A, "first", "e1");
         backup.save(COLLIDING_B, "second", "e2");
@@ -127,7 +128,7 @@ public class StorageTreeTest {
 
     @Test
     public void everyFileInTheStoreIsABackup() throws IOException {
-        ConfigStorage store = rootStore();
+        CgConfigStorage store = rootStore();
         Backup backup = new Backup(store);
         backup.save(file("proj:src/Main.java"), "unsaved", null);
 
@@ -142,7 +143,7 @@ public class StorageTreeTest {
 
     @Test
     public void historySweepsDownToTheFileCap() throws IOException {
-        ConfigStorage store = rootStore();
+        CgConfigStorage store = rootStore();
         AtomicLong clock = new AtomicLong(1_000L);
         LocalHistory history = new LocalHistory(store, clock::get, 10, Long.MAX_VALUE, 3);
 
@@ -168,7 +169,7 @@ public class StorageTreeTest {
         // Both stores own everything in the store they are given -- discardAll() clears one, the file
         // sweep clears the other -- so they must never be handed the same one. Shared, a successful
         // save deleted the history it had just written, and the merge base with it.
-        ConfigStorage workspaceStore = rootStore();
+        CgConfigStorage workspaceStore = rootStore();
         Backup backup = new Backup(workspaceStore.scoped("backups"));
         LocalHistory history = new LocalHistory(workspaceStore.scoped("history"));
         Resource main = file("proj:src/Main.java");
@@ -184,18 +185,18 @@ public class StorageTreeTest {
     @Test
     public void deletingTheCacheTreeLosesNothing() throws IOException {
         Path installation = folder.newFolder("install").toPath();
-        ConfigStorage config = new LocalConfigStorage(StorageLayout.configIn(installation));
-        ConfigStorage workspace = config.scoped(StorageLayout.PROJECTS).scoped("abc123");
+        CgConfigStorage config = new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(installation));
+        CgConfigStorage workspace = config.scoped(CrystalGuiStorage.PROJECTS).scoped("abc123");
         Backup backup = new Backup(workspace);
         backup.save(file("proj:src/Main.java"), "unsaved", "e1");
         config.write("settings.json", "{\"theme\":\"Crystal Dark\"}");
 
         // Something derived, in the sibling tree.
-        Path cache = StorageLayout.cacheIn(installation).resolve("apps").resolve("crystalgui.editor");
+        Path cache = CrystalGuiStorage.LAYOUT.cacheIn(installation).resolve("apps").resolve("crystalgui.editor");
         Files.createDirectories(cache);
         Files.write(cache.resolve("Compiled.class"), new byte[] {1, 2, 3});
 
-        deleteTree(StorageLayout.cacheIn(installation));
+        deleteTree(CrystalGuiStorage.LAYOUT.cacheIn(installation));
 
         // The operational claim the sibling split exists to make.
         assertEquals(1, backup.restorable().size());

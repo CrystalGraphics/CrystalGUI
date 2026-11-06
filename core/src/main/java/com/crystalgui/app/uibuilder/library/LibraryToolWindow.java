@@ -8,7 +8,7 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.composite.ActionButton;
@@ -60,7 +60,7 @@ public final class LibraryToolWindow extends UIElement implements TitleActionsCo
         // keeps the panel's session library.
         onConnected(() -> {
             if (storeBound) return;
-            ConfigStorage store = workbench.extensionStore(extensionId);
+            CgConfigStorage store = workbench.extensionStore(extensionId);
             if (store == null) return;
             storeBound = true;
             panel.useLibrary(UserLibrary.in(store));

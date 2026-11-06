@@ -18,7 +18,7 @@ import com.crystalgui.app.uibuilder.style.SheetDocuments;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.undo.CompositeEdit;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.document.DocumentEditor;
@@ -93,7 +93,7 @@ public final class UIBuilderView implements DocumentEditor {
     }
 
     /** @param store the UI builder's extension store, where the Insert menu keeps recent picks; null for none */
-    public UIBuilderView(UiBuilderDocument document, @Nullable ConfigStorage store) {
+    public UIBuilderView(UiBuilderDocument document, @Nullable CgConfigStorage store) {
         this(document, store, null);
     }
 
@@ -102,7 +102,7 @@ public final class UIBuilderView implements DocumentEditor {
      * @param sheets where the document's stylesheets come from — null for none, which leaves the canvas
      *               styled by the engine's own sheet alone
      */
-    public UIBuilderView(UiBuilderDocument document, @Nullable ConfigStorage store,
+    public UIBuilderView(UiBuilderDocument document, @Nullable CgConfigStorage store,
                          @Nullable SheetDocuments sheets) {
         this.document = document;
         this.sheets = sheets != null ? sheets : new SheetDocuments(null, null);

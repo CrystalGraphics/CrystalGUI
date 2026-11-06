@@ -21,7 +21,7 @@ import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.app.uibuilder.library.LibraryCatalog;
 import com.crystalgui.app.uibuilder.library.UserLibrary;
 import com.crystalgui.core.storage.ConfigRecord;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -65,7 +65,7 @@ public final class BuilderInsert implements InsertSource {
 
     private final BuilderSurface surface;
     @Nullable
-    private final ConfigStorage store;
+    private final CgConfigStorage store;
     private final ConfigRecord<List<String>> recents;
 
     private final UIText relation = new UIText("");
@@ -81,7 +81,7 @@ public final class BuilderInsert implements InsertSource {
     @Nullable
     private InsertMenu dressed;
 
-    public BuilderInsert(BuilderSurface surface, @Nullable ConfigStorage store) {
+    public BuilderInsert(BuilderSurface surface, @Nullable CgConfigStorage store) {
         this.surface = surface;
         this.store = store;
         this.recents = ConfigRecord.in(store, RECENTS_FILE, CgCodecs.listOf(CgCodecs.STRING), List.of());

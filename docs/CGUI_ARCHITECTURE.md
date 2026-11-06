@@ -57,10 +57,10 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                write through, polled or announcedBy, the history its edits go into,
                                map), what every config control binds to; ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
-  .storage                     WHERE ANYTHING PRIVATE GOES. ConfigStorage (the key/value SPI),
-                               LocalConfigStorage (one real directory, atomic writes, and `scoped`
-                               answering a real SUBDIRECTORY), ScopedConfigStorage (the default
-                               `scoped` — a key prefix), InMemoryConfigStorage, and StorageLayout —
+  .storage                     WHERE ANYTHING PRIVATE GOES, on CrystalGraphics' `storage` package: CgConfigStorage (the key/value SPI),
+                               CgLocalConfigStorage (one real directory, atomic writes, and `scoped`
+                               answering a real SUBDIRECTORY), CgScopedConfigStorage (the default
+                               `scoped` — a key prefix), CgInMemoryConfigStorage, all CrystalGraphics'; here CrystalGuiStorage and CrystalGuiDownloads —
                                the `crystalgui/` tree stated ONCE: workspace-config/ (durable —
                                apps/ an application's, projects/<key>/ a workspace's, extensions/
                                what a user made with an extension), cache/ (deletable at any
@@ -68,13 +68,11 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                typed JSON record in a store: codec + default, update, onChanged,
                                an unreadable file left alone.
                                A host answers WHERE its installation is and nothing else; nothing
-                               outside StorageLayout may spell those segments.
+                               outside CrystalGuiStorage may spell those segments.
                                plan/crystalgui/fs-rewrite/fs-storage-layout.md
-  .cache                       FETCHING A FILE AND KEEPING IT, for any module. Downloads (a described
-                               transfer: named, reported, cancellable, resumed, retried, verified),
-                               DownloadLocations (download/locations.json -- every address in one
-                               file, repairable from master after release), CacheFiles (verified,
-                               atomic installs), TarArchive. The language stack was its first user
+  .cache                       Only the CLAUDE.md of the downloads guide; the machinery (CgDownloads,
+                               CgDownloadLocations, CgCacheFiles, CgTarArchive) is CrystalGraphics',
+                               and CrystalGuiDownloads (in .storage) binds it to download/locations.json
   .command                     Command (a named invocable action), CommandContext, CommandRegistry —
                                what a key binding, a menu item and the palette all point at. Plus the
                                MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested

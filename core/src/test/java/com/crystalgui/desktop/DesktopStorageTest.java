@@ -1,6 +1,6 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.ui.dom.UIDocument;
 
 import org.junit.Test;
@@ -34,8 +34,8 @@ public class DesktopStorageTest {
         Desktop desktop = Desktop.of(new UIDocument()).useStorage(installation);
 
         assertEquals("the store goes under crystalgui/workspace-config, never beside it",
-                StorageLayout.configIn(installation), desktop.config().directory());
-        assertEquals(StorageLayout.cacheIn(installation), desktop.cacheRoot());
+                CrystalGuiStorage.LAYOUT.configIn(installation), desktop.config().directory());
+        assertEquals(CrystalGuiStorage.LAYOUT.cacheIn(installation), desktop.cacheRoot());
     }
 
     /**
@@ -52,7 +52,7 @@ public class DesktopStorageTest {
         // Path elements, not a string split: a regex would have to know the platform separator, and
         // getting that wrong is how this assertion first passed on nothing at all.
         long roots = StreamSupport.stream(desktop.config().directory().spliterator(), false)
-                .filter(segment -> StorageLayout.ROOT.equals(segment.toString()))
+                .filter(segment -> CrystalGuiStorage.LAYOUT.root().equals(segment.toString()))
                 .count();
         assertEquals("exactly one crystalgui segment", 1L, roots);
     }
@@ -82,7 +82,7 @@ public class DesktopStorageTest {
                 .useStorage(installation)
                 .useLocalWorld(() -> world);
 
-        assertEquals(StorageLayout.configIn(world).resolve("projects").resolve("abc123"),
+        assertEquals(CrystalGuiStorage.LAYOUT.configIn(world).resolve("projects").resolve("abc123"),
                 desktop.workspaceStore("abc123").directory());
     }
 
@@ -95,7 +95,7 @@ public class DesktopStorageTest {
         Path installation = installation("remote-host");
         Desktop desktop = Desktop.of(new UIDocument()).useStorage(installation);
 
-        assertEquals(StorageLayout.configIn(installation).resolve("projects").resolve("server99"),
+        assertEquals(CrystalGuiStorage.LAYOUT.configIn(installation).resolve("projects").resolve("server99"),
                 desktop.workspaceStore("server99").directory());
     }
 

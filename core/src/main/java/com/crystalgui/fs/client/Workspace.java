@@ -1,5 +1,6 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgStateMap;
@@ -7,8 +8,7 @@ import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsHello;
@@ -294,12 +294,12 @@ public final class Workspace implements Disposable {
      * config directory on one loader, a profile folder on another. Without one a workspace still works
      * and simply offers no hot exit and no timeline.</p>
      */
-    public Workspace setStorage(@Nullable ConfigStorage storage) {
+    public Workspace setStorage(@Nullable CgConfigStorage storage) {
         // A DIRECTORY EACH, and not tidiness: both stores own everything in the store they are given --
         // Backup#discardAll clears it, LocalHistory sweeps it to a file cap. Sharing one meant a
         // successful save, which discards backups, deleted the history it had just written.
-        this.backup = storage == null ? null : new Backup(storage.scoped(StorageLayout.BACKUPS));
-        this.history = storage == null ? null : new LocalHistory(storage.scoped(StorageLayout.HISTORY));
+        this.backup = storage == null ? null : new Backup(storage.scoped(CrystalGuiStorage.BACKUPS));
+        this.history = storage == null ? null : new LocalHistory(storage.scoped(CrystalGuiStorage.HISTORY));
         return this;
     }
 

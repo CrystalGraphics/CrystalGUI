@@ -523,7 +523,7 @@ are bound; the 89 external sites are the older idiom the `binding` javadoc warns
 
 | Id | Label | Menus | Keys |
 |---|---|---|---|
-| `java.downloadJdkSources` | Download JDK Sources | — |  |
+| `java.downloadJdkSources` | CgDownload JDK Sources | — |  |
 
 ### Scripts — mappings view
 

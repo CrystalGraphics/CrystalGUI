@@ -2,7 +2,7 @@ package com.crystalgui.desktop;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.taskbar.TaskbarPins;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -69,9 +69,9 @@ public final class DesktopSession {
     private static final String KEY_APP = "app";
 
     private final Desktop desktop;
-    private final ConfigStorage storage;
+    private final CgConfigStorage storage;
 
-    public DesktopSession(Desktop desktop, ConfigStorage storage) {
+    public DesktopSession(Desktop desktop, CgConfigStorage storage) {
         this.desktop = desktop;
         this.storage = storage;
     }

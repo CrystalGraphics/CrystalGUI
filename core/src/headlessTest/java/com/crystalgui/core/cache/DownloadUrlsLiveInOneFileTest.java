@@ -1,5 +1,7 @@
 package com.crystalgui.core.cache;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
 import org.junit.Assume;
 import org.junit.Test;
 
@@ -55,7 +57,7 @@ public class DownloadUrlsLiveInOneFileTest {
 
     @Test
     public void theShippedFileListsEveryIdAHostAsksFor() throws IOException {
-        DownloadLocations shipped = DownloadLocations.get();
+        CgDownloadLocations shipped = CrystalGuiDownloads.LOCATIONS;
         List<String> missing = new ArrayList<>();
         for (Path file : sources()) {
             Matcher located = LOCATED.matcher(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
@@ -83,7 +85,7 @@ public class DownloadUrlsLiveInOneFileTest {
      */
     @Test
     public void theShippedFileExpandsToTheAddressesTheBuildVerifies() {
-        DownloadLocations shipped = DownloadLocations.get();
+        CgDownloadLocations shipped = CrystalGuiDownloads.LOCATIONS;
         assertEquals(Arrays.asList(
                         "https://repo1.maven.org/maven2/org/benf/cfr/0.152/cfr-0.152.jar",
                         "https://github.com/CrystalGraphics/CrystalGUI/releases/download/download-mirror/cfr-0.152.jar"),

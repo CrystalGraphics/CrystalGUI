@@ -1,8 +1,9 @@
 package com.crystalgui.language.java.assist;
 
+import com.crystalgraphics.storage.download.CgDownloads;
 import com.crystalgraphics.job.progress.CgProgress;
-import com.crystalgui.core.cache.DownloadLocations;
-import com.crystalgui.core.cache.TarArchive;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.cache.CgTarArchive;
 import org.junit.Assume;
 import org.junit.Test;
 
@@ -37,12 +38,12 @@ import static org.junit.Assert.assertTrue;
  * <h3>The tar is written by hand, and that is the point</h3>
  *
  * <p>Java ships a reader and a writer for zip and neither for tar, so the fixture below lays out ustar
- * header blocks itself. That makes this test the specification {@link TarArchive} is read against rather
+ * header blocks itself. That makes this test the specification {@link CgTarArchive} is read against rather
  * than a round-trip through one implementation — a reader tested against its own writer agrees with
  * itself about a field it has misplaced.</p>
  *
  * <p>What cannot be exercised here is the HTTP request, and it is the one part with no logic in it:
- * {@code Downloads.open} is three lines shared with the mapping fetch. Everything between the socket and
+ * {@code CgDownloads.open} is three lines shared with the mapping fetch. Everything between the socket and
  * the cache file — the gzip, the tar, the layout rule, the package filter, the strip, the repack — is
  * driven below.</p>
  */
@@ -322,7 +323,7 @@ public class JdkSourceExtractTest {
         Path cache = Files.createTempDirectory("cgui-jdk-announce");
         // A location that fails as fast as anything can, so the ONLY reason begin could have been reached
         // is that it comes first.
-        DownloadLocations locations = DownloadLocations.of("""
+        CgDownloadLocations locations = CgDownloadLocations.of("""
                 {"files": {"jdk-sources/{java}": {"urls": ["%s"]}}}
                 """.formatted(new File(cache.toFile(), "absent.tar.gz").toURI()), null, null, false);
         JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, recorder, () -> false, locations);
@@ -338,7 +339,7 @@ public class JdkSourceExtractTest {
     public void aJvmWithNoListedSourcesIsNotConfigured() throws Exception {
         Path cache = Files.createTempDirectory("cgui-jdk-unlisted");
         JdkSourceExtract.Result result = JdkSourceExtract.acquire(cache, CgProgress.NONE, () -> false,
-                DownloadLocations.of("{}", null, null, false));
+                CgDownloadLocations.of("{}", null, null, false));
         assertEquals(JdkSourceExtract.State.NOT_CONFIGURED, result.state());
     }
 
@@ -357,7 +358,7 @@ public class JdkSourceExtractTest {
     }
 
     private static byte[] buildFrom(byte[] targz) throws IOException {
-        try (TarArchive archive = TarArchive.gzip(new ByteArrayInputStream(targz))) {
+        try (CgTarArchive archive = CgTarArchive.gzip(new ByteArrayInputStream(targz))) {
             return JdkSourceExtract.buildToBytes(archive, CgProgress.NONE);
         }
     }

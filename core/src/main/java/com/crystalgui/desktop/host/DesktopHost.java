@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloads;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.function.Supplier;
@@ -7,9 +9,9 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
-import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
@@ -58,7 +60,7 @@ public final class DesktopHost implements Disposable {
     /** True when this host copies the snapshot itself; a session's is refreshed at its host entries. */
     private final boolean ownsSnapshot;
     private final UIDocument document;
-    private final ConfigStorage config;
+    private final CgConfigStorage config;
 
     /** Where derived output goes. Handed to an application at launch; never written to by this class. */
     private final Path cacheRoot;
@@ -102,8 +104,8 @@ public final class DesktopHost implements Disposable {
         Desktop desktop = Desktop.of(document).useStorage(services.installationDirectory());
         this.config = desktop.config();
         this.cacheRoot = desktop.cacheRoot();
-        // Downloads keep master's copy of download/locations.json under it between launches.
-        DownloadLocations.useCacheRoot(cacheRoot);
+        // CgDownloads keep master's copy of download/locations.json under it between launches.
+        CrystalGuiDownloads.LOCATIONS.useCacheRoot(cacheRoot);
         // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.
         desktop.useLocalWorld(services::localWorldDirectory);
         // What a pin, Start and an entry's menu launch against
@@ -132,7 +134,7 @@ public final class DesktopHost implements Disposable {
     }
 
     /** Where private records go — the arrangement, an application's preferences, its session. */
-    public ConfigStorage config() {
+    public CgConfigStorage config() {
         return config;
     }
 

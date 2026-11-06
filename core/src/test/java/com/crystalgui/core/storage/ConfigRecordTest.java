@@ -1,5 +1,6 @@
 package com.crystalgui.core.storage;
 
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -35,7 +36,7 @@ public class ConfigRecordTest {
 
     @Test
     public void aChangeSurvivesANewRecordOnTheSameStore() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY).update(s -> new Shelf(true, "button"));
 
         assertEquals(new Shelf(true, "button"), ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY).get());
@@ -44,7 +45,7 @@ public class ConfigRecordTest {
     /** Two holders of one file — two open editors — each change it; neither change is written over by the other. */
     @Test
     public void twoRecordsOverOneFileDoNotOverwriteEachOther() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         ConfigRecord<Shelf> first = ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY);
         ConfigRecord<Shelf> second = ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY);
 
@@ -61,7 +62,7 @@ public class ConfigRecordTest {
 
     @Test
     public void anEqualValueWritesAndAnnouncesNothing() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         ConfigRecord<Shelf> shelf = ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY);
         List<Shelf> heard = new ArrayList<>();
         shelf.onChanged.connect(heard::add);
@@ -76,7 +77,7 @@ public class ConfigRecordTest {
 
     @Test
     public void anUnreadableFileGivesTheDefaultAndIsLeftAloneUntilAChange() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         store.write("shelf.json", "{ \"rows\": tru");
 
         ConfigRecord<Shelf> shelf = ConfigRecord.in(store, "shelf.json", Shelf.CODEC, Shelf.EMPTY);

@@ -26,8 +26,8 @@ import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -99,7 +99,7 @@ public class TwoApplicationsTest {
     private Workspace workspace;
     private UIDocument surface;
     private Desktop desktop;
-    private ConfigStorage storage;
+    private CgConfigStorage storage;
     private boolean animationsWere;
 
     @Before
@@ -127,7 +127,7 @@ public class TwoApplicationsTest {
 
         surface = new UIDocument();
         desktop = Desktop.of(surface);
-        storage = new InMemoryConfigStorage();
+        storage = new CgInMemoryConfigStorage();
     }
 
     @After
