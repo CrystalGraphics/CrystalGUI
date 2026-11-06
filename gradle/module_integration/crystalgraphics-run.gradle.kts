@@ -104,19 +104,43 @@ val resourceTasks: List<String> = bundledProjects.map { "${it.path}:processResou
  */
 val devResourcesDir: File = layout.buildDirectory.dir("dev-resources").get().asFile
 
+/** CrystalGraphics' lifecycle listener files, one per bundled project; a single root offers only one. */
+val devListenersFile = "META-INF/crystalgraphics/listeners"
+val mergedListenersDir: File = layout.buildDirectory.dir("merged-listeners").get().asFile
+
+val mergeDevListeners = tasks.register("mergeDevListeners") {
+    group = "build"
+    description = "Unions every bundled project's $devListenersFile."
+    val files = bundledProjects.mapNotNull { mainSourceSet(it).output.resourcesDir?.let { dir -> File(dir, devListenersFile) } }
+    inputs.files(files).withPropertyName("listenerFiles").optional()
+    outputs.dir(mergedListenersDir)
+    dependsOn(resourceTasks)
+    doLast {
+        val lines = linkedSetOf<String>()
+        for (file in files.filter { it.isFile }) {
+            file.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { lines.add(it) }
+        }
+        val out = File(mergedListenersDir, devListenersFile)
+        out.parentFile.mkdirs()
+        out.writeText(lines.joinToString("\n", postfix = "\n"))
+    }
+}
+
 val stageDevResources = tasks.register<Sync>("stageDevResources") {
     group = "build"
     description = "Stages every project's resources into one root, with a single merged META-INF/services."
     dependsOn(mergeDevServices)
+    dependsOn(mergeDevListeners)
     // ITS OWN, not inherited: from(File) carries no task dependency, so without these the copy is
     // ordered only by mergeDevServices happening to depend on the same tasks.
     dependsOn(resourceTasks)
     into(devResourcesDir)
     for (owner in bundledProjects) {
         val resources = mainSourceSet(owner).output.resourcesDir ?: continue
-        from(resources) { exclude("META-INF/services/**") }
+        from(resources) { exclude("META-INF/services/**", devListenersFile) }
     }
     from(mergedServicesDir)
+    from(mergedListenersDir)
 }
 
 /** tree-sitter, which :language needs and which must live in the same module it does. */
