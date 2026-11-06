@@ -70,6 +70,8 @@ public final class StartingMark extends UIElement {
             + Math.round(PACE * SLOWER * (1.0 - PEAK) * SETTLE_SLOWER * SETTLE_SEEN);
     private static final LengthPercent CENTRE = LengthPercent.percent(0.5f);
     private static final Transform REST = scaled(1f);
+    /** Drawn, barely, through the entry delay: its first draw (layer, icon raster) lands while nothing else changes. */
+    private static final float HELD_OPACITY = 0.003f;
 
     private final String icon;
     private final String title;
@@ -88,7 +90,7 @@ public final class StartingMark extends UIElement {
         append(new WindowIcon().show(icon, title));
         if (settles) {
             whileConnected(() -> {
-                in = new CompositorAnimation(this, scaled(ENTER_SCALE), REST, 0f, 1f, CENTRE, CENTRE,
+                in = new CompositorAnimation(this, scaled(ENTER_SCALE), REST, HELD_OPACITY, 1f, CENTRE, CENTRE,
                         IN_NANOS, settleEased(BoxFlights.outBack(OVERSHOOT), PEAK, (double) RISE_NANOS / IN_NANOS, SETTLE_SEEN), FADE_NANOS, CgEasings.LINEAR);
                 return BoxFlights.play(this, in, IN_DELAY, null);
             });
