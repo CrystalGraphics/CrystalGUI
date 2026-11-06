@@ -1,5 +1,6 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.job.reply.CgReply;
 import org.junit.After;
 import org.junit.Test;
@@ -15,27 +16,27 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /** UI code reaches a game thread: the work runs there, and the answer comes back where it was asked. */
-public class HostThreadTest {
+public class CgHostThreadTest {
 
     private final UiSequence sequence = UiSequence.create("ui");
 
     @After
     public void unbind() {
-        HostThread.bind(HostThread.SERVER, null);
+        FakeGameThreads.bind(CgHostThread.SERVER, null);
         sequence.close();
     }
 
     @Test
     public void aCallFromASequenceIsAnsweredOnIt() throws Exception {
-        HostThread.Queue server = new HostThread.Queue();
-        HostThread.bind(HostThread.SERVER, server);
+        CgHostThread.Queue server = new CgHostThread.Queue();
+        FakeGameThreads.bind(CgHostThread.SERVER, server);
         AtomicReference<Thread> ranOn = new AtomicReference<>();
         AtomicReference<UiSequence> answeredOn = new AtomicReference<>();
         CountDownLatch answered = new CountDownLatch(1);
 
         CountDownLatch asked = new CountDownLatch(1);
         sequence.execute(() -> {
-            HostThread.SERVER.call(() -> {
+            CgHostThread.SERVER.call(() -> {
                 ranOn.set(Thread.currentThread());
                 return 42;
             }).then(value -> {
@@ -55,15 +56,15 @@ public class HostThreadTest {
     /** Asked from the client thread with no document framing, the answer still comes back: to the client thread. */
     @Test
     public void aCallFromAGameThreadIsAnsweredOnIt() throws Exception {
-        HostThread.Queue client = new HostThread.Queue();
-        HostThread.Queue server = new HostThread.Queue();
-        HostThread.bind(HostThread.CLIENT, client);
-        HostThread.bind(HostThread.SERVER, server);
+        CgHostThread.Queue client = new CgHostThread.Queue();
+        CgHostThread.Queue server = new CgHostThread.Queue();
+        FakeGameThreads.bind(CgHostThread.CLIENT, client);
+        FakeGameThreads.bind(CgHostThread.SERVER, server);
         try {
             AtomicReference<Thread> answeredOn = new AtomicReference<>();
             Thread clientThread = new Thread(() -> {
                 client.drain();   // this thread is now the client's
-                HostThread.SERVER.call(() -> 42).then(value -> answeredOn.set(Thread.currentThread()));
+                CgHostThread.SERVER.call(() -> 42).then(value -> answeredOn.set(Thread.currentThread()));
             }, "client");
             clientThread.start();
             clientThread.join();
@@ -77,33 +78,33 @@ public class HostThreadTest {
             clientAgain.join();
             assertSame("the answer went somewhere other than the client thread", clientAgain, answeredOn.get());
         } finally {
-            HostThread.bind(HostThread.CLIENT, null);
+            FakeGameThreads.bind(CgHostThread.CLIENT, null);
         }
     }
 
     @Test
     public void onItsOwnThreadACallIsAnsweredBeforeItReturns() {
-        HostThread.Queue server = new HostThread.Queue();
-        HostThread.bind(HostThread.SERVER, server);
+        CgHostThread.Queue server = new CgHostThread.Queue();
+        FakeGameThreads.bind(CgHostThread.SERVER, server);
         server.drain();   // this thread is now the server's
 
-        CgReply<Integer> reply = HostThread.SERVER.call(() -> 7);
+        CgReply<Integer> reply = CgHostThread.SERVER.call(() -> 7);
         assertTrue(reply.isDone());
         assertEquals(Integer.valueOf(7), reply.result());
     }
 
     @Test
     public void withNoServerACallFailsAndNothingRuns() {
-        assertFalse(HostThread.SERVER.isAvailable());
+        assertFalse(CgHostThread.SERVER.isAvailable());
         boolean[] ran = {false};
-        CgReply<Integer> reply = HostThread.SERVER.call(() -> {
+        CgReply<Integer> reply = CgHostThread.SERVER.call(() -> {
             ran[0] = true;
             return 1;
         });
         assertTrue(reply.isDone());
         assertNotNull(reply.error());
-        assertTrue(reply.error().is(HostThread.UNAVAILABLE));
-        HostThread.SERVER.run(() -> ran[0] = true);
+        assertTrue(reply.error().is(CgHostThread.UNAVAILABLE));
+        CgHostThread.SERVER.run(() -> ran[0] = true);
         assertFalse(ran[0]);
     }
 }

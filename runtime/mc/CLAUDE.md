@@ -9,12 +9,11 @@ spells something; it decides nothing. The seams it answers, all in `core/`:
 
 | Seam | A loader answers |
 |---|---|
-| `desktop.host.HostServices` | where the game directory is, how big the surface is, the locale, the connection, how to give the current screen a key the desktop left (`reinjectKey`), and the game's client and server threads (`clientThread`, `serverThread`: what `HostThread.CLIENT`/`SERVER` run work on; null where the client thread is the one the desktop is framed on, or there is no integrated server) |
+| `desktop.host.HostServices` | how to give the current screen a key the desktop left (`reinjectKey`), and, only where a host is not a Minecraft client, its `desktopId` and `connection`. The directories, window, language and connection are read from CrystalGraphics' `CgGameDirectory`, `CgHostWindow`, `CgI18n` and `CgNetwork`, and the game's threads from `CgGameThreads` (what `CgHostThread.CLIENT`/`SERVER` run work on) |
 | `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, whether a pointer event may reach a pinned window (`offerMouse` takes the host's grab state and decides), and which arm paints on CrystalGraphics' `HUD` and `SCREEN` stages (`attachStages`) |
 | `desktop.host.HostSession.PaintHost` | whether a screen is up and whose, and how to bracket a draw |
 | `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
-| `fs.server.WorkspaceRoles` | is this actor the single-player owner, and is it a connected operator |
-| `probe.ServerSmoke.Host` | is this a dedicated server, which package is client-only, how to stop |
+| `probe.ServerSmoke.Footprint` | *(data)* which packages are client-only, and a class in their container; the server, its workspace, its operators and the smoke itself are the engine's, over CrystalGraphics' `CgServers` and `CgPlayers` |
 | `ui.input.HostPointer` | *(nothing — it OWNS)* the scroll sign, and that a move carries no click time |
 | `desktop.host.HostInput` | *(nothing — it OWNS)* where its screen's input enters: a host calls `HostSession.session().input()`, never `document.input()`, so the document's `DocumentDriver` can post events to a document on its own thread |
 
@@ -25,9 +24,8 @@ drifted across two loaders by the time anyone compared them.
 > **Naming: bare, unless the simple name collides with the seam it adapts — then an era SUFFIX.** J9
 > deliberately dropped the `1201` suffixes, so `CgUiScreen`, `CgUiHud` and `ClientProbe` are bare. An
 > adapter whose core counterpart shares its name cannot import it, and a fully-qualified name at a call
-> site is the thing to avoid — so `WorkspaceHostModern` adapts `fs.server.WorkspaceHost`,
-> `ServerSmokeModern` adapts `probe.ServerSmoke`, `HostModern`/`Host1710` answer `HostServices`, and
-> `MachineExample1710` wires `app.machine.MachineExample`. **Never a prefix** — not `Mc1710Host`, and
+> site is the thing to avoid — so `HostModern`/`Host1710` answer `HostServices`.
+> **Never a prefix** — not `Mc1710Host`, and
 > not `ModernHost`.
 
 > **Packages: every loader tree owns a segment under `com.crystalgui.mc`, and none of them owns the
@@ -44,7 +42,7 @@ drifted across two loaders by the time anyone compared them.
 > **What a rename here does not reach**: `@SidedProxy`'s two class strings, `mixins.crystalgui.json`'s
 > `package`/`plugin`, `mixinsPackage`/`mixinPlugin`/`generateGradleTokenClass` in the module's
 > `gradle.properties` (all relative to `modGroup`, which stays `com.crystalgui` — it is the maven
-> group), `ServerSmoke.Host.clientPackage()`, and **the entry-class strings in
+> group), `ServerSmoke.Footprint`, and **the entry-class strings in
 > `cg-descriptors.gradle.kts`**. That last one is the merged jar's variant table and only `prodSmoke`
 > would catch it in the wild — but `checkSingleJar`'s `requiredEntries` names the same classes, so it
 > fails first and on a laptop. Keep those two lists in step.

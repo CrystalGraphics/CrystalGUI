@@ -11,15 +11,6 @@ import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.neoforge.client.event.RegisterKeyMappingsEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.server.ServerStartedEvent;
-import net.neoforged.neoforge.event.server.ServerStartingEvent;
-import net.neoforged.neoforge.event.server.ServerStoppingEvent;
-//? if >=1.20.5 {
-/*import net.neoforged.neoforge.client.event.ClientTickEvent;
-import net.neoforged.neoforge.event.tick.ServerTickEvent;
-*///?} else {
-import net.neoforged.neoforge.event.TickEvent;
-//?}
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
@@ -59,36 +50,8 @@ public final class CrystalGUINeoForge implements VariantEntry {
         private Events() {}
 
         static void register(IEventBus modBus) {
-            NeoForge.EVENT_BUS.addListener(Events::onServerStarting);
-            NeoForge.EVENT_BUS.addListener(Events::onServerStarted);
-            NeoForge.EVENT_BUS.addListener(Events::onServerStopping);
-            NeoForge.EVENT_BUS.addListener(Events::onServerTick);
-
             if (FmlSide.isClient(FMLLoader.class)) ClientBus.register(modBus);
         }
-
-        private static void onServerStarting(ServerStartingEvent event) {
-            LifecycleCrystalGUI.serverStarting(event.getServer());
-        }
-
-        private static void onServerStarted(ServerStartedEvent event) {
-            LifecycleCrystalGUI.serverStarted(event.getServer());
-        }
-
-        private static void onServerStopping(ServerStoppingEvent event) {
-            LifecycleCrystalGUI.serverStopping();
-        }
-
-        // 1.20.5 split the tick events by phase into classes of their own.
-        //? if >=1.20.5 {
-        /*private static void onServerTick(ServerTickEvent.Post event) {
-            LifecycleCrystalGUI.serverTick();
-        }
-        *///?} else {
-        private static void onServerTick(TickEvent.ServerTickEvent event) {
-            if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.serverTick();
-        }
-        //?}
 
         /**
          * The client listeners, in a class a dedicated server never loads.
@@ -111,8 +74,6 @@ public final class CrystalGUINeoForge implements VariantEntry {
             static void register(IEventBus modBus) {
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
 
-                NeoForge.EVENT_BUS.addListener(ClientBus::onClientTick);
-
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMousePressed);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMouseReleased);
                 NeoForge.EVENT_BUS.addListener(ClientBus::onMouseScrolled);
@@ -125,16 +86,6 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 LifecycleCrystalGUI.bootstrapClient();
                 CgUiKeybinds.all().forEach(event::register);
             }
-
-            //? if >=1.20.5 {
-            /*private static void onClientTick(ClientTickEvent.Post event) {
-                LifecycleCrystalGUI.clientTick();
-            }
-            *///?} else {
-            private static void onClientTick(TickEvent.ClientTickEvent event) {
-                if (event.phase == TickEvent.Phase.END) LifecycleCrystalGUI.clientTick();
-            }
-            //?}
 
             private static void onMousePressed(ScreenEvent.MouseButtonPressed.Pre event) {
                 if (LifecycleCrystalGUI.offerMouse(event.getButton(), true, 0f)) event.setCanceled(true);

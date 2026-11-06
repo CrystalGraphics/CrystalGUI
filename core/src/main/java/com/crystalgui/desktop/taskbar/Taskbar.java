@@ -15,6 +15,7 @@ import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UINode;
@@ -28,6 +29,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.ContextMenu;
+import com.crystalgui.widget.overlay.Menu;
 import com.crystalgui.widget.overlay.Tooltip;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -145,6 +147,9 @@ public class Taskbar extends UIElement {
      * listener hands its argument straight to a switch — {@code NullPointerException} out of
      * {@code resolveTouched}, on the frame an arriving entry settled. @see TaskbarEntryMotion
      */
+    /** An arriving entry while it is measured: invisible, since it has no box to carry an opacity yet. */
+    public static final String MEASURING_CLASS = "__measuring__";
+
     public static final String ANIMATING_CLASS = "__animating__";
 
     /**
@@ -213,10 +218,11 @@ public class Taskbar extends UIElement {
         });
         // An application installed late gives its pin a button
         whileConnected(() -> desktop().applications().onDidChange.connect(this::refresh));
-        onConnected(this::refresh);
+        onConnected(this::arrive);
+        // A PRESS ON BARE BAR FOCUSES THE BAR, unringed and never a Tab stop itself, so Tab goes on to Start, as Windows'.
+        setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
         // THE HAIRLINE FIRST, so it paints under the entries rather than over them. Absolute, so the row
         // below still centres its island as if the edge were not there.
-        UIElement edge = new UIElement();
         edge.addClass(EDGE_CLASS);
         edge.setHitTest(false);
         append(edge);
@@ -275,9 +281,9 @@ public class Taskbar extends UIElement {
         return entry instanceof Entry known ? known.shown() : List.of();
     }
 
-    /** Holds the hover previews down while an entry is being dragged. */
-    void previewsSuppressed(boolean suppressed) {
-        previews.setSuppressed(suppressed);
+    /** Holds the hover previews down while an entry is being dragged, by {@code drag}. */
+    void previewsSuppressed(Object drag, boolean suppressed) {
+        previews.setSuppressed(drag, suppressed);
     }
 
     /** The start button, and through it the launcher. */
@@ -302,9 +308,14 @@ public class Taskbar extends UIElement {
      * phase</b>, so the jump list's own handler — attached first — was silencing the preview's dismissal
      * outright. Depending on the order two listeners happen to be registered in is exactly the coupling
      * that produced a preview sitting on top of the menu that replaced it.</p>
+     *
+     * <pre>{@code
+     * taskbar.setPreviewsSuppressed(menu, true);    // as the jump list opens
+     * taskbar.setPreviewsSuppressed(menu, false);   // as it closes: previews return once nothing else holds them
+     * }</pre>
      */
-    public void setPreviewsSuppressed(boolean suppressed) {
-        previews.setSuppressed(suppressed);
+    public void setPreviewsSuppressed(Object by, boolean suppressed) {
+        previews.setSuppressed(by, suppressed);
     }
 
     /**
@@ -419,7 +430,8 @@ public class Taskbar extends UIElement {
                 // ...AND THE ROW OPENS FOR IT, the collapse in reverse. Only for an entry built HERE: this
                 // loop runs on every activation and every title change, so anything keyed on the frame
                 // rather than on the entry being new would restart the arrival over and over.
-                if (WindowAnimator.isEnabled()) {
+                // Not while the bar comes on screen: the entries rise into it with it.
+                if (WindowAnimator.isEnabled() && !arriving) {
                     TaskbarEntryMotion open = TaskbarEntryMotion.opening(entry, () -> entering.remove(key));
                     if (open.start()) entering.put(key, open);
                 }
@@ -443,7 +455,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, LAUNCH_CLASS, false);
                 setClass(entry, ACTIVE_CLASS, frame == active);
                 setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);
-                setClass(entry, ATTENTION_CLASS, frame.isDemandingAttention());
+                setAttention(entry, frame.isDemandingAttention());
                 applyBadge(entry, frame.badge());
                 applyProgress(entry, frame.progress());
                 entry.tooltip.setText("");
@@ -454,7 +466,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, LAUNCH_CLASS, true);
                 setClass(entry, ACTIVE_CLASS, false);
                 setClass(entry, HIDDEN_CLASS, false);
-                setClass(entry, ATTENTION_CLASS, false);
+                setAttention(entry, false);
                 applyBadge(entry, null);
                 applyProgress(entry, -1f);
                 entry.tooltip.setText(entry.kind.displayName());
@@ -477,7 +489,7 @@ public class Taskbar extends UIElement {
                 setClass(entry, LAUNCH_CLASS, false);
                 setClass(entry, ACTIVE_CLASS, lit);
                 setClass(entry, HIDDEN_CLASS, allHidden);
-                setClass(entry, ATTENTION_CLASS, attention);
+                setAttention(entry, attention);
                 applyBadge(entry, badge);
                 applyProgress(entry, progress);
                 entry.tooltip.setText("");
@@ -806,7 +818,12 @@ public class Taskbar extends UIElement {
             event.stopPropagation();
             // ALREADY UP: a second right-click on its own entry leaves it, as Windows does
             if (SystemMenu.isJumpListOpen(entry.subject(), element)) return;
-            SystemMenu.showJumpList(entry.subject(), element);
+            Menu jumpList = SystemMenu.showJumpList(entry.subject(), element);
+            // LIT WHILE ITS LIST IS UP, as Windows': the pointer leaves the entry for the list, and the entry still says whose
+            // it is. Its pill stays the one it had: the window you were in is still the one you are in.
+            if (jumpList == null) return;
+            entry.addClass(MENU_OPEN_CLASS);
+            jumpList.onClosed.connect(() -> entry.removeClass(MENU_OPEN_CLASS));
         }, false, false);
         previews.watch(entry, entry::shown);
         // DRAG TO REORDER, from a left press. Never from the keyboard: Space and Enter arrive as a synthesized
@@ -879,6 +896,14 @@ public class Taskbar extends UIElement {
             WindowFrame after = before instanceof Entry other ? other.anyWindow() : null;
             desktop.registry().moveInTaskbar(entry.anyWindow(), after);
         }
+    }
+
+    /** {@code successor}'s button where {@code was}'s is: an application's window taking its starting window's place. */
+    public void takePlace(WindowFrame successor, WindowFrame was) {
+        int at = sessionOrder.indexOf(was);
+        if (at < 0) return;
+        sessionOrder.remove(successor);
+        sessionOrder.set(sessionOrder.indexOf(was), successor);
     }
 
     /**
@@ -967,6 +992,52 @@ public class Taskbar extends UIElement {
         tile.show(iconName, entry.getText());
     }
 
+    /** On an attention entry between its pulses: the sheet fades it out. @see #setAttention */
+    public static final String FLASH_OFF_CLASS = "__flash-off__";
+    /** On an attention entry once its pulses are over: the sheet settles it to the tint it holds. */
+    public static final String FLASH_HELD_CLASS = "__flash-held__";
+    /**
+     * Windows' flash, measured (FlashWindowEx, seven toggles at the 530 ms caret blink time): four pulses, one every
+     * four blinks, each lit for 750 ms of it, then held lit at four fifths. The sheet's transitions are its rise and
+     * fall: lit over 700 ms, unlit over 850 ms, held over 600 ms.
+     */
+    private static final long FLASH_PERIOD_NANOS = 4L * 530_000_000L, FLASH_LIT_NANOS = 750_000_000L,
+            FLASH_SETTLE_NANOS = 1_000_000_000L;
+    private static final int PULSES = 4;
+
+    /**
+     * Lights {@code entry} for a window wanting attention, pulsing it as Windows' {@code FlashWindowEx} does a window
+     * that finished in the background, then holding it lit; off, its pulsing stops with it.
+     */
+    private void setAttention(UIElement entry, boolean on) {
+        boolean was = entry.hasClass(ATTENTION_CLASS);
+        setClass(entry, ATTENTION_CLASS, on);
+        if (!on) {
+            entry.removeClass(FLASH_OFF_CLASS);
+            entry.removeClass(FLASH_HELD_CLASS);
+        }
+        if (!on || was) return;
+        UIDocument document = entry.document();
+        if (document == null || !WindowAnimator.isEnabled()) {
+            entry.addClass(FLASH_HELD_CLASS);
+            return;
+        }
+        long start = System.nanoTime();
+        document.animation().every(entry, delta -> {
+            if (!entry.hasClass(ATTENTION_CLASS)) return false;
+            long since = System.nanoTime() - start;
+            long pulse = since / FLASH_PERIOD_NANOS, into = since % FLASH_PERIOD_NANOS;
+            if (pulse >= PULSES - 1 && into >= FLASH_SETTLE_NANOS || pulse >= PULSES) {
+                entry.removeClass(FLASH_OFF_CLASS);
+                entry.addClass(FLASH_HELD_CLASS);
+                return false;
+            }
+            // The last pulse is not put out: it settles from lit to held
+            setClass(entry, FLASH_OFF_CLASS, pulse < PULSES - 1 && into >= FLASH_LIT_NANOS);
+            return true;
+        });
+    }
+
     private static void setClass(UIElement element, String cls, boolean on) {
         if (on) element.addClass(cls);
         else element.removeClass(cls);
@@ -975,11 +1046,94 @@ public class Taskbar extends UIElement {
     /** Hides the whole strip — what fullscreen (W13) does, and the reason the work area is a layout box
      * rather than a subtraction somebody has to remember. */
     public void setBarVisible(boolean visible) {
-        // `setDisplayed`, the engine's own attribute, where the old engine wrote `display` at IMPORTANT.
-        // The M6.0 rule: this selector engine has no attribute selectors, so HTML's `[hidden] { display:
-        // none }` cannot be written -- the box tree gives a hidden node no box instead, exactly as it
-        // gives none to `display: none`, which is what the IMPORTANT write effectively did anyway.
-        setDisplayed(visible);
+        if (visible == barShown) return;
+        barShown = visible;
+        stopMotion();
+        if (visible) {
+            removeClass(LEAVING_CLASS);
+            setDisplayed(true);
+            playEnter();
+            return;
+        }
+        // OUT OF FLOW WHILE IT LEAVES, so the work area takes the bar's row at once and the bar slides away over it.
+        addClass(LEAVING_CLASS);
+        motion = TaskbarMotion.leave(this, edge, buttons(), false, this::gone);
+    }
+
+    /**
+     * The desktop is closing: the bar slides off and stays off until {@link #comeOnScreen}, then {@code done}, at once
+     * when it is not on screen or animations are off.
+     */
+    public void leaveScreen(Runnable done) {
+        stopMotion();
+        if (!barShown || box() == null) {
+            done.run();
+            return;
+        }
+        motion = TaskbarMotion.leave(this, edge, buttons(), true, done);
+    }
+
+    /** The desktop is opening again: the bar comes in, its buttons rising into it. */
+    public void comeOnScreen() {
+        if (barShown) playEnter();
+        else stopMotion();
+    }
+
+    /** On an entry while its jump list is open, which the sheet lights as the active entry hovered. */
+    public static final String MENU_OPEN_CLASS = "__menu-open__";
+
+    /** On a button while it rises in with the bar, which the sheet gives a picture of its own. */
+    public static final String RISING_CLASS = "__rising__";
+
+    /** On the bar while it slides off screen, which the sheet takes out of flow. */
+    public static final String LEAVING_CLASS = "__leaving__";
+
+    /** Whether the bar is meant to be on screen: false from the moment it starts leaving. */
+    private boolean barShown = true;
+    /** True for the refresh of the bar coming on screen, whose entries rise in with it rather than opening the row. */
+    private boolean arriving;
+    @Nullable
+    private TaskbarMotion motion;
+    /** The light along the bar's top, which draws in and out with it. */
+    private final UIElement edge = new UIElement();
+
+    /** Joined the tree: brought up to date, and comes on screen. */
+    private void arrive() {
+        arriving = barShown && WindowAnimator.isEnabled();
+        try {
+            refresh();
+        } finally {
+            arriving = false;
+        }
+        stopMotion();
+        // LEFT THE TREE WHILE LEAVING, whose end never ran.
+        if (!barShown) gone();
+        else playEnter();
+    }
+
+    private void playEnter() {
+        stopMotion();
+        motion = TaskbarMotion.enter(this, edge, buttons());
+    }
+
+    /** The start button, then the entries: the order they rise in. */
+    private List<UIElement> buttons() {
+        List<UIElement> buttons = new ArrayList<>();
+        buttons.add(start);
+        buttons.addAll(entryRow());
+        return buttons;
+    }
+
+    private void gone() {
+        removeClass(LEAVING_CLASS);
+        // `setDisplayed`, the engine's own attribute: the box tree gives a hidden node no box.
+        setDisplayed(false);
+    }
+
+    private void stopMotion() {
+        if (motion == null) return;
+        motion.stop();
+        motion = null;
     }
 
     /** The window a hover preview is currently showing, or null. @see TaskbarPreviews */

@@ -879,14 +879,14 @@ theme {
     --taskbar-indicator: var(--fg-secondary);
     --taskbar-indicator-active: var(--accent);
     --taskbar-indicator-hidden: var(--fg-disabled);
-    /* ATTENTION: a SOFT accent fill, with the full accent on the pill. This was the accent itself, and
-     * on a bar whose every other state is a step on one grey a solid accent entry was the loudest thing
-     * on the desktop — it read as an error rather than as a knock. Windows' own flash settles to a tint.
-     * A window that opened without focus is still the only thing here asking rather than reporting;
-     * it now asks in the same voice as everything else. The label takes --fg rather than the on-accent
-     * white, because --accent-soft is pale in the light theme and white would not read on it. */
-    --taskbar-entry-attention-fg: var(--fg);
-    --taskbar-entry-attention-bg: var(--accent-soft);
+    /* ATTENTION: Windows' orange, flashed seven times and then held until the window is looked at
+     * (FlashWindowEx) -- the one thing on the bar asking rather than reporting, so the one colour that is no
+     * step on its grey. Its own colour rather than the accent, which an orange flash would mean nothing in. */
+    --taskbar-entry-attention-fg: var(--fg-on-accent);
+    --taskbar-entry-attention-bg: var(--attention);
+    --taskbar-indicator-attention: var(--attention-mark);
+    --taskbar-entry-attention-off-bg: var(--attention-clear);
+    --taskbar-entry-attention-held-bg: var(--attention-held);
     /* A count, so it takes the same red every error count in the application takes rather than a colour
      * of its own — the badge/colour split FileDecoration already draws, one level up. */
     --taskbar-entry-badge-fg: var(--fg-on-accent);

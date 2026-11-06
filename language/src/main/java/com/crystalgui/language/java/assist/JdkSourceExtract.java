@@ -1,11 +1,12 @@
 package com.crystalgui.language.java.assist;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
 import com.crystalgraphics.job.progress.CgProgress;
-import com.crystalgui.core.cache.CacheFiles;
-import com.crystalgui.core.cache.Download;
-import com.crystalgui.core.cache.DownloadLocations;
-import com.crystalgui.core.cache.Downloads;
-import com.crystalgui.core.cache.TarArchive;
+import com.crystalgraphics.storage.cache.CgCacheFiles;
+import com.crystalgraphics.storage.download.CgDownload;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloads;
+import com.crystalgraphics.storage.cache.CgTarArchive;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
@@ -45,7 +46,7 @@ import java.util.zip.ZipOutputStream;
  *
  * <p>It is therefore <b>never automatic</b>. A fetch of this size, from a third party, on the user's
  * connection, is a thing somebody asks for — which is also how IntelliJ does it, and what
- * {@code plan/lang-resolver.md} §24.1 already named as the popup's "Download documentation" entry.</p>
+ * {@code plan/lang-resolver.md} §24.1 already named as the popup's "CgDownload documentation" entry.</p>
  *
  * <h3>Why the cached form is a plain zip of stripped files</h3>
  *
@@ -210,14 +211,14 @@ public final class JdkSourceExtract {
     public static boolean useCachedIfPresent(Path cacheRoot) {
         if (System.getProperty(SOURCES_PROPERTY) != null) return true;
         Path file = extractFile(cacheRoot, runningFeatureVersion());
-        if (!CacheFiles.isValid(file, null)) return false;
+        if (!CgCacheFiles.isValid(file, null)) return false;
         System.setProperty(SOURCES_PROPERTY, file.toAbsolutePath().toString());
         return true;
     }
 
     /** Whether a fetch would do anything — what the command's {@code enabledWhen} asks. */
     public static boolean isCached(Path cacheRoot) {
-        return CacheFiles.isValid(extractFile(cacheRoot, runningFeatureVersion()), null);
+        return CgCacheFiles.isValid(extractFile(cacheRoot, runningFeatureVersion()), null);
     }
 
     /**
@@ -236,15 +237,15 @@ public final class JdkSourceExtract {
      * </ul>
      */
     public static Result acquire(Path cacheRoot, CgProgress progress, BooleanSupplier cancelled) {
-        return acquire(cacheRoot, progress, cancelled, DownloadLocations.get());
+        return acquire(cacheRoot, progress, cancelled, CrystalGuiDownloads.LOCATIONS);
     }
 
     /** The same, from {@code locations} rather than the process's own. */
     static Result acquire(Path cacheRoot, CgProgress progress, BooleanSupplier cancelled,
-                          DownloadLocations locations) {
+                          CgDownloadLocations locations) {
         int feature = runningFeatureVersion();
         Path target = extractFile(cacheRoot, feature);
-        if (CacheFiles.isValid(target, null)) {
+        if (CgCacheFiles.isValid(target, null)) {
             return new Result(State.CACHED, target.toString());
         }
         String id = "jdk-sources/" + feature;
@@ -255,17 +256,17 @@ public final class JdkSourceExtract {
         Path scratch = target.resolveSibling(target.getFileName() + ".building");
         try {
             // THE DESCRIBED FORM. Announcing before the connect, retargeting once the response says how
-            // big it is, counting the bytes past and rate-limiting the reports are all Downloads' now --
+            // big it is, counting the bytes past and rate-limiting the reports are all CgDownloads' now --
             // this class had its own Counting stream and its own begin/retarget dance, and the next
             // consumer would have had a second copy of both.
             Files.createDirectories(target.getParent());
 
             int written;
             String from;
-            try (Download download = Downloads.located(locations, id)
+            try (CgDownload download = CgDownloads.located(locations, id)
                          .named("Downloading JDK sources").reporting(progress)
                          .cancelledWhen(cancelled).open();
-                 TarArchive archive = TarArchive.gzip(download.stream());
+                 CgTarArchive archive = CgTarArchive.gzip(download.stream());
                  OutputStream file = Files.newOutputStream(scratch);
                  ZipOutputStream out = new ZipOutputStream(file)) {
                 from = download.url();
@@ -276,10 +277,10 @@ public final class JdkSourceExtract {
                 Files.deleteIfExists(scratch);
                 return new Result(State.UNAVAILABLE, "nothing usable in the archive at " + from);
             }
-            // THROUGH CacheFiles so the atomic-install rule has one implementation. The extra copy of a
+            // THROUGH CgCacheFiles so the atomic-install rule has one implementation. The extra copy of a
             // few megabytes is the price of not writing the .part-then-move dance a second time.
             try (InputStream built = Files.newInputStream(scratch)) {
-                if (!CacheFiles.install(target, built, null)) {
+                if (!CgCacheFiles.install(target, built, null)) {
                     return new Result(State.UNAVAILABLE, "the extract would not install at " + target);
                 }
             }
@@ -291,7 +292,7 @@ public final class JdkSourceExtract {
             // debugging wants and it is not what a balloon should say -- offline, this read
             // "java.net.UnknownHostException: api.adoptium.net" to a user whose wifi was simply off.
             System.err.println("[crystalgui] jdk sources failed: " + unavailable);
-            return new Result(State.UNAVAILABLE, Downloads.describe(unavailable));
+            return new Result(State.UNAVAILABLE, CgDownloads.describe(unavailable));
         } finally {
             try {
                 Files.deleteIfExists(scratch);
@@ -329,10 +330,10 @@ public final class JdkSourceExtract {
      *
      * @return how many files were written
      */
-    static int build(TarArchive archive, ZipOutputStream out, CgProgress progress) throws IOException {
+    static int build(CgTarArchive archive, ZipOutputStream out, CgProgress progress) throws IOException {
         Set<String> written = new LinkedHashSet<>();
         int count = 0;
-        for (TarArchive.Entry entry = archive.next(); entry != null; entry = archive.next()) {
+        for (CgTarArchive.Entry entry = archive.next(); entry != null; entry = archive.next()) {
             if (!entry.isFile() || !entry.name().endsWith(".java")) continue;
             String path = relativePathOf(entry.name());
             // A DUPLICATE ENTRY MAKES ZipOutputStream THROW, and the same package path really does appear
@@ -374,7 +375,7 @@ public final class JdkSourceExtract {
     }
 
     /** Visible for testing — the bytes of a zip built from one archive, without touching disk. */
-    static byte[] buildToBytes(TarArchive archive, CgProgress progress) throws IOException {
+    static byte[] buildToBytes(CgTarArchive archive, CgProgress progress) throws IOException {
         ByteArrayOutputStream bytes = new ByteArrayOutputStream();
         try (ZipOutputStream out = new ZipOutputStream(bytes)) {
             build(archive, out, progress);

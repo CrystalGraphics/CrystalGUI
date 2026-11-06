@@ -2,7 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.trace.UiTrace;
 
@@ -22,7 +22,7 @@ final class Extracts {
 
     /** One extract. Its last value and in-flight flag are the document's; {@code pending} is set off it too. */
     private final class Extract<T> {
-        final HostThread thread;
+        final CgHostThread thread;
         final Supplier<T> read;
         final Consumer<T> use;
         @Nullable
@@ -30,7 +30,7 @@ final class Extracts {
         boolean used;
         volatile boolean pending;
 
-        Extract(HostThread thread, Supplier<T> read, Consumer<T> use) {
+        Extract(CgHostThread thread, Supplier<T> read, Consumer<T> use) {
             this.thread = thread;
             this.read = read;
             this.use = use;
@@ -54,7 +54,7 @@ final class Extracts {
         this.document = document;
     }
 
-    <T> Connection add(HostThread thread, Supplier<T> read, Consumer<T> use) {
+    <T> Connection add(CgHostThread thread, Supplier<T> read, Consumer<T> use) {
         Extract<T> extract = new Extract<>(thread, read, use);
         all.add(extract);
         return () -> all.remove(extract);
@@ -85,7 +85,7 @@ final class Extracts {
 
     @Nullable
     private <T> Runnable readOne(Extract<T> extract) {
-        HostThread thread = extract.thread;
+        CgHostThread thread = extract.thread;
         if (thread.isCurrent()) {
             T value = safeRead(extract);
             return value == FAILED ? null : () -> extract.deliver(value);

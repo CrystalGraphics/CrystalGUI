@@ -2,7 +2,7 @@ package com.crystalgui.workbench;
 
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.EditorInput;
@@ -226,7 +226,7 @@ public final class WorkbenchSession {
      * {@link #restore} do nothing, which is the same answer they already gave on a read-only store.</p>
      */
     @Nullable
-    private ConfigStorage storage;
+    private CgConfigStorage storage;
 
     /** View state read from a record, waiting for its file's content to arrive. */
     private final Map<CgPath, JsonElement> pendingViewState = new LinkedHashMap<>();
@@ -259,7 +259,7 @@ public final class WorkbenchSession {
      * session.useStorage(context.workspaces().scoped(workspaceIdentity));
      * }</pre>
      */
-    public WorkbenchSession useStorage(@Nullable ConfigStorage storage) {
+    public WorkbenchSession useStorage(@Nullable CgConfigStorage storage) {
         this.storage = storage;
         return this;
     }

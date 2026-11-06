@@ -5,7 +5,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.app.Application;
@@ -155,7 +155,7 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
             return new Running(late, frame);
         });
         desktop.applications().install(late);
-        desktop.persistTo(new InMemoryConfigStorage(), "combine");
+        desktop.persistTo(new CgInMemoryConfigStorage(), "combine");
         desktop.desktopSettings().setTaskbarCombine(TaskbarCombine.NEVER);
         desktop.pins().pin(late);
         WindowFrame one = open("One");
@@ -164,6 +164,10 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
         assertSame(taskbar.pinEntryFor(late), taskbar.entryRow().get(0));
 
         DesktopCommands.open(desktop, late);
+        // Built behind its starting window, a frame or two later
+        frame();
+        frame();
+        frame();
         WindowFrame window = desktop.registry().windows().get(1);
         assertEquals("the launched pin went back to the end", List.of(taskbar.entryFor(window), taskbar.entryFor(one)),
                 taskbar.entryRow());
@@ -178,7 +182,7 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
 
     @Test
     public void theSettingComesBackAfterARestart() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         desktop.persistTo(storage, "combine");
         desktop.desktopSettings().setTaskbarCombine(TaskbarCombine.WHEN_FULL);
 

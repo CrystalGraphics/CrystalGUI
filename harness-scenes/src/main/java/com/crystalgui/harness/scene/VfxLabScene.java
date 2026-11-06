@@ -6,7 +6,7 @@ import com.crystalgraphics.harness.config.HarnessContext;
 import com.crystalgraphics.harness.scene.test.HarnessWorld;
 import com.crystalgui.app.vfxlab.VfxLab;
 
-/** An empty world with the VFX Lab open on the harness's desktop (F6 opens it in any 3D scene). */
+/** An empty world with the VFX Lab open on the harness's desktop (the launcher opens it in any 3D scene). */
 public final class VfxLabScene implements InteractiveSceneLifecycle {
 
     @Override

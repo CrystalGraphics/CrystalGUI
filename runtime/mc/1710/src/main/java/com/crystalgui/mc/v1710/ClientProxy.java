@@ -6,7 +6,6 @@ import com.crystalgui.mc.v1710.probe.CgUiConnectionProbe;
 import com.crystalgui.mc.v1710.probe.CgUiDesktopProbe;
 import com.crystalgui.mc.v1710.client.CgUiInput;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
-import com.crystalgui.mc.v1710.example.MachineExampleClient1710;
 
 /** The client half: the key binding, the input pump, the HUD and the probes. CrystalGraphics finds CrystalGUI's lifecycle. */
 public class ClientProxy extends CommonProxy {
@@ -33,8 +32,5 @@ public class ClientProxy extends CommonProxy {
         // The SCRIPTED DESKTOP RUN, which this era did not have. Off unless
         // -Dcrystalgui.clientProbe=true. @see DesktopProbe
         CgUiDesktopProbe.register();
-        // The worked example's CLIENT half: F8, and the session it shows. Always on -- it is meant to
-        // be opened and looked at, unlike the probes above, which are diagnostics behind a flag.
-        MachineExampleClient1710.registerClient();
     }
 }

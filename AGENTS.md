@@ -78,7 +78,7 @@ wildcard never reports.
 
 ## Supported versions
 
-Forge 1.7.10 · 1.8.8–1.12.2 · 1.13.2–1.21.11 · 26.1.1–26.3; NeoForge 1.20.2–26.3; Fabric 1.14.4–26.3 — with gaps. **Before code that differs by version**, read [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md) § *Supported versions*: which versions are refused and why, which run Java 8, 26.x's Vulkan and unobfuscated names, 26.3's SDL3 input (`CgUiInput.hostKey`), and JOML below 1.19.3.
+Forge 1.7.10 · 1.8.8–1.12.2 · 1.13.2–1.21.11 · 26.1.1–26.3; NeoForge 1.20.2–26.3; Fabric 1.14.4–26.3 — with gaps. **Before code that differs by version**, read [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md) § *Supported versions*: which versions are refused and why, which run Java 8, 26.x's Vulkan and unobfuscated names, 26.3's SDL3 input (`HostKeys.key`), and JOML below 1.19.3.
 
 ---
 
@@ -117,6 +117,7 @@ Guides below are relative to `core/src/main/java/com/crystalgui/` and load thems
 | Work on layout / Taffy | `ui/box/CLAUDE.md`, and `style/CLAUDE.md` § *`BoxStyle`* — the defaults diverge from CSS |
 | Work on events, focus, hover, drag | `ui/service/CLAUDE.md` |
 | Serialize a tree / send UI over a wire | `net/CLAUDE.md` · `docs/CGUI_SERVER_AND_SERIALIZATION.md` |
+| Keep files, a cache or a download (CrystalGraphics owns the plumbing) | `core/storage/CLAUDE.md` · `CrystalGraphics/docs/STORAGE.md` |
 | Understand a frame | [Frame lifecycle](#frame-lifecycle) |
 | Debug "my selector doesn't match" or "my layout is wrong by default" | [Load-bearing invariants](#load-bearing-invariants) |
 | Work on a Minecraft host | `runtime/mc/CLAUDE.md` — loader modules are wiring, never logic |

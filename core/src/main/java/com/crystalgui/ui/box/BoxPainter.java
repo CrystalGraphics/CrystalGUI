@@ -190,11 +190,11 @@ public final class BoxPainter {
         box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor(), turn),
                 ctx.frameId());
         if (turn == null) {
-            ctx.damageSurface(region);
+            ctx.placeSurface(surface, region);
         } else {
             boundsThrough(region.x(), region.y(), region.x() + region.width(), region.y() + region.height(),
                     surfaceScratch.set(ctx.drawToTarget()).mul(turn).mul(ctx.targetToDraw()));
-            ctx.damageSurface(ctx.surfaceRegion(ink[0], ink[1], ink[2], ink[3]));
+            ctx.placeSurface(surface, ctx.surfaceRegion(ink[0], ink[1], ink[2], ink[3]));
         }
         return true;
     }
@@ -333,7 +333,7 @@ public final class BoxPainter {
             paintOwnAfter(box, style, node, ctx);
             ctx.endLayerFbo();
             box.noteFadedNode(ctx.blitLayer(subtreeFbo, opacity, region, fades), ctx.frameId());
-            ctx.damageSurface(region);
+            ctx.placeLayer(box.layerPlacement(), region);
         } finally {
             if (clipPath == CLIPPED) ctx.popRoundedClip();
             painted.set(base).mul(box.localToWorld());
@@ -348,18 +348,54 @@ public final class BoxPainter {
     /**
      * {@code clip-path: inset()} over the box and everything it hosts, as a rounded clip in the box's
      * own space. Past the clip table's depth it draws unclipped, as a rounded {@code overflow} falls back.
+     *
+     * <p>Grown by the box's own outline, which {@link #paintOutline} rings around the clip rather than the box: a
+     * panel revealed by its clip keeps its rim on every edge of what shows.</p>
      */
     private int pushClipPath(Box box, ComputedStyle style, CgUiPaintContext ctx) {
-        ClipPath clip = style.get(StylePropertyRegistry.CLIP_PATH);
-        if (clip == null || clip.isNone()) return UNCLIPPED;
-        float w = box.width(), h = box.height();
-        float left = clip.left().resolve(w), top = clip.top().resolve(h);
-        float width = w - left - clip.right().resolve(w), height = h - top - clip.bottom().resolve(h);
+        if (!clipRect(box, style, clipPathRect)) return UNCLIPPED;
+        float left = clipPathRect[0], top = clipPathRect[1], width = clipPathRect[2], height = clipPathRect[3];
         if (width <= 0f || height <= 0f) return CLIPPED_AWAY;
-        Arrays.fill(clipPathRx, Math.min(clip.round().resolve(width), width / 2f));
-        Arrays.fill(clipPathRy, Math.min(clip.round().resolve(height), height / 2f));
-        return ctx.pushRoundedClip(left, top, width, height, clipPathRx, clipPathRy, null) ? CLIPPED : UNCLIPPED;
+        float ring = outlineReach(box, style);
+        float rx = Math.min(clipPathRect[4], width / 2f), ry = Math.min(clipPathRect[5], height / 2f);
+        // Grown as the ring's own corners are, a square clip staying square
+        Arrays.fill(clipPathRx, rx <= 0f ? 0f : rx + ring);
+        Arrays.fill(clipPathRy, ry <= 0f ? 0f : ry + ring);
+        return ctx.pushRoundedClip(left - ring, top - ring, width + 2f * ring, height + 2f * ring,
+                clipPathRx, clipPathRy, null) ? CLIPPED : UNCLIPPED;
     }
+
+    /**
+     * The box's {@code clip-path} as {@code left, top, width, height, rx, ry} in its own space, or false for none.
+     * The radii are {@code round} resolved against the clip's width and height, unclamped.
+     */
+    static boolean clipRect(Box box, ComputedStyle style, float[] into) {
+        ClipPath clip = style.get(StylePropertyRegistry.CLIP_PATH);
+        if (clip == null || clip.isNone()) return false;
+        float w = box.width(), h = box.height();
+        into[0] = clip.left().resolve(w);
+        into[1] = clip.top().resolve(h);
+        into[2] = w - into[0] - clip.right().resolve(w);
+        into[3] = h - into[1] - clip.bottom().resolve(h);
+        into[4] = clip.round().resolve(Math.max(0f, into[2]));
+        into[5] = clip.round().resolve(Math.max(0f, into[3]));
+        return true;
+    }
+
+    /** How far past its edge a box's stroked outline reaches, offsets included; zero with none. */
+    private static float outlineReach(Box box, ComputedStyle style) {
+        LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
+        float stroke = strokeLp == null ? 0f : strokeLp.resolve(box.width());
+        if (stroke <= 0f) return 0f;
+        float w = box.width(), h = box.height();
+        return stroke + Math.max(Math.max(resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_TOP), h),
+                        resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM), h)),
+                Math.max(resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_LEFT), w),
+                        resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT), w)));
+    }
+
+    /** @see #pushClipPath -- {@code left, top, width, height, rx, ry}. */
+    private final float[] clipPathRect = new float[6];
 
     /** @see #pushClipPath -- its corners, all four alike. */
     private final float[] clipPathRx = new float[4], clipPathRy = new float[4];
@@ -393,7 +429,7 @@ public final class BoxPainter {
             ctx.compositeMask(childrenFbo, maskFbo, inside);
             ctx.endLayerFbo();
             ctx.blitLayer(childrenFbo, 1f, region);
-            ctx.damageSurface(region);
+            ctx.placeLayer(box.layerPlacement(), region);
             pose.last().pose().set(base).mul(box.localToWorld());
         }
         paintOwnAfter(box, style, node, ctx);
@@ -1084,18 +1120,36 @@ public final class BoxPainter {
         // The SDF stroke measures inward from the shape's outer edge; a CSS outline grows outward from
         // the offset edge -- so inflate by offset + width and let the inward stroke land in the band.
         float insetTop = top + stroke, insetBottom = bottom + stroke, insetLeft = left + stroke, insetRight = right + stroke;
-        // RESOLVED AGAIN rather than carried from paintBox: the children painted in between share the
-        // one scratch. @see #radii
-        Radii ring = radiiOf(style, width, height)
-                .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
+        // AROUND WHAT SHOWS while a clip-path cuts the box, its corners the clip's: the rim follows the reveal.
+        float x = 0f, y = 0f;
+        Radii ring;
+        if (clipRect(box, style, outlineClip)) {
+            x = outlineClip[0];
+            y = outlineClip[1];
+            width = Math.max(0f, outlineClip[2]);
+            height = Math.max(0f, outlineClip[3]);
+            float rx = Math.min(outlineClip[4], width / 2f), ry = Math.min(outlineClip[5], height / 2f);
+            ring = radii;
+            ring.rxTL = ring.rxTR = ring.rxBR = ring.rxBL = rx;
+            ring.ryTL = ring.ryTR = ring.ryBR = ring.ryBL = ry;
+            ring.expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
+        } else {
+            // RESOLVED AGAIN rather than carried from paintBox: the children painted in between share the
+            // one scratch. @see #radii
+            ring = radiiOf(style, width, height)
+                    .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
+        }
         int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
         shaped(ctx, ring)
-                .at(-insetLeft, -insetTop)
+                .at(x - insetLeft, y - insetTop)
                 .size(width + insetLeft + insetRight, height + insetTop + insetBottom)
                 .fillColor(color & 0x00FFFFFF)
                 .border(stroke, color)
                 .submit();
     }
+
+    /** @see #paintOutline -- the clip it rings, apart from {@link #clipPathRect}, which a child's push overwrites. */
+    private final float[] outlineClip = new float[6];
 
     private static float resolve(@Nullable LengthPercent lp, float against) {
         return lp == null ? 0f : lp.resolve(against);

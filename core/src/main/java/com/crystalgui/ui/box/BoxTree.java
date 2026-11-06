@@ -92,6 +92,8 @@ public final class BoxTree {
     final BoxPainter painter = new BoxPainter();
     /** {@link Box#hitTest}'s radii scratch, apart from the painter's: a hit test can run mid-paint. */
     final BoxPainter.Radii hitRadii = new BoxPainter.Radii();
+    /** A box's {@code clip-path} rect during a hit test. @see Box#insideClipPath */
+    final float[] hitClipPath = new float[6];
 
     /** A subtree laid out again under another host. */
     private static final class Mirror {

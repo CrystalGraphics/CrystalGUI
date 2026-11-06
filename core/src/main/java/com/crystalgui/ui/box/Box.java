@@ -4,6 +4,7 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.render.Surface;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
@@ -382,6 +383,15 @@ public final class Box {
         scrolledFrame = frame;
     }
 
+    /** Where its opacity or mask layer was composited into a surface. @see BoxPainter */
+    Surface.Placement layerPlacement() {
+        if (layerPlacement == null) layerPlacement = new Surface.Placement();
+        return layerPlacement;
+    }
+
+    @Nullable
+    private Surface.Placement layerPlacement;
+
     void noteFadedNode(int node, long frame) {
         if (node == 0) return;
         fadedNode = node;
@@ -700,15 +710,20 @@ public final class Box {
      * "there is nothing to scroll".</p>
      */
     public float maxScrollLeft() {
-        return atLeastZero(scrollWidth() - clientWidth());
+        return scrollRange(scrollWidth() - clientWidth());
     }
 
     public float maxScrollTop() {
-        return atLeastZero(scrollHeight() - clientHeight());
+        return scrollRange(scrollHeight() - clientHeight());
     }
 
-    private static float atLeastZero(float value) {
-        return value > 0f ? value : 0f;
+    /**
+     * Overflow under half a pixel is none, as the web's, whose {@code scrollWidth} and {@code clientWidth} are whole
+     * pixels: a layout's rounding put a box a fraction of a pixel past its scroller, and a full-width scrollbar showed
+     * for nothing to scroll.
+     */
+    private static float scrollRange(float value) {
+        return value >= 0.5f ? value : 0f;
     }
 
     /**
@@ -984,6 +999,8 @@ public final class Box {
         boolean inside = box.contains(worldX, worldY);
         // WHEN THE BOX CLIPS, nothing it paints lies outside it -- the rectangle and, as the painter masks, the corners.
         if (!inside && box.clips()) return null;
+        // ...AND ITS clip-path, as the web's: what is cut away is neither drawn nor hit, the box or anything in it.
+        if (!box.insideClipPath(worldX, worldY)) return null;
         Box hit = null;
         if (asContext) {
             StackingOrder order = box.stackingOrder();
@@ -1103,6 +1120,22 @@ public final class Box {
         worldToLocal.transform(p);
         if (p.x < 0f || p.y < 0f || p.x >= width || p.y >= height) return false;
         return insideCorners(p.x, p.y);
+    }
+
+    /**
+     * Whether a world point is inside this box's {@code clip-path}, its rounded corners included; true with none. The
+     * rect is the painter's, resolved by the same call that clips the drawing.
+     */
+    private boolean insideClipPath(float worldX, float worldY) {
+        float[] r = tree.hitClipPath;
+        if (!BoxPainter.clipRect(this, node.computedStyle(), r)) return true;
+        Vector4f p = new Vector4f(worldX, worldY, 0f, 1f);
+        worldToLocal.transform(p);
+        float x = p.x - r[0], y = p.y - r[1], w = r[2], h = r[3];
+        if (x < 0f || y < 0f || x >= w || y >= h) return false;
+        float rx = Math.min(r[4], w / 2f), ry = Math.min(r[5], h / 2f);
+        return !outsideCorner(x, y, rx, ry) && !outsideCorner(w - x, y, rx, ry)
+                && !outsideCorner(w - x, h - y, rx, ry) && !outsideCorner(x, h - y, rx, ry);
     }
 
     /**

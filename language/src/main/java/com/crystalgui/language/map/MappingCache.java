@@ -1,7 +1,7 @@
 package com.crystalgui.language.map;
 
-import com.crystalgui.core.cache.CacheFiles;
-import com.crystalgui.core.cache.Downloads;
+import com.crystalgraphics.storage.cache.CgCacheFiles;
+import com.crystalgraphics.storage.download.CgDownloads;
 import com.crystalgui.language.map.format.MappingFiles;
 import com.crystalgui.language.platform.MappingCoordinates;
 
@@ -35,7 +35,7 @@ import java.util.zip.ZipFile;
  * directory simply goes inert. No TTL, no revalidation, no invalidation logic anywhere.</p>
  *
  * <p>What still needs handling is not staleness but <b>partial and damaged state</b>, and that is
- * {@link CacheFiles}: present-and-valid checked on every launch, missing treated identically to invalid,
+ * {@link CgCacheFiles}: present-and-valid checked on every launch, missing treated identically to invalid,
  * verified against a pinned digest rather than a size, installed atomically, deleted on failure so the
  * next launch retries.</p>
  *
@@ -133,7 +133,7 @@ public final class MappingCache {
         for (String fileName : coordinates.files()) {
             Path target = directory.resolve(fileName);
             String archiveEntry = coordinates.archiveEntryOf(fileName);
-            if (CacheFiles.isValid(target, cachedDigestOf(coordinates, fileName))) {
+            if (CgCacheFiles.isValid(target, cachedDigestOf(coordinates, fileName))) {
                 present.add(target);
                 continue;
             }
@@ -146,7 +146,7 @@ public final class MappingCache {
                 // SWEEP -- the two CSVs are small and their host declares no length worth trusting, so a
                 // bar would be invented rather than measured -- and a second announce from inside would
                 // retarget the very thing that decided a sweep was the honest answer.
-                Downloads.Request request = coordinates.sourceOf(fileName).request().cancelledWhen(cancelled);
+                CgDownloads.Request request = coordinates.sourceOf(fileName).request().cancelledWhen(cancelled);
                 boolean arrived = archiveEntry == null
                         ? request.into(target)
                         : extract(request, archiveEntry, target);
@@ -190,7 +190,7 @@ public final class MappingCache {
     }
 
     /**
-     * Downloads an archive and takes ONE entry out of it.
+     * CgDownloads an archive and takes ONE entry out of it.
      *
      * <p>The mapping data a modern loader needs is published inside a zip — MCPConfig's
      * {@code joined.tsrg} and Fabric's {@code mappings.tiny} both — and the rest of the archive is of no
@@ -199,7 +199,7 @@ public final class MappingCache {
      *
      * @return false when the download did not match its digest, exactly as a plain fetch reports it
      */
-    private static boolean extract(Downloads.Request request, String entryName, Path target) throws IOException {
+    private static boolean extract(CgDownloads.Request request, String entryName, Path target) throws IOException {
         Path archive = target.resolveSibling(target.getFileName() + ".archive");
         try {
             if (!request.into(archive)) {
@@ -212,7 +212,7 @@ public final class MappingCache {
                 }
                 try (InputStream contents = zip.getInputStream(entry)) {
                     // No digest: what upstream pinned was the archive, and that has been checked already.
-                    CacheFiles.install(target, contents, null);
+                    CgCacheFiles.install(target, contents, null);
                 }
             }
             return true;
@@ -272,7 +272,7 @@ public final class MappingCache {
         Path directory = directoryFor(coordinates, cacheRoot);
         if (directory == null || !Files.isDirectory(directory)) return false;
         for (String fileName : coordinates.files()) {
-            if (!CacheFiles.isValid(directory.resolve(fileName), cachedDigestOf(coordinates, fileName))) {
+            if (!CgCacheFiles.isValid(directory.resolve(fileName), cachedDigestOf(coordinates, fileName))) {
                 return false;
             }
         }

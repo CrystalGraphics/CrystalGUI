@@ -35,7 +35,7 @@ import com.crystalgui.fs.Resource;
  *
  * <ul>
  *   <li>{@code dispose()} must be idempotent: a host quitting it destroys the window, which reaches it again.</li>
- *   <li>Its thread is the document's; GPU resources are released on {@code HostThread.RENDER}.</li>
+ *   <li>Its thread is the document's; GPU resources are released on {@code CgHostThread.RENDER}.</li>
  * </ul>
  *
  * <p>It is also why a main window is exempt from hidden-window eviction: a hidden main window <em>is</em>

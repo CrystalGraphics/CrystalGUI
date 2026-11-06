@@ -1,5 +1,7 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgraphics.platform.service.CgHostPaint;
+import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
@@ -30,13 +32,13 @@ public final class CgUiHud {
         @Override
         public boolean ownScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && ClientGame.screen(mc) instanceof CgUiScreen;
+            return mc != null && CgMinecraftClient.screen(mc) instanceof CgUiScreen;
         }
 
         @Override
         public boolean anyScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && ClientGame.screen(mc) != null;
+            return mc != null && CgMinecraftClient.screen(mc) != null;
         }
 
         /**
@@ -51,12 +53,12 @@ public final class CgUiHud {
 
         @Override
         public void enter() {
-            CgUiHostGl.enter();
+            CgHostPaint.enter();
         }
 
         @Override
         public void leave() {
-            CgUiHostGl.leave();
+            CgHostPaint.leave();
         }
     };
 

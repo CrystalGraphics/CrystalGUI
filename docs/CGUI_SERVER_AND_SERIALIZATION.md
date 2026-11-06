@@ -63,7 +63,7 @@ Two implementations ship:
 
 | Ops | Backing | Used for |
 |---|---|---|
-| `CgJsonOps` | Gson `JsonElement` | debugging, tests, anything human-readable; `CgFormats.JSON` for files |
+| `CgJsonOps` | Gson `JsonElement` | debugging, tests, anything human-readable; `CgFiles.JSON` for files |
 | `CgPlainOps` | plain `Map`/`List`/`String`/`Number`/`Boolean` | the default — no Gson on the server path |
 
 `CgCodecs` holds the helpers: `STRING`/`INT`/`FLOAT`/`DOUBLE`/`LONG`/`BOOL`, `xmap` (transform a codec's

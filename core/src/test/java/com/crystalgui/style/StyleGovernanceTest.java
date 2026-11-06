@@ -157,6 +157,9 @@ public class StyleGovernanceTest {
             // beside it, and the set was simply incomplete -- --success is the body colour for a finished
             // thing and too dark to read as a 10px dot.
             "error-icon", "warning-icon", "info-icon", "success-icon",
+            // What a taskbar button flashes for a window wanting attention, Windows' orange, and the brighter
+            // mark on it: none of the severities, since asking to be looked at is not a warning.
+            "attention", "attention-mark", "attention-clear", "attention-held",
             // Non-colour, and themeable for the same reason IntelliJ's themes set arcs and insets:
             // "Islands" IS these three plus a palette, and a flat theme is them zeroed.
             "radius-panel", "radius-control", "panel-gap");

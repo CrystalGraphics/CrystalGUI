@@ -254,7 +254,8 @@ public final class CommandRegistry {
         // registry's version alone, a document that had resolved one key never saw a later extension's F2.
         int globalVersion = this == GLOBAL ? 0 : GLOBAL.version;
         if (declared == null || declaredVersion != version || declaredGlobalVersion != globalVersion) {
-            Keymap built = new Keymap();
+            // Shared chords are by design here (Mod+N's presets, F2, Alt+Enter): enablement picks one.
+            Keymap built = Keymap.sharingChords();
             for (Command command : all()) {
                 for (String spec : command.bindings()) built.bind(spec, command.getId());
             }

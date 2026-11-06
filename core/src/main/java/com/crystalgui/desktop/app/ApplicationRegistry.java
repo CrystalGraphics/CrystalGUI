@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.app;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
@@ -14,13 +15,16 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.dispose.Disposable;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.storage.ConfigStorage;
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.ui.dom.UIDocument;
 
 /**
  * What is <b>installed</b> on this desktop, and what is <b>running</b> — the shell's side of an
@@ -54,7 +58,7 @@ import com.crystalgui.fs.client.Workspace;
  *
  * <h3>Each instance gets its own corner</h3>
  *
- * <p>{@link #launch} scopes the {@link ConfigStorage} it is given by the kind's id before handing over a
+ * <p>{@link #launch} scopes the {@link CgConfigStorage} it is given by the kind's id before handing over a
  * {@link LaunchContext}, so two applications on one desktop keep separate sessions and preferences with
  * neither of them doing anything about it.</p>
  */
@@ -164,7 +168,7 @@ public final class ApplicationRegistry {
 
     private void runAutostart(ApplicationKind kind) {
         Consumer<LaunchContext> hook = kind.autostartHook();
-        ConfigStorage storage = desktop.config();
+        CgConfigStorage storage = desktop.config();
         if (hook == null || storage == null) return;
         try {
             hook.accept(LaunchContext.of(kind, desktop, null, scoped(kind, storage),
@@ -252,6 +256,85 @@ public final class ApplicationRegistry {
         return application;
     }
 
+    /**
+     * Launches {@code kind} as a click on Start, a pin or a key does: behind its starting window when it opts in to one
+     * ({@link ApplicationKind#startingWindow}), which opens on this frame while the application builds into it,
+     * however long it takes; otherwise built and activated now, as {@link #launch}.
+     *
+     * <pre>{@code
+     * desktop.applications().launchInStartingWindow(CrystalEditor.KIND, workspace);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>A single-instance kind already running is brought forward, as {@link #launch} does, with no window.</li>
+     *   <li>A kind that cannot start here (no factory, no server it needs) is refused at once, with no window.</li>
+     *   <li>Closing the starting window before the build cancels the launch.</li>
+     *   <li>For the instance itself, call {@link #launch}: this answers nothing, since nothing exists yet.</li>
+     * </ul>
+     */
+    public void launchInStartingWindow(ApplicationKind kind, @Nullable Workspace workspace) {
+        bootstrap();
+        boolean runsAlready = kind.isSingleInstance() && firstRunning(kind) != null;
+        boolean refused = kind.factory() == null || (kind.requiresConnection() && workspace == null)
+                || desktop.config() == null;
+        UIDocument document = desktop.document();
+        if (!kind.hasStartingWindow() || runsAlready || refused || document == null) {
+            Application launched = launch(kind, workspace);
+            if (launched != null) launched.activate();
+            return;
+        }
+        if (desktop.isStarting(kind)) {
+            desktop.activate(desktop.openStartingWindow(kind));
+            return;
+        }
+        WindowFrame starter = desktop.openStartingWindow(kind);
+        boolean[] launched = {false};
+        Connection[] waiting = {Connection.DISCONNECTED};
+        // ON THE DESKTOP, AGAIN ON EVERY CONNECT: a hook goes with its node, so one on the starter died with a minimise
+        // and one on the desktop dies with the desktop's close. Its mark comes in again on the reopen, so the wait
+        // starts over too.
+        waiting[0] = desktop.whileConnected(() -> {
+            UIDocument at = desktop.document();
+            if (launched[0] || at == null) return Connection.DISCONNECTED;
+            boolean[] stopped = {false};
+            int[] frames = {0};
+            long asked = System.nanoTime();
+            at.animation().every(desktop, delta -> {
+                if (stopped[0] || launched[0]) return false;
+                // CLOSED: the launch is over
+                if (!desktop.isStarting(kind)) {
+                    launched[0] = true;
+                    waiting[0].disconnect();
+                    return false;
+                }
+                // FLYING TO THE TASKBAR: the build replaces this window, and replacing it mid-flight cuts the flight
+                if (starter.isMinimizing() && starter.state() != WindowState.HIDDEN) return true;
+                // MINIMISED: no mark to wait for, so it builds now and its window waits minimised
+                boolean away = starter.state() == WindowState.HIDDEN;
+                // ITS MARK ON SCREEN WHOLE BEFORE THE BUILD, which holds this document while it runs: begun sooner,
+                // the mark would stand still part way in
+                boolean shown = away || ++frames[0] >= STARTING_FRAMES && StartingMark.settled(starter);
+                if (!shown && System.nanoTime() - asked < STARTING_LONGEST_NANOS) return true;
+                launched[0] = true;
+                waiting[0].disconnect();
+                if (!desktop.isStarting(kind)) return false;
+                Application application = launch(kind, workspace);
+                // No main window took its place: a refusal, a failure, or an application with none
+                if (desktop.isStarting(kind)) {
+                    desktop.endStartingWindow(kind, application == null ? null : application.mainWindow());
+                }
+                if (application != null && !away) application.activate();
+                return false;
+            });
+            return () -> stopped[0] = true;
+        });
+    }
+
+    /** Frames a starting window shows before its application builds: one recorded and presented, then the build. */
+    private static final int STARTING_FRAMES = 2;
+    /** The longest a build waits for its starting window's mark to come in. */
+    private static final long STARTING_LONGEST_NANOS = 3_000_000_000L;
+
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
     private void quit(Application application) {
         if (!running.contains(application)) return;
@@ -265,10 +348,11 @@ public final class ApplicationRegistry {
      * list and never from the button.
      *
      * <pre>{@code
-     * desktop.applications().activateOrLaunch(VfxLab.KIND, workspace);   // F6
+     * desktop.applications().activateOrLaunch(VfxLab.KIND, workspace);
      * }</pre>
      *
-     * <p>Of several running, the one whose window was active most recently.</p>
+     * <p>Of several running, the one whose window was active most recently. None running, it launches behind a
+     * starting window ({@link #launchInStartingWindow}) and answers null, since the instance builds a frame later.</p>
      */
     @Nullable
     public Application activateOrLaunch(ApplicationKind kind, @Nullable Workspace workspace) {
@@ -282,7 +366,11 @@ public final class ApplicationRegistry {
                 if (at >= 0) best = at;
             }
         }
-        if (recent == null) return launch(kind, workspace);
+        // A WINDOW AT ONCE, the application built into it: what a key or a button asks for
+        if (recent == null) {
+            launchInStartingWindow(kind, workspace);
+            return null;
+        }
         recent.activate();
         return recent;
     }
@@ -300,7 +388,7 @@ public final class ApplicationRegistry {
      */
     @Nullable
     public Application launch(ApplicationKind kind, @Nullable Workspace workspace) {
-        ConfigStorage storage = desktop.config();
+        CgConfigStorage storage = desktop.config();
         if (storage == null) {
             CrystalGuiCore.LOGGER.warn("[cgui] '{}' was not launched: this desktop has nowhere to "
                     + "write. Call Desktop.useStorage(installation) first.", kind.id());
@@ -312,14 +400,14 @@ public final class ApplicationRegistry {
     /** Launches with nothing asked of it, and nowhere to cache derived output. */
     @Nullable
     public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
-                              ConfigStorage storage) {
+                              CgConfigStorage storage) {
         return launch(kind, workspace, storage, null);
     }
 
     /** Launches with nothing asked of it. @param cacheRoot {@code crystalgui/cache}, or null for none */
     @Nullable
     public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
-                              ConfigStorage storage, @Nullable Path cacheRoot) {
+                              CgConfigStorage storage, @Nullable Path cacheRoot) {
         return launch(kind, LaunchContext.of(kind, desktop, workspace,
                 scoped(kind, storage), cacheFor(kind, cacheRoot)));
     }
@@ -331,14 +419,14 @@ public final class ApplicationRegistry {
      */
     @Nullable
     public Application open(Resource resource, @Nullable Workspace workspace,
-                            ConfigStorage storage) {
+                            CgConfigStorage storage) {
         return open(resource, workspace, storage, null);
     }
 
-    /** As {@link #open(Resource, Workspace, ConfigStorage)}, with somewhere to cache. */
+    /** As {@link #open(Resource, Workspace, CgConfigStorage)}, with somewhere to cache. */
     @Nullable
     public Application open(Resource resource, @Nullable Workspace workspace,
-                            ConfigStorage storage, @Nullable Path cacheRoot) {
+                            CgConfigStorage storage, @Nullable Path cacheRoot) {
         ApplicationKind kind = handlerFor(resource);
         if (kind == null) return null;
         return launch(kind, new LaunchContext(kind, desktop, workspace, scoped(kind, storage),
@@ -398,21 +486,21 @@ public final class ApplicationRegistry {
     }
 
     /** D20: each application's own corner of a shared config directory. */
-    private static ConfigStorage scoped(ApplicationKind kind, ConfigStorage storage) {
-        return storage.scoped(StorageLayout.APPS).scoped(kind.id());
+    private static CgConfigStorage scoped(ApplicationKind kind, CgConfigStorage storage) {
+        return storage.scoped(CrystalGuiStorage.APPS).scoped(kind.id());
     }
 
     /**
      * The same corner of {@code cache/}, sanitised by hand.
      *
-     * <p>{@link ConfigStorage#scoped} does this substitution for us; a raw {@link Path} has nobody to
+     * <p>{@link CgConfigStorage#scoped} does this substitution for us; a raw {@link Path} has nobody to
      * do it, and an application id is namespaced ({@code crystalgui:editor}) with a colon that cannot
      * be a directory on Windows.</p>
      */
     @Nullable
     private static Path cacheFor(ApplicationKind kind, @Nullable Path cacheRoot) {
         if (cacheRoot == null) return null;
-        return cacheRoot.resolve(StorageLayout.APPS)
+        return cacheRoot.resolve(CrystalGuiStorage.APPS)
                 .resolve(kind.id().replace(':', '.').replace('/', '.'));
     }
 }

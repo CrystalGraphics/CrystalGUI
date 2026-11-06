@@ -23,7 +23,7 @@ import com.crystalgui.app.uibuilder.library.LibraryCatalog;
 import com.crystalgui.app.uibuilder.library.LibraryStarters;
 import com.crystalgui.app.uibuilder.library.UserLibrary;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIElementRegistry;
@@ -42,7 +42,7 @@ public class BuilderInsertTest extends UiDocumentTestBase {
     private UIElement first;
     private UIElement second;
     private Disposable commands;
-    private final InMemoryConfigStorage store = new InMemoryConfigStorage();
+    private final CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
 
     @After
     public void releaseCommands() {

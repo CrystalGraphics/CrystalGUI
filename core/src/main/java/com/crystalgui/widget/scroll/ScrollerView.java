@@ -184,6 +184,9 @@ public class ScrollerView extends UIElement {
     /** @see #setFitsMainAxis */
     private boolean fitsMainAxis;
 
+    /** @see #setFitsCrossAxis */
+    private boolean fitsCrossAxis;
+
     public ScrollerView() {
         this(NAME);
     }
@@ -446,9 +449,11 @@ public class ScrollerView extends UIElement {
                     if (justify != null) l.justifyContent(justify);
                     l.flexWrap(wrap == null ? FlexWrap.NO_WRAP : wrap);
                     // THE VIEW'S LENGTH ALONG THE CONTENT'S AXIS, or content-sized. @see #setFitsMainAxis
-                    if (fitsMainAxis && row) l.widthPercent(100f);
+                    boolean fitsWidth = row ? fitsMainAxis : fitsCrossAxis;
+                    boolean fitsHeight = row ? fitsCrossAxis : fitsMainAxis;
+                    if (fitsWidth) l.widthPercent(100f);
                     else l.widthAuto();
-                    if (fitsMainAxis && !row) l.heightPercent(100f);
+                    if (fitsHeight) l.heightPercent(100f);
                     else l.heightAuto();
                 });
     }
@@ -465,6 +470,24 @@ public class ScrollerView extends UIElement {
      * exceed the view, and every list that scrolls relies on that. Items that cannot shrink still overflow, and
      * still scroll.</p>
      */
+    /**
+     * Lays the content out at the view's size across the axis it runs, as a page fills its window's width, instead of
+     * growing to its content's longest line: what a window's content wants, which scrolls down and not sideways.
+     *
+     * <pre>{@code
+     * windowContent.setFitsCrossAxis(true);   // a column fills the width; a long line clips or wraps, not widens it
+     * }</pre>
+     *
+     * <p>Off by default: a list whose rows are wider than it scrolls sideways to them. Content that cannot shrink
+     * still overflows, and still scrolls.</p>
+     */
+    public ScrollerView setFitsCrossAxis(boolean fits) {
+        if (fitsCrossAxis == fits) return this;
+        fitsCrossAxis = fits;
+        mirrorFlexContainer();
+        return this;
+    }
+
     public ScrollerView setFitsMainAxis(boolean fits) {
         if (fitsMainAxis == fits) return this;
         fitsMainAxis = fits;

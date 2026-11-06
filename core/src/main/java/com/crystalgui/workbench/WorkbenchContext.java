@@ -3,7 +3,7 @@ package com.crystalgui.workbench;
 import com.crystalgui.core.settings.SettingsScope;
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.workbench.dock.panel.DockOpenOptions;
 import com.crystalgui.workbench.dock.panel.DockInput;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -274,7 +274,7 @@ public interface WorkbenchContext extends SettingsScope {
      * </ul>
      */
     @Nullable
-    ConfigStorage extensionStore(String extensionId);
+    CgConfigStorage extensionStore(String extensionId);
 
     /** Adds a panel type and how to build one. */
     WorkbenchContext registerPanel(DockPanelDescriptor descriptor,

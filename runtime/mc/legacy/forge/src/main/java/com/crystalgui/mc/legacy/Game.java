@@ -1,7 +1,5 @@
 package com.crystalgui.mc.legacy;
 
-import com.mojang.authlib.GameProfile;
-
 import java.io.File;
 import java.util.Collections;
 import java.util.List;
@@ -22,8 +20,8 @@ import net.minecraftforge.fml.common.FMLCommonHandler;
 
 /**
  * The server-side members Minecraft renamed between 1.8.9 and 1.12.2, spelt once, so the rest of the
- * host reads the same on every plateau. The client's are in {@code client.ClientGame}, which a server
- * must never load.
+ * host reads the same on every plateau. The client's come from CrystalGraphics' {@code CgWorldQueries} and
+ * {@code CgPlayers}.
  */
 public final class Game {
 
@@ -44,15 +42,6 @@ public final class Game {
         *///?} else {
         PlayerList list = server.getPlayerList();
         return list == null ? Collections.<EntityPlayerMP>emptyList() : list.getPlayers();
-        //?}
-    }
-
-    /** Whether this profile may use commands: an operator, or the owner of a cheats-enabled world. */
-    public static boolean canSendCommands(MinecraftServer server, GameProfile profile) {
-        //? if <1.9 {
-        /*return server.getConfigurationManager() != null && server.getConfigurationManager().canSendCommands(profile);
-        *///?} else {
-        return server.getPlayerList() != null && server.getPlayerList().canSendCommands(profile);
         //?}
     }
 

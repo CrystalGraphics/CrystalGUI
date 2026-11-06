@@ -1,5 +1,7 @@
 package com.crystalgui.mc.legacy.probe;
 
+import com.crystalgraphics.world.CgWorldQueries;
+import com.crystalgraphics.platform.service.CgGameDirectory;
 import com.crystalgui.mc.legacy.client.CgUiScreen;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
@@ -11,7 +13,6 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiMainMenu;
-import com.crystalgui.mc.legacy.client.ClientGame;
 import net.minecraft.world.WorldSettings;
 import net.minecraft.world.WorldType;
 
@@ -71,12 +72,12 @@ public final class CgUiAutoTest {
         @Override
         public boolean readyToDrive() {
             Minecraft mc = Minecraft.getMinecraft();
-            return mc.currentScreen instanceof GuiMainMenu || ClientGame.world() != null;
+            return mc.currentScreen instanceof GuiMainMenu || CgWorldQueries.clientLevel() != null;
         }
 
         @Override
         public boolean inWorld() {
-            return ClientGame.world() != null;
+            return CgWorldQueries.clientLevel() != null;
         }
 
         @Override
@@ -169,7 +170,7 @@ public final class CgUiAutoTest {
      * on its title screen. @see AutoTest#resolveWorld</p>
      */
     private static String resolveWorld(Minecraft mc) {
-        String named = AutoTest.resolveWorld(new File(ClientGame.gameDir(), "saves"));
+        String named = AutoTest.resolveWorld(new File(CgGameDirectory.game().toFile(), "saves"));
         return named == null ? "cgui-autotest" : named;
     }
 
@@ -180,7 +181,7 @@ public final class CgUiAutoTest {
         if (!(mc.currentScreen instanceof GuiMainMenu)) return false;
 
         String world = resolveWorld(mc);
-        boolean exists = new File(ClientGame.gameDir(), "saves/" + world + "/level.dat").isFile();
+        boolean exists = new File(CgGameDirectory.game().toFile(), "saves/" + world + "/level.dat").isFile();
         CrystalGuiCore.LOGGER.info("[cgui] {} world '{}'", exists ? "loading" : "creating", world);
         mc.launchIntegratedServer(world, world, exists ? null : creativeFlat());
         return true;

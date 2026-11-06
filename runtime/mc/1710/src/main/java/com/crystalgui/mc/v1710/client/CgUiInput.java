@@ -63,21 +63,13 @@ public final class CgUiInput {
     /** LWJGL2 reports 120 raw units per notch. The SIGN is {@link HostPointer#scroll}'s. */
     private static final float UNITS_PER_NOTCH = 120f;
 
-    private static KeyBinding openEditor;
     private static KeyBinding openDesktop;
 
     private CgUiInput() {
     }
 
     public static void register() {
-        openEditor = new KeyBinding("key.crystalgui.open", Keyboard.KEY_F6, "key.categories.crystalgui");
-        ClientRegistry.registerKeyBinding(openEditor);
-        // TWO KEYS, TWO DIFFERENT THINGS, and the pair is what makes the compositor a place rather than
-        // a frame around one application. F6 asks for the EDITOR and brings it forward whatever state it
-        // was left in; F7 asks for the DESKTOP and touches no window at all, so a desktop left with
-        // everything minimised comes back that way. Collapsing them would mean either never being able
-        // to reach the desktop without the editor on top of it, or F6 not reliably producing an editor.
-        openDesktop = new KeyBinding("key.crystalgui.desktop", Keyboard.KEY_F7, "key.categories.crystalgui");
+        openDesktop = new KeyBinding("key.crystalgui.desktop", Keyboard.KEY_LMENU, "key.categories.crystalgui");
         ClientRegistry.registerKeyBinding(openDesktop);
         // THE FML BUS, not MinecraftForge.EVENT_BUS -- fireKeyInput posts to FMLCommonHandler.bus(), and
         // registering on the wrong one compiles, runs, and never fires.
@@ -128,19 +120,14 @@ public final class CgUiInput {
     public static final class Handler {
 
         /**
-         * Opens the editor. Only reached with no screen up — see the class javadoc: with one open,
+         * Opens the desktop. Only reached with no screen up — see the class javadoc: with one open,
          * {@code allowUserInput} gates this event out entirely, which is exactly the behaviour wanted
-         * here (F6 must not re-trigger while the editor already has the keyboard).
+         * here (the key must not re-trigger while the desktop already has the keyboard).
          */
         @SubscribeEvent
         public void onKeyInput(InputEvent.KeyInputEvent event) {
             if (Minecraft.getMinecraft().currentScreen != null) return;
-            // BOTH ASKED, never else-if: isPressed() CONSUMES the press, so a chain that stops at the
-            // first hit leaves the other key's press queued and it fires on the next unrelated keystroke.
-            boolean editor = openEditor != null && openEditor.isPressed();
-            boolean desktop = openDesktop != null && openDesktop.isPressed();
-            if (editor) CgUiScreen.openEditor();
-            else if (desktop) CgUiScreen.openDesktop();
+            if (openDesktop != null && openDesktop.isPressed()) CgUiScreen.openDesktop();
         }
     }
 }

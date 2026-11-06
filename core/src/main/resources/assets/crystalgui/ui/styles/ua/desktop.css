@@ -167,6 +167,19 @@ taskbar {
     min-height: 34px;
 }
 
+/* LEAVING, out of flow at the desktop's foot: the work area takes its row at once, and the bar slides off over it. */
+taskbar.__leaving__ {
+    position: absolute;
+    left: 0px;
+    bottom: 0px;
+}
+
+/* RISING IN WITH THE BAR, a button is drawn at rest into a surface the motion moves whole, so its icon is drawn
+ * exactly as it is at rest throughout. */
+taskbar .__rising__ {
+    will-change: transform;
+}
+
 /* THE DESKTOP'S GLASS: one material for the bar and everything that floats over the desktop -- the jump
  * list, the hover preview, the switcher and the launcher. Written once so they cannot drift apart.
  *
@@ -253,9 +266,15 @@ taskbar .__start-button__:active {
     background-color: var(--taskbar-entry-active-bg);
 }
 
+/* ITS MENU UP, lit as an entry is with its jump list open (the active entry hovered), however the pointer is placed. */
+taskbar .__start-button__.__menu-open__ {
+    background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
+    transition: background-color 250ms ease-out;
+}
+
 /* START'S MARK GOES BLUE, as Windows 10's does, and only start's: overlay-tint multiplies the logo's own
  * colours, so at rest it is exactly the logo. */
-taskbar .__start-button__:hover::part(pre-icon) {
+taskbar .__start-button__.__pointed__::part(pre-icon) {
     overlay-tint: var(--taskbar-start-hover-tint, #D4E2FF);
 }
 
@@ -302,6 +321,21 @@ launcher .__app-row__ {
     padding-left: 6px;
     padding-right: 6px;
     border-radius: var(--radius-control, 4px);
+}
+
+/* HOVER AND POINTER, as an entry's and a jump-list row's: a row is a button, and says so under the cursor. */
+launcher .__app-row__ {
+    cursor: pointer;
+    background-color: transparent;
+    transition: background-color 140ms ease-out;
+}
+
+launcher .__app-row__:hover {
+    background-color: var(--taskbar-entry-hover-bg, #FFFFFF29);
+}
+
+launcher .__app-row__:active {
+    background-color: var(--taskbar-entry-active-bg, #FFFFFF1A);
 }
 
 /* The tile at a list's size; a window icon has no size of its own. */
@@ -378,6 +412,8 @@ taskbar .__entry__ {
     color: var(--taskbar-entry-fg, #9DA0A8);
     /* WinUI's ControlFasterAnimationDuration, what Button fades its pointer-over brush in. */
     transition: background-color 140ms ease-out, color 140ms ease-out;
+    /* The arrow, as Windows' taskbar: over the sheet-wide `button { cursor: pointer }`. */
+    cursor: default;
 }
 
 /* AN ENTRY WITH NO LABEL is an icon, and is shaped like one.
@@ -405,6 +441,12 @@ taskbar .__entry__.__iconic__ {
  * handed straight to the overflow listener's switch. @see Taskbar#ANIMATING_CLASS */
 taskbar .__entry__.__animating__ {
     overflow: clip;
+}
+
+/* MEASURED UNSEEN: the arriving entry is laid out out of flow at its natural width for a frame or two, and a new
+ * entry has no box to take an opacity until it has been laid out, so the sheet hides it. @see TaskbarEntryMotion */
+taskbar .__entry__.__measuring__ {
+    opacity: 0;
 }
 
 /* LIT GLASS, NOT A GREY CHIP. The bar behind these is a live blurred backdrop, and an OPAQUE fill on
@@ -444,6 +486,15 @@ taskbar .__entry__.__active__ {
 taskbar .__entry__.__active__:hover {
     background: none;
     background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
+}
+
+/* ITS JUMP LIST OPEN, any entry is lit as the active one hovered, as Windows': the pointer has gone to the list. */
+taskbar .__entry__.__menu-open__ {
+    color: var(--taskbar-entry-active-fg, #FFFFFF);
+    background: none;
+    background-color: var(--taskbar-entry-active-hover-bg, #FFFFFF1F);
+    /* Eased in slower than a hover, which is what makes it read as the list taking the entry; back at hover's pace. */
+    transition: background-color 250ms ease-out, color 250ms ease-out;
 }
 
 /* A minimised window's entry is DIMMED, not hidden — hiding it is the failure the strip exists to
@@ -530,24 +581,37 @@ taskbar .__entry__::part(label) {
  * a window nobody knows about. Win32 flashes the button, X11 raises the urgency hint, macOS bounces
  * the icon; here it is a class the entry carries until the window is activated.
  *
- * A SOFT accent fill with the full accent on the pill, where this used to flood the whole entry in
- * the accent. The flood was the loudest thing on the desktop, and on a bar whose every other state is
- * a step on one grey it read as an error rather than as a knock; Windows' own flash settles to a tint.
+ * Windows' flash, measured off FlashWindowEx: four slow pulses of orange, one every 2.12 s, each rising over
+ * about 700 ms and fading over 850, then held at four fifths until the window is activated. Taskbar times the
+ * three states (lit, __flash-off__, __flash-held__); each rule's transition is how its state is reached.
  *
  * AFTER the hidden rule and before nothing, because a background-opened window is very often also a
  * hidden one and the attention state is the more urgent thing to say. Same tie-break the disabled/hover
  * pair already pays for: both are one class, so the later rule wins. */
 taskbar .__entry__.__attention__ {
-    color: var(--taskbar-entry-attention-fg, #DFE1E5);
+    color: var(--taskbar-entry-attention-fg, #FFFFFF);
     background: none;
-    background-color: var(--taskbar-entry-attention-bg, #2E436E);
-    transition: background-color 600ms ease-in-out;
+    background-color: var(--taskbar-entry-attention-bg, #C4621A);
+    /* The rise: decelerating */
+    transition: background-color 700ms cubic-bezier(0, 0, 0.2, 1);
 }
 
 taskbar .__entry__.__attention__ .__indicator__ {
     width: 16px;
     transform: translate(-8px, 0);
-    background-color: var(--taskbar-indicator-active, #3574F0);
+    background-color: var(--taskbar-indicator-attention, #F7A04A);
+}
+
+/* Between pulses: the same orange at no alpha, so the fade does not pass through a dark half-colour; accelerating. */
+taskbar .__entry__.__attention__.__flash-off__ {
+    background-color: var(--taskbar-entry-attention-off-bg, #C4621A00);
+    transition: background-color 850ms cubic-bezier(0.4, 0, 1, 1);
+}
+
+/* Once the pulses are over: held at four fifths of the pulse until the window is looked at. */
+taskbar .__entry__.__attention__.__flash-held__ {
+    background-color: var(--taskbar-entry-attention-held-bg, #C4621ACC);
+    transition: background-color 600ms ease-in-out;
 }
 
 /* An unsaved count, an error count — the badge/colour split FileDecoration already draws. The window
@@ -607,6 +671,39 @@ taskbar .__entry__.__busy__ .__progress__ {
     overlay-size: contain;
     overlay-origin: content-box;
     color: var(--window-icon-glyph, #FFFFFF);
+}
+
+/* A STARTING WINDOW: its application's icon, centred, until the application has built into it --
+ * Android's starting window and Windows' splash. Then the cover, the same backdrop and mark laid over the application's
+ * content while they leave. @see Desktop#STARTING_CLASS @see StartingMark */
+.__starting__,
+.__starting-cover__ {
+    justify-content: center;
+    align-items: center;
+}
+
+/* Over everything its window's content stacks: an application's own panels go up to 7, and paint over an `auto` */
+.__starting-cover__ {
+    z-index: 100;
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    height: 100%;
+    background: var(--window-bg, #191A1C);
+}
+
+/* A surface of its own, so it is drawn once at rest and its scale applied to the picture: an icon mid-scale is drawn
+ * without its cached raster, and loses its drop shadow */
+.__starting-mark__ {
+    will-change: transform;
+}
+
+.__starting-mark__ > .__window-icon__ {
+    width: 72px;
+    height: 72px;
+    padding: 12px;
+    border-radius: 15px;
 }
 
 /* BRANDED ARTWORK IS ITS OWN TILE. A file that names every colour it uses — no currentColor anywhere in
@@ -721,6 +818,13 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     resize: both;
     background: var(--window-bg, #191A1C);
     color: var(--window-fg, #DFE1E5);
+}
+
+/* WHILE A MAXIMISE, RESTORE OR SNAP PLAYS, the animation sizes the window, unclamped: leaving fullscreen starts at the
+ * whole screen with the taskbar's row already taken back. @see WindowFrame#RESIZING_CLASS */
+.__window__.__resizing__ {
+    max-width: auto;
+    max-height: auto;
 }
 
 /* The caption. 18px against 10px text — two more than `dialog`'s bar, because a window's is a
@@ -1328,6 +1432,12 @@ tooltip.__taskbar-tip__::part(label) {
     opacity: 0;
 }
 
+/* A first appearance takes its width at once; only a move between entries widens. */
+.__window-preview__.__placing__ > .__thumbnail__,
+.__preview-row__.__placing__ .__thumbnail__ {
+    transition: none;
+}
+
 /* OPENING AND CLOSING, WinUI's menu flyout (MenuPopupThemeTransition): it slides up from half its height
  * below while the bottom half is cut away, so the visible edge stays on the bar and the panel comes out of
  * it; 250ms on (0, 0, 0, 1), with no fade. Closing fades over 83ms, linear. The placing state above is
@@ -1490,6 +1600,8 @@ menu.__jump-list__ menuitem {
     height: 16px;
     margin-bottom: 6px;
     flex-shrink: 0;
+    /* A squeezed card (WindowPreviewRow) can be narrower than the icon and close, which are cut rather than spilling. */
+    overflow: clip;
     /* NO WIDTH HERE. WindowPreview writes one, equal to the thumbnail's MEASURED width, so the header can
      * never be the child that sizes the panel -- see matchHeaderToThumbnail for why neither `width: 100%`
      * nor `width: 0; min-width: 100%` achieved that. The title inside is `width: 0; flex-grow: 1`, so it
@@ -1575,33 +1687,24 @@ menu.__jump-list__ menuitem {
     color: var(--preview-close-hover-fg, #FFFFFF);
 }
 
-/* The picture. THIS IS A MAXIMUM, not a size -- Windows' MaxThumbSizePx, which is one number bounding
- * both axes rather than a width or a height. WindowThumbnail measures this square once and then writes
- * the window's own shape scaled to fit inside it, so BOTH of a thumbnail's dimensions vary from window
- * to window: a tall window comes back full-height and narrow, a wide one full-width and short, and the
- * panel is built around whatever came back.
- *
- * Which is why there are no min/max-width bounds here any more. They were an attempt at the same idea
- * with the height held fixed, and holding the height fixed is precisely the thing that does not work: it
- * makes the panel's PROPORTIONS follow the window while its SIZE does not, so a tall window gets a
- * sliver of a panel and a bound generous enough to prevent that letterboxes everything else. */
+/* The picture's cell: ONE HEIGHT FOR EVERY WINDOW and a width that follows it, as Windows' previews.
+ * These are the MAXIMUM: WindowThumbnail reads them once and writes the window's width at this height, or
+ * this width for a window wider than it, centred. The width transitions while the picture is drawn at its
+ * final scale, so a move never rescales it. A tall window's cell is never narrower than it is high, so its
+ * header keeps room; the bars either side are the panel's own glass, so the cell has no fill. */
 .__window-preview__ > .__thumbnail__ {
     width: 92px;
-    height: 92px;
+    height: 56px;
     flex-shrink: 0;
-    /* NOT STRETCHED, which is what defeated the aspect ratio entirely. A flex column stretches its
-     * children across the cross axis by default, so the box was forced to the panel's width and
-     * `aspect-ratio` never got to decide anything -- the picture went on being letterboxed inside a box
-     * that was the wrong shape for a different reason than before. Sizing to itself is what lets the
-     * ratio pick the width, and it is then the thumbnail that decides how wide the PANEL is. */
     align-self: center;
-    background-color: var(--preview-thumbnail-bg, #26282B);
+    /* TaskbarPreviews.SWITCH_NANOS: the slide and the cross-fade take as long */
+    transition: width 300ms ease-out;
     /* Centres the PLACEHOLDER below; the picture itself is painted, not laid out. */
     justify-content: center;
     align-items: center;
 }
 
-/* NO PICTURE: the window's icon tile, large, on the letterbox colour — Windows' own icon thumbnail
+/* NO PICTURE: the window's icon tile, large, centred in the cell — Windows' own icon thumbnail
  * for a window it has no bitmap of. A window restored HIDDEN at startup has never been painted and so
  * has no photograph; drawing nothing for it made the panel read as broken, and collapsing the box
  * for it starved the preview's placement (WindowThumbnail.placeholder). The tile's own drawing is

@@ -1,8 +1,10 @@
 package com.crystalgui.mc.shared.modern;
 
-import com.crystalgui.core.cache.Download;
-import com.crystalgui.core.cache.DownloadLocations;
-import com.crystalgui.core.cache.Downloads;
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.cache.CgCacheFiles;
+import com.crystalgraphics.storage.download.CgDownload;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloads;
 import com.crystalgui.language.platform.MappingCoordinates;
 
 import com.google.gson.JsonElement;
@@ -46,7 +48,7 @@ public final class MojangMappings {
     /** The client mappings for {@code minecraftVersion}: pinned when the locations file pins them. */
     public static MappingCoordinates.Source clientMappings(String minecraftVersion) {
         String pinned = "mojang/" + minecraftVersion + "/client.txt";
-        if (DownloadLocations.get().lists(pinned)) return MappingCoordinates.Source.located(pinned);
+        if (CrystalGuiDownloads.LOCATIONS.lists(pinned)) return MappingCoordinates.Source.located(pinned);
         return new MappingCoordinates.Source() {
 
             private String url;
@@ -68,7 +70,7 @@ public final class MojangMappings {
                 if (url != null) return;
                 JsonObject download = clientMappingsEntry(minecraftVersion);
                 url = download.get("url").getAsString();
-                // Tagged, because a digest without its algorithm is not a digest. @see CacheFiles
+                // Tagged, because a digest without its algorithm is not a digest. @see CgCacheFiles
                 digest = download.has("sha1") ? "sha1:" + download.get("sha1").getAsString() : null;
             }
         };
@@ -76,7 +78,7 @@ public final class MojangMappings {
 
     /** The {@code downloads.client_mappings} object for one version. */
     private static JsonObject clientMappingsEntry(String minecraftVersion) throws IOException {
-        JsonObject manifest = read(Downloads.located("mojang/version-manifest"));
+        JsonObject manifest = read(CrystalGuiDownloads.located("mojang/version-manifest"));
         String versionUrl = null;
         for (JsonElement entry : manifest.getAsJsonArray("versions")) {
             JsonObject version = entry.getAsJsonObject();
@@ -88,7 +90,7 @@ public final class MojangMappings {
         if (versionUrl == null) {
             throw new IOException("Mojang's manifest lists no Minecraft " + minecraftVersion);
         }
-        JsonObject downloads = read(Downloads.from(versionUrl)).getAsJsonObject("downloads");
+        JsonObject downloads = read(CgDownloads.from(versionUrl)).getAsJsonObject("downloads");
         if (downloads == null || !downloads.has("client_mappings")) {
             // True of every version before 1.14.4, and the message has to say so: "no mappings" and "the
             // download failed" produce the same runtime names and are entirely different things.
@@ -97,8 +99,8 @@ public final class MojangMappings {
         return downloads.getAsJsonObject("client_mappings");
     }
 
-    private static JsonObject read(Downloads.Request request) throws IOException {
-        try (Download download = request.named("Minecraft version manifest").open();
+    private static JsonObject read(CgDownloads.Request request) throws IOException {
+        try (CgDownload download = request.named("Minecraft version manifest").open();
              Reader json = new InputStreamReader(download.stream(), StandardCharsets.UTF_8)) {
             JsonElement parsed = new JsonParser().parse(json);
             if (parsed == null || !parsed.isJsonObject()) {

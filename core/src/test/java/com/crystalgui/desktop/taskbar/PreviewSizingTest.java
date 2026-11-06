@@ -8,6 +8,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.service.Input;
 import org.junit.After;
 import org.junit.Before;
@@ -18,18 +19,8 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 /**
- * <b>A preview is sized by its thumbnail, and its thumbnail is the document fitted into a maximum.</b>
- *
- * <p>Windows' model: the taskbar asks for a bitmap no larger than a maximum on each axis and the document
- * answers with its own shape scaled to fit, so BOTH dimensions vary from document to document — a tall document
- * comes back full-height and narrow, a wide one full-width and short. Nothing is letterboxed and no two
- * previews need be the same size.</p>
- *
- * <p>Every near-miss on the way here looked reasonable and produced a different visible fault: a fixed
- * box letterboxed tall windows; a fixed HEIGHT with a derived width made the panel's proportions follow
- * the document while its size did not; and a header left to size itself made the gap around the picture a
- * function of the document's NAME. Those are three different bugs with one test between them, which is why
- * this asserts the geometry rather than any one of the fixes.</p>
+ * <b>A preview is one height for every window, with a width that follows the window</b>, as Windows' are. A move
+ * widens the cell while the picture keeps its final scale: a picture rescaled every frame of a slide shimmered.
  */
 public class PreviewSizingTest extends UiDocumentTestBase {
 
@@ -82,43 +73,76 @@ public class PreviewSizingTest extends UiDocumentTestBase {
     }
 
     /**
-     * <b>The thumbnail is the document's own shape, and it fits inside the maximum on both axes.</b>
-     *
-     * <p>Which is the same statement as "nothing is letterboxed": the picture is drawn fitted into this
-     * box, so a box that matches the document's aspect leaves no bars.</p>
+     * One height for every window; the width is the window's at that height, between square and the sheet's
+     * width. A tall window does not sit in a wide empty cell, and a very wide one is fitted to the sheet's width.
      */
     @Test
-    public void aThumbnailKeepsItsWindowsShape() {
+    public void everyWindowGetsOneHeightAndItsOwnWidth() {
         WindowFrame tall = open("Tall", 200f, 300f);
-        WindowPreview panel = preview(tall);
-        var thumb = panel.thumbnailBox();
+        WindowFrame medium = open("Medium", 300f, 200f);
+        WindowFrame wide = open("A rather longer document name", 600f, 150f);
 
-        assertTrue("the thumbnail was never sized", thumb.width() > 0f && thumb.height() > 0f);
-        assertEquals("the thumbnail is not the document's shape, so the picture is letterboxed in it",
-                200f / 300f, thumb.width() / thumb.height(), 0.02f);
-        assertTrue("a tall document should come back taller than it is wide",
-                thumb.height() > thumb.width());
+        float[] tallThumb = copy(preview(tall).thumbnailBox());
+        float[] mediumThumb = copy(preview(medium).thumbnailBox());
+        float[] wideThumb = copy(preview(wide).thumbnailBox());
+        float[] again = copy(preview(tall).thumbnailBox());
+
+        assertTrue("the cell was never laid out", tallThumb[0] > 0f && tallThumb[1] > 0f);
+        assertEquals("the height follows the window", tallThumb[1], mediumThumb[1], 0.5f);
+        assertEquals("the height follows the window", tallThumb[1], wideThumb[1], 0.5f);
+        assertEquals("the width is not the window's at the cell's height", 300f / 200f,
+                mediumThumb[0] / mediumThumb[1], 0.02f);
+        assertEquals("a tall window's cell is narrower than square", tallThumb[1], tallThumb[0], 0.5f);
+        assertTrue("a very wide window is not fitted to the sheet's width",
+                wideThumb[0] > mediumThumb[0] && wideThumb[0] < 4f * wideThumb[1]);
+        assertEquals("a move left the cell another size", tallThumb[0], again[0], 0.5f);
     }
 
     /**
-     * <b>Two differently-shaped windows get differently-sized previews.</b>
-     *
-     * <p>The thing every version of this got wrong in a different way. A tall document and a wide one must
-     * differ in BOTH dimensions — matching on either axis means something other than the document is
-     * deciding that axis.</p>
+     * A move widens the cell over the slide rather than at once, and the panel lands centred on its entry: the
+     * placement centres on where the width is going, not where it is when the move starts.
      */
     @Test
-    public void differentlyShapedWindowsGetDifferentlySizedPreviews() {
+    public void aMoveWidensTheCellAndLandsCentred() {
         WindowFrame tall = open("Tall", 200f, 300f);
-        WindowFrame wide = open("A rather longer document name", 320f, 160f);
+        WindowFrame medium = open("Medium", 300f, 200f);
+        float from = copy(preview(tall).thumbnailBox())[0];
 
-        var tallThumb = copy(preview(tall).thumbnailBox());
-        var wideThumb = copy(preview(wide).thumbnailBox());
+        hover(medium);
+        long hovered = System.nanoTime();
+        while (System.nanoTime() < hovered + 150L * 1_000_000L) frame();
+        assertEquals("the panel switched before the pointer had rested, as Windows' does not", tall,
+                desktop.taskbar().previewedWindow());
+        // 100ms into the move, after the 250ms switch delay
+        while (System.nanoTime() < hovered + 350L * 1_000_000L) frame();
+        WindowPreview panel = panelOf();
+        float during = panel.thumbnailBox().width();
 
-        assertTrue("both thumbnails are the same width, so the document is not deciding it",
-                Math.abs(tallThumb[0] - wideThumb[0]) > 1f);
-        assertTrue("both thumbnails are the same height, so the document is not deciding it",
-                Math.abs(tallThumb[1] - wideThumb[1]) > 1f);
+        WindowPreview settled = preview(medium);
+        float to = settled.thumbnailBox().width();
+        assertTrue("the move widened nothing", to > from + 10f);
+        assertTrue("the cell took its new width at once instead of over the slide: " + from + " -> " + during
+                + " -> " + to, during > from + 0.5f && during < to - 0.5f);
+
+        var self = settled.box();
+        var root = document.box();
+        AnchoredPlacement.Rect anchor = AnchoredPlacement.anchorRectInRoot(desktop.taskbar().entryFor(medium), document);
+        float panelCentre = self.x() - root.x() + self.width() / 2f;
+        assertEquals("the panel landed off its entry's centre", anchor.x() + anchor.width() / 2f, panelCentre, 3f);
+    }
+
+    private void hover(WindowFrame target) {
+        var box = desktop.taskbar().entryFor(target).box();
+        input.consumeMouseEvent(new CgSystemInput.Mouse.Event(
+                Math.round(box.worldX() + box.width() / 2f * uiScale()),
+                Math.round(box.worldY() + box.height() / 2f * uiScale()), 0, 0, -1, false, 0f, -1L));
+    }
+
+    private WindowPreview panelOf() {
+        for (UIElement child : desktop.taskbar().children()) {
+            if (child instanceof WindowPreview panel) return panel;
+        }
+        throw new AssertionError("the taskbar has no preview panel");
     }
 
     /**
@@ -138,33 +162,6 @@ public class PreviewSizingTest extends UiDocumentTestBase {
 
         assertEquals("the gap around the picture follows the TITLE, not the panel's padding",
                 firstGap, secondGap, 1f);
-    }
-
-    /**
-     * <b>Moving the panel between entries leaves its picture free to resize again.</b>
-     *
-     * <p>A move MORPHS the thumbnail — it writes a size every frame — which means it also has to hold off
-     * the sizing that would otherwise put the destination straight back over each frame, and then hand
-     * that back. A morph that did not would leave the picture frozen at whatever it last reached, for
-     * every document the panel showed afterwards, and the fault would only appear on the SECOND move: the
-     * first still looks perfect, because it is the thing that got stuck at the right answer.</p>
-     *
-     * <p>Hence three hops rather than two. The panel returns to the document it started on and its picture
-     * has to be the shape it was the first time.</p>
-     */
-    @Test
-    public void movingBetweenEntriesDoesNotFreezeThePicture() {
-        WindowFrame tall = open("Tall", 200f, 300f);
-        WindowFrame wide = open("Wide", 320f, 160f);
-
-        float[] first = copy(preview(tall).thumbnailBox());
-        preview(wide);
-        float[] again = copy(preview(tall).thumbnailBox());
-
-        assertEquals("the picture kept the previous document's width, so sizing was never handed back",
-                first[0], again[0], 1f);
-        assertEquals("the picture kept the previous document's height, so sizing was never handed back",
-                first[1], again[1], 1f);
     }
 
     /** Panel width less thumbnail width — the padding either side of the picture. */

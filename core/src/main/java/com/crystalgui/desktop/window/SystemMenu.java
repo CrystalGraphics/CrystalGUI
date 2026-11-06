@@ -122,8 +122,11 @@ public final class SystemMenu {
      * menu's own width, which a popover does not have until it has been laid out. So it is anchored to
      * the entry (which flips it above the strip for free), then centred on the next frame, which is the
      * same two-step the hover previews use for the identical placement.</p>
+     *
+     * @return the menu shown, whose {@code onClosed} says when it goes; null when {@code anchor} is in no document
      */
-    public static void showJumpList(@Nullable WindowFrame frame, UIElement anchor) {
+    @Nullable
+    public static Menu showJumpList(@Nullable WindowFrame frame, UIElement anchor) {
         // THE ANCHOR'S WINDOW, NEVER THE FRAME'S -- and this route is the one place the difference is
         // fatal. HIDE IS DETACH: a minimised window is out of the tree entirely, so `frame` answers null
         // here for exactly the windows a jump list exists to reach, and the method returned having done
@@ -136,7 +139,7 @@ public final class SystemMenu {
         // is built against the frame and positioned off the title bar's box, so a detached window has no
         // system menu by that route anyway.
         UIDocument window = anchor.document();
-        if (window == null) return;
+        if (window == null) return null;
 
         // BUILT AGAINST THE ENTRY, whose DataProvider answers for the window it stands for -- which is
         // how the same rows come out about a background window rather than the active one.
@@ -157,7 +160,7 @@ public final class SystemMenu {
         // entry, so the hover is still live and the delay would simply elapse again under the open menu.
         Taskbar taskbar = Taskbar.of(anchor);
         if (taskbar != null) {
-            taskbar.setPreviewsSuppressed(true);
+            taskbar.setPreviewsSuppressed(owner, true);
             SUPPRESSED.put(owner, taskbar);
         }
         // THE SAME SURFACE THE HOVER PREVIEW WEARS. A jump list and a preview are the same object from
@@ -225,6 +228,7 @@ public final class SystemMenu {
             menu.removeClass(RISING_CLASS);
             return false;
         });
+        return menu;
     }
 
     /**
@@ -278,7 +282,7 @@ public final class SystemMenu {
         // popover's parent is the overlay host, not the element it was opened from, so walking out of the
         // menu never reaches the taskbar. That divergence is the whole reason promotion is documented.
         Taskbar suppressed = SUPPRESSED.remove(owner);
-        if (suppressed != null) suppressed.setPreviewsSuppressed(false);
+        if (suppressed != null) suppressed.setPreviewsSuppressed(owner, false);
 
         List<Menu> live = LIVE.remove(owner);
         if (live != null) MenuBuilder.discard(new ArrayList<>(live));

@@ -1,9 +1,10 @@
 package com.crystalgui.language.engine;
 
-import com.crystalgui.core.cache.DownloadLocations;
-import com.crystalgui.core.cache.Downloads;
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloads;
 import com.crystalgraphics.job.progress.CgProgress;
-import com.crystalgui.core.cache.CacheFiles;
+import com.crystalgraphics.storage.cache.CgCacheFiles;
 
 import java.io.File;
 import java.io.InputStream;
@@ -156,7 +157,7 @@ public interface EngineSource {
      *
      * <h3>What "on first use" costs, and what it does not</h3>
      *
-     * <p>Second and later launches copy nothing: {@link CacheFiles#isValid} finds each jar present and
+     * <p>Second and later launches copy nothing: {@link CgCacheFiles#isValid} finds each jar present and
      * non-empty and the extraction is skipped entirely. The first launch pays one sequential copy, off
      * the client thread by virtue of when engines are opened.</p>
      *
@@ -181,13 +182,13 @@ public interface EngineSource {
                 List<Path> extracted = new ArrayList<>(names.size());
                 for (String name : names) {
                     Path target = directory.resolve(name);
-                    if (!CacheFiles.isValid(target, null)) {
+                    if (!CgCacheFiles.isValid(target, null)) {
                         InputStream bytes = loader.getResourceAsStream(prefix + name);
                         // A name that came out of the listing and then cannot be opened is a broken jar,
                         // not a missing band -- skipped so the rest still extract, and it surfaces later
                         // as the engine failing to find a class rather than as an unexplained absence.
                         if (bytes == null) continue;
-                        if (!CacheFiles.install(target, bytes, null)) continue;
+                        if (!CgCacheFiles.install(target, bytes, null)) continue;
                     }
                     extracted.add(target);
                 }
@@ -217,7 +218,7 @@ public interface EngineSource {
      *
      * <p>A band's jars are the ids {@code engine/<band>/<file>}, pinned to the artifacts Gradle resolved —
      * {@code checkDownloadLocations} fails the build when they drift. So a fetched jar is
-     * checked against the exact bytes the build was tested with, and {@code CacheFiles.install} writes
+     * checked against the exact bytes the build was tested with, and {@code CgCacheFiles.install} writes
      * through a {@code .part} and deletes on mismatch, so a bad transfer leaves nothing behind to be
      * mistaken for a good one next launch.</p>
      *
@@ -225,7 +226,7 @@ public interface EngineSource {
      * is worse than none, because the engine opens and then fails on whichever class was in the jar that
      * did not arrive — so one failure abandons the whole band and says so.</p>
      */
-    static EngineSource downloadedFrom(DownloadLocations locations, Path into, CgProgress progress) {
+    static EngineSource downloadedFrom(CgDownloadLocations locations, Path into, CgProgress progress) {
         return new EngineSource() {
             @Override
             public List<URL> jarsFor(EngineBand band) throws IOException {
@@ -235,7 +236,7 @@ public interface EngineSource {
 
                 Path directory = into.resolve(String.valueOf(band.minimumFeatureVersion()));
                 List<Path> jars = new ArrayList<>(ids.size());
-                List<Downloads.Artifact> missing = new ArrayList<>();
+                List<CgDownloads.Artifact> missing = new ArrayList<>();
                 for (String id : ids) {
                     String fileName = id.substring(prefix.length());
                     // The guard EngineBundle applies: a name out of a shipped file becomes a path, so it
@@ -245,9 +246,9 @@ public interface EngineSource {
                     }
                     Path target = directory.resolve(fileName);
                     jars.add(target);
-                    Downloads.Request request = Downloads.located(locations, id);
-                    if (!CacheFiles.isValid(target, request.digest())) {
-                        missing.add(new Downloads.Artifact(fileName, request));
+                    CgDownloads.Request request = CgDownloads.located(locations, id);
+                    if (!CgCacheFiles.isValid(target, request.digest())) {
+                        missing.add(new CgDownloads.Artifact(fileName, request));
                     }
                 }
                 if (missing.isEmpty()) return urlsOf(jars);
@@ -255,13 +256,13 @@ public interface EngineSource {
                 // ONE BATCH, ONE BAR. Sizes are totalled first so it is determinate from its first
                 // frame, each artifact names itself on the detail line, and a failure abandons the set
                 // rather than leaving a partial band -- which loads and then fails on a class nobody can
-                // explain. All of that is Downloads.Batch's, not this method's: it was fifty lines here
+                // explain. All of that is CgDownloads.Batch's, not this method's: it was fifty lines here
                 // and the next consumer would have written them again.
                 //
                 // NO `cancelledWhen` HERE, and that is a statement rather than an omission: this runs from
                 // EngineHost, which has no JobContext to ask -- the band is acquired before there is a
                 // workbench to cancel from. When it grows one, this is the line that takes the flag.
-                Downloads.Batch.Result fetched = Downloads.batch(missing)
+                CgDownloads.Batch.Result fetched = CgDownloads.batch(missing)
                         .named("Downloading Java engine (band " + band.minimumFeatureVersion() + ")")
                         .reporting(progress)
                         .into(directory);

@@ -1,7 +1,8 @@
 package com.crystalgui.language.engine;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
 import com.crystalgraphics.job.progress.CgProgress;
-import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
 
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.CgPlatform;
@@ -268,7 +269,7 @@ public final class EngineHost implements Closeable {
     private static EngineSource downloadedSource(CgProgress progress) {
         Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
-        return EngineSource.downloadedFrom(DownloadLocations.get(), cacheRoot.resolve("engines"),
+        return EngineSource.downloadedFrom(CrystalGuiDownloads.LOCATIONS, cacheRoot.resolve("engines"),
                 progress == null ? CgProgress.NONE : progress);
     }
 

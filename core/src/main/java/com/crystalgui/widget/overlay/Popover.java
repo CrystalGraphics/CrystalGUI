@@ -105,6 +105,14 @@ public class Popover extends UIElement {
     @Setter
     private AnchoredPlacement.Side preferredSide = AnchoredPlacement.Side.BOTTOM;
 
+    /** How the popup lines up with its anchor across the main axis; centred by a subclass that hangs off a button. */
+    private AnchoredPlacement.CrossAlign crossAlign = AnchoredPlacement.CrossAlign.START;
+
+    /** Centres this on its anchor across the side it opens on, as a launcher over its button. */
+    protected final void setCrossAlign(AnchoredPlacement.CrossAlign align) {
+        this.crossAlign = align == null ? AnchoredPlacement.CrossAlign.START : align;
+    }
+
     /** Gap between anchor and popup, in logical px. */
     @Getter
     @Setter
@@ -714,7 +722,7 @@ public class Popover extends UIElement {
         if (anchoredToPoint) {
             AnchoredPlacement.placeAtPoint(this, pointX, pointY, preferredSide, offset);
         } else if (anchor != null) {
-            AnchoredPlacement.place(this, anchor, preferredSide, offset);
+            AnchoredPlacement.place(this, anchor, preferredSide, offset, crossAlign);
         } else {
             return;
         }

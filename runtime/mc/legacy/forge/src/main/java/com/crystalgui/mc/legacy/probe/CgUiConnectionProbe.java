@@ -1,5 +1,7 @@
 package com.crystalgui.mc.legacy.probe;
 
+import com.crystalgraphics.world.CgPlayers;
+import com.crystalgraphics.world.CgWorldQueries;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
@@ -8,7 +10,6 @@ import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
 import com.crystalgui.mc.legacy.Game;
-import com.crystalgui.mc.legacy.client.ClientGame;
 import java.util.List;
 import net.minecraft.client.Minecraft;
 import net.minecraft.entity.player.EntityPlayerMP;
@@ -70,7 +71,7 @@ public final class CgUiConnectionProbe {
 
         @Override
         public boolean inWorld() {
-            return ClientGame.inWorld();
+            return (CgWorldQueries.clientLevel() != null && CgPlayers.local() != null);
         }
 
         @Override

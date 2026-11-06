@@ -1,5 +1,7 @@
 package com.crystalgui.mc.legacy.probe;
 
+import com.crystalgraphics.world.CgPlayers;
+import com.crystalgraphics.world.CgWorldQueries;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.legacy.client.CgUiHud;
 import com.crystalgui.mc.legacy.client.CgUiScreen;
@@ -8,7 +10,6 @@ import com.crystalgui.probe.DesktopProbe;
 import net.minecraftforge.fml.common.FMLCommonHandler;
 import net.minecraftforge.fml.common.eventhandler.SubscribeEvent;
 import net.minecraftforge.fml.common.gameevent.TickEvent;
-import com.crystalgui.mc.legacy.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiChat;
 
@@ -42,7 +43,7 @@ public final class CgUiDesktopProbe {
 
         @Override
         public boolean inWorld() {
-            return ClientGame.inWorld();
+            return (CgWorldQueries.clientLevel() != null && CgPlayers.local() != null);
         }
 
         @Override

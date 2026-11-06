@@ -1,11 +1,13 @@
 package com.crystalgui.mc.legacy.client;
 
+import com.crystalgraphics.world.CgPlayers;
+import com.crystalgraphics.world.CgWorldQueries;
+import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -17,7 +19,6 @@ import com.crystalgui.ui.dom.UIDocument;
 
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiScreen;
-import net.minecraft.client.renderer.GlStateManager;
 import net.minecraft.client.renderer.OpenGlHelper;
 
 import org.lwjgl.input.Keyboard;
@@ -116,8 +117,9 @@ public final class CgUiScreen extends GuiScreen {
         return HostSession.isInstalled() && HostSession.session().isBuilt();
     }
 
+    /** Escape: the desktop plays itself off first, and the frame after it has, this closes. @see HostSession#requestHide */
     void requestClose() {
-        closeRequested = true;
+        if (!HostSession.session().requestHide(() -> closeRequested = true)) closeRequested = true;
     }
 
     /** Quits the editor at game shutdown. Not called on close — see the class note. */
@@ -149,7 +151,7 @@ public final class CgUiScreen extends GuiScreen {
             // and closing from here happens mid-frame, inside the drawScreen of the screen being closed.
             // Asking directly is idempotent when it already happened and is the difference between the
             // world coming back and the cursor still floating over an unresponsive game.
-            if (ClientGame.inWorld()) mc.setIngameFocus();
+            if ((CgWorldQueries.clientLevel() != null && CgPlayers.local() != null)) mc.setIngameFocus();
 
             // AND THE LAST FRAME OF THE FLICKER GOES HERE. Minecraft renders the overlay BEFORE it draws
             // the current screen, so on the frame this method closes itself the overlay hook has already
@@ -224,20 +226,12 @@ public final class CgUiScreen extends GuiScreen {
 
         @Override
         public void enter() {
-            CgGL.fromHost();
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.enter();
         }
 
         @Override
         public void leave() {
-            CgGL.toHost();
-            // Through GlStateManager, so Minecraft's own cache agrees with the driver it presents on.
-            GlStateManager.setActiveTexture(OpenGlHelper.defaultTexUnit);
-            OpenGlHelper.glUseProgram(0);
-            GlStateManager.enableTexture2D();
-            // The shadow cannot see the three lines above either, so tell it so rather than leaving it
-            // describing a context that no longer exists.
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.leave();
         }
     };
 
@@ -304,7 +298,7 @@ public final class CgUiScreen extends GuiScreen {
         // the window had already dealt with and stayed open on one nobody wanted.
         boolean consumed = CgUiInput.pumpKeyboard(HostSession.session().input());
         if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
-            closeRequested = true;
+            requestClose();
         }
     }
 
@@ -313,7 +307,7 @@ public final class CgUiScreen extends GuiScreen {
      * one nothing wanted. @see #handleKeyboardInput
      */
     void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
-        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) closeRequested = true;
+        if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) requestClose();
     }
 
     /** <b>The mouse pump.</b> Once per event, same contract as above. */

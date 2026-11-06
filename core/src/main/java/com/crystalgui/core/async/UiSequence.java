@@ -1,5 +1,7 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.service.CgGameThreads;
 import com.crystalgraphics.job.CgJobLoop;
 import com.crystalgui.core.CrystalGuiCore;
 
@@ -41,6 +43,14 @@ public final class UiSequence implements Executor {
 
     private static final ThreadLocal<UiSequence> CURRENT = new ThreadLocal<>();
 
+    static {
+        // A CgHostThread answer goes back to the sequence that asked, so its then() may touch the tree.
+        CgHostThread.answerThrough(() -> {
+            UiSequence sequence = CURRENT.get();
+            return sequence == null ? null : sequence.asBinding();
+        });
+    }
+
     private final String name;
     private final Executor pool;
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
@@ -74,6 +84,20 @@ public final class UiSequence implements Executor {
 
     public boolean isCurrent() {
         return CURRENT.get() == this;
+    }
+
+    private CgGameThreads.Binding asBinding() {
+        return new CgGameThreads.Binding() {
+            @Override
+            public void execute(Runnable work) {
+                UiSequence.this.execute(work);
+            }
+
+            @Override
+            public boolean isCurrent() {
+                return UiSequence.this.isCurrent();
+            }
+        };
     }
 
     public String name() {

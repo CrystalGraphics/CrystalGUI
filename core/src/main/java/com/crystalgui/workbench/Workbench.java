@@ -9,7 +9,7 @@ import com.crystalgui.workbench.extension.ProblemsExtension;
 import com.crystalgui.workbench.extension.NotificationsExtension;
 import com.crystalgui.workbench.extension.SessionSlice;
 import java.nio.file.Path;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.workbench.dock.WorkbenchOpener;
 import com.crystalgui.workbench.editor.TextFileKind;
@@ -1117,7 +1117,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * absent — which is an ordinary state, not a broken one.
      */
     @Nullable
-    private ConfigStorage storage;
+    private CgConfigStorage storage;
 
     /** Where derived output goes — {@code crystalgui/cache/apps/<id>/}. Null means "cache nowhere". */
     @Nullable
@@ -1129,7 +1129,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>Called by the application that owns the store, never by a host: where a private directory IS
      * is a host fact, and which parts of one an application uses is the application's.</p>
      */
-    public Workbench useConfig(@Nullable ConfigStorage storage) {
+    public Workbench useConfig(@Nullable CgConfigStorage storage) {
         this.storage = storage;
         return this;
     }
@@ -1154,20 +1154,20 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     }
 
     @Nullable
-    private Function<String, ConfigStorage> extensionStores;
+    private Function<String, CgConfigStorage> extensionStores;
 
     /**
      * Where extensions keep what a user made with them. Called by the application beside {@link #useConfig}, from
      * its desktop — the placement is the desktop's, so a workbench names no desktop. Null: nowhere.
      */
-    public Workbench useExtensionStores(@Nullable Function<String, ConfigStorage> stores) {
+    public Workbench useExtensionStores(@Nullable Function<String, CgConfigStorage> stores) {
         this.extensionStores = stores;
         return this;
     }
 
     @Override
     @Nullable
-    public ConfigStorage extensionStore(String extensionId) {
+    public CgConfigStorage extensionStore(String extensionId) {
         return extensionStores == null ? null : extensionStores.apply(extensionId);
     }
 

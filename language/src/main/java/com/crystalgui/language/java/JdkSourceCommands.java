@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgraphics.storage.download.CgDownload;
 import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
@@ -14,14 +15,14 @@ import com.crystalgraphics.platform.CgPlatform;
 import java.nio.file.Path;
 
 /**
- * <b>Download JDK Sources</b> — M13 §25.5's one affordance.
+ * <b>CgDownload JDK Sources</b> — M13 §25.5's one affordance.
  *
  * <h3>A command, and never a startup step</h3>
  *
  * <p>The fetch is tens of megabytes from a third party over the user's own connection, and what it
  * produces is a GPL-derived extract made on their machine for their use. Every one of those is a reason
  * it has to be asked for rather than done quietly on a first launch — which is also what IntelliJ does,
- * and what {@code plan/lang-resolver.md} §24.1 already named as the popup's <i>Download documentation</i> entry.
+ * and what {@code plan/lang-resolver.md} §24.1 already named as the popup's <i>CgDownload documentation</i> entry.
  * The engine bands and the mapping data are fetched automatically because without them the feature does
  * not work at all; this one only makes an existing feature better, so it waits to be asked.</p>
  *
@@ -62,7 +63,7 @@ public final class JdkSourceCommands {
         Path cacheRoot = cacheRoot();
         JdkSourceExtract.useCachedIfPresent(cacheRoot);
 
-        registry.register(Command.of(DOWNLOAD, "Download JDK Sources")
+        registry.register(Command.of(DOWNLOAD, "CgDownload JDK Sources")
                 // NO ACCELERATOR. A binding is for something done repeatedly; this is done once per
                 // installation, and a key that fires a large download by accident is a poor trade.
                 //

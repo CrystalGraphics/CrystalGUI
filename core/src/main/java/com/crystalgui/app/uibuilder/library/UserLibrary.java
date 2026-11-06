@@ -15,7 +15,7 @@ import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgui.app.uibuilder.library.LibraryCatalog.Group;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.storage.ConfigRecord;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.ui.dom.Name;
 
 /**
@@ -99,13 +99,13 @@ public final class UserLibrary {
 
     private final ConfigRecord<State> record;
 
-    private UserLibrary(@Nullable ConfigStorage store) {
+    private UserLibrary(@Nullable CgConfigStorage store) {
         record = ConfigRecord.in(store, FILE, State.CODEC, State.EMPTY);
         record.onChanged.connect(state -> onChanged.emit());
     }
 
     /** The user's library kept in {@code store}, or for this session alone when there is no store. */
-    public static UserLibrary in(@Nullable ConfigStorage store) {
+    public static UserLibrary in(@Nullable CgConfigStorage store) {
         return new UserLibrary(store);
     }
 

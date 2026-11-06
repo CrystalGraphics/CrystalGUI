@@ -61,10 +61,10 @@ photograph exact frames: `cgui-text-stress`, `cgui-timeline`, `cgui-text-gamma`,
 capture or script counts `driver.presentedFrames()`, not frame numbers: async presents nothing until the
 first frame is recorded.
 
-**UI code reaches the game through `HostThread`** (`core.async`), never directly: `HostThread.CLIENT.run(...)`,
-`HostThread.SERVER.call(...)` answering a `CgReply` on the UI's thread, and `UINode.extract(read, use)` for a value read
+**UI code reaches the game through `CgHostThread`** (`core.async`), never directly: `CgHostThread.CLIENT.run(...)`,
+`CgHostThread.SERVER.call(...)` answering a `CgReply` on the UI's thread, and `UINode.extract(read, use)` for a value read
 every frame and used when it changes. Instant where the named thread is the one framing the document; otherwise one
-hop, the answer landing at the next frame. Each loader answers the threads through `HostServices`; the guide is
+hop, the answer landing at the next frame. Each loader answers the threads through CrystalGraphics' `CgGameThreads`; the guide is
 `docs/CGUI_BUILDING_UIS.md` §7c.
 
 ### `ShadowRoot` and `UISlot`

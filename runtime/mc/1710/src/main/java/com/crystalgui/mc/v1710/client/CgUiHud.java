@@ -1,7 +1,6 @@
 package com.crystalgui.mc.v1710.client;
 
-import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 
@@ -73,17 +72,12 @@ public final class CgUiHud {
 
         @Override
         public void enter() {
-            CgGL.fromHost();
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.enter();
         }
 
         @Override
         public void leave() {
-            CgGL.toHost();
-            // MINECRAFT GETS ITS FIXED-FUNCTION STATE BACK. It drew with alpha and blend on and lighting
-            // off and will assume the same next frame; CrystalGUI's endFrame restores what IT saved,
-            // which is not the same thing.
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.leave();
         }
     };
 

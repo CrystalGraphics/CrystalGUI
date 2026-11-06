@@ -1,6 +1,6 @@
 package com.crystalgui.fs.client;
 
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.fs.Resource;
 
 import org.jetbrains.annotations.Nullable;
@@ -34,9 +34,9 @@ public final class Backup {
     /** The record's own version, so a format change discards rather than misreads. */
     private static final int VERSION = 1;
 
-    private final ConfigStorage storage;
+    private final CgConfigStorage storage;
 
-    public Backup(ConfigStorage storage) {
+    public Backup(CgConfigStorage storage) {
         this.storage = Objects.requireNonNull(storage, "storage");
     }
 

@@ -30,6 +30,38 @@ import com.crystalgui.core.command.CommandRegistry;
 public final class Keymap {
 
     private final List<KeyBinding> bindings = new ArrayList<>();
+    private final boolean warnsOnConflict;
+
+    /** An element's scope: a chord bound twice here is logged as a conflict. */
+    public Keymap() {
+        this(true);
+    }
+
+    private Keymap(boolean warnsOnConflict) {
+        this.warnsOnConflict = warnsOnConflict;
+    }
+
+    /**
+     * A keymap whose chords several commands may share, with no conflict warning: the one the registry
+     * builds from every command's declared defaults.
+     *
+     * <pre>{@code
+     * Keymap declared = Keymap.sharingChords();
+     * declared.bind("Mod+N", "explorer.newJavaClass");   // enabled in a java source root
+     * declared.bind("Mod+N", "explorer.newFile");        // everywhere else
+     * }</pre>
+     *
+     * <p>Sharing works because {@link KeymapResolver} passes over a bound command that is disabled where
+     * focus is, so each command's enablement decides which one answers.</p>
+     *
+     * <ul>
+     *   <li>Not for an element's scope: there a doubled chord is a mistake, and {@link #Keymap()} reports it.</li>
+     *   <li>{@link #conflicts()} still lists shared chords.</li>
+     * </ul>
+     */
+    public static Keymap sharingChords() {
+        return new Keymap(false);
+    }
 
     /**
      * Binds {@code chord} to a command id.
@@ -80,9 +112,10 @@ public final class Keymap {
         // would make load order significant and turn a diagnosable mistake into a mysterious one.
         // Innermost-first resolution would otherwise hide this entirely.
         for (KeyBinding existing : bindings) {
-            if (existing.getChord().equals(chord) && existing.getEventType() == binding.getEventType()) {
+            if (warnsOnConflict && existing.getChord().equals(chord)
+                    && existing.getEventType() == binding.getEventType()) {
                 CrystalGuiCore.LOGGER.warn("Keymap conflict: {} is already bound to '{}' in this scope,"
-                        + " now also '{}'. The earlier binding wins.",
+                        + " now also '{}'. The earlier binding wins wherever it is enabled.",
                         chord, existing.getCommandId(), commandId);
             }
         }

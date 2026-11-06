@@ -186,7 +186,7 @@ did. Under a node the
   **The tests run with `-Dcrystalgui.font.systemFonts=false`** (`core/build.gradle.kts`), so no result
   depends on the machine's fonts; `FontFamilyCache.useSystemFonts` hands a test its own. A Han
   character takes the language its own text shows (kana → Japanese, Hangul → Korean), else the
-  player's: `HostServices.locale()`, pushed into `FontFamilyCache.useLocale` by `DesktopHost` each frame.
+  player's: `CgI18n.locale()`, pushed into `FontFamilyCache.useLocale` by `DesktopHost` each frame.
 
 ### Drawables — `render/texture/`
 
@@ -218,7 +218,9 @@ exact-area coverage on the edges that are on the outline. Full account in `ICONS
 things it deliberately does not implement and why none of them matters for icons.
 
 > **A fill at icon size is rasterised once and drawn from a texture** — `SvgRasterCache`, for any
-> document at most 128 device px tall under an axis-aligned pose at a whole-pixel origin. A cell thinner
+> document at most 128 device px tall under an axis-aligned, uniform pose: 1:1 on the pixel grid, and off it
+> (an icon mid-animation) filtered from its exact raster or the next of 16 sizes a doubling, so a moving icon
+> looks as it does at rest, shadow included, rather than flickering to the direct path. A cell thinner
 > than a pixel cannot be composited on its own: two cells each covering half a pixel blend to three
 > quarters, so a direct draw has to let one cell claim the whole pixel and guess the rest of its boundary,
 > which is wrong wherever the outline bends inside the pixel — every corner of a 16-unit icon at 10 to

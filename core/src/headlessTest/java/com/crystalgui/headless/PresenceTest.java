@@ -6,7 +6,7 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
@@ -98,7 +98,7 @@ public class PresenceTest {
             binding = new WorkspaceBinding<>(service, hub, who, who, CgPlainOps.INSTANCE);
             binding.installOn(server::onRequest);
             workspace = Workspace.over(client::call, client::onNotify, CgPlainOps.INSTANCE)
-                    .setStorage(new InMemoryConfigStorage());
+                    .setStorage(new CgInMemoryConfigStorage());
             DocumentKinds kinds = new DocumentKinds();
             kinds.register(DocumentKind.of("test:text", "Text")
                     .files(DocumentKind.FilePatterns.extension("txt"))

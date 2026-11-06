@@ -15,7 +15,7 @@ import com.crystalgraphics.net.CgInMemoryTransport;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -232,7 +232,7 @@ public class DirtyTabMarkerTest extends UiDocumentTestBase {
      */
     @Test
     public void aBackupIdenticalToTheFileRestoresNothing() {
-        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.setStorage(new CgInMemoryConfigStorage());
 
         // EXACTLY WHAT THE FILE HOLDS. The seeded content, byte for byte.
         workspace.backup().save(Resource.of(FILE), "class Main { }".getBytes(StandardCharsets.UTF_8),
@@ -255,7 +255,7 @@ public class DirtyTabMarkerTest extends UiDocumentTestBase {
      */
     @Test
     public void aBackupThatDiffersIsRestoredAndIsDirty() {
-        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.setStorage(new CgInMemoryConfigStorage());
         workspace.backup().save(Resource.of(FILE),
                 "class Main { int unsaved; }".getBytes(StandardCharsets.UTF_8), "whatever");
 

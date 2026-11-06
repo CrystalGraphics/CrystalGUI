@@ -29,7 +29,7 @@ import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.PortDirection;
 import com.crystalgui.graph.PortRef;
 import com.crystalgui.graph.PortSpec;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSet;
@@ -187,7 +187,7 @@ public final class ShaderGraphDocument implements DocumentModel {
     /** The graph as it stands, in the serialized form {@link GraphCodecs#DOCUMENT} defines. */
     @Override
     public byte[] encode() {
-        return CgFormats.JSON.toText(GraphCodecs.DOCUMENT, graph).getBytes(StandardCharsets.UTF_8);
+        return CgFiles.JSON.toText(GraphCodecs.DOCUMENT, graph).getBytes(StandardCharsets.UTF_8);
     }
 
     /**
@@ -212,7 +212,7 @@ public final class ShaderGraphDocument implements DocumentModel {
         boolean blank = text.trim().isEmpty();
         GraphDocument loaded = blank
                 ? new GraphDocument()
-                : CgFormats.JSON.fromText(GraphCodecs.DOCUMENT, text);
+                : CgFiles.JSON.fromText(GraphCodecs.DOCUMENT, text);
         graph.replaceWith(loaded);
         if (blank) addStarterGraph();
         history.clear();

@@ -5,7 +5,7 @@ import java.util.List;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Workspace;
@@ -47,7 +47,7 @@ import com.crystalgui.fs.client.Workspace;
  * the answer exists:</p>
  *
  * <pre>{@code
- * ConfigStorage mine = context.desktop().workspaceStore(workspaceIdentity);
+ * CgConfigStorage mine = context.desktop().workspaceStore(workspaceIdentity);
  * workspace.setStorage(mine);          // backups and local history
  * session.useStorage(mine);            // the arrangement
  * }</pre>
@@ -55,7 +55,7 @@ import com.crystalgui.fs.client.Workspace;
 public record LaunchContext(ApplicationKind kind,
                             Desktop desktop,
                             @Nullable Workspace workspace,
-                            ConfigStorage storage,
+                            CgConfigStorage storage,
                             @Nullable Path cache,
                             List<Resource> open) {
 
@@ -65,7 +65,7 @@ public record LaunchContext(ApplicationKind kind,
 
     /** A launch with nothing asked of it. */
     public static LaunchContext of(ApplicationKind kind, Desktop desktop,
-                                   @Nullable Workspace workspace, ConfigStorage storage,
+                                   @Nullable Workspace workspace, CgConfigStorage storage,
                                    @Nullable Path cache) {
         return new LaunchContext(kind, desktop, workspace, storage, cache, List.of());
     }

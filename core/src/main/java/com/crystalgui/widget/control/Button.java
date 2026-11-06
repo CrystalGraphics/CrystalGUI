@@ -251,6 +251,7 @@ public class Button extends UIElement {
         if (preIcon != null) shadow.remove(preIcon);
         preIcon = icon;
         if (preIcon != null) {
+            preIcon.setHitTest(false);
             preIcon.set(Attribute.PART, PRE_ICON_PART);
             shadow.insertAt(0, preIcon);
         }

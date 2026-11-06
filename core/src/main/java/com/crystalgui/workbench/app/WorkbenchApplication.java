@@ -21,7 +21,7 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsModel;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -121,7 +121,7 @@ public class WorkbenchApplication extends UIElement
     private final ApplicationKind kind;
     private final Desktop desktop;
     private final Workspace workspace;
-    private final ConfigStorage storage;
+    private final CgConfigStorage storage;
     private final Workbench workbench;
     private final WindowFrame window;
     private final WorkbenchSession session;
@@ -574,7 +574,7 @@ public class WorkbenchApplication extends UIElement
         // directory of its own, so a client that has joined ten servers keeps ten sets of unsaved work
         // rather than one shared pile -- and the record inside it is named after the APPLICATION,
         // because the directory has already said which workspace this is.
-        ConfigStorage mine = desktop.workspaceStore(identityFor(workspace, roots));
+        CgConfigStorage mine = desktop.workspaceStore(identityFor(workspace, roots));
         sessionKey = kind.id();
         // BACKUPS AND HISTORY TOO, and not before now: see DesktopHost#frame, which used to set a store
         // here that every workspace shared.

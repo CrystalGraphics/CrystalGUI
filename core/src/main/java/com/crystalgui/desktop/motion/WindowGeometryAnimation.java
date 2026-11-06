@@ -2,8 +2,10 @@ package com.crystalgui.desktop.motion;
 
 import com.crystalgui.style.StyleGroup;
 import com.crystalgraphics.easing.CgEasing;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIElement;
 
+import javax.annotation.Nullable;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -74,6 +76,10 @@ public final class WindowGeometryAnimation implements WindowMotion {
      */
     private final boolean animatePosition;
 
+    /** Whose box the size ends at, read each frame, or null for the size it was given. @see #followSizeOf */
+    @Nullable
+    private UIElement sizeOf;
+
     private final long startNanos;
     private final long durationNanos;
     private final CgEasing easing;
@@ -104,6 +110,20 @@ public final class WindowGeometryAnimation implements WindowMotion {
         // THE START RECT NOW, not on the first tick. A frame's gap here is a frame of the DESTINATION
         // rect, which for a maximise is the window snapping to full screen and then animating out of it.
         apply(0.0);
+    }
+
+    /**
+     * Ends the size at {@code element}'s box as it is on each frame, rather than as it was at the start: a maximise into
+     * a work area that grows while it plays, as one does when fullscreen takes the taskbar away.
+     *
+     * <pre>{@code
+     * new WindowGeometryAnimation(frame, alive, x, y, w, h, 0f, 0f, area.width(), area.height(), true, true,
+     *         nanos, easing, settle).followSizeOf(workArea);
+     * }</pre>
+     */
+    public WindowGeometryAnimation followSizeOf(@Nullable UIElement element) {
+        this.sizeOf = element;
+        return this;
     }
 
     @Override
@@ -146,8 +166,14 @@ public final class WindowGeometryAnimation implements WindowMotion {
         float p = (float) progress;
         float left = fromLeft + (toLeft - fromLeft) * p;
         float top = fromTop + (toTop - fromTop) * p;
-        float width = fromWidth + (toWidth - fromWidth) * p;
-        float height = fromHeight + (toHeight - fromHeight) * p;
+        float endWidth = toWidth, endHeight = toHeight;
+        Box live = sizeOf == null ? null : sizeOf.box();
+        if (live != null && live.width() > 0f && live.height() > 0f) {
+            endWidth = live.width();
+            endHeight = live.height();
+        }
+        float width = fromWidth + (endWidth - fromWidth) * p;
+        float height = fromHeight + (endHeight - fromHeight) * p;
         StyleGroup.inlinePipeline(target.getStyle().getLayoutGroup(), l -> {
             if (animatePosition) l.left(left).top(top);
             if (animateSize) l.width(width).height(height);

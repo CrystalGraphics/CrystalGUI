@@ -286,9 +286,8 @@ public final class DesktopCommands {
      */
     public static void open(Desktop desktop, ApplicationKind kind) {
         // THE HOST'S WORKSPACE, or an application that needs a server is refused even with one connected
-        Workspace workspace = desktop.workspace();
-        Application running = desktop.applications().launch(kind, workspace);
-        if (running != null) running.activate();
+        // ITS WINDOW AT ONCE, and the application built into it, however long that takes
+        desktop.applications().launchInStartingWindow(kind, desktop.workspace());
     }
 
     /**

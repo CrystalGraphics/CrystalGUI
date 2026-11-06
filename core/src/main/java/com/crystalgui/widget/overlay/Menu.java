@@ -305,7 +305,7 @@ public class Menu extends Popover {
         // requestPointerFocus, not requestFocus: the latter rings, and a focus ring trailing the mouse
         // through a menu is the noise :focus-visible exists to avoid.
         item.onMouseEnter.attachListener((el, event) -> {
-            if (!isOpen()) return;
+            if (!isOpen() || pointerStillSinceOpen()) return;
             if (item.hasSubmenu()) {
                 scheduleSubmenu(item);
             } else {
@@ -563,8 +563,28 @@ public class Menu extends Popover {
     @Override
     protected void onOpened() {
         UIDocument window = document();
-        if (window != null) window.focus().requestFocus(this);
+        if (window == null) return;
+        window.focus().requestFocus(this);
+        openedAtX = window.input().pointer().x();
+        openedAtY = window.input().pointer().y();
+        pointerMoved = false;
     }
+
+    /**
+     * Whether the pointer is where it was when this opened. A row that comes under a still pointer, as the menu
+     * opens or rises over it, is not pointed at: Windows' menus light nothing until the mouse moves.
+     */
+    private boolean pointerStillSinceOpen() {
+        if (pointerMoved) return false;
+        UIDocument window = document();
+        if (window == null) return false;
+        pointerMoved = window.input().pointer().x() != openedAtX || window.input().pointer().y() != openedAtY;
+        return !pointerMoved;
+    }
+
+    /** Where the pointer was as this opened, in surface pixels, until it first moves. */
+    private float openedAtX, openedAtY;
+    private boolean pointerMoved;
 
     /**
      * Type-to-select — the letter keys every native menu answers to.

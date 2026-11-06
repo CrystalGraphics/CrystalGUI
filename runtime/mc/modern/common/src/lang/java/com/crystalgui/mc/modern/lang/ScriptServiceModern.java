@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.lang;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import java.io.IOException;
 import java.nio.file.Path;
 
@@ -8,7 +9,6 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.storage.StorageLayout;
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.MappingCoordinates.Source;
 import com.crystalgui.language.platform.NamespaceProbe;
@@ -75,7 +75,7 @@ public final class ScriptServiceModern implements ScriptService {
      */
     @Override
     public Path cacheRoot() {
-        return StorageLayout.cacheIn(gameDirectory).toAbsolutePath().normalize();
+        return CrystalGuiStorage.LAYOUT.cacheIn(gameDirectory).toAbsolutePath().normalize();
     }
 
     @Override

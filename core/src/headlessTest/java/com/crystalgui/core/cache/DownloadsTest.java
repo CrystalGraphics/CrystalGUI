@@ -1,5 +1,9 @@
 package com.crystalgui.core.cache;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloads;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.cache.CgCacheFiles;
 import com.crystalgraphics.job.progress.CgProgress;
 import org.junit.Rule;
 import org.junit.Test;
@@ -32,7 +36,7 @@ import static org.junit.Assert.fail;
  * <p>Driven over {@code file:} URLs, which {@code URLConnection} serves like any other. That reaches
  * everything except the HTTP status codes — the one thing a local file cannot express is a {@code 206},
  * so {@link #aResumedTransferAppendsRatherThanRestarting} drives the append path through
- * {@link CacheFiles} directly and says so rather than pretending otherwise.</p>
+ * {@link CgCacheFiles} directly and says so rather than pretending otherwise.</p>
  */
 public class DownloadsTest {
 
@@ -61,7 +65,7 @@ public class DownloadsTest {
         AtomicLong seen = new AtomicLong();
 
         try {
-            Downloads.from(source.toURI().toString())
+            CgDownloads.from(source.toURI().toString())
                     .named("Test")
                     // AFTER SOME OF IT HAS ARRIVED, not immediately: cancelling before the first byte
                     // would pass against an implementation that only checks once, up front.
@@ -82,7 +86,7 @@ public class DownloadsTest {
         File source = sourceOf(64 * 1024);
         Path target = folder.getRoot().toPath().resolve("never.bin");
         try {
-            Downloads.from(source.toURI().toString()).named("Test")
+            CgDownloads.from(source.toURI().toString()).named("Test")
                     .cancelledWhen(() -> true).into(target);
             fail("expected to be refused");
         } catch (InterruptedIOException expected) {
@@ -99,18 +103,18 @@ public class DownloadsTest {
      * it; this turns that into a resume for nothing.</p>
      *
      * <p>The {@code 206} itself is the one thing a {@code file:} URL cannot produce, so the append is
-     * driven through {@link CacheFiles} — the half that decides what happens to the bytes.</p>
+     * driven through {@link CgCacheFiles} — the half that decides what happens to the bytes.</p>
      */
     @Test
     public void aResumedTransferAppendsRatherThanRestarting() throws Exception {
         Path target = folder.getRoot().toPath().resolve("resumed.bin");
-        Path part = CacheFiles.partOf(target);
+        Path part = CgCacheFiles.partOf(target);
         Files.write(part, "first-half-".getBytes(StandardCharsets.UTF_8));
 
         assertEquals("the partial is what a resume would ask to continue from",
-                11L, CacheFiles.partialSize(target));
+                11L, CgCacheFiles.partialSize(target));
 
-        boolean installed = CacheFiles.install(target,
+        boolean installed = CgCacheFiles.install(target,
                 new java.io.ByteArrayInputStream("second-half".getBytes(StandardCharsets.UTF_8)),
                 null, true);
 
@@ -123,9 +127,9 @@ public class DownloadsTest {
     @Test
     public void aTransferThatCannotResumeStartsAgain() throws Exception {
         Path target = folder.getRoot().toPath().resolve("restarted.bin");
-        Files.write(CacheFiles.partOf(target), "stale".getBytes(StandardCharsets.UTF_8));
+        Files.write(CgCacheFiles.partOf(target), "stale".getBytes(StandardCharsets.UTF_8));
 
-        CacheFiles.install(target,
+        CgCacheFiles.install(target,
                 new java.io.ByteArrayInputStream("whole".getBytes(StandardCharsets.UTF_8)), null, false);
 
         assertEquals("whole", new String(Files.readAllBytes(target), StandardCharsets.UTF_8));
@@ -143,13 +147,13 @@ public class DownloadsTest {
         File source = sourceOf(1024);
         Path target = folder.getRoot().toPath().resolve("mismatch.bin");
 
-        boolean installed = Downloads.from(source.toURI().toString())
+        boolean installed = CgDownloads.from(source.toURI().toString())
                 .named("Test").verifying("00000000000000000000000000000000").into(target);
 
         assertFalse(installed);
         assertFalse(Files.exists(target));
         assertFalse("a rejected partial must not become the base of the next attempt",
-                Files.exists(CacheFiles.partOf(target)));
+                Files.exists(CgCacheFiles.partOf(target)));
     }
 
     /** Git's own blob hash, which is what pins the MCP mapping files. */
@@ -161,11 +165,11 @@ public class DownloadsTest {
         // `git hash-object` of "hello\n" — sha1("blob 6\0hello\n"). A fixed, checkable constant rather
         // than one this test computes with the code under test.
         String known = "ce013625030ba8dba906f756967f9e9ca394464a";
-        assertEquals(known, CacheFiles.gitBlobSha1(file));
-        assertTrue(CacheFiles.isValid(file, "gitblob:" + known));
-        assertFalse(CacheFiles.isValid(file, "gitblob:" + known.replace('c', 'd')));
+        assertEquals(known, CgCacheFiles.gitBlobSha1(file));
+        assertTrue(CgCacheFiles.isValid(file, "gitblob:" + known));
+        assertFalse(CgCacheFiles.isValid(file, "gitblob:" + known.replace('c', 'd')));
         assertFalse("an algorithm nobody knows is a failure, never a pass",
-                CacheFiles.isValid(file, "sha256:" + known));
+                CgCacheFiles.isValid(file, "sha256:" + known));
     }
 
     /** A plain value stays MD5, so everything that already pins one is unaffected. */
@@ -173,10 +177,10 @@ public class DownloadsTest {
     public void anUntaggedDigestIsStillMd5() throws Exception {
         Path file = folder.getRoot().toPath().resolve("md5.txt");
         Files.write(file, "hello\n".getBytes(StandardCharsets.UTF_8));
-        String md5 = CacheFiles.digestOf(file);
+        String md5 = CgCacheFiles.digestOf(file);
         assertNotNull(md5);
-        assertTrue(CacheFiles.isValid(file, md5));
-        assertTrue(CacheFiles.isValid(file, "md5:" + md5));
+        assertTrue(CgCacheFiles.isValid(file, md5));
+        assertTrue(CgCacheFiles.isValid(file, "md5:" + md5));
     }
 
     /**
@@ -191,12 +195,12 @@ public class DownloadsTest {
     @Test
     public void aFailureReadsAsASentence() {
         assertEquals("could not reach api.adoptium.net — check your connection",
-                Downloads.describe(new java.net.UnknownHostException("api.adoptium.net")));
+                CgDownloads.describe(new java.net.UnknownHostException("api.adoptium.net")));
         assertEquals("the connection timed out",
-                Downloads.describe(new java.net.SocketTimeoutException("Read timed out")));
+                CgDownloads.describe(new java.net.SocketTimeoutException("Read timed out")));
         assertEquals("the server does not have it any more",
-                Downloads.describe(new java.io.FileNotFoundException("https://example/x")));
-        assertEquals("stopped", Downloads.describe(new InterruptedIOException("cancelled")));
+                CgDownloads.describe(new java.io.FileNotFoundException("https://example/x")));
+        assertEquals("stopped", CgDownloads.describe(new InterruptedIOException("cancelled")));
     }
 
     /**
@@ -209,7 +213,7 @@ public class DownloadsTest {
     public void anUnknownHostIsNotRetried() {
         long started = System.currentTimeMillis();
         try {
-            Downloads.from("http://no-such-host.invalid/thing.bin").named("Test")
+            CgDownloads.from("http://no-such-host.invalid/thing.bin").named("Test")
                     .into(folder.getRoot().toPath().resolve("never.bin"));
             fail("expected an unknown host to fail");
         } catch (IOException expected) {
@@ -228,14 +232,14 @@ public class DownloadsTest {
         File wrong = folder.newFile("wrong.bin");
         Files.write(wrong.toPath(), "not the artifact".getBytes(StandardCharsets.UTF_8));
         String dead = new File(folder.getRoot(), "gone.bin").toURI().toString();
-        String pin = "md5:" + CacheFiles.digestOf(right.toPath());
-        DownloadLocations locations = DownloadLocations.of("""
+        String pin = "md5:" + CgCacheFiles.digestOf(right.toPath());
+        CgDownloadLocations locations = CgDownloadLocations.of("""
                 {"files": {"x.bin": {"digest": "%s", "urls": ["%s", "%s", "%s"]}}}
                 """.formatted(pin, dead, wrong.toURI(), right.toURI()), null, null, false);
 
         Path target = folder.getRoot().toPath().resolve("x.bin");
-        assertTrue(Downloads.located(locations, "x.bin").named("Test").into(target));
-        assertEquals(pin, "md5:" + CacheFiles.digestOf(target));
+        assertTrue(CgDownloads.located(locations, "x.bin").named("Test").into(target));
+        assertEquals(pin, "md5:" + CgCacheFiles.digestOf(target));
     }
 
     /** Every location serving other bytes installs nothing, and answers false rather than throwing. */
@@ -245,12 +249,12 @@ public class DownloadsTest {
         File two = folder.newFile("two.bin");
         Files.write(one.toPath(), "one".getBytes(StandardCharsets.UTF_8));
         Files.write(two.toPath(), "two".getBytes(StandardCharsets.UTF_8));
-        DownloadLocations locations = DownloadLocations.of("""
+        CgDownloadLocations locations = CgDownloadLocations.of("""
                 {"files": {"x.bin": {"digest": "md5:00000000000000000000000000000000", "urls": ["%s", "%s"]}}}
                 """.formatted(one.toURI(), two.toURI()), null, null, false);
 
         Path target = folder.getRoot().toPath().resolve("x.bin");
-        assertFalse(Downloads.located(locations, "x.bin").named("Test").into(target));
+        assertFalse(CgDownloads.located(locations, "x.bin").named("Test").into(target));
         assertFalse(Files.exists(target));
     }
 

@@ -8,7 +8,7 @@ import java.util.List;
 
 import org.junit.Test;
 
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.Checkbox;
@@ -19,7 +19,7 @@ public class UserLibraryTest {
 
     @Test
     public void groupsAndTheViewSurviveANewLibraryOnTheSameStore() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         UserLibrary first = UserLibrary.in(store);
         first.createGroup("Forms");
         first.addToGroup("Forms", Button.NAME);
@@ -87,7 +87,7 @@ public class UserLibraryTest {
     /** What earlier builds kept — a shipped name as a parent, and a name twice — reads back as one group each. */
     @Test
     public void aKeptShippedNameAndADuplicateAreRepairedOnRead() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         store.write(UserLibrary.FILE, "{\"rows\": false, \"groups\": ["
                 + "{\"name\": \"Common\", \"kinds\": []},"
                 + "{\"name\": \"Common/Bebe\", \"kinds\": [\"" + Button.NAME + "\"]},"
@@ -106,7 +106,7 @@ public class UserLibraryTest {
 
     @Test
     public void anUnreadableRecordStartsEmptyRatherThanThrowing() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         store.write(UserLibrary.FILE, "{\"groups\": [ not json");
 
         assertTrue(UserLibrary.in(store).groups().isEmpty());
@@ -114,7 +114,7 @@ public class UserLibraryTest {
 
     @Test
     public void aKindNoLongerRegisteredStaysInItsGroup() {
-        InMemoryConfigStorage store = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage store = new CgInMemoryConfigStorage();
         Name gone = Name.of("uninstalled", "gizmo");
         UserLibrary library = UserLibrary.in(store);
         library.createGroup("Mod");

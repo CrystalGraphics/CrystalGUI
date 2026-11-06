@@ -1,9 +1,10 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.storage.LocalConfigStorage;
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgraphics.storage.config.CgLocalConfigStorage;
 import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
@@ -24,7 +25,7 @@ import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowKeyboardMove;
 import com.crystalgui.desktop.window.WindowRegistry;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuId;
@@ -763,11 +764,23 @@ public class Desktop extends UIElement implements DataProvider {
         windows.append(frame);
         // BEFORE the animation and the activation below: a window restored from a record should open AT
         // the size and place it is meant to be, not fly in at a default and jump. @see #persistTo
-        if (!applyPersistedGeometry(frame) && !frame.isSized() && frame.isApplicationMain()) sizeByDefault(frame);
+        // AN APPLICATION'S STARTING WINDOW GIVES WAY to its main window: the same place, already open, no second flight
+        WindowFrame starter = startingFor(frame);
+        if (starter != null) {
+            // ITS STARTER'S, NOT THE RECORD'S: the starter opened at the record, and a resize or maximise made while it
+            // loaded is the newer word. The record is spent, or it would apply to the next window under this key.
+            if (frame.key() != null) pendingPlacements.remove(frame.key());
+            takeGeometry(frame, starter);
+        } else if (!applyPersistedGeometry(frame) && !frame.isSized() && frame.isApplicationMain()) {
+            sizeByDefault(frame);
+        }
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
         // show() puts a hidden one back -- and the animation is the only thing they share.
-        frame.playOpenAnimation();
+        // A minimised starter's application waits minimised: activated, it would open over the minimise
+        if (starter != null && (starter.state() == WindowState.HIDDEN || starter.isMinimizing())) activate = false;
+        if (starter == null) frame.playOpenAnimation();
+        else replaceStarting(starter, frame);
         if (!activate) {
             // NO RAISE EITHER. A background window that jumped to the front of the stack would be a
             // focus steal missing only the focus -- it would cover the window being typed in. Its stack
@@ -1297,7 +1310,7 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** This desktop's own store — preferences, the arrangement, every workspace's state. */
     @Nullable
-    private ConfigStorage config;
+    private CgConfigStorage config;
 
     /** {@code crystalgui/cache}. Disposable in its entirety. @see #useStorage */
     @Nullable
@@ -1314,7 +1327,7 @@ public class Desktop extends UIElement implements DataProvider {
      * <h3>A platform says WHERE, and nothing else</h3>
      *
      * <p>The compositor is engine-owned, and so is everything about it that survives a restart. A host
-     * supplies a {@link ConfigStorage} and an id — where the record lives and which desktop it is — and
+     * supplies a {@link CgConfigStorage} and an id — where the record lives and which desktop it is — and
      * gets the rest for nothing. The alternative was tried and is the reason this note exists: the same
      * read-apply-write orchestration written once in the Minecraft screen and once in the harness scene,
      * which is two copies of a policy that has to agree, in two places nobody reads together.</p>
@@ -1332,7 +1345,7 @@ public class Desktop extends UIElement implements DataProvider {
      * back. Core cannot invent it, and a record that claimed otherwise would be describing windows that
      * cannot exist.</p>
      */
-    public Desktop persistTo(ConfigStorage storage, String id) {
+    public Desktop persistTo(CgConfigStorage storage, String id) {
         // AND IT BECOMES THIS DESKTOP'S STORE, which is what an application launched onto it is given.
         // A caller that named one place for the arrangement did not mean a second place for everything
         // else. @see #useStorage
@@ -1364,7 +1377,7 @@ public class Desktop extends UIElement implements DataProvider {
      * {@code HostServices.installationDirectory()}.
      *
      * <p>One call, before anything is launched onto this desktop: it derives the config store and the
-     * cache root from {@link StorageLayout}, so nothing else spells those segments. Applications
+     * cache root from {@link CrystalGuiStorage}, so nothing else spells those segments. Applications
      * launched afterwards need no storage argument at all.</p>
      *
      * <pre>{@code
@@ -1378,11 +1391,11 @@ public class Desktop extends UIElement implements DataProvider {
      * answer chosen for a host that never saw the question is indistinguishable from one it meant.</p>
      */
     public Desktop useStorage(Path installation) {
-        this.config = new LocalConfigStorage(StorageLayout.configIn(installation));
+        this.config = new CgLocalConfigStorage(CrystalGuiStorage.configIn(installation));
         desktopSettings.useStorage(config);
-        // A PATH, NOT A STORAGE: LocalConfigStorage creates its directory eagerly, and a cache/ that
+        // A PATH, NOT A STORAGE: CgLocalConfigStorage creates its directory eagerly, and a cache/ that
         // exists before anything derived does is a directory nobody can explain.
-        this.cacheRoot = StorageLayout.cacheIn(installation);
+        this.cacheRoot = CrystalGuiStorage.LAYOUT.cacheIn(installation);
         // AUTOSTART AS SOON AS THERE IS SOMEWHERE TO READ SETTINGS FROM: a hook that records from the
         // first frame is only worth anything before the first frame.
         applications().autostart();
@@ -1461,12 +1474,12 @@ public class Desktop extends UIElement implements DataProvider {
      * than by process needs the root a workspace belongs to, which only its server knows: the greeting
      * is where it would arrive.</p>
      */
-    public ConfigStorage workspaceStore(String identity) {
+    public CgConfigStorage workspaceStore(String identity) {
         Path world = localWorld == null ? null : localWorld.get();
-        ConfigStorage root = world == null
+        CgConfigStorage root = world == null
                 ? config()
-                : new LocalConfigStorage(StorageLayout.configIn(world));
-        return root.scoped(StorageLayout.PROJECTS).scoped(identity);
+                : new CgLocalConfigStorage(CrystalGuiStorage.configIn(world));
+        return root.scoped(CrystalGuiStorage.PROJECTS).scoped(identity);
     }
 
     /**
@@ -1474,17 +1487,17 @@ public class Desktop extends UIElement implements DataProvider {
      * on this installation — or null when this desktop was given nowhere to write.
      *
      * <pre>{@code
-     * ConfigStorage library = desktop.extensionStore("crystalgui:uibuilder");   // …/extensions/crystalgui.uibuilder
+     * CgConfigStorage library = desktop.extensionStore("crystalgui:uibuilder");   // …/extensions/crystalgui.uibuilder
      * }</pre>
      */
     @Nullable
-    public ConfigStorage extensionStore(String extensionId) {
-        return config == null ? null : config.scoped(StorageLayout.EXTENSIONS).scoped(extensionId);
+    public CgConfigStorage extensionStore(String extensionId) {
+        return config == null ? null : config.scoped(CrystalGuiStorage.EXTENSIONS).scoped(extensionId);
     }
 
     /** Where this desktop's private records go, or null when it was never given anywhere. */
     @Nullable
-    public ConfigStorage config() {
+    public CgConfigStorage config() {
         return config;
     }
 
@@ -1563,6 +1576,113 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     private final List<WindowFrame> hideAfterRestore = new ArrayList<>();
+
+    /** On a starting window's content: the placeholder an application's window shows until it has built. */
+    public static final String STARTING_CLASS = "__starting__";
+
+    /** Each launching application's starting window, by its kind's id. @see #openStartingWindow */
+    private final Map<String, WindowFrame> starting = new HashMap<>();
+
+    /**
+     * Opens {@code kind}'s window at once, before the application has built it: its title and icon, where its main
+     * window was last closed or at its kind's size, and its icon ({@link StartingMark}). The application's main window takes
+     * its place when it is added. Android's starting window and Windows' splash: the click is answered on this frame,
+     * however long the application takes.
+     *
+     * <pre>{@code
+     * WindowFrame starter = desktop.openStartingWindow(kind);
+     * // a frame or more later: kind's factory adds its main window, which replaces the starter
+     * }</pre>
+     *
+     * <p>Closing it before the application has built cancels nothing by itself: the launcher asks
+     * {@link #isStarting}. {@link #endStartingWindow} takes it down when the launch fails.</p>
+     */
+    public WindowFrame openStartingWindow(ApplicationKind kind) {
+        WindowFrame open = starting.get(kind.id());
+        if (open != null && open.state() != WindowState.DESTROYED && !open.isClosing()) return open;
+        WindowFrame frame = new WindowFrame(kind.displayName());
+        if (kind.icon() != null) frame.setIcon(kind.icon());
+        // ITS APPLICATION'S: the pin's slot on the bar, and its kind's size when nothing was recorded
+        frame.setApplication(kind).markApplicationMain();
+        frame.content().addClass(STARTING_CLASS);
+        frame.content().append(new StartingMark(kind.icon(), kind.displayName()));
+        DesktopSession.Placement remembered = placementOfApplication(kind.id());
+        if (remembered != null && remembered.isUsable()) {
+            frame.resizeTo(remembered.width(), remembered.height());
+            frame.moveTo(remembered.left(), remembered.top());
+        }
+        addWindow(frame);
+        if (remembered != null && remembered.maximized()) {
+            frame.maximize();
+            frame.setRestoreRect(remembered.left(), remembered.top(), remembered.width(), remembered.height());
+        }
+        starting.put(kind.id(), frame);
+        return frame;
+    }
+
+    /** Whether {@code kind}'s starting window is still waiting for its application: not closed, not replaced. */
+    public boolean isStarting(ApplicationKind kind) {
+        WindowFrame frame = starting.get(kind.id());
+        // CLOSING COUNTS AS CLOSED: its mark may settle during the close's flight, and the build would reopen it
+        return frame != null && frame.state() != WindowState.DESTROYED && !frame.isClosing();
+    }
+
+    /**
+     * Takes down {@code kind}'s starting window once its launch is over without a main window taking its place: failed,
+     * or built a window that named its application only after it was added.
+     *
+     * @param successor the window it stood for, which takes its place on the taskbar; null for none
+     */
+    public void endStartingWindow(ApplicationKind kind, @Nullable WindowFrame successor) {
+        WindowFrame frame = starting.remove(kind.id());
+        if (frame == null) return;
+        if (successor != null && successor.desktop() == this) replaceStarting(frame, successor);
+        else frame.destroy();
+    }
+
+    /** {@code successor} where {@code starter} was on the taskbar, then the starter gone. */
+    private void replaceStarting(WindowFrame starter, WindowFrame successor) {
+        boolean minimised = starter.state() == WindowState.HIDDEN || starter.isMinimizing();
+        registry.takePlace(successor, starter);
+        Taskbar bar = taskbar();
+        if (bar != null) bar.takePlace(successor, starter);
+        // NO CUT TO THE APPLICATION: its mark and backdrop leave over it, the loading screen's way out -- on its restore,
+        // for one built minimised
+        StartingMark.leaveOver(starter, successor);
+        // MINIMISED, it waits minimised: the build finished in the background, and a restore shows it ready
+        if (minimised) successor.hide();
+        starter.destroy();
+    }
+
+    @Nullable
+    private WindowFrame startingFor(WindowFrame frame) {
+        ApplicationKind kind = frame.isApplicationMain() ? frame.application() : null;
+        if (kind == null) return null;
+        WindowFrame starter = starting.get(kind.id());
+        if (starter == null || starter == frame) return null;
+        starting.remove(kind.id());
+        return starter.state() == WindowState.DESTROYED || starter.isClosing() ? null : starter;
+    }
+
+    /** The starting window's geometry, for an application's main window nothing recorded. */
+    private static void takeGeometry(WindowFrame frame, WindowFrame starter) {
+        if (starter.isMaximized()) {
+            frame.maximize();
+            frame.setRestoreRect(starter.restoreLeft(), starter.restoreTop(), starter.restoreWidth(), starter.restoreHeight());
+            return;
+        }
+        frame.resizeTo(starter.recordedWidth(), starter.recordedHeight());
+        frame.moveTo(starter.getWantedLeft(), starter.getWantedTop());
+    }
+
+    /** The waiting placement an application's main window last had, or null. */
+    @Nullable
+    private DesktopSession.Placement placementOfApplication(String applicationId) {
+        for (DesktopSession.Placement placement : pendingPlacements.values()) {
+            if (applicationId.equals(placement.app())) return placement;
+        }
+        return null;
+    }
 
     /** A closing window's geometry, for the next window under its key. @see WindowFrame#dispose */
     public void rememberPlacement(WindowFrame frame) {
@@ -1695,6 +1815,49 @@ public class Desktop extends UIElement implements DataProvider {
         suspendedIn = document;
         document.remove(this);
         onSuspendedChanged.emit(false);
+    }
+
+    /**
+     * Plays the desktop off screen before its screen closes: the taskbar slides away and every window on it plays its
+     * close, a pinned one excepted, since it stays over the game. Then {@code done}, which closes the screen; until
+     * {@link #arrive} everything stays gone, so the frames before the close show none of it.
+     *
+     * <pre>{@code
+     * desktop.leave(() -> closeTheScreen());   // Escape pressed
+     * // the screen opens again:
+     * desktop.resume();
+     * desktop.arrive();
+     * }</pre>
+     *
+     * <p>{@code done} runs at once with animations off, and on the document's thread otherwise.</p>
+     */
+    public void leave(Runnable done) {
+        List<WindowFrame> going = new ArrayList<>();
+        for (WindowFrame frame : registry.windows()) {
+            if (frame.state() == WindowState.VISIBLE && !frame.isPinned()) going.add(frame);
+        }
+        int[] left = {going.size() + 1};
+        Runnable one = () -> {
+            if (--left[0] == 0) done.run();
+        };
+        taskbar.leaveScreen(one);
+        for (WindowFrame frame : going) frame.animator().playLeave(one);
+    }
+
+    /**
+     * Plays the desktop onto the screen as it opens: the taskbar comes in and every window on it plays its open. A
+     * window already moving, one the HUD put away and is restoring, keeps its own.
+     */
+    public void arrive() {
+        taskbar.comeOnScreen();
+        for (WindowFrame frame : registry.windows()) {
+            if (frame.state() != WindowState.VISIBLE) continue;
+            WindowAnimator animator = frame.animator();
+            animator.releaseLeave();
+            // Pinned: it stayed over the game, and never left.
+            if (frame.isPinned() || animator.isPlaying()) continue;
+            animator.playOpen();
+        }
     }
 
     /** Puts the compositor back. @see #suspend() */

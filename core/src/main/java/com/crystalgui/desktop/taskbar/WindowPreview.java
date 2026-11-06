@@ -58,7 +58,8 @@ public class WindowPreview extends UIElement {
     private final WindowIcon icon = new WindowIcon();
     private final UIText title = new UIText("");
     private final Button close = new Button("");
-    private final WindowThumbnail thumbnail = new WindowThumbnail();
+    /** One height for every window and a width that follows it, as Windows' previews. */
+    private final WindowThumbnail thumbnail = new WindowThumbnail().setHeightFixed(true);
     private final Tooltip titleTooltip;
 
     @Nullable
@@ -121,65 +122,41 @@ public class WindowPreview extends UIElement {
     }
 
     /**
-     * Keeps the picture the shape of its window, and the header the width of the picture.
+     * Keeps the placeholder in step with the window and the header the width of the picture. Cheap and
+     * idempotent, and called per frame while a preview is up: a window can be minimised under its own preview.
      *
-     * <p>Cheap and idempotent, and called per frame while a preview is up: a window can be minimised
-     * <em>while</em> its own preview is open — that is what pressing its entry does — and a resized
-     * window's preview follows it.</p>
-     *
-     * <p>This used to COLLAPSE the thumbnail for a window with no picture, on the argument that an empty
-     * box reads as a window that renders nothing. It is no longer a special case here at all: the
-     * thumbnail draws the window's icon tile on a card of its own shape instead, which is what Windows
-     * shows for a window it has no bitmap of — and it is what stopped a pictureless window stalling the
-     * panel's placement, since a card has a size where a collapsed box had none. @see WindowThumbnail#placeholder</p>
-     *
-     * @return whether the panel's geometry changed, so a caller that is about to place it knows the
-     *         measurement it is holding is out of date
+     * @return whether the panel's geometry changed, so a caller about to place it measures again
      */
     public boolean syncThumbnail() {
         return thumbnail.syncSize() | matchHeaderToThumbnail();
     }
 
-    /** Where the picture is GOING for the window it is currently pointed at, without going there. */
-    @Nullable
-    float[] fittedThumbnailSize() {
-        return thumbnail.fittedSize();
-    }
-
-    /** @see WindowThumbnail#forgetApplied */
-    void forgetThumbnailSize() {
-        thumbnail.forgetApplied();
-    }
-
-    /** Whether the picture is the icon-tile placeholder rather than the window. @see WindowThumbnail#placeholder */
+    /** Whether the picture is the icon-tile placeholder rather than the window. */
     public boolean isShowingPlaceholder() {
         return thumbnail.isShowingPlaceholder();
     }
 
-    /** The picture itself, for something that wants to animate its box. @see WindowThumbnail#applySize */
-    UIElement thumbnailElement() {
-        return thumbnail;
-    }
-
-    /** @see WindowThumbnail#setSizingSuppressed */
-    void setThumbnailSizingSuppressed(boolean suppressed) {
-        thumbnail.setSizingSuppressed(suppressed);
-    }
-
-    /** @see WindowThumbnail#applySize */
-    void applyThumbnailSize(float width, float height) {
-        thumbnail.applySize(width, height);
-    }
-
     /**
-     * The picture's box, or {@code null} while the thumbnail has none.
-     *
-     * <p><b>Nullable where the old accessor never was.</b> {@code getRuntimeCache()} always answered,
-     * so a caller measuring the picture could not fail; a {@link Box} is absent for any node that is
-     * disconnected, frozen or {@code display: none} — which a preview panel's thumbnail is for every
-     * frame before it has been shown. Both callers are morph geometry and both want the same answer
-     * when there is no box: don't morph.</p>
+     * How much wider the panel ends up than it is now, once the picture's width transition lands: zero at rest,
+     * NaN before the picture has been sized. What a placement centres on.
      */
+    float pendingWidthChange() {
+        Box box = thumbnail.box();
+        float target = thumbnail.targetWidth();
+        return box == null || Float.isNaN(target) ? Float.NaN : target - box.width();
+    }
+
+    /** The picture's width at the sheet's size, NaN before it has been sized. @see WindowThumbnail#setSqueeze */
+    float naturalThumbnailWidth() {
+        return thumbnail.naturalWidth();
+    }
+
+    /** Holds the picture to a share of the sheet's size; {@link #syncThumbnail} applies it. */
+    void setSqueeze(float share) {
+        thumbnail.setSqueeze(share);
+    }
+
+    /** The picture's box, or {@code null} before the panel's first layout. */
     @Nullable
     Box thumbnailBox() {
         return thumbnail.box();
@@ -225,7 +202,6 @@ public class WindowPreview extends UIElement {
         return true;
     }
 
-    /** Points the preview at a window. Cheap enough to call while it is moving between entries. */
     /** The window shown, or null. */
     @Nullable
     public WindowFrame frame() {
@@ -233,8 +209,13 @@ public class WindowPreview extends UIElement {
     }
 
     public WindowPreview setFrame(@Nullable WindowFrame frame) {
+        return setFrame(frame, 0L);
+    }
+
+    /** Points the preview at a window, cross-fading the picture from the last one over {@code fadeNanos}. */
+    public WindowPreview setFrame(@Nullable WindowFrame frame, long fadeNanos) {
         this.frame = frame;
-        thumbnail.setFrame(frame);
+        thumbnail.setFrame(frame, fadeNanos);
         String text = frame == null ? "" : frame.getTitle();
         title.setText(text);
         titleTooltip.setText(text);

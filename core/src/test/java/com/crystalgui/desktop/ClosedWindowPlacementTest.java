@@ -1,6 +1,6 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -16,7 +16,7 @@ import static org.junit.Assert.assertTrue;
 /** A closed window's size and place come back with the next window under its key, in the session and after a restart. */
 public class ClosedWindowPlacementTest extends UiDocumentTestBase {
 
-    private final InMemoryConfigStorage storage = new InMemoryConfigStorage();
+    private final CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
     private Desktop desktop;
 
     @Before

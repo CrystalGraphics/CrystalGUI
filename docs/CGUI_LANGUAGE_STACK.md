@@ -251,7 +251,7 @@ Never by file name — several publishers ship a `mappings.txt`.
 Mojang's `client.txt` lives at a content-addressed URL discoverable only through the version manifest, so
 `MappingCoordinates.Source` resolves a URL **and its digest** at fetch time rather than pinning a number
 nobody could verify. `MojangMappings` does that lookup; the digest comes back tagged `sha1:`, which
-`CacheFiles` checks alongside `gitblob:` and bare MD5. The runtime halves live inside archives
+`CgCacheFiles` checks alongside `gitblob:` and bare MD5. The runtime halves live inside archives
 (MCPConfig a zip, Fabric a jar), so a file may name an entry to extract; the digest is verified on the
 **archive**, and presence is the check on what came out of it.
 

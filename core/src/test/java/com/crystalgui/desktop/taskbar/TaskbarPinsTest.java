@@ -5,7 +5,7 @@ import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.app.Application;
@@ -75,7 +75,7 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
 
     @Test
     public void pinsComeBackAfterARestart() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         ApplicationKind lab = kindOf("test:lab", "Lab");
         ApplicationKind cues = kindOf("test:cues", "Cues");
         desktop.applications().install(lab);
@@ -100,7 +100,7 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         ApplicationKind lab = kindOf("test:lab", "Lab");
         desktop.applications().install(lab);
         // Somewhere to write, or a launch is refused
-        desktop.persistTo(new InMemoryConfigStorage(), "pins");
+        desktop.persistTo(new CgInMemoryConfigStorage(), "pins");
         desktop.pins().pin(lab);
         Button pin = taskbar().pinEntryFor(lab);
         assertNotNull(pin);
@@ -133,7 +133,7 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
             return new Stub(lab, frame);
         });
         desktop.applications().install(lab);
-        desktop.persistTo(new InMemoryConfigStorage(), "pins");
+        desktop.persistTo(new CgInMemoryConfigStorage(), "pins");
         desktop.pins().pin(lab);
         Button pin = taskbar().pinEntryFor(lab);
 
@@ -210,8 +210,10 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
             return new Stub(single, frame);
         });
         desktop.applications().install(single);
-        desktop.persistTo(new InMemoryConfigStorage(), "pins");
+        desktop.persistTo(new CgInMemoryConfigStorage(), "pins");
         DesktopCommands.open(desktop, single);
+        // Built behind its starting window, a frame or two later
+        for (int i = 0; i < 4; i++) frame();
         WindowFrame window = desktop.registry().windows().get(0);
         WindowFrame other = desktop.addWindow(new WindowFrame("Other"));
         for (int i = 0; i < 3; i++) frame();

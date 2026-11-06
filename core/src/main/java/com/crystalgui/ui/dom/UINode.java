@@ -1,7 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import java.util.function.Consumer;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
@@ -793,18 +793,18 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * extract(() -> List.copyOf(player.getInventory().items), slots::show);
      * }</pre>
      *
-     * @see #extract(HostThread, Supplier, Consumer)
+     * @see #extract(CgHostThread, Supplier, Consumer)
      */
     public final <T> Connection extract(Supplier<T> read, Consumer<T> use) {
-        return extract(HostThread.CLIENT, read, use);
+        return extract(CgHostThread.CLIENT, read, use);
     }
 
     /**
      * {@link #extract(Supplier, Consumer)} on a thread of your choosing.
      *
      * <pre>{@code
-     * extract(HostThread.SERVER, () -> level.getDayTime(), clock::setTime);    // the integrated server's world
-     * extract(HostThread.RENDER, () -> camera.position(), compass::point);     // where frames are drawn
+     * extract(CgHostThread.SERVER, () -> level.getDayTime(), clock::setTime);    // the integrated server's world
+     * extract(CgHostThread.RENDER, () -> camera.position(), compass::point);     // where frames are drawn
      * }</pre>
      *
      * <ul>
@@ -814,11 +814,11 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      *       {@code equals} to the last.</li>
      *   <li>Instant when the thread is the one the frame is drawn on: read as the frame starts, used in that frame.
      *       Otherwise one read is in flight at a time and its answer lands at the start of a later frame.</li>
-     *   <li>A read that throws is skipped for that frame, and the error logged once. {@link HostThread#SERVER} reads
+     *   <li>A read that throws is skipped for that frame, and the error logged once. {@link CgHostThread#SERVER} reads
      *       nothing while no server runs here.</li>
      * </ul>
      */
-    public final <T> Connection extract(HostThread thread, Supplier<T> read, Consumer<T> use) {
+    public final <T> Connection extract(CgHostThread thread, Supplier<T> read, Consumer<T> use) {
         Objects.requireNonNull(thread, "thread");
         Objects.requireNonNull(read, "read");
         Objects.requireNonNull(use, "use");
@@ -997,7 +997,8 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
     protected void bindKeys() {
     }
 
-    /** Every class that has had {@link #registerCommands} run for it. */
+    /** Whether {@link #bindKeys} has run: the keymap outlives a detach, so a re-attach must not bind it again. */
+    private boolean keysBound;
 
     void runCommandHooks() {
         // KEYED TO THE REGISTRY, never to a static set on this class. A static latch outlives
@@ -1006,7 +1007,10 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         // just a key that stopped working. `contribute` records the contributor ON the registry, so
         // clearing one clears the other.
         CommandRegistry.global().contribute(getClass(), this::registerCommands);
-        bindKeys();
+        if (!keysBound) {
+            keysBound = true;
+            bindKeys();
+        }
     }
 
     /** This node was linked under {@code parent}: take its document, its shadowness, its observer. */

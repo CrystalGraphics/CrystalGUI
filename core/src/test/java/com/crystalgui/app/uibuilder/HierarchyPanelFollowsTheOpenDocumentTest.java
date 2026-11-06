@@ -27,7 +27,7 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.canvas.UIBuilderView;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
 import com.crystalgui.core.data.Transform2D;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.fs.CgPath;
@@ -335,7 +335,7 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         workbench.open(DockInput.of(workbench.refFor(FILE)));
         for (int i = 0; i < 16; i++) frameAndPump();
         Workspace workspace = workbench.workspace();
-        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.setStorage(new CgInMemoryConfigStorage());
         workspace.backup().save(Resource.of(FILE), SOURCE.replace("bao", "unsaved").getBytes(StandardCharsets.UTF_8),
                 "whatever");
         workbench.editors().restoreUnsavedWork();
@@ -365,7 +365,7 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         for (int i = 0; i < 4; i++) frameAndPump();
 
         Workspace workspace = workbench.workspace();
-        workspace.setStorage(new InMemoryConfigStorage());
+        workspace.setStorage(new CgInMemoryConfigStorage());
         workspace.backup().save(Resource.of(FILE), SOURCE.replace("bao", "unsaved").getBytes(StandardCharsets.UTF_8), "a");
         workspace.backup().save(Resource.of(OTHER), "unsaved notes\n".getBytes(StandardCharsets.UTF_8), "b");
         assertTrue(session.fromJson(record));

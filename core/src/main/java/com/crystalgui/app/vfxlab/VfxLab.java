@@ -27,7 +27,7 @@ import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -411,7 +411,7 @@ public class VfxLab extends UIElement {
             viewportDraw.close();
             window.destroy();
             // The document's thread; what the lab holds is the render thread's
-            HostThread.RENDER.run(lab::delete);
+            CgHostThread.RENDER.run(lab::delete);
         }
     }
 

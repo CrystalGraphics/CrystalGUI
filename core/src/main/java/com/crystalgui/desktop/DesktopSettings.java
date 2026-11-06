@@ -6,7 +6,7 @@ import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.desktop.taskbar.TaskbarCombine;
 
 import javax.annotation.Nullable;
@@ -45,7 +45,7 @@ public final class DesktopSettings {
 
     private final Settings store;
     @Nullable
-    private ConfigStorage storage;
+    private CgConfigStorage storage;
     /** True while a load replaces the user layer, which is not a change to write back. */
     private boolean loading;
 
@@ -74,7 +74,7 @@ public final class DesktopSettings {
     }
 
     /** Loads the settings from {@code config} and saves every later change there. */
-    void useStorage(ConfigStorage config) {
+    void useStorage(CgConfigStorage config) {
         if (config == storage) return;
         storage = config;
         loading = true;
@@ -86,7 +86,7 @@ public final class DesktopSettings {
     }
 
     private void save() {
-        ConfigStorage target = storage;
+        CgConfigStorage target = storage;
         if (target == null || !target.isWritable()) return;
         try {
             target.write(FILE, SettingsCodec.toJson(store.layer(SettingsLayer.USER)));

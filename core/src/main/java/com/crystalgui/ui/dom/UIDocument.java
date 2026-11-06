@@ -1,7 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.async.HostThread;
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.core.command.CommandRegistry;
@@ -196,7 +196,7 @@ public final class UIDocument extends UIElement {
     private final Queue<Runnable> inbox = new ConcurrentLinkedQueue<>();
 
     /** Registers an extract; the public form is {@link UINode#extract}, which ties it to a node's time in the tree. */
-    <T> Connection addExtract(HostThread thread, Supplier<T> read, Consumer<T> use) {
+    <T> Connection addExtract(CgHostThread thread, Supplier<T> read, Consumer<T> use) {
         return extracts.add(Objects.requireNonNull(thread, "thread"), Objects.requireNonNull(read, "read"),
                 Objects.requireNonNull(use, "use"));
     }

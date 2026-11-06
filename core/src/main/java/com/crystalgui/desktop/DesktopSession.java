@@ -2,11 +2,11 @@ package com.crystalgui.desktop;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.taskbar.TaskbarPins;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 
 import javax.annotation.Nullable;
 
@@ -66,11 +66,12 @@ public final class DesktopSession {
     private static final String KEY_HEIGHT = "height";
     private static final String KEY_MAXIMIZED = "maximized";
     private static final String KEY_HIDDEN = "hidden";
+    private static final String KEY_APP = "app";
 
     private final Desktop desktop;
-    private final ConfigStorage storage;
+    private final CgConfigStorage storage;
 
-    public DesktopSession(Desktop desktop, ConfigStorage storage) {
+    public DesktopSession(Desktop desktop, CgConfigStorage storage) {
         this.desktop = desktop;
         this.storage = storage;
     }
@@ -118,7 +119,7 @@ public final class DesktopSession {
             if (isPersistable(frame)) mru.add(frame.key());
         }
         List<String> pins = new ArrayList<>(desktop.pins().ids());
-        return CgFormats.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, pins));
+        return CgFiles.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, pins));
     }
 
     /** The whole file. */
@@ -160,9 +161,14 @@ public final class DesktopSession {
 
     // ── Restoring ───────────────────────────────────────────────────────────────────────────────
 
-    /** One window's recorded geometry. */
+    /**
+     * One window's recorded geometry.
+     *
+     * @param app the application whose main window it was, empty for any other: what a starting window opens at
+     *            before the application has named its window's key
+     */
     public record Placement(String key, float left, float top, float width, float height,
-                            boolean maximized, boolean hidden) {
+                            boolean maximized, boolean hidden, String app) {
 
         static final CgCodec<Placement> CODEC = CgCodecs.record(
                 CgCodecs.fieldOr(KEY_KEY, CgCodecs.STRING, Placement::key, ""),
@@ -172,6 +178,7 @@ public final class DesktopSession {
                 CgCodecs.fieldOr(KEY_HEIGHT, CgCodecs.FLOAT, Placement::height, 0f),
                 CgCodecs.optionalField(KEY_MAXIMIZED, CgCodecs.BOOL, Placement::maximized, false),
                 CgCodecs.optionalField(KEY_HIDDEN, CgCodecs.BOOL, Placement::hidden, false),
+                CgCodecs.optionalField(KEY_APP, CgCodecs.STRING, Placement::app, ""),
                 Placement::new);
 
         /**
@@ -194,7 +201,7 @@ public final class DesktopSession {
          */
         /** The same geometry, shown rather than minimised: a closed window reopens on screen. */
         Placement shown() {
-            return new Placement(key, left, top, width, height, maximized, false);
+            return new Placement(key, left, top, width, height, maximized, false, app);
         }
 
         static Placement of(WindowFrame frame) {
@@ -206,7 +213,8 @@ public final class DesktopSession {
                     maximized ? frame.restoreTop() : frame.getWantedTop(),
                     maximized ? frame.restoreWidth() : frame.recordedWidth(),
                     maximized ? frame.restoreHeight() : frame.recordedHeight(),
-                    maximized, frame.state() == WindowState.HIDDEN);
+                    maximized, frame.state() == WindowState.HIDDEN,
+                    frame.isApplicationMain() && frame.application() != null ? frame.application().id() : "");
         }
 
         /**
@@ -257,7 +265,7 @@ public final class DesktopSession {
 
     /** The record's codecs made and the JSON reader loaded, by a read of an empty record: {@code CgUiStart}'s worker. */
     public static void ahead() {
-        CgFormats.JSON.fromText(Saved.CODEC, "{}");
+        CgFiles.JSON.fromText(Saved.CODEC, "{}");
     }
 
     /** The file, or null when there is none, it will not parse, or it is another version's. */
@@ -266,7 +274,7 @@ public final class DesktopSession {
         String raw = storage.read(fileNameFor(desktopId));
         if (raw == null || raw.isEmpty()) return null;
         try {
-            Saved saved = CgFormats.JSON.fromText(Saved.CODEC, raw);
+            Saved saved = CgFiles.JSON.fromText(Saved.CODEC, raw);
             return saved.version() == VERSION ? saved : null;
         } catch (RuntimeException malformed) {
             // A record that will not parse is a record that describes nothing. Discarded rather than

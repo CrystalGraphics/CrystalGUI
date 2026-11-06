@@ -1,5 +1,9 @@
 package com.crystalgui.core.cache;
 
+import com.crystalgraphics.storage.download.CgDownloads;
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
+import com.crystalgraphics.storage.cache.CgCacheFiles;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -52,9 +56,9 @@ public class DownloadLocationsTest {
 
     @Test
     public void anArtifactIsTheJarsPinAndItsUrlsBestFirst() {
-        DownloadLocations locations = DownloadLocations.of(JAR, null, null, false);
+        CgDownloadLocations locations = CgDownloadLocations.of(JAR, null, null, false);
 
-        DownloadLocations.Location where = locations.find("a/b.jar");
+        CgDownloadLocations.Location where = locations.find("a/b.jar");
         assertEquals("md5:0123abcd", where.digest());
         assertEquals(Arrays.asList("https://one.example/b.jar", "https://two.example/b.jar"), where.urls());
         assertNull("an id the jar does not list has no location", locations.find("a/c.jar"));
@@ -62,9 +66,9 @@ public class DownloadLocationsTest {
 
     @Test
     public void aTemplateIsFilledFromTheIdAndNeverPinned() {
-        DownloadLocations locations = DownloadLocations.of(JAR, null, null, false);
+        CgDownloadLocations locations = CgDownloadLocations.of(JAR, null, null, false);
 
-        DownloadLocations.Location maps = locations.find("maps/1.20.4");
+        CgDownloadLocations.Location maps = locations.find("maps/1.20.4");
         assertEquals(Collections.singletonList("https://maps.example/1.20.4/maps.zip"), maps.urls());
         assertNull(maps.digest());
         assertEquals(Collections.singletonList("https://central.example/org/example/lib/1.20.4/lib-1.20.4-v2.zip"),
@@ -75,10 +79,10 @@ public class DownloadLocationsTest {
     /** An engine jar is its band's coordinates, in each repository the engines come from, in order. */
     @Test
     public void anEngineJarIsItsCoordinatesInEachRepository() {
-        DownloadLocations locations = DownloadLocations.of(JAR, null, null, false);
+        CgDownloadLocations locations = CgDownloadLocations.of(JAR, null, null, false);
 
         assertEquals(Collections.singletonList("engine/8/engine-1.0.jar"), locations.idsUnder("engine/8/"));
-        DownloadLocations.Location engine = locations.find("engine/8/engine-1.0.jar");
+        CgDownloadLocations.Location engine = locations.find("engine/8/engine-1.0.jar");
         assertEquals("sha1:abcd", engine.digest());
         assertEquals(Arrays.asList("https://central.example/org/example/tools/engine/1.0/engine-1.0.jar",
                 "https://mirror.example/engine-1.0.jar"), engine.urls());
@@ -100,9 +104,9 @@ public class DownloadLocationsTest {
                   }
                 }
                 """);
-        DownloadLocations locations = DownloadLocations.of(JAR, null, master, true);
+        CgDownloadLocations locations = CgDownloadLocations.of(JAR, null, master, true);
 
-        DownloadLocations.Location where = locations.find("a/b.jar");
+        CgDownloadLocations.Location where = locations.find("a/b.jar");
         assertEquals("the jar's pin, whatever master says", "md5:0123abcd", where.digest());
         assertEquals(Arrays.asList("https://three.example/b.jar",
                 "https://one.example/b.jar", "https://two.example/b.jar"), where.urls());
@@ -119,11 +123,11 @@ public class DownloadLocationsTest {
         Path master = write("master.json", """
                 {"files": {"a/b.jar": {"urls": ["https://three.example/b.jar"]}}}
                 """);
-        DownloadLocations locations = DownloadLocations.of(JAR, """
+        CgDownloadLocations locations = CgDownloadLocations.of(JAR, """
                 {"files": {"a/b.jar": {"digest": "md5:ffffffff", "urls": ["https://pack.example/b.jar"]}}}
                 """, master, true);
 
-        DownloadLocations.Location where = locations.find("a/b.jar");
+        CgDownloadLocations.Location where = locations.find("a/b.jar");
         assertEquals("https://pack.example/b.jar", where.urls().get(0));
         assertEquals("md5:0123abcd", where.digest());
     }
@@ -136,7 +140,7 @@ public class DownloadLocationsTest {
     @Test
     public void aDeadLinkIsRepairedFromMastersCopy() throws IOException {
         Path artifact = write("moved.bin", "the artifact");
-        String pin = "md5:" + CacheFiles.digestOf(artifact);
+        String pin = "md5:" + CgCacheFiles.digestOf(artifact);
         Path served = folder.getRoot().toPath().resolve("served.json");
         write("served.json", """
                 {"self": ["%s"], "files": {"a/moved.bin": {"urls": ["%s"]}}}
@@ -145,14 +149,14 @@ public class DownloadLocationsTest {
         Path cached = write("cached.json", """
                 {"self": ["%s"]}
                 """.formatted(served.toUri()));
-        DownloadLocations locations = DownloadLocations.of("""
+        CgDownloadLocations locations = CgDownloadLocations.of("""
                 {"self": ["%s"], "files": {"a/moved.bin": {"digest": "%s", "urls": ["%s"]}}}
                 """.formatted(served.toUri(), pin, folder.getRoot().toPath().resolve("gone.bin").toUri()),
                 null, cached, true);
 
         Path target = folder.getRoot().toPath().resolve("installed.bin");
-        assertTrue(Downloads.located(locations, "a/moved.bin").into(target));
-        assertEquals(pin, "md5:" + CacheFiles.digestOf(target));
+        assertTrue(CgDownloads.located(locations, "a/moved.bin").into(target));
+        assertEquals(pin, "md5:" + CgCacheFiles.digestOf(target));
         assertTrue("the fetched copy is kept for the next launch",
                 read(cached).contains(artifact.toUri().toString()));
         assertFalse("at most once per session", locations.refresh());
@@ -172,14 +176,14 @@ public class DownloadLocationsTest {
                 {"self": ["%s"]}
                 """.formatted(served.toUri());
 
-        DownloadLocations unchanged = DownloadLocations.of(jar, null, write("fresh.json", before), true);
+        CgDownloadLocations unchanged = CgDownloadLocations.of(jar, null, write("fresh.json", before), true);
         unchanged.refreshIfStale();
         assertEquals("https://one.example/b.jar", unchanged.find("a/b.jar").urls().get(0));
 
         Path stale = write("stale.json", before);
         Files.setLastModifiedTime(stale, FileTime.fromMillis(
-                System.currentTimeMillis() - DownloadLocations.STALE_AFTER_MILLIS - 60_000));
-        DownloadLocations refreshed = DownloadLocations.of(jar, null, stale, true);
+                System.currentTimeMillis() - CgDownloadLocations.STALE_AFTER_MILLIS - 60_000));
+        CgDownloadLocations refreshed = CgDownloadLocations.of(jar, null, stale, true);
         refreshed.refreshIfStale();
         assertEquals("https://fresh.example/b.jar", refreshed.find("a/b.jar").urls().get(0));
     }
@@ -195,7 +199,7 @@ public class DownloadLocationsTest {
                 {"self": ["%s"], "files": {"a/b.jar": {"urls": ["https://kept.example/b.jar"]}}}
                 """.formatted(page.toUri()));
 
-        DownloadLocations locations = DownloadLocations.of(jar, null, cached, true);
+        CgDownloadLocations locations = CgDownloadLocations.of(jar, null, cached, true);
         assertFalse(locations.refresh());
         assertEquals("https://kept.example/b.jar", locations.find("a/b.jar").urls().get(0));
 
@@ -203,7 +207,7 @@ public class DownloadLocationsTest {
                 {"format": 2, "files": {"a/b.jar": {"urls": ["https://newer.example/b.jar"]}}}
                 """);
         assertEquals(Collections.singletonList("https://one.example/b.jar"),
-                DownloadLocations.of(jar, null, newer, true).find("a/b.jar").urls());
+                CgDownloadLocations.of(jar, null, newer, true).find("a/b.jar").urls());
     }
 
     private Path write(String name, String text) throws IOException {

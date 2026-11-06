@@ -794,7 +794,7 @@ public class SplitView extends UIElement implements MinimumSize {
     }
 
     /** {@code element}'s own {@code min-width} or {@code min-height} in pixels, or zero. */
-    private static float ownMinimum(UIElement element, boolean vertical) {
+    static float ownMinimum(UIElement element, boolean vertical) {
         Float own = resolveLimit(element, vertical ? LayoutProperties.MIN_HEIGHT : LayoutProperties.MIN_WIDTH, 0f);
         return own == null ? 0f : own;
     }

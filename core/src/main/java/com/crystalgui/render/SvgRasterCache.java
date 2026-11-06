@@ -44,12 +44,16 @@ import java.util.Map;
  * <h3>What is and is not cached</h3>
  *
  * <p>Fills of a document drawn at most {@value #MAX_DEVICE_PX} device pixels tall, under an
- * axis-aligned pose, at a whole-pixel origin. Larger draws are artwork rather than icons — a zoomed
- * canvas — and there a cell is bigger than a pixel, so the direct path is exact enough and a texture
- * would be the size of the screen. A fractional origin is an icon mid-animation and gets the direct
- * path too; snapping it here would make it judder. Strokes are cached as well, combined by MAX rather
- * than by sum since their segments overlap at every joint — so a cached icon is textured quads and
- * nothing else, whatever the file is made of.</p>
+ * axis-aligned, uniform pose. Larger draws are artwork rather than icons — a zoomed canvas — and there a
+ * cell is bigger than a pixel, so the direct path is exact enough and a texture would be the size of the
+ * screen. Strokes are cached as well, combined by MAX rather than by sum since their segments overlap at
+ * every joint — so a cached icon is textured quads and nothing else, whatever the file is made of.</p>
+ *
+ * <p><b>On the pixel grid a raster is drawn 1:1</b>, built at the draw's own scale. <b>Off it</b> — an icon
+ * mid-animation — the atlas's linear filter places it between pixels, from its exact raster where one exists,
+ * else from the next of {@value #LADDER_STEPS} sizes a doubling, drawn up to 4% smaller than it was built. So
+ * an icon moving or growing looks as it does at rest, shadow included, and builds a dozen rasters rather than
+ * one a frame. Before, it left for the direct path on every frame off the grid and flickered between the two.</p>
  *
  * <p>One atlas, {@value #ATLAS_SIZE} square, filled shelf by shelf. When it is full everything is
  * dropped and rasterised again on demand — simpler than an eviction policy, and a working set that
@@ -205,24 +209,45 @@ public final class SvgRasterCache {
     private boolean decide(SvgDocument document, float x, float y, float scale) {
         if (!ENABLED || !ctx.isPoseAxisAligned()) return false;
         Matrix4f m = ctx.targetPose();
-        // Uniform and unflipped: the raster is built at one scale and drawn 1:1.
+        // Uniform and unflipped: the raster is built at one scale.
         if (m.m00() <= 0f || m.m00() != m.m11()) return false;
-        float device = ctx.deviceScale();
-        if (Math.max(document.width(), document.height()) * scale * device > MAX_DEVICE_PX) return false;
-        // SUB-PIXEL CELLS LEAVE NO CHOICE, whatever the alignment. Below one device pixel per document
-        // unit a scanline cell is thinner than a pixel, and the direct path has to let one cell claim
-        // the whole pixel -- so a fill paints a pixel per row and the icon comes out a SLAB many times
-        // its size, in its own colour. That is what a window thumbnail is (BoxTree.mirror re-draws the
-        // subtree at a fifth of its size), and why every icon in a taskbar preview and a switcher tile
-        // was a filled block. Accumulation is exact at any scale, and half a device pixel of
-        // misalignment is nothing at four pixels across; the cost is a raster per scale while something
-        // zooms out, each of them a few pixels.
-        if (scale * device < 1f) return true;
-        // Otherwise the raster is drawn 1:1 and aligned to the pixel grid, so the origin has to be on
-        // it -- CgUiSvg snaps it there for a settled icon, and an icon mid-zoom is exactly the case
-        // that must not be cached.
+        // Whatever the alignment: off the pixel grid it is drawn filtered, as the class note says. Below one device
+        // pixel per document unit the direct path could not draw it at all -- a cell thinner than a pixel claims the
+        // whole pixel, and a thumbnail's icon came out a block.
+        return Math.max(document.width(), document.height()) * scale * ctx.deviceScale() <= MAX_DEVICE_PX;
+    }
+
+    /** Whether logical {@code (x, y)} lands on a whole device pixel. */
+    private boolean onPixel(float x, float y) {
+        Matrix4f m = ctx.targetPose();
         float px = m.m00() * x + m.m30(), py = m.m11() * y + m.m31();
         return Math.abs(px - Math.round(px)) < 1e-3f && Math.abs(py - Math.round(py)) < 1e-3f;
+    }
+
+    /** Raster sizes off the pixel grid, per doubling: a raster drawn at most this much smaller than it was built. */
+    private static final float LADDER_STEPS = 16f;
+
+    /** {@link #probe}, set to op {@code op}'s raster at {@code rasterScale} for a draw at {@code scale}. */
+    private Key rasterKey(SvgDocument document, int op, float rasterScale, float scale, boolean flat, boolean stroke,
+                          float halfWidth) {
+        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
+        float override = stroke && halfWidth > 0f ? halfWidth * atlasPerLogical : 0f;
+        return probe.set(document, op, Float.floatToIntBits(rasterScale), flat, Float.floatToIntBits(override));
+    }
+
+    /** The scale a raster of {@code document} drawn at {@code scale} is built at exactly: drawn 1:1. */
+    private float exactScale(SvgDocument document, float scale) {
+        float span = Math.max(1f, Math.max(document.width(), document.height()));
+        // FLOORED, so the atlas always holds an icon rather than a smudge. @see #MIN_RASTER_PX
+        return Math.max(scale * ctx.deviceScale(), MIN_RASTER_PX / span);
+    }
+
+    /**
+     * The rung of the ladder at or above {@code exact}: what a draw off the pixel grid with no exact raster is built at,
+     * drawn shrunk and filtered. An icon growing through a hundred scales then builds a dozen rasters, not one a frame.
+     */
+    private static float rung(float exact) {
+        return (float) Math.pow(2.0, Math.ceil(Math.log(exact) / Math.log(2.0) * LADDER_STEPS) / LADDER_STEPS);
     }
 
     /**
@@ -237,17 +262,18 @@ public final class SvgRasterCache {
      */
     public void draw(SvgDocument document, int op, float x, float y, float scale, int argb, boolean flat,
                      float halfWidth) {
-        float device = ctx.deviceScale();
-        // FLOORED, so the atlas always holds an icon rather than a smudge. @see #MIN_RASTER_PX
-        float span = Math.max(1f, Math.max(document.width(), document.height()));
-        float rasterScale = Math.max(scale * device, MIN_RASTER_PX / span);
-        // Atlas pixels per LOGICAL pixel, which is `device` exactly while nothing is floored -- and is
-        // what every conversion below has to read once the two can differ.
-        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
         boolean stroke = !document.ops().get(op).fill();
+        float rasterScale = exactScale(document, scale);
+        Entry entry = entries.get(rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth));
+        if (entry == null && !onPixel(x, y)) {
+            rasterScale = rung(rasterScale);
+            entry = entries.get(rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth));
+        }
+        // Atlas pixels per LOGICAL pixel, which is the device scale exactly while nothing is floored or laddered -- and
+        // is what every conversion below has to read once the two can differ.
+        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
+        Key key = rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth);
         float override = stroke && halfWidth > 0f ? halfWidth * atlasPerLogical : 0f;
-        Key key = probe.set(document, op, Float.floatToIntBits(rasterScale), flat, Float.floatToIntBits(override));
-        Entry entry = entries.get(key);
         if (entry == null) {
             entry = rasterise(document, op, rasterScale, flat, override);
             entries.put(key.copy(), entry);
@@ -297,13 +323,16 @@ public final class SvgRasterCache {
     public void drawShadow(SvgDocument document, int first, float x, float y, float scale) {
         SvgScene.DropShadow shadow = document.ops().get(first).shadow();
         if (shadow == null || (shadow.argb() >>> 24) == 0) return;
-        float device = ctx.deviceScale();
-        float span = Math.max(1f, Math.max(document.width(), document.height()));
-        float rasterScale = Math.max(scale * device, MIN_RASTER_PX / span);
-        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
+        float rasterScale = exactScale(document, scale);
         // A negative op names the group starting at that op, so it never meets a fill or stroke's key
         Key key = probe.set(document, -1 - first, Float.floatToIntBits(rasterScale), false, 0);
         Shadow entry = shadows.get(key);
+        if (entry == null && !onPixel(x, y)) {
+            rasterScale = rung(rasterScale);
+            key = probe.set(document, -1 - first, Float.floatToIntBits(rasterScale), false, 0);
+            entry = shadows.get(key);
+        }
+        float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
         if (entry == null) {
             if (shadows.size() >= MAX_SHADOWS) clearShadows();
             entry = rasteriseShadow(document, first, shadow, rasterScale);

@@ -12,6 +12,7 @@ import com.crystalgraphics.api.material.CgMaterialValues;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgRenderState;
+import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
@@ -214,8 +215,7 @@ public final class CgUiPaintContext {
                 }
             }
             if (built < materials.length) return false;
-            // THE DESKTOP'S TEXT READY BEFORE IT OPENS: its families loaded and their glyphs generated, so its first
-            // frame neither loads a font nor draws from the bitmap stand-ins
+            // THE DESKTOP'S FONTS LOADED BEFORE IT OPENS, so its first frame loads none
             if (!glyphsLanded()) return false;
             try {
                 context.beginFrame(Math.max(1, width), Math.max(1, height));
@@ -230,10 +230,12 @@ public final class CgUiPaintContext {
             return true;
         }
 
+        /**
+         * The families loaded. Their glyphs keep generating behind the first frames: every size the sheets use is
+         * thousands of bitmap glyphs, which held the loading screen five seconds.
+         */
         private boolean glyphsLanded() {
-            if (System.nanoTime() > glyphsDeadline) return true;
-            if (glyphs != null && !glyphs.isDone()) return false;
-            return !CgFontRegistry.get().isWarming();
+            return System.nanoTime() > glyphsDeadline || glyphs == null || glyphs.isDone();
         }
 
         /** How far along, 0 to 1: the materials built, then the empty frame. */
@@ -638,7 +640,7 @@ public final class CgUiPaintContext {
      * would also submit the distance-field tier once per size, and those jobs are not {@code equals}
      * — they would slip past the executor's dedup and generate the same entry six times over.</p>
      */
-    /** How long the warm waits for the sheets' glyphs at most. */
+    /** How long the warm waits for the sheets' families at most. */
     private static final long GLYPH_WAIT_NANOS = 5_000_000_000L;
 
     /** Null when it could not start: glyphs rasterise on demand. */
@@ -2549,11 +2551,22 @@ public final class CgUiPaintContext {
         }, limited, whole);
     }
 
-    /** Damages {@code region} of the surface being walked when drawn straight into it: a layer composited there. */
-    public void damageSurface(LayerRegion region) {
+    /**
+     * Composites {@code inner} into the surface being walked at {@code region}: damaged there now, and once {@code inner}
+     * is no longer composited into it, so a box that leaves takes its picture with it.
+     */
+    public void placeSurface(Surface inner, LayerRegion region) {
         Surface surface = walkingSurface();
         if (surface != null) {
-            surface.damage(region.x(), region.y(), region.x() + region.width(), region.y() + region.height());
+            inner.placeIn(surface, region.x(), region.y(), region.x() + region.width(), region.y() + region.height(), frameId);
+        }
+    }
+
+    /** Composites a layer into the surface being walked at {@code region}, as {@link #placeSurface} a surface. */
+    public void placeLayer(Surface.Placement placement, LayerRegion region) {
+        Surface surface = walkingSurface();
+        if (surface != null) {
+            placement.place(surface, region.x(), region.y(), region.x() + region.width(), region.y() + region.height(), frameId);
         }
     }
 
@@ -2881,8 +2894,10 @@ public final class CgUiPaintContext {
 
     /**
      * Draws a finished target into an arbitrary rect, through the active {@link PoseStack}: a captured layer drawn
-     * somewhere else and at another size — a window's snapshot in a taskbar preview. Tinted by {@link #getColor()},
-     * which for one texture is exactly group opacity, since a photograph has already resolved every overlap.
+     * somewhere else and at another size — a window's snapshot in a taskbar preview. Tinted by {@link #getColor()}.
+     *
+     * <p>Fade one with {@link #pushLayerOpacity}, never the tint's alpha: the texture is premultiplied, so an
+     * alpha-only tint keeps its full colour while covering less, and the picture brightens instead of fading.</p>
      *
      * <p>Same material and flipped V as {@link #blitLayer}, for the same reasons.</p>
      */
@@ -3010,7 +3025,9 @@ public final class CgUiPaintContext {
         float v1 = Math.max(0f, 1f - (float) region.height() / layer.getHeight());
         // Declared rather than bound by hand: _MainTex has a "white" default, so an undeclared texture composites
         // the white fallback, premultiplied -- a destination flooded white rather than a missing image.
-        layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
+        // THROUGH A TRANSFORM IT IS RESAMPLED, so filtered: sampled as it stands, a slow scale steps a texel at a time
+        if (turn != null) layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer, CgSampler.BILINEAR_CLAMP));
+        else layerBlitMaterial.applyProperties(b -> b.sampler("_MainTex", 0, layer));
         int effect = 0;
         if (NODES && (opacity < 1f || fades) && nodesSuspended == 0 && recording.effects().count() < CgSpatialTree.MAX_NODES) {
             effect = recording.effects().add(effectNode, opacity);

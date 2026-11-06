@@ -5,7 +5,7 @@ import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.gl.texture.CgTextureManager;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
-import com.crystalgraphics.serialization.format.CgFormats;
+import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.CgUiDrawable;
@@ -128,7 +128,7 @@ public final class CgUiSpriteRegistry {
     }
 
     private static ParsedPack parsePack(String json) {
-        ParsedPack pack = CgFormats.JSON.fromText(ParsedPack.CODEC, json);
+        ParsedPack pack = CgFiles.JSON.fromText(ParsedPack.CODEC, json);
         if (pack.texture == null && pack.elements.values().stream().allMatch(e -> e.texture == null)) {
             throw new IllegalArgumentException("pack has no top-level 'texture' and no element overrides one");
         }

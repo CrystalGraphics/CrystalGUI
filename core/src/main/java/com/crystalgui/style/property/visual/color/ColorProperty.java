@@ -9,7 +9,9 @@ public class ColorProperty extends StyleProperty<Integer> {
     public ColorProperty(String name, int initialValue) {
         super(name, Integer.class, initialValue, ColorValue::new);
         setAllowTransition(true);
-        setInterpolator(ArgbMath::lerp);
+        // PREMULTIPLIED, as CSS interpolates colours: fading to `transparent` (transparent BLACK) must only lose alpha. A straight
+        // lerp darkens the colour on the way, so a highlight fading out looked like it snapped off while one fading in did not.
+        setInterpolator(ArgbMath::lerpPremultiplied);
     }
 
     /**

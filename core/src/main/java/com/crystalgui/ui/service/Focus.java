@@ -54,6 +54,8 @@ public final class Focus {
     private UIElement focused;
     @Nullable
     private UIElement announced;
+    /** Whether the user's last interaction was a pointer press rather than a key: what decides a scripted focus's ring. */
+    private boolean pointerLast;
 
     /**
      * <b>The focus owner changed.</b> Carries the new one, or null. {@code FocusEvent} answers "did
@@ -231,8 +233,16 @@ public final class Focus {
     // ── Moving focus ─────────────────────────────────────────────────────────
 
     /**
-     * The DOM's {@code element.focus()} — programmatic, so it rings and scrolls its target into
-     * view. Focus that lands somewhere invisible is focus the user cannot see.
+     * The DOM's {@code element.focus()}: scrolls its target into view, since focus that lands somewhere invisible is
+     * focus the user cannot see.
+     *
+     * <pre>{@code
+     * document.focus().requestFocus(menu);   // after Tab or Shift+F10: rings
+     *                                        // after a click or right-click: focused, no ring
+     * }</pre>
+     *
+     * <p>It rings unless the user's last interaction was a pointer press, as Chromium decides {@code :focus-visible}
+     * for a scripted focus; a shortcut such as Ctrl+C does not count as a key. A text field rings either way.</p>
      */
     public void requestFocus(@Nullable UIElement node) {
         moveTo(node, FocusSource.PROGRAMMATIC);
@@ -280,11 +290,19 @@ public final class Focus {
         if (node != null && focused == node) blur(node);
     }
 
+    /** A key went down, unmodified or with Shift: a scripted focus rings again until the next pointer press. */
+    void keyPressed() {
+        pointerLast = false;
+    }
+
     private void focus(UIElement target, FocusSource source) {
         focused = target;
         // A focused text field rings however it was focused: a caret alone is a weak affordance and
         // the field is where typing goes. Everything else stays unringed after a click.
-        target.setFocused(true, source.ringsByDefault() || target.consumesTextInput());
+        // A SCRIPTED FOCUS RINGS ONLY AFTER A KEY, Chromium's :focus-visible rule: a menu a right-click opened
+        // takes focus from code, and a ring on it says the keyboard did something it did not.
+        boolean rings = source == FocusSource.PROGRAMMATIC ? !pointerLast : source.ringsByDefault();
+        target.setFocused(true, rings || target.consumesTextInput());
         // Anything that is NOT a click reveals its target: focus that lands off-screen is focus the
         // user cannot see. A click cannot need it -- you clicked what you could already see -- and
         // scrolling there would pull the content out from under the cursor.
@@ -329,6 +347,7 @@ public final class Focus {
      * destroyed by the menu opened over it.</p>
      */
     void pressed(@Nullable UIElement target, int button, boolean absorbedByModal) {
+        pointerLast = true;
         if (button != CgMouseCodes.LEFT_BUTTON) return;
         // A press that hit nothing normally blurs, as a browser does. But while a modal is open, "hit
         // nothing" can mean inertness ATE the press, and dropping the caret out of a dialog's field

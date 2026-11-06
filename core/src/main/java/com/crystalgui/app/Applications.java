@@ -2,6 +2,8 @@ package com.crystalgui.app;
 
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.frameprofiler.FrameProfiler;
+import com.crystalgui.app.machine.MachineExample;
+import com.crystalgui.app.vfxlab.VfxLab;
 import com.crystalgui.desktop.app.ApplicationKinds;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 
@@ -10,7 +12,7 @@ import com.crystalgui.desktop.app.ApplicationRegistry;
  * service.
  *
  * <p>Found on the classpath and run once per desktop, so shipping the jar is what makes Crystal Editor
- * appear in a launcher. No host names a product, which means a fourth host cannot forget to - and a
+ * appear in a launcher, and VfxLab beside it. No host names a product, which means a fourth host cannot forget to - and a
  * mod's own application arrives through the same door rather than needing a line in code it does not
  * own.</p>
  *
@@ -27,6 +29,8 @@ public final class Applications implements ApplicationKinds {
     @Override
     public void register(ApplicationRegistry applications) {
         applications.install(CrystalEditor.KIND);
+        applications.install(VfxLab.KIND);
+        applications.install(MachineExample.KIND);
         // AN INSTRUMENT, not a product, and installed all the same: the frames worth measuring are an
         // editor's and a game client's, and a profiler reachable only from a harness scene can see
         // neither. Every desktop that has this jar can open it.

@@ -18,7 +18,10 @@ import com.crystalgui.widget.control.Button;
 
 import javax.annotation.Nullable;
 
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 import java.util.function.Supplier;
 
@@ -39,9 +42,8 @@ import java.util.function.Supplier;
  * enough to separate "went past this" from "asked about this" — the same argument {@code Tooltip}'s delay
  * makes, for the same reason.</p>
  *
- * <p><b>The wait applies to the FIRST preview only.</b> Once one is up, moving to a neighbouring entry
- * switches immediately: you have already asked the question, and re-imposing the delay would make the
- * panel disappear and come back rather than travel.</p>
+ * <p><b>A switch waits too, half as long</b>, as Windows' does. Once a panel is up, it stays on its window
+ * while the pointer rests on a neighbour, then travels there; it never goes down in between.</p>
  *
  * <h3>Leaving is a question about two elements, not one</h3>
  *
@@ -55,13 +57,17 @@ public final class TaskbarPreviews {
     /** Windows' own wait before the first preview. */
     private static final long HOVER_DELAY_NANOS = 500L * 1_000_000L;
 
+    /** The wait before a panel that is already up moves to another entry: shorter than the first, as Windows'. */
+    private static final long SWITCH_DELAY_NANOS = 250L * 1_000_000L;
+
     /**
-     * How long the panel takes to get anywhere — rising from the bar, or sliding between entries.
-     *
-     * <p>One duration because it is one motion. The two were separate while the entrance was a transform
-     * and a fade and the slide was a position animation; once both became "the panel travels to where it
-     * belongs", keeping two names for the same number was only an invitation to make them differ for no
-     * reason. GNOME's {@code SHOW_WINDOW_ANIMATION_TIME}.</p>
+     * How long a move between entries takes: the slide, the pictures' cross-fade and, in the sheet, the picture's
+     * {@code width} transition. Keep the three equal.
+     */
+    private static final long SWITCH_NANOS = 300L * 1_000_000L;
+
+    /**
+     * How long a panel that has just appeared takes no pointer, while it rises. A move is {@link #SWITCH_NANOS}.
      */
     private static final long TRAVEL_NANOS = 150L * 1_000_000L;
 
@@ -124,23 +130,13 @@ public final class TaskbarPreviews {
     private boolean pendingPlacement;
     private boolean pendingEntering;
 
-    /**
-     * Where the panel was, and how big its picture was, before a move — what a move animates FROM.
-     *
-     * <p>Captured at the moment the switch is noticed, because pointing the panel at another window
-     * changes both immediately: measured any later, they are already the destination and the move has
-     * nothing to travel from.</p>
-     */
+    /** Where the panel was when a move began, in the root: what the slide travels from. */
     private float morphLeft;
     private float morphTop;
-    private float morphThumbWidth;
-    private float morphThumbHeight;
 
-    /** The panel travelling, and its picture changing shape underneath it. @see #placeAndPlay */
+    /** The panel travelling. @see #placeAndPlay */
     @Nullable
     private WindowMotion motion;
-    @Nullable
-    private WindowMotion thumbMotion;
 
     /**
      * Built with the taskbar and parked in it immediately.
@@ -208,7 +204,7 @@ public final class TaskbarPreviews {
     void watch(Button entry, Supplier<List<WindowFrame>> windows) {
         entry.onMouseEnter.attachListener((element, event) -> {
             List<WindowFrame> shown = windows.get();
-            if (suppressed || shown.isEmpty()) return;
+            if (isSuppressed() || shown.isEmpty()) return;
             hovered = shown.size() == 1 ? shown.get(0) : null;
             hoveredGroup = shown.size() > 1 ? shown : null;
             hoveredEntry = entry;
@@ -239,21 +235,25 @@ public final class TaskbarPreviews {
      * merely busy: they occupy the same space above the same entry, so the panel sits over the menu it
      * is supposed to have been replaced by.</p>
      *
-     * <p>Dismissing once is not enough, which is why this is a flag rather than a call. The pointer does
+     * <p>Dismissing once is not enough, which is why this is held rather than a call. The pointer does
      * not leave the entry when the menu opens, so nothing takes the panel down again — the hover is
      * still live, the delay elapses under the open menu, and it comes straight back.</p>
+     *
+     * <p>HELD PER REASON: each jump list and a drag hold their own, and previews come back when the last lets go.
+     * One flag let the list a right-click light-dismissed lift the hold of the list that same press opened.</p>
      */
-    void setSuppressed(boolean nowSuppressed) {
-        if (suppressed == nowSuppressed) return;
-        suppressed = nowSuppressed;
-        if (suppressed) dismiss();
+    void setSuppressed(Object by, boolean held) {
+        boolean was = isSuppressed();
+        if (held) suppressedBy.add(by);
+        else suppressedBy.remove(by);
+        if (!was && isSuppressed()) dismiss();
     }
 
     boolean isSuppressed() {
-        return suppressed;
+        return !suppressedBy.isEmpty();
     }
 
-    private boolean suppressed;
+    private final Set<Object> suppressedBy = Collections.newSetFromMap(new IdentityHashMap<>());
 
     /** Takes the panel down at once — a click, a closed window, a rebuilt strip. */
     void dismiss() {
@@ -368,6 +368,8 @@ public final class TaskbarPreviews {
 
     /** @return whether there is still anything to watch */
     private boolean update() {
+        // NOTHING NEW WHILE HELD, whatever hover was already counting down
+        if (isSuppressed()) return false;
         if (pendingPlacement) {
             pendingPlacement = false;
             placeAndPlay(pendingEntering);
@@ -386,9 +388,9 @@ public final class TaskbarPreviews {
         UIDocument here = taskbar.document();
         if (hoveredGroup != null && here != null) {
             leftAt = 0L;
-            boolean asked = System.nanoTime() - hoveredSince >= HOVER_DELAY_NANOS
-                    || showing != null || rowEntry != null;
-            // ALREADY UP somewhere: no second wait, as between single previews
+            // The same wait when a panel is already up: Windows' does not switch until the pointer rests.
+            boolean asked = System.nanoTime() - hoveredSince
+                    >= (showing != null || rowEntry != null ? SWITCH_DELAY_NANOS : HOVER_DELAY_NANOS);
             if (asked && rowEntry != hoveredEntry) showRow(hoveredEntry, hoveredGroup);
             return true;
         }
@@ -403,25 +405,22 @@ public final class TaskbarPreviews {
         UIDocument window = taskbar.document();
         if (hovered != null && window != null) {
             leftAt = 0L;
-            boolean elapsed = System.nanoTime() - hoveredSince >= HOVER_DELAY_NANOS;
+            boolean elapsed = System.nanoTime() - hoveredSince
+                    >= (showing != null || rowEntry != null ? SWITCH_DELAY_NANOS : HOVER_DELAY_NANOS);
             preview.syncThumbnail();
-            // FROM A ROW TO ONE WINDOW: the row goes and the preview comes up without a second wait
+            // FROM A ROW TO ONE WINDOW: the row stays until the wait is out, then gives way
             if (rowEntry != null) {
+                if (!elapsed) return true;
                 hideRow(false);
-                elapsed = true;
             }
             if (showing == null && elapsed) {
                 show(hovered);
-            } else if (showing != null && showing != hovered) {
-                // NO SECOND WAIT. The question has already been asked; this is the panel travelling.
-                //
-                // WHERE IT IS NOW, BEFORE THE CONTENT CHANGES. Pointing the panel at another window
-                // resizes its thumbnail, and the panel with it, so anything measured afterwards is the
-                // destination -- the move would have nothing to travel from and would only slide.
+            } else if (showing != null && showing != hovered && elapsed) {
+                // The panel waits on the old window until the pointer has rested, as Windows' does, then
+                // travels. Where it is now: the slide travels from here.
                 Box was = preview.box();
                 Box rootBox = window.box();
-                Box wasThumb = preview.thumbnailBox();
-                if (was == null || rootBox == null || wasThumb == null) return true;
+                if (was == null || rootBox == null) return true;
                 // THROUGH THE ROOT'S INVERSE, never by subtracting its origin. A promoted panel is
                 // hosted by the top layer rather than by the taskbar, so its `Box.x()` is an offset
                 // within THAT -- and a subtraction of two world origins cancels the root's translation
@@ -429,12 +428,8 @@ public final class TaskbarPreviews {
                 Vector2f origin = Box.originIn(was, rootBox);
                 morphLeft = origin.x;
                 morphTop = origin.y;
-                morphThumbWidth = wasThumb.width();
-                morphThumbHeight = wasThumb.height();
-                // HELD AT THE OLD SIZE until the morph takes over, or setFrame writes the destination
-                // size on the spot and the picture snaps a frame before the panel starts moving.
-                preview.setThumbnailSizingSuppressed(true);
-                preview.setFrame(hovered);
+                // The pictures cross-fade over the slide, as Windows' do.
+                preview.setFrame(hovered, Desktop.animationsEnabled() ? SWITCH_NANOS : 0L);
                 showing = hovered;
                 placeAndPlay(false);
             }
@@ -561,10 +556,6 @@ public final class TaskbarPreviews {
     private void show(WindowFrame frame) {
         previewFade.cancel();
         showing = frame;
-        // A FRESH SHOW HAS NO MORPH IN FLIGHT, so nothing may be holding the picture's size. Belt and
-        // braces beside cancelMotion's hand-back: an entrance that inherited a suppressed thumbnail
-        // placed a panel around a picture of the previous window's shape.
-        preview.setThumbnailSizingSuppressed(false);
         preview.setFrame(frame);
         setPanelShown(true);
         taskbar.document().promote(preview);
@@ -612,27 +603,15 @@ public final class TaskbarPreviews {
             return;
         }
 
-        // WHERE THE PANEL ENDS UP, which on a move is not where it is now: the picture is still held at
-        // the old window's size, and the panel is only ever the picture plus its padding. Asking the
-        // thumbnail where it is GOING and adding that same padding gives the destination without having
-        // to jump there first -- and the placement must be computed against it, or a panel that grows
-        // during the move ends up centred on the width it started at.
-        float[] fit = entering ? null : preview.fittedThumbnailSize();
-        if (!entering && fit == null) {
-            placeWhenMeasured(false);
+        // Centred on where the panel ends up: on a move the picture's width is still transitioning to the new
+        // window's, and the panel is the picture plus its padding.
+        float widening = preview.pendingWidthChange();
+        if (Float.isNaN(widening)) {
+            placeWhenMeasured(entering);
             return;
         }
-        float endWidth = self.width();
+        float endWidth = self.width() + widening;
         float endHeight = self.height();
-        if (fit != null) {
-            Box thumb = preview.thumbnailBox();
-            if (thumb == null) {
-                placeWhenMeasured(entering);
-                return;
-            }
-            endWidth += fit[0] - thumb.width();
-            endHeight += fit[1] - thumb.height();
-        }
 
         Box root = window.box();
         AnchoredPlacement.Rect anchor = onTheBar(entry, window);
@@ -671,49 +650,12 @@ public final class TaskbarPreviews {
         // expensive frame in the system. The move between entries stays a position animation.
         preview.removeClass(PLACING_CLASS);
 
-        // THE PICTURE IS WHAT CHANGES SIZE, and the panel is never told to. Two windows are rarely the
-        // same shape, so a move that only slid would change size once, abruptly, at the start of an
-        // otherwise smooth journey -- and animating the PANEL's size instead is the version that was
-        // tried and is worse in two ways. A width written every frame is a width PINNED at INLINE
-        // origin: the panel was frozen at the first size it ever had, every later thumbnail changed
-        // underneath it, and every stylesheet rule aimed at the problem landed beneath the inline write.
-        // And even before it settled it was wrong, because the picture inside snapped to the new size on
-        // the first frame while the box around it was still travelling -- so for the length of a move a
-        // wide window's thumbnail hung out past the panel holding it.
-        //
-        // Animating the thumbnail fixes both at once and needs no third mechanism: the panel is sized by
-        // its content, so it follows the picture frame by frame, and the header follows it too through
-        // matchHeaderToThumbnail. Nothing writes a size onto the panel, so nothing can pin one.
+        // A move slides; the sheet transitions the picture's width beside it, drawn at its final scale.
         float fromLeft = entering ? target.x : morphLeft;
         float fromTop = entering ? target.y : morphTop;
         play(new WindowGeometryAnimation(preview, this::panelIsLive,
                 fromLeft, fromTop, 0f, 0f, target.x, target.y, 0f, 0f,
-                true, false, TRAVEL_NANOS, CgEasings.OUT_QUAD, this::motionFinished));
-
-        if (fit != null) morphThumbnail(window, fit[0], fit[1]);
-    }
-
-    /**
-     * Runs the picture from the shape of the window the panel was showing to the shape of the new one.
-     *
-     * <p>{@code syncSize} is held off for the duration, because it and this write the same slot: it would
-     * put the destination straight back over each intermediate frame and the morph would be invisible.
-     * Handed back at the end with the final size applied, so the two agree about what is on screen.</p>
-     */
-    private void morphThumbnail(UIDocument window, float toWidth, float toHeight) {
-        UIElement picture = preview.thumbnailElement();
-        preview.setThumbnailSizingSuppressed(true);
-        preview.applyThumbnailSize(morphThumbWidth, morphThumbHeight);
-        WindowMotion started = new WindowGeometryAnimation(picture, this::panelIsLive,
-                0f, 0f, morphThumbWidth, morphThumbHeight,
-                0f, 0f, toWidth, toHeight,
-                false, true, TRAVEL_NANOS, CgEasings.OUT_QUAD, () -> {
-                    thumbMotion = null;
-                    preview.setThumbnailSizingSuppressed(false);
-                    preview.applyThumbnailSize(toWidth, toHeight);
-                });
-        thumbMotion = started;
-        window.animation().every(picture, started);
+                true, false, entering ? TRAVEL_NANOS : SWITCH_NANOS, CgEasings.OUT_QUAD, this::motionFinished));
     }
 
     private void play(WindowMotion started) {
@@ -733,24 +675,6 @@ public final class TaskbarPreviews {
     }
 
     private void cancelMotion() {
-        if (thumbMotion != null) {
-            thumbMotion.cancel();
-            thumbMotion = null;
-            // THE BOX IS MID-MORPH AND THE RECORD SAYS OTHERWISE. The animation writes the picture's
-            // INLINE size without going through the thumbnail, so after a cancel the box holds an
-            // intermediate size while the thumbnail's own "last applied" still says the morph's start.
-            // Forgetting it makes the next sync write unconditionally.
-            preview.forgetThumbnailSize();
-        }
-        // NEVER LEFT SUPPRESSED -- and UNCONDITIONALLY, which is the half that was missing. Sizing is
-        // switched off the moment a move begins (update, before setFrame) and only ever switched back on
-        // by a morph COMPLETING, or here when one is cancelled. A move abandoned before its morph was
-        // created -- the pointer left, a click dismissed the panel, the destination was still being
-        // measured -- had no thumbMotion to cancel and so left sizing off for good: every later preview
-        // kept whatever box it had, and a wide window was drawn letterboxed in a tall one's. Reported as
-        // "you messed up the sizes of the previews", and it was the first pictureless window in the
-        // strip that made the abandoned move routine.
-        preview.setThumbnailSizingSuppressed(false);
         if (motion == null) return;
         motion.cancel();
         motion = null;

@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgui.core.storage.CrystalGuiDownloads;
+import com.crystalgraphics.storage.download.CgDownloads;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.function.Supplier;
@@ -7,9 +9,9 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
-import com.crystalgui.core.cache.DownloadLocations;
+import com.crystalgraphics.storage.download.CgDownloadLocations;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.storage.ConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
@@ -48,15 +50,17 @@ import com.crystalgui.ui.dom.UIDocument;
  * <h3>The workspace follows the wire, and is rebound rather than rebuilt</h3>
  *
  * <p>A reconnect is a different connection carrying the same workspace, so {@link #frame} re-asks
- * {@link HostServices#connection()} and rebinds the workspace when it has moved - keeping the object
+ * the game's connection and rebinds the workspace when it has moved - keeping the object
  * every window already holds. Rebuilding it instead would fix the routing and leave every retained
  * window pointing at the old client, with all its callbacks on the wrong object.</p>
  */
 public final class DesktopHost implements Disposable {
 
-    private final HostServices services;
+    private final HostSnapshot services;
+    /** True when this host copies the snapshot itself; a session's is refreshed at its host entries. */
+    private final boolean ownsSnapshot;
     private final UIDocument document;
-    private final ConfigStorage config;
+    private final CgConfigStorage config;
 
     /** Where derived output goes. Handed to an application at launch; never written to by this class. */
     private final Path cacheRoot;
@@ -76,7 +80,8 @@ public final class DesktopHost implements Disposable {
     /** The theme a desktop opens in when nothing has chosen one. */
     public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
 
-    private DesktopHost(HostServices services) {
+    private DesktopHost(HostSnapshot services, boolean ownsSnapshot) {
+        this.ownsSnapshot = ownsSnapshot;
         this.services = services;
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
         FontFamilyCache.useLocale(services.locale());
@@ -84,7 +89,7 @@ public final class DesktopHost implements Disposable {
         // THE SCALE, ONCE. It lives on the box tree's root transform, which is the matrix layout
         // composes, painting reads and hit-testing inverts -- so there is no second place it can be
         // applied and no window in which the three can disagree.
-        this.document.boxes().setUiScale(services.uiScale());
+        this.document.boxes().setUiScale(HostServices.DEFAULT_UI_SCALE);
         // NOT INSTALLED FOR YOU. Without the sheets the surface matches no selector at all, and without a
         // theme every token falls back to the sheet's literal: until an editor opened and installed one,
         // the bar drew in those fallbacks.
@@ -99,8 +104,8 @@ public final class DesktopHost implements Disposable {
         Desktop desktop = Desktop.of(document).useStorage(services.installationDirectory());
         this.config = desktop.config();
         this.cacheRoot = desktop.cacheRoot();
-        // Downloads keep master's copy of download/locations.json under it between launches.
-        DownloadLocations.useCacheRoot(cacheRoot);
+        // CgDownloads keep master's copy of download/locations.json under it between launches.
+        CrystalGuiDownloads.LOCATIONS.useCacheRoot(cacheRoot);
         // AND THE ARRANGEMENT, which the compositor owns reading, applying and writing again.
         desktop.useLocalWorld(services::localWorldDirectory);
         // What a pin, Start and an entry's menu launch against
@@ -109,8 +114,13 @@ public final class DesktopHost implements Disposable {
         this.mount = new DesktopWindowMount(document);
     }
 
+    /** A host over a snapshot its session refreshes. */
+    static DesktopHost create(HostSnapshot snapshot) {
+        return new DesktopHost(snapshot, false);
+    }
+
     public static DesktopHost create(HostServices services) {
-        return new DesktopHost(services);
+        return new DesktopHost(new HostSnapshot(services), true);
     }
 
     /** The surface everything is drawn on. */
@@ -124,7 +134,7 @@ public final class DesktopHost implements Disposable {
     }
 
     /** Where private records go — the arrangement, an application's preferences, its session. */
-    public ConfigStorage config() {
+    public CgConfigStorage config() {
         return config;
     }
 
@@ -168,6 +178,7 @@ public final class DesktopHost implements Disposable {
      * and on some of them it is not even the same call every frame.</p>
      */
     public void frame(float deltaSeconds) {
+        if (ownsSnapshot) services.refresh();
         // Re-asked like the connection: a change of the game's language reaches this frame's text.
         FontFamilyCache.useLocale(services.locale());
         CgProtocolConnection<Object> live = services.connection();
@@ -205,6 +216,20 @@ public final class DesktopHost implements Disposable {
         // it restores them onto is the attached one.
         desktop().exitHudMode();
         desktop().resume();
+        // Again on every resize, which re-opens a game's screen: the desktop comes in only from off screen.
+        if (!onScreen) desktop().arrive();
+        onScreen = true;
+    }
+
+    /** Whether the surface is up: from its building, as it is built when first shown. */
+    private boolean onScreen = true;
+
+    /**
+     * The surface is about to go: the desktop plays itself off screen, then {@code done}, which closes it.
+     * @see Desktop#leave
+     */
+    public void leave(Runnable done) {
+        desktop().leave(done);
     }
 
     /**
@@ -218,6 +243,7 @@ public final class DesktopHost implements Disposable {
      * window by window.</p>
      */
     public void hidden() {
+        onScreen = false;
         if (desktop().hasPinnedWindows()) {
             desktop().enterHudMode();
             return;

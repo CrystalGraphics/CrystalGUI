@@ -1,187 +1,66 @@
 package com.crystalgui.mc.modern.platform;
 
-import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
-
-
-import com.crystalgraphics.net.CgNetwork;
-import com.crystalgui.core.CrystalGuiCore;
-
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.mc.modern.client.CgUiHud;
 import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.client.CgUiScreen;
-import com.crystalgui.mc.modern.example.MachineExampleClientModern;
-import com.crystalgui.mc.modern.example.MachineExampleModern;
-import com.crystalgui.mc.modern.net.WorkspaceHostModern;
 import com.crystalgui.mc.modern.probe.CgUiAutoTest;
 import com.crystalgui.mc.modern.probe.ClientProbe;
 import com.crystalgui.mc.modern.probe.ConnectionProbeModern;
-import com.crystalgui.mc.modern.probe.ServerSmokeModern;
-import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.probe.ConnectionProbe;
-import com.crystalgui.text.syntax.LanguageRegistry;
+import com.crystalgui.probe.ServerSmoke;
 
-import com.crystalgui.mc.modern.client.ClientGame;
-import net.minecraft.client.Minecraft;
-import net.minecraft.server.MinecraftServer;
+import java.util.Arrays;
+import java.util.Collections;
 
 /**
- * <b>The one class a 1.20.x loader talks to.</b> One method per lifecycle moment; a loader subscribes
- * its events and forwards, and supplies nothing but its own transport.
- *
- * <p>The point is that a moment happens in ONE place. Wired per loader, "what a server tick does" is
- * written three times and drifts -- and the drift shows up as a feature that works on one loader and
- * not another, which is the least debuggable shape this module can produce. Same reason
- * {@code ScreenOverlay} keeps the input arbitration in {@code core/}.</p>
+ * <b>The one class a 1.20.x loader talks to</b>: the platform's own moments, which a loader forwards. The game's
+ * ticks and its server's start and stop are the engine's ({@code CgEngineLifecycle}), and CrystalGUI's start
+ * from them is its own listener's.
  */
 public final class LifecycleCrystalGUI {
 
     private LifecycleCrystalGUI() {}
 
-    /** One server tick, at 20 Hz. */
-    private static final float SERVER_TICK_SECONDS = 1f / 20f;
-
     /**
-     * Mod init. The connections are CrystalGraphics' ({@link CgNetwork}); CrystalGUI contributes its protocols to
-     * them, which bind onto every connection opened after they register.
+     * Mod init, both sides: where this platform's client-only classes are, for the server smoke. The protocols, the
+     * workspace and the example start from the engine's own lifecycle.
      */
     public static void bootstrap() {
-        // Without it a client has no ClientWindows, and every requestOpen is refused locally.
-        WindowProtocol.register();
-        CgNetwork.onPeerClosed(WorkspaceHostModern::forget);
-        MachineExampleModern.registerCommon();
+        // .probe too: every class in there is client-only.
+        CgPlatform.provide(ServerSmoke.FOOTPRINT, new ServerSmoke.Footprint(LifecycleCrystalGUI.class,
+                Arrays.asList("com.crystalgui.mc.modern.client", "com.crystalgui.mc.modern.probe"),
+                Collections.emptyList()));
     }
 
     /**
      * Client init, once. Everything client-side that has to be registered is registered from here, so a
-     * loader never enumerates it -- including the example's key, which is why
-     * {@link CgUiKeybinds#all()} must be read AFTER this runs.
+     * loader never enumerates it -- which is why {@link CgUiKeybinds#all()} must be read AFTER this runs.
      */
     public static void bootstrapClient() {
-        // FIRST: the keybinds and the example both reach the session, and a key pressed before it
-        // exists would throw rather than open anything.
+        // FIRST: the keybinds reach the session, and a key pressed before it exists would throw rather
+        // than open anything.
         CgUiScreen.install();
         CgUiHud.attachStages();
-        MachineExampleClientModern.registerClient();
+        CgEngineLifecycle.onClientTick(CgUiAutoTest::tick);
+        CgEngineLifecycle.onClientTick(ClientProbe::tick);
+        CgEngineLifecycle.onClientTick(CgUiKeybinds::tick);
 
-        // THE CONNECTION PROBE RIDES THE TICK HOOKS, and is registered from HERE rather than called
-        // from serverTick() -- that method runs on a dedicated server, and this probe is a client
-        // class. Registering in client init is what keeps it off a server entirely; serverSmoke
-        // enumerates `.probe` as well as `.client`, which is what would catch it if that ever stopped
-        // being true. @see ServerSmoke.Host#clientPackages()
+        // THE CONNECTION PROBE is registered from HERE rather than from a common path: it is a client
+        // class, and registering in client init keeps it off a server entirely; serverSmoke enumerates
+        // `.probe` as well as `.client`, which would catch it if that ever stopped being true.
+        // @see ServerSmoke.Host#clientPackages()
         if (ConnectionProbe.enabled()) {
-            onServerTick(ConnectionProbeModern::serverTick);
-            onClientTick(ConnectionProbeModern::clientTick);
+            CgEngineLifecycle.onServerTick(ConnectionProbeModern::serverTick);
+            CgEngineLifecycle.onClientTick(ConnectionProbeModern::clientTick);
             // THE WATCHDOG, which is what makes this a build task rather than a window somebody has to
             // close by hand. @see ConnectionProbe#arm()
             ConnectionProbe.arm();
         }
     }
 
-    /**
-     * Says which tier of the language stack this deployment has, without naming it.
-     *
-     * <p>{@code LanguageRegistry} is {@code core}'s engineless tier, so this compiles and runs with the
-     * language mod absent — which is the whole point since J8 made it a separate jar. An empty
-     * contributor list IS the absent case; the language mod announces its own arrival.</p>
-     *
-     * <p>Worth a line either way: every tier opens a file perfectly and the configurations are
-     * indistinguishable on screen, so nothing else separates "this pack ships no grammars" from "a
-     * contributor failed to load".</p>
-     *
-     * <p><b>ON A TICK, NOT AT BOOTSTRAP, AND THAT IS NOT TIDINESS.</b> Every read of
-     * {@code LanguageRegistry} bootstraps it, and bootstrapping constructs the engines — each of which
-     * captures whether a {@code ScriptService} is registered <em>at that moment</em> and keeps the
-     * answer for the life of the process. The language mod is ordered AFTER this one, so a read from
-     * this method's original home in {@code bootstrapClient} ran first, found no service, and turned
-     * the live tier off permanently: every script reported {@code net.minecraft.client.Minecraft}
-     * unresolvable while the byte source behind it was perfectly healthy. The first tick with no loading
-     * overlay is after every mod's setup on all three loaders -- a tick alone is not: Forge 1.21.11 ticks
-     * behind the overlay before the language mod's setup work has run. @see #loadingFinished</p>
-     */
-    private static void announceLanguageTier() {
-        List<String> contributors = LanguageRegistry.contributors();
-        if (contributors.isEmpty()) {
-            CrystalGuiCore.LOGGER.info("[cgui-1201] no language stack installed -- source files colour "
-                    + "from core's built-in lexers and are not analysed. Install crystalgui_language for "
-                    + "grammars, analysis and scripting.");
-        } else {
-            CrystalGuiCore.LOGGER.info("[cgui-1201] language contributors: {}", contributors);
-        }
-    }
-
-    // ── Server ──────────────────────────────────────────────────────────────────────────────────
-
-    public static void serverStarting(MinecraftServer server) {
-        WorkspaceHostModern.setServer(server);
-        WorkspaceHostModern.register();
-    }
-
-    /**
-     * The server is genuinely up. Late enough that a mod which failed to load has already taken the
-     * process down, which is why the smoke check runs here rather than at {@link #serverStarting}.
-     */
-    public static void serverStarted(MinecraftServer server) {
-        if (ServerSmokeModern.enabled()) ServerSmokeModern.run(server);
-    }
-
-    public static void serverStopping() {
-        WorkspaceHostModern.setServer(null);
-    }
-
-    public static void serverTick() {
-        WorkspaceHostModern.tick(SERVER_TICK_SECONDS);
-        run(serverTickHooks);
-    }
-
-    /**
-     * Content rides the platform's tick rather than subscribing a loader event of its own -- otherwise
-     * a mod's tick is wired three times and only one copy ever gets debugged.
-     */
-    public static void onServerTick(Runnable hook) {
-        serverTickHooks.add(hook);
-    }
-
-    public static void onClientTick(Runnable hook) {
-        clientTickHooks.add(hook);
-    }
-
-    /** @see #announceLanguageTier */
-    private static boolean languageTierAnnounced;
-
-    private static final List<Runnable> serverTickHooks = new CopyOnWriteArrayList<>();
-    private static final List<Runnable> clientTickHooks = new CopyOnWriteArrayList<>();
-
-    /** One hook's failure must not stop the others, or a demo takes the platform down with it. */
-    private static void run(List<Runnable> hooks) {
-        for (Runnable hook : hooks) {
-            try {
-                hook.run();
-            } catch (RuntimeException failed) {
-                CrystalGuiCore.LOGGER.error("[cgui-1201] tick hook failed", failed);
-            }
-        }
-    }
-
-    // ── Client ──────────────────────────────────────────────────────────────────────────────────
-
-    public static void clientTick() {
-        if (!languageTierAnnounced && loadingFinished()) {
-            languageTierAnnounced = true;
-            announceLanguageTier();
-        }
-        CgUiAutoTest.tick();
-        ClientProbe.tick();
-        CgUiKeybinds.tick();
-        run(clientTickHooks);
-    }
-
-    /** Whether the loading overlay is gone -- mod setup included. 1.13 has none and sets up before ticking. */
-    private static boolean loadingFinished() {
-        return !ClientGame.overlayUp(Minecraft.getInstance());
-    }
-
-    // ── Pinned windows. ScreenOverlay in core/ makes every decision; these only carry it. ────────
+    // -- Pinned windows. ScreenOverlay in core/ makes every decision; these only carry it. ------------
 
     /** @return whether the desktop consumed it and the foreign screen must not see it */
     public static boolean offerMouse(int button, boolean pressed, float wheel) {

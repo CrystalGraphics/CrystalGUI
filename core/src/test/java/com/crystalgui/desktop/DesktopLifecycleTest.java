@@ -1,7 +1,6 @@
 package com.crystalgui.desktop;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.core.async.HostThread;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.core.dispose.Disposable;
@@ -590,17 +589,9 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
     private DesktopHost hostOnTempStorage() throws Exception {
         Path root = Files.createTempDirectory("cgui-host");
         return DesktopHost.create(new HostServices() {
-            @Override public Path installationDirectory() { return root; }
-            @Override public Path localWorldDirectory() { return null; }
-            @Override public float uiScale() { return 1f; }
-            @Override public int surfaceWidth() { return 1280; }
-            @Override public int surfaceHeight() { return 720; }
             @Override public String desktopId() { return "test"; }
             @Override public CgProtocolConnection<Object> connection() { return null; }
-            @Override public Locale locale() { return Locale.getDefault(); }
             @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
-            @Override public HostThread.Binding clientThread() { return null; }
-            @Override public HostThread.Binding serverThread() { return null; }
         });
     }
 

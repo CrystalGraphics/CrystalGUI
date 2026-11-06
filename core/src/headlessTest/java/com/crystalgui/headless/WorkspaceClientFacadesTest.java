@@ -1,6 +1,6 @@
 package com.crystalgui.headless;
 
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Backup;
@@ -43,7 +43,7 @@ public class WorkspaceClientFacadesTest {
      */
     @Test
     public void anUnsavedDocumentSurvivesAQuit() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         new Backup(storage).save(MAIN, "half-typed".getBytes(StandardCharsets.UTF_8), "1:9");
 
         // The client goes away entirely and a new one is built over the same store.
@@ -59,7 +59,7 @@ public class WorkspaceClientFacadesTest {
     /** A save discards it, so the next open is not offered work that is already on disk. */
     @Test
     public void savingDiscardsTheBackup() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         Backup backup = new Backup(storage);
         backup.save(MAIN, "typed".getBytes(StandardCharsets.UTF_8), "1:9");
 
@@ -71,7 +71,7 @@ public class WorkspaceClientFacadesTest {
 
     @Test
     public void backingUpTwiceKeepsOneEntryPerDocument() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         Backup backup = new Backup(storage);
 
         backup.save(MAIN, "one".getBytes(StandardCharsets.UTF_8), "1:9");
@@ -84,7 +84,7 @@ public class WorkspaceClientFacadesTest {
 
     @Test
     public void severalDocumentsAreOfferedTogether() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         Backup backup = new Backup(storage);
         backup.save(MAIN, "a".getBytes(StandardCharsets.UTF_8), "");
         backup.save(file("README.md"), "b".getBytes(StandardCharsets.UTF_8), "");
@@ -95,7 +95,7 @@ public class WorkspaceClientFacadesTest {
     /** Arbitrary bytes, since a backup covers any document kind and not only text. */
     @Test
     public void arbitraryBytesSurviveABackup() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         byte[] content = new byte[256];
         for (int i = 0; i < 256; i++) content[i] = (byte) i;
         Backup backup = new Backup(storage);
@@ -108,7 +108,7 @@ public class WorkspaceClientFacadesTest {
     /** A record this build cannot read is discarded — restoring wrong bytes is worse than losing an edit. */
     @Test
     public void anUnreadableRecordIsDiscardedRatherThanGuessedAt() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         Backup backup = new Backup(storage);
         backup.save(MAIN, "typed".getBytes(StandardCharsets.UTF_8), "");
         String name = storage.list().get(0);
@@ -123,7 +123,7 @@ public class WorkspaceClientFacadesTest {
     /** History is filed under the resource, so a move has to carry it or the file loses its past. */
     @Test
     public void historyFollowsARename() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         AtomicLong clock = new AtomicLong(1000);
         LocalHistory history = new LocalHistory(storage, clock::get, 10, Long.MAX_VALUE);
         Resource renamed = Resource.of(CgPath.parse("proj:src/Renamed.java"));
@@ -142,7 +142,7 @@ public class WorkspaceClientFacadesTest {
      */
     @Test
     public void renamingOntoAFileMergesBothHistories() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         AtomicLong clock = new AtomicLong(1000);
         LocalHistory history = new LocalHistory(storage, clock::get, 10, Long.MAX_VALUE);
         Resource target = Resource.of(CgPath.parse("proj:src/Target.java"));
@@ -168,7 +168,7 @@ public class WorkspaceClientFacadesTest {
      */
     @Test
     public void keepMineIsRecoverableFromLocalHistory() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         AtomicLong clock = new AtomicLong(1000);
         LocalHistory history = new LocalHistory(storage, clock::get, 10, Long.MAX_VALUE);
 
@@ -190,7 +190,7 @@ public class WorkspaceClientFacadesTest {
      */
     @Test
     public void theMergeBaseIsTheLastSavedVersion() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         AtomicLong clock = new AtomicLong(1000);
         LocalHistory history = new LocalHistory(storage, clock::get, 10, Long.MAX_VALUE);
 
@@ -203,7 +203,7 @@ public class WorkspaceClientFacadesTest {
 
     @Test
     public void theHistoryIsBoundedByCount() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         AtomicLong clock = new AtomicLong(1000);
         LocalHistory history = new LocalHistory(storage, clock::get, 3, Long.MAX_VALUE);
 
@@ -219,7 +219,7 @@ public class WorkspaceClientFacadesTest {
 
     @Test
     public void theHistoryIsBoundedByAge() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         AtomicLong clock = new AtomicLong(1000);
         LocalHistory history = new LocalHistory(storage, clock::get, 10, 5000);
         history.record(MAIN, "old".getBytes(StandardCharsets.UTF_8));
@@ -235,7 +235,7 @@ public class WorkspaceClientFacadesTest {
     /** A 50 MB log's history is a way to fill a disk. */
     @Test
     public void aLargeFileGetsNoHistory() {
-        InMemoryConfigStorage storage = new InMemoryConfigStorage();
+        CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
         LocalHistory history = new LocalHistory(storage);
 
         history.record(MAIN, new byte[(int) LocalHistory.MAX_FILE_BYTES + 1]);

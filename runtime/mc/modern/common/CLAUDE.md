@@ -13,10 +13,9 @@ compiles against one loader and is used by three.
 | Package | What it contains |
 |---|---|
 | `com.crystalgui.mc.modern.platform` | `LifecycleCrystalGUI` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint, and the mouse/key offers. Plus `CrystalGUI`, which holds the mod id and name |
-| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud`, `CgUiHostGl`, `CgUiKeybinds`, and `ClientGame` — the client state Minecraft moved (26.2 put the screen, the overlay and the HUD's hidden flag on `mc.gui`), spelled once |
-| `com.crystalgui.mc.modern.net` | `Connections`, `Peer`, `WorkspaceHostModern` — where the served workspace is |
-| `com.crystalgui.mc.modern.probe` | Every adapter over `core`'s probes: `CgUiAutoTest`, `ClientProbe`, `ConnectionProbeModern`, `ServerSmokeModern`. **`serverSmoke` enumerates this package as client-only**, the smoke itself excepted — so a probe added here is checked without anyone listing it |
-| `com.crystalgui.mc.modern.example` | `MachineExampleModern` and its client half — a key and a tick over `app.machine.MachineExample`; the worked example, not engine code |
+| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`), `CgUiInput`, `CgUiHud` and `CgUiKeybinds`. The client state Minecraft moved (`CgMinecraftClient`), the GL hand-over around a paint (`CgHostPaint`) and host key numbers (`HostKeys`) are CrystalGraphics' modern `platform` package, which this module uses |
+| `com.crystalgui.mc.modern.net` | `Connections`, `Peer` |
+| `com.crystalgui.mc.modern.probe` | Every adapter over `core`'s probes: `CgUiAutoTest`, `ClientProbe`, `ConnectionProbeModern`. **`serverSmoke` enumerates this package as client-only** (`ServerSmoke.Footprint`), so a probe added here is checked without anyone listing it |
 | `com.crystalgui.mc.modern.lang` (`src/lang`) | `ScriptServiceModern` — the language jar's half: Minecraft's bytes and names for scripts |
 
 ## Key design points

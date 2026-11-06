@@ -1,17 +1,19 @@
 package com.crystalgui.core.storage;
 
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgLocalConfigStorage;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import java.util.Objects;
 import java.util.function.UnaryOperator;
 
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.serialization.CgCodec;
-import com.crystalgraphics.serialization.format.CgFormats;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 
 /**
- * One typed record kept as a JSON file in a {@link ConfigStorage} — what a user chose and would miss, rewritten whole on
+ * One typed record kept as a file in a {@link CgConfigStorage}, its format the name's extension — what a user chose and would miss, rewritten whole on
  * each change.
  *
  * <pre>{@code
@@ -32,8 +34,8 @@ import com.crystalgui.core.signal.Signal;
  *       before changing it, so one holder's change is never written over with another's stale copy; {@link #reload}
  *       picks up what another holder wrote before showing it.</li>
  *   <li><b>With no store</b> — a test, a host with nowhere private — the record lives for the session.</li>
- *   <li>Written pretty-printed, since this is a file somebody may open. Atomic when the store is
- *       {@link LocalConfigStorage}.</li>
+ *   <li>Written in the format its name says ({@code .json} pretty-printed, {@code .toml} with a person's comments
+ *       kept), since this is a file somebody may open. Atomic when the store is {@link CgLocalConfigStorage}.</li>
  * </ul>
  */
 public final class ConfigRecord<T> {
@@ -41,12 +43,12 @@ public final class ConfigRecord<T> {
     /** After the value changed, with the new value. */
     public final Signal.Value<T> onChanged = new Signal.Value<>();
 
-    private final ConfigStorage store;
+    private final CgConfigStorage store;
     private final String file;
     private final CgCodec<T> codec;
     private T value;
 
-    private ConfigRecord(ConfigStorage store, String file, CgCodec<T> codec, T empty) {
+    private ConfigRecord(CgConfigStorage store, String file, CgCodec<T> codec, T empty) {
         this.store = store;
         this.file = file;
         this.codec = codec;
@@ -58,11 +60,11 @@ public final class ConfigRecord<T> {
      *
      * @param store where it is kept, or null for the session alone
      */
-    public static <T> ConfigRecord<T> in(@Nullable ConfigStorage store, String file, CgCodec<T> codec, T empty) {
+    public static <T> ConfigRecord<T> in(@Nullable CgConfigStorage store, String file, CgCodec<T> codec, T empty) {
         Objects.requireNonNull(file, "file");
         Objects.requireNonNull(codec, "codec");
         Objects.requireNonNull(empty, "empty");
-        return new ConfigRecord<>(store == null ? new InMemoryConfigStorage() : store, file, codec, empty);
+        return new ConfigRecord<>(store == null ? new CgInMemoryConfigStorage() : store, file, codec, empty);
     }
 
     public T get() {
@@ -74,7 +76,7 @@ public final class ConfigRecord<T> {
         Objects.requireNonNull(next, "value");
         if (next.equals(value)) return;
         value = next;
-        store.write(file, CgFormats.JSON.toText(codec, next));
+        store.write(file, codec, next);
         onChanged.emit(next);
     }
 
@@ -93,10 +95,8 @@ public final class ConfigRecord<T> {
     }
 
     private T read(T empty) {
-        String json = store.read(file);
-        if (json == null || json.trim().isEmpty()) return empty;
         try {
-            T decoded = CgFormats.JSON.fromText(codec, json);
+            T decoded = store.read(file, codec);
             return decoded == null ? empty : decoded;
         } catch (RuntimeException unreadable) {
             CrystalGuiCore.LOGGER.warn("[cgui] {} could not be read; continuing with the defaults until it changes",

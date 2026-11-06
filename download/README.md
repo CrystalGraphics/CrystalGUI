@@ -34,7 +34,7 @@ so a second host or the mirror can serve it without being trusted:
 | Forge 1.20.6+, NeoForge | nothing: they run Mojang's names |
 
 Digests are the publisher's: Mojang's version JSON for `client.txt`, the `.sha1` beside a Maven file.
-`checkDownloadLocations` fails a node whose own version is unpinned; `verifyScriptingCoverage` (online)
+`checkDownloadPins` (part of `checkDownloadLocations`) fails a node whose own version is unpinned; `verifyScriptingCoverage` (online)
 every release its range claims. A new mirrored file then goes up with `stageDownloadMirror`.
 
 ## What is in it
@@ -50,15 +50,15 @@ every release its range claims. A new mirrored file then goes up with `stageDown
 An id holding `{minecraft}` or `{java}` covers every version, and is never pinned.
 
 `mirror` is this repository's `download-mirror` release. It holds only what a licence lets us
-redistribute — `mirrorLicences` in the root `build.gradle.kts` — and never MCP's, MCPConfig's or Mojang's
+redistribute — the file's `mirror.licences` — and never MCP's, MCPConfig's or Mojang's
 mappings.
 
 ## Checks
 
 ```
-./gradlew checkDownloadLocations    # well-formed, and the engines are the resolved bands; part of check
+./gradlew checkDownloadLocations    # well-formed and mirrored files licensed (CrystalGraphics' tool), plus checkDownloadPins: the engines are the resolved bands; part of check
 ./gradlew verifyDownloadLocations   # every address answers with the right bytes; online
 ./gradlew stageDownloadMirror       # the files for the download-mirror release, and the commands to upload them
 ```
 
-When an engine band is re-pinned, `checkDownloadLocations` fails and prints the `bands` block to paste.
+When an engine band is re-pinned, `checkDownloadPins` fails and prints the `bands` block to paste.

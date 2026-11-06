@@ -7,7 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgraphics.job.reply.CgReplyError;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
@@ -97,7 +97,7 @@ public class EditorServiceTest {
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
-        workspace = Workspace.of(clientSide).setStorage(new InMemoryConfigStorage());
+        workspace = Workspace.of(clientSide).setStorage(new CgInMemoryConfigStorage());
         kinds = new DocumentKinds();
         // A kind with a MODEL and no EDITOR, which is a real declaration and what lets this whole
         // suite be headless: everything asserted here is about the lane, not about a widget.

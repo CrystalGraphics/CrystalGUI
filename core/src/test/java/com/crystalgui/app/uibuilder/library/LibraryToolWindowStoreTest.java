@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.library;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
@@ -20,8 +21,7 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.UiBuilderContribution;
-import com.crystalgui.core.storage.InMemoryConfigStorage;
-import com.crystalgui.core.storage.StorageLayout;
+import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -79,7 +79,7 @@ public class LibraryToolWindowStoreTest extends UiDocumentTestBase {
         Desktop desktop = Desktop.of(document);
         desktop.useStorage(installation.getRoot().toPath());
         // AFTER construction, as WorkbenchApplication does it.
-        workbench.useConfig(new InMemoryConfigStorage());
+        workbench.useConfig(new CgInMemoryConfigStorage());
         workbench.useExtensionStores(desktop::extensionStore);
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);
@@ -94,8 +94,8 @@ public class LibraryToolWindowStoreTest extends UiDocumentTestBase {
         mine.createGroup("Mine");
         mine.addToGroup("Mine", Button.NAME);
 
-        Path file = StorageLayout.configIn(installation.getRoot().toPath())
-                .resolve(StorageLayout.EXTENSIONS).resolve("crystalgui.uibuilder").resolve(UserLibrary.FILE);
+        Path file = CrystalGuiStorage.configIn(installation.getRoot().toPath())
+                .resolve(CrystalGuiStorage.EXTENSIONS).resolve("crystalgui.uibuilder").resolve(UserLibrary.FILE);
         assertTrue("the group was not written to " + file, Files.isRegularFile(file));
         assertTrue(Files.readString(file).contains("crystalgui:button"));
     }
