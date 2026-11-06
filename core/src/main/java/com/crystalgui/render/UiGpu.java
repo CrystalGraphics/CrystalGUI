@@ -140,6 +140,30 @@ public final class UiGpu {
     }
 
     /**
+     * Executes a sealed frame into the UI's own target and composites nothing: for a rehearsal behind the loading
+     * screen, which builds the pipelines, targets and rasters a real frame will need. The frame is not kept, so
+     * {@link #presentAgain} and {@link #redraw} never show it. Render thread.
+     *
+     * <pre>{@code
+     * UiFrame frame = desktop.record(DesktopPresentation.DESKTOP, delta, width, height);
+     * if (frame != null) UiGpu.warm(frame);
+     * }</pre>
+     */
+    public static void warm(UiFrame frame) {
+        UiGpu gpu = get();
+        gpu.beginFrame(frame.width(), frame.height());
+        gpu.warming = true;
+        try {
+            gpu.endFrame(frame);
+        } finally {
+            gpu.warming = false;
+        }
+    }
+
+    /** Set while {@link #warm} runs: the frame executes, then is recycled instead of composited and kept. */
+    private boolean warming;
+
+    /**
      * Executes the frame, photographs the result for the trace when due, gives the host its state back, and executes
      * the composite onto the host's target, which the restored scope has bound again. Hands the frame's buffers back.
      */
@@ -149,7 +173,7 @@ public final class UiGpu {
             execute(frame.frame, frame.present);
             executed = true;
         } finally {
-            if (executed) {
+            if (executed && !warming) {
                 keep(frame);
             } else {
                 frame.builder.recycle(frame.frame);
@@ -253,7 +277,7 @@ public final class UiGpu {
             glScope = null;
             CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
         }
-        composite(present);
+        if (!warming) composite(present);
         unparkSamplers();
         CgGpuTrace.end();
         // The other half of the frame the document opened: reports and clears. A no-op when none was opened.

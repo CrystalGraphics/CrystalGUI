@@ -259,7 +259,7 @@ public final class HostSession {
      * compositor, taskbar and arrangement, and their first cascade and layout. The loading screen runs it, as the load
      * task {@code crystalgui:desktop}. Render thread; does nothing once built.
      *
-     * <p>Nothing draws it until a screen is up: a desktop with no pinned window presents nothing.</p>
+     * <p>Nothing presents it until a screen is up; {@link #warmStep} draws a throwaway one meanwhile.</p>
      */
     public void preload() {
         if (host != null) return;
@@ -267,6 +267,28 @@ public final class HostSession {
         build();
         DesktopHost built = host;
         post(() -> built.document().update(snapshot.surfaceWidth(), snapshot.surfaceHeight()));
+    }
+
+    private DesktopWarmup warmup;
+    private boolean warmed;
+
+    /**
+     * Draws one frame of a throwaway desktop that nothing composites, so the first open finds its GPU work done. The
+     * loading screen calls it as the load task {@code crystalgui:desktop-warm} until it answers true. Render thread.
+     *
+     * @return whether the warm-up is over: finished, failed (logged), or there is no desktop to warm
+     */
+    public boolean warmStep() {
+        if (warmed || host == null) return true;
+        try {
+            if (warmup == null) warmup = new DesktopWarmup();
+            if (!warmup.step(Math.max(1, snapshot.surfaceWidth()), Math.max(1, snapshot.surfaceHeight()))) return false;
+        } catch (RuntimeException | LinkageError failed) {
+            CrystalGuiCore.LOGGER.error("[cgui] the desktop warm-up failed; the first open pays for it", failed);
+        }
+        warmup = null;
+        warmed = true;
+        return true;
     }
 
     /**

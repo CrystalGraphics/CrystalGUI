@@ -171,10 +171,15 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
             return warm == null;
         }).start();
         // THE DESKTOP BUILT BEHIND THE SCREEN, after the fonts and shaders its first frame needs, so opening it is
-        // a resume. A client whose host installed no session (the harness) has none to build.
+        // a resume. A client whose host installed no session has none to build.
         plan.task("crystalgui:desktop").after("crystalgui:paint").render(task -> {
             if (HostSession.isInstalled()) HostSession.session().preload();
             return true;
+        }).start();
+        // THE DESKTOP DRAWN ONCE BEHIND THE SCREEN, into targets of its own: its first paint is hundreds of ms of
+        // pipelines, blur targets and rasters that would otherwise land inside the open animation.
+        plan.task("crystalgui:desktop-warm").after("crystalgui:desktop").render(task -> {
+            return !HostSession.isInstalled() || HostSession.session().warmStep();
         }).start();
     }
 

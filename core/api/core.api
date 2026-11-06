@@ -4811,6 +4811,7 @@ com/crystalgui/desktop/host/HostSession
   method public services ()Lcom/crystalgui/desktop/host/HostServices;
   method public shown ()V
   method public textInputArea ()[F
+  method public warmStep ()Z
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public,static attachStages (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)V
   method public,static install (Lcom/crystalgui/desktop/host/HostServices;Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/host/HostSession;
@@ -8326,6 +8327,7 @@ com/crystalgui/render/UiGpu
   method public,static presentAgain (II)V
   method public,static presented ()Lcom/crystalgui/render/UiFrame;
   method public,static redraw (IIZ)V
+  method public,static warm (Lcom/crystalgui/render/UiFrame;)V
 com/crystalgui/render/text/FontFamilyCache
   access public,final
   extends java/lang/Object
