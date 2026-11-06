@@ -51,7 +51,8 @@ public class BackdropFilterValue extends StyleValue<CgUiBackdropFilter> {
     @Nullable
     public static CgUiBackdropFilter parse(String raw) {
         String value = raw == null ? "" : raw.trim();
-        if (value.isEmpty() || value.equalsIgnoreCase("none")) return null;
+        if (value.isEmpty()) return null;
+        if (value.equalsIgnoreCase("none")) return CgUiBackdropFilter.NONE;
 
         CgUiBackdropFilter filter = new CgUiBackdropFilter();
         boolean anyRecognised = false;
@@ -138,7 +139,7 @@ public class BackdropFilterValue extends StyleValue<CgUiBackdropFilter> {
      * {@code blur()} is always written, so the value is never an empty declaration.</p>
      */
     public static String write(@Nullable CgUiBackdropFilter filter) {
-        if (filter == null) return "none";
+        if (!CgUiBackdropFilter.isActive(filter)) return "none";
         List<String> out = new ArrayList<>();
         out.add("blur(" + trim(filter.getBlurRadius()) + "px)");
         addRatio(out, "saturate", filter.getSaturation(), DEFAULTS.getSaturation());

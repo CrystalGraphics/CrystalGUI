@@ -8358,6 +8358,7 @@ com/crystalgui/render/texture/CgUiBackdropFilter
   method public getChromatic ()F
   method public getEdgeHighlight ()F
   method public getEdgeWidth ()F
+  field public,static,final NONE Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public getFallbackColorArgb ()I
   method public getGlow ()F
   method public getIor ()F
@@ -8391,6 +8392,7 @@ com/crystalgui/render/texture/CgUiColorField
   method public setCornerRadius (FF)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setCornerRadius (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setGradient (II)Lcom/crystalgui/render/texture/CgUiColorField;
+  method public,static isActive (Lcom/crystalgui/render/texture/CgUiBackdropFilter;)Z
   method public setHue (F)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setInnerRadius (F)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setMode (Lcom/crystalgui/render/texture/CgUiColorField$Mode;)Lcom/crystalgui/render/texture/CgUiColorField;

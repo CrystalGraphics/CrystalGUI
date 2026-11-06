@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
@@ -1059,7 +1060,7 @@ public final class BoxTree {
         // A subtree is keepable only while nothing in it paints out of state the tree cannot see, and
         // `backdrop-filter` never is -- what it composites is behind the element and outside this tree
         // altogether. @see UIElement#paintsDynamically
-        box.selfBackdrop = style.get(StylePropertyRegistry.BACKDROP_FILTER) != null;
+        box.selfBackdrop = CgUiBackdropFilter.isActive(style.get(StylePropertyRegistry.BACKDROP_FILTER));
         box.selfRetainable = !box.node.paintsDynamically() && !box.selfBackdrop;
         return true;
     }

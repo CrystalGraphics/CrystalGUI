@@ -232,7 +232,7 @@ public final class BoxPainter {
         // WHAT THIS BOX PAINTS, for the backdrop: a glass element drawn later recaptures only if this lands on
         // what it samples. Noted before and after, since a capture taken by a child in between clears it -- but
         // a glass box only after: noted before its own draw, it found itself painted over and recaptured always.
-        if (style.get(StylePropertyRegistry.BACKDROP_FILTER) == null) notePainted(box, ctx, pose.last().pose());
+        if (!CgUiBackdropFilter.isActive(style.get(StylePropertyRegistry.BACKDROP_FILTER))) notePainted(box, ctx, pose.last().pose());
         int clipPath = pushClipPath(box, style, ctx);
         try {
             if (clipPath == CLIPPED_AWAY) return;
@@ -542,7 +542,7 @@ public final class BoxPainter {
     private static boolean foldsOpacity(Box box, ComputedStyle style, UIElement node) {
         if (!box.children().isEmpty()) return false;
         if (node.paintsItsOwnContent()) return false;
-        if (style.get(StylePropertyRegistry.BACKDROP_FILTER) != null) return false;
+        if (CgUiBackdropFilter.isActive(style.get(StylePropertyRegistry.BACKDROP_FILTER))) return false;
 
         int primitives = 0;
         CgUiDrawable background = style.get(StylePropertyRegistry.BACKGROUND);
@@ -856,7 +856,7 @@ public final class BoxPainter {
         // It clips itself to the radii, like any CornerRadiusAware drawable: wrapped in a rounded quad
         // it would come out a rounded rectangle full of nothing.
         CgUiBackdropFilter backdrop = style.get(StylePropertyRegistry.BACKDROP_FILTER);
-        if (backdrop != null) {
+        if (CgUiBackdropFilter.isActive(backdrop)) {
             backdrop.setCornerRadii(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
                     radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
             ctx.setColor(WHITE);

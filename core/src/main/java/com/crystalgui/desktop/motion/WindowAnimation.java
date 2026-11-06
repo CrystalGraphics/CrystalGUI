@@ -195,7 +195,9 @@ public final class WindowAnimation implements WindowMotion {
         UIDocument document = target.document();
         CompositorAnimation flight = new CompositorAnimation(target, from, to, fromOpacity, toOpacity,
                 originX, originY, durationNanos, easing, opacityNanos, opacityEasing);
-        boolean played = document != null && document.animation().playOnCompositor(flight);
+        // GLASS IS DRAWN IN PLACE, in no surface a compositor could fade: its flight is written to the box instead
+        boolean glass = target.box() != null && target.box().hasBackdrop();
+        boolean played = document != null && !glass && document.animation().playOnCompositor(flight);
         this.compositor = played ? flight : null;
         this.playedBy = played ? document.animation() : null;
         // PLAYED BY THE COMPOSITOR, the window is recorded at rest: the compositor applies the whole curve to one

@@ -46,6 +46,14 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     /** Shared, like every other drawable's material. {@code gui_backdrop_filter.shader} declares its own buffer. */
     private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_backdrop_filter.shader");
 
+    /** What {@code backdrop-filter: none} computes to: present so the declaration parses and overrides a lower one, filtering nothing. */
+    public static final CgUiBackdropFilter NONE = new CgUiBackdropFilter();
+
+    /** Whether {@code filter} filters anything: not null and not {@link #NONE}. */
+    public static boolean isActive(@javax.annotation.Nullable CgUiBackdropFilter filter) {
+        return filter != null && filter != NONE;
+    }
+
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
     /**

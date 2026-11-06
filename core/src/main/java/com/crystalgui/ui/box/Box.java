@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
@@ -324,7 +325,7 @@ public final class Box {
                 || !z.auto()
                 || opacity() < 1f
                 || !transform().isIdentity()
-                || style.get(StylePropertyRegistry.BACKDROP_FILTER) != null
+                || CgUiBackdropFilter.isActive(style.get(StylePropertyRegistry.BACKDROP_FILTER))
                 || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY
                 || style.get(StylePropertyRegistry.ISOLATION) == Isolation.ISOLATE
                 || willChange(style, WillChange.TRANSFORM) || willChange(style, WillChange.OPACITY)
