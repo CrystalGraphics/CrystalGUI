@@ -1391,7 +1391,7 @@ public class Desktop extends UIElement implements DataProvider {
      * answer chosen for a host that never saw the question is indistinguishable from one it meant.</p>
      */
     public Desktop useStorage(Path installation) {
-        this.config = new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(installation));
+        this.config = new CgLocalConfigStorage(CrystalGuiStorage.configIn(installation));
         desktopSettings.useStorage(config);
         // A PATH, NOT A STORAGE: CgLocalConfigStorage creates its directory eagerly, and a cache/ that
         // exists before anything derived does is a directory nobody can explain.
@@ -1478,7 +1478,7 @@ public class Desktop extends UIElement implements DataProvider {
         Path world = localWorld == null ? null : localWorld.get();
         CgConfigStorage root = world == null
                 ? config()
-                : new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(world));
+                : new CgLocalConfigStorage(CrystalGuiStorage.configIn(world));
         return root.scoped(CrystalGuiStorage.PROJECTS).scoped(identity);
     }
 

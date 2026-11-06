@@ -4285,6 +4285,8 @@ com/crystalgui/core/storage/CrystalGuiStorage
   field public,static,final HISTORY Ljava/lang/String;
   field public,static,final LAYOUT Lcom/crystalgraphics/platform/service/CgStorageLayout;
   field public,static,final PROJECTS Ljava/lang/String;
+  field public,static,final WORKSPACE_CONFIG Ljava/lang/String;
+  method public,static configIn (Ljava/nio/file/Path;)Ljava/nio/file/Path;
   method public,static projectsIn (Ljava/nio/file/Path;)Ljava/nio/file/Path;
 com/crystalgui/core/trace/FrameStats
   access public,final

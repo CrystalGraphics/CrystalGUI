@@ -53,7 +53,7 @@ public class StorageTreeTest {
 
     /** A config store over a real directory, reached the way a host reaches it. */
     private CgConfigStorage rootStore() throws IOException {
-        return new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(folder.newFolder("install").toPath()));
+        return new CgLocalConfigStorage(CrystalGuiStorage.configIn(folder.newFolder("install").toPath()));
     }
 
     // ── The tree ────────────────────────────────────────────────────────────────────────────────
@@ -61,11 +61,11 @@ public class StorageTreeTest {
     @Test
     public void scopingTwiceMakesTwoRealDirectories() throws IOException {
         Path root = folder.newFolder("install").toPath();
-        CgConfigStorage config = new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(root));
+        CgConfigStorage config = new CgLocalConfigStorage(CrystalGuiStorage.configIn(root));
         config.scoped(CrystalGuiStorage.PROJECTS).scoped("abc123").write("session.json", "{}");
 
         assertTrue("the record goes where the tree says",
-                Files.isRegularFile(CrystalGuiStorage.LAYOUT.configIn(root)
+                Files.isRegularFile(CrystalGuiStorage.configIn(root)
                         .resolve("projects").resolve("abc123").resolve("session.json")));
     }
 
@@ -100,7 +100,7 @@ public class StorageTreeTest {
         for (Path root : List.of(installation, world)) {
             assertEquals(root.resolve("crystalgui"), CrystalGuiStorage.LAYOUT.rootIn(root));
             assertEquals(root.resolve("crystalgui").resolve("workspace-config"),
-                    CrystalGuiStorage.LAYOUT.configIn(root));
+                    CrystalGuiStorage.configIn(root));
             assertEquals(root.resolve("crystalgui").resolve("cache"), CrystalGuiStorage.LAYOUT.cacheIn(root));
             assertEquals(root.resolve("crystalgui").resolve("projects"),
                     CrystalGuiStorage.projectsIn(root));
@@ -185,7 +185,7 @@ public class StorageTreeTest {
     @Test
     public void deletingTheCacheTreeLosesNothing() throws IOException {
         Path installation = folder.newFolder("install").toPath();
-        CgConfigStorage config = new CgLocalConfigStorage(CrystalGuiStorage.LAYOUT.configIn(installation));
+        CgConfigStorage config = new CgLocalConfigStorage(CrystalGuiStorage.configIn(installation));
         CgConfigStorage workspace = config.scoped(CrystalGuiStorage.PROJECTS).scoped("abc123");
         Backup backup = new Backup(workspace);
         backup.save(file("proj:src/Main.java"), "unsaved", "e1");

@@ -34,7 +34,7 @@ public class DesktopStorageTest {
         Desktop desktop = Desktop.of(new UIDocument()).useStorage(installation);
 
         assertEquals("the store goes under crystalgui/workspace-config, never beside it",
-                CrystalGuiStorage.LAYOUT.configIn(installation), desktop.config().directory());
+                CrystalGuiStorage.configIn(installation), desktop.config().directory());
         assertEquals(CrystalGuiStorage.LAYOUT.cacheIn(installation), desktop.cacheRoot());
     }
 
@@ -82,7 +82,7 @@ public class DesktopStorageTest {
                 .useStorage(installation)
                 .useLocalWorld(() -> world);
 
-        assertEquals(CrystalGuiStorage.LAYOUT.configIn(world).resolve("projects").resolve("abc123"),
+        assertEquals(CrystalGuiStorage.configIn(world).resolve("projects").resolve("abc123"),
                 desktop.workspaceStore("abc123").directory());
     }
 
@@ -95,7 +95,7 @@ public class DesktopStorageTest {
         Path installation = installation("remote-host");
         Desktop desktop = Desktop.of(new UIDocument()).useStorage(installation);
 
-        assertEquals(CrystalGuiStorage.LAYOUT.configIn(installation).resolve("projects").resolve("server99"),
+        assertEquals(CrystalGuiStorage.configIn(installation).resolve("projects").resolve("server99"),
                 desktop.workspaceStore("server99").directory());
     }
 

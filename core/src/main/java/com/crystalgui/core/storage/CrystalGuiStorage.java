@@ -6,10 +6,10 @@ import java.nio.file.Path;
 
 /**
  * Where CrystalGUI keeps what it writes: {@code <base>/crystalgui/}, on CrystalGraphics' {@link CgStorageLayout}, plus
- * the folders it adds under it.
+ * the folders it adds under it. Its durable tree is {@code workspace-config/}, not the layout's plain {@code config/}.
  *
  * <pre>{@code
- * Path config = CrystalGuiStorage.LAYOUT.configIn(gameDir);    // …/crystalgui/workspace-config   durable
+ * Path config = CrystalGuiStorage.configIn(gameDir);           // …/crystalgui/workspace-config   durable
  * Path cache  = CrystalGuiStorage.LAYOUT.cacheIn(gameDir);     // …/crystalgui/cache              disposable
  * Path world  = CrystalGuiStorage.projectsIn(worldDir);        // …/crystalgui/projects           the user's files
  *
@@ -29,6 +29,9 @@ public final class CrystalGuiStorage {
     /** {@code crystalgui/} under any base. */
     public static final CgStorageLayout LAYOUT = CgStorageLayout.of("crystalgui");
 
+    /** CrystalGUI's durable tree under its root: the workspace's preferences, sessions, backups and history. */
+    public static final String WORKSPACE_CONFIG = "workspace-config";
+
     /** The workspaces themselves, the user's own files. */
     public static final String PROJECTS = "projects";
 
@@ -45,6 +48,11 @@ public final class CrystalGuiStorage {
     public static final String HISTORY = "history";
 
     private CrystalGuiStorage() {
+    }
+
+    /** {@code <base>/crystalgui/workspace-config}. */
+    public static Path configIn(Path base) {
+        return LAYOUT.rootIn(base).resolve(WORKSPACE_CONFIG);
     }
 
     /** {@code <base>/crystalgui/projects}. */

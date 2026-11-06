@@ -94,7 +94,7 @@ public class LibraryToolWindowStoreTest extends UiDocumentTestBase {
         mine.createGroup("Mine");
         mine.addToGroup("Mine", Button.NAME);
 
-        Path file = CrystalGuiStorage.LAYOUT.configIn(installation.getRoot().toPath())
+        Path file = CrystalGuiStorage.configIn(installation.getRoot().toPath())
                 .resolve(CrystalGuiStorage.EXTENSIONS).resolve("crystalgui.uibuilder").resolve(UserLibrary.FILE);
         assertTrue("the group was not written to " + file, Files.isRegularFile(file));
         assertTrue(Files.readString(file).contains("crystalgui:button"));
