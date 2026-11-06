@@ -160,11 +160,13 @@ public final class EngineHost implements Closeable {
      * slash back.</p>
      */
     private static URL ownClasses() {
-        CodeSource source = EngineHost.class.getProtectionDomain().getCodeSource();
-        URL candidate = source == null ? null : source.getLocation();
+        // The class file first: a mod made of several roots (a NeoForge dev run's) reports its first root as the
+        // code source, a resources folder holding none of these classes.
+        URL candidate = EngineHost.class.getClassLoader()
+                .getResource(EngineHost.class.getName().replace('.', '/') + ".class");
         if (candidate == null) {
-            candidate = EngineHost.class.getClassLoader()
-                    .getResource(EngineHost.class.getName().replace('.', '/') + ".class");
+            CodeSource source = EngineHost.class.getProtectionDomain().getCodeSource();
+            candidate = source == null ? null : source.getLocation();
         }
         return candidate == null ? null : asClasspathRoot(candidate);
     }

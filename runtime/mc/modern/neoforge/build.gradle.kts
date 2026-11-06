@@ -9,6 +9,7 @@
 import cgbuildlogic.commonNode
 import cgbuildlogic.devRunSourceSet
 import cgbuildlogic.renderDocRun
+import cgbuildlogic.shaderToolchainRun
 import cgbuildlogic.stubMode
 import cgbuildlogic.useNeoForgeApi
 import net.neoforged.moddevgradle.dsl.NeoForgeExtension
@@ -84,6 +85,7 @@ if (!stubMode) configure<NeoForgeExtension> {
             client()
             gameDirectory = project.file("runs/client")
             renderDocRun(this)
+            shaderToolchainRun(this)
         }
         // A server run, so serverSmoke has something to boot here too. Without it this loader is the
         // one that cannot be checked for the server-side class-loading contract.

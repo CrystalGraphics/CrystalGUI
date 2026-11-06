@@ -8,7 +8,7 @@ import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
-import com.crystalgraphics.api.shader.CgShaderBindings;
+import com.crystalgraphics.api.material.CgMaterialValues;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgRenderState;
@@ -528,7 +528,7 @@ public final class CgUiPaintContext {
      * it was a fresh capture per material switch, on the path every SDF drawable takes for every
      * element of every frame.</p>
      */
-    private final Consumer<CgShaderBindings> layerOpacityBinder = b -> b.set1f("_LayerOpacity", layerOpacity);
+    private final Consumer<CgMaterialValues> layerOpacityBinder = b -> b.set1f("_LayerOpacity", layerOpacity);
 
     @Getter
     private final CgFont font = defaultFont();

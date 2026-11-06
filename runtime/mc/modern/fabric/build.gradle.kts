@@ -7,6 +7,7 @@ import cgbuildlogic.renderDocDevRun
 import cgbuildlogic.renderDocEnvironment
 import cgbuildlogic.sameVersionNodeDir
 import cgbuildlogic.sameVersionNodePath
+import cgbuildlogic.shaderToolchainVmArgs
 import cgbuildlogic.stubMode
 import net.fabricmc.loom.LoomGradleExtension
 import net.fabricmc.loom.api.LoomGradleExtensionAPI
@@ -101,6 +102,7 @@ if (!stubMode) {
         named("client") {
             runDir("runs/client")
             renderDocDevRun().forEach(::vmArg)
+            shaderToolchainVmArgs().forEach(::vmArg)
             renderDocEnvironment().forEach { (key, value) -> environmentVariable(key, value) }
         }
         named("server") { runDir("runs/server") }
