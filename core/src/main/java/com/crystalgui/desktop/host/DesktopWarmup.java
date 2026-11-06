@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -26,15 +27,16 @@ import javax.annotation.Nullable;
  */
 final class DesktopWarmup {
 
-    /** Frames drawn, and at least this long: the bar's entry slide and the first window's glass are both seen. */
-    private static final int FRAMES = 40;
-    private static final long MIN_NANOS = 600_000_000L;
+    /** Frames drawn: a cold run spends its first-use cost in the first three (199, 32, 19 ms), then about 7 ms each. */
+    private static final int FRAMES = 5;
     private static final float DELTA = 1f / 60f;
 
     @Nullable
     private Desktop desktop;
     private int drawn;
     private long begun;
+    /** Each frame's cost in ms, logged at the end: where a cold warm-up spends its time. */
+    private final StringBuilder costs = new StringBuilder();
 
     /** Draws one frame. Returns true once the warm-up is complete. */
     boolean step(int width, int height) {
@@ -42,10 +44,17 @@ final class DesktopWarmup {
             begun = System.nanoTime();
             desktop = build();
         }
+        long start = System.nanoTime();
         UiFrame frame = desktop.record(DesktopPresentation.DESKTOP, DELTA, width, height);
         if (frame != null) UiGpu.warm(frame);
         drawn++;
-        return drawn >= FRAMES && System.nanoTime() - begun >= MIN_NANOS;
+        costs.append(' ').append((System.nanoTime() - start) / 1_000_000L);
+        boolean done = drawn >= FRAMES;
+        if (done) {
+            CrystalGuiCore.LOGGER.info("[cgui] desktop warm-up: {} frames in {} ms, each (ms):{}", drawn,
+                    (System.nanoTime() - begun) / 1_000_000L, costs);
+        }
+        return done;
     }
 
     private static Desktop build() {
