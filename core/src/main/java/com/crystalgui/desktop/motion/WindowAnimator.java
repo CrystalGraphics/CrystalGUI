@@ -90,6 +90,8 @@ public final class WindowAnimator {
 
     /** @see #SHOW_NANOS */
     private static final long SHOW_FADE_NANOS = 83L * 1_000_000L;
+    /** A starting window fades out this long: from 100 ms in to 560 ms, where its mark's growth ends. */
+    private static final long TAKEOVER_NANOS = 460L * 1_000_000L;
 
     /** {@code DESTROY_WINDOW_ANIMATION_TIME} (150ms) — a window closing. */
     private static final long DESTROY_NANOS = 125L * 1_000_000L;
@@ -235,6 +237,24 @@ public final class WindowAnimator {
         if (!enabled) return;
         start(Transform.scale(SHOW_SCALE), NEUTRAL_SCALE, 0f, 1f, CENTRE, CENTRE,
                 SHOW_NANOS, ARRIVING, SHOW_FADE_NANOS, CgEasings.LINEAR, null);
+    }
+
+    /** The window fades in where it stands, over the time {@link #playFadeOut} takes: the two make a crossfade. */
+    public void playFadeIn() {
+        if (!enabled) return;
+        start(NEUTRAL_SCALE, NEUTRAL_SCALE, 0f, 1f, CENTRE, CENTRE, TAKEOVER_NANOS, t -> t * t * (3.0 - 2.0 * t), null);
+    }
+
+    /**
+     * The window fades out where it stands, over whatever is beneath it, then {@code then}: a starting window
+     * handing over to its application's.
+     */
+    public void playFadeOut(Runnable then) {
+        if (!enabled) {
+            then.run();
+            return;
+        }
+        start(NEUTRAL_SCALE, NEUTRAL_SCALE, 1f, 0f, CENTRE, CENTRE, TAKEOVER_NANOS, t -> t * t * (3.0 - 2.0 * t), then);
     }
 
     /**

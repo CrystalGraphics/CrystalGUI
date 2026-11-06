@@ -684,6 +684,17 @@ taskbar .__entry__.__busy__ .__progress__ {
 }
 
 /* Over everything its window's content stacks: an application's own panels go up to 7, and paint over an `auto` */
+/* An application's window beneath its starting window's glass, unseen until the handover fades it in. */
+.__window__.__handover__ {
+    opacity: 0;
+}
+
+/* THE STARTING WINDOW'S BODY IS ITS FRAME'S GLASS under a dark wash, not the opaque fill an application's slot has:
+ * the glass alone left the mark almost no contrast against a bright scene. */
+.__window__ > .__content__.__starting__ {
+    background: var(--starting-wash, #0E0F1199);
+}
+
 .__starting-cover__ {
     z-index: 100;
     position: absolute;
@@ -691,7 +702,6 @@ taskbar .__entry__.__busy__ .__progress__ {
     top: 0;
     width: 100%;
     height: 100%;
-    background: var(--window-bg, #191A1C);
 }
 
 /* A surface of its own, so it is drawn once at rest and its scale applied to the picture: an icon mid-scale is drawn
@@ -817,7 +827,12 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     max-width: 100%;
     max-height: 100%;
     resize: both;
-    background: var(--window-bg, #191A1C);
+    /* Glass: the desktop blurred behind a translucent fill, as the taskbar and the failure box. */
+    background: var(--failure-bg, #16171A66);
+    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
+                     specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
+                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
+                     chromatic(0) fallback(var(--window-bg, #191A1C));
     color: var(--window-fg, #DFE1E5);
 }
 
@@ -881,7 +896,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
      * has no `calc()`, so the pair is maintained by hand: change --activity-bar-w or the tile and both
      * numbers move. It was 6px against a 12px tile, which centred it at 12 against the rail's 10 -- near
      * enough to read as a misalignment rather than a different measurement, which is what it was. */
-    padding-left: 4px;
+    padding-left: 5px;
     /* NO CLEARANCE, because there is no longer a border to clear.
      *
      * This was `padding-right: 1px`, and it was earned: `window` carried a 1px `outline`, outlines are
@@ -894,8 +909,9 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
      * With the border gone the same padding is a plain 1px gap, and it moves the close block off centre
      * by exactly the pixel it used to put back. A correction outlives its cause silently: nothing fails,
      * the strip is simply a pixel wrong in the other direction. */
-    background: var(--window-title-bg, #26282B);
-    color: var(--window-title-fg, #9DA0A8);
+    /* A light wash over the window's glass, white text. */
+    background: var(--failure-title-bg, #FFFFFF1C);
+    color: var(--window-title-active-fg, #DFE1E5);
 }
 
 /* ── The active window ──────────────────────────────────────────────────────────────────────────
@@ -908,7 +924,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
  * is why `window` is in ua/core.css's focus-ring carve-out: a rectangle round the whole pane would
  * say the same thing again, louder and in the wrong place. */
 .__window__.__active__ > .__title-bar__ {
-    background: var(--window-title-active-bg, #26282B);
+    background: var(--failure-title-bg, #FFFFFF1C);
     color: var(--window-title-active-fg, #DFE1E5);
 }
 
@@ -989,12 +1005,12 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
  * The right margin is the other half of the caption's left column -- 3 + 14 + 3 is the rail's 20 -- so
  * it is not a gap that can be tuned on its own. See the padding on the caption rule. */
 .__window__ > .__title-bar__ > .__icon__ {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     padding: 2px;
-    border-radius: 4px;
+    border-radius: 3px;
     flex-shrink: 0;
-    margin-right: 3px;
+    margin-right: 4px;
 }
 
 /* ── A TORN-OUT TAB'S OWN WINDOW ───────────────────────────────────────────────────────────────
@@ -1009,10 +1025,6 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     background: var(--surface-panel, #191A1C);
 }
 
-.__dock-window__ > .__title-bar__ > .__title__ {
-    font-size: 9;
-}
-
 .__window__ > .__title-bar__ > .__title__ {
     flex-grow: 1;
     flex-basis: 0;
@@ -1020,6 +1032,11 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    font-size: 8;
+}
+
+.__dock-window__ > .__title-bar__ > .__title__ {
+    font-size: 8;
 }
 
 /* ── The window controls ────────────────────────────────────────────────────────────────────────
@@ -1082,8 +1099,8 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
      * glyph against the CAPTION's height -- which is not fixed, so the same mark would come out
      * smaller in a window hosting a menu bar than in one that is not. At 2px the content box is at
      * least 16px tall for every caption this sheet can produce, so the width always wins. */
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 5px;
+    padding-right: 5px;
     padding-top: 2px;
     padding-bottom: 2px;
     flex-shrink: 0;
@@ -1092,7 +1109,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     background-color: transparent;
     overlay-origin: content-box;
     overlay-size: contain;
-    color: var(--window-control-fg, #9DA0A8);
+    color: #FFFFFF;    /* as the failure box's close mark: grey sinks into the glass */
 }
 
 .__window__ .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"); }
@@ -1204,6 +1221,8 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
  * scrolls programmatically and draws no bar: a panel unfolding past the desktop's edge was cut off
  * with nothing to grab.) */
 .__window__ > .__content__ {
+    /* The application's view is opaque: the frame's glass is the caption's, not what shows through an app's own gaps. */
+    background: var(--window-bg, #191A1C);
     width: 100%;
     flex-grow: 1;
     flex-shrink: 1;
@@ -1309,7 +1328,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     overlay: icon("crystalgui:window-dock");
     overlay-origin: content-box;
     overlay-size: contain;
-    color: var(--window-control-fg, #9DA0A8);
+    color: #FFFFFF;
 }
 
 .__window__.__tool-window__ .__title-bar__ .__dock__:hover {
@@ -1994,6 +2013,7 @@ window.__failure__ .__title-bar__ .__close__ {
 }
 
 window.__failure__ > .__content__ {
+    background: none;
     outline: 0px #00000000;
     padding: 0px;
 }

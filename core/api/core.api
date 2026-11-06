@@ -4884,6 +4884,8 @@ com/crystalgui/desktop/motion/WindowAnimator
   method public currentTarget ()Lcom/crystalgui/style/property/visual/transform/Transform;
   method public isPlaying ()Z
   method public playClose (Ljava/lang/Runnable;)V
+  method public playFadeIn ()V
+  method public playFadeOut (Ljava/lang/Runnable;)V
   method public playLeave (Ljava/lang/Runnable;)V
   method public playMinimize (Ljava/lang/Runnable;)V
   method public playOpen ()V
@@ -5080,8 +5082,10 @@ com/crystalgui/desktop/window/StartingMark
   access public,final
   extends com/crystalgui/ui/dom/UIElement
   field public,static,final COVER_CLASS Ljava/lang/String;
+  field public,static,final LEAVE_NANOS J
   field public,static,final MARK_CLASS Ljava/lang/String;
   method public <init> (Ljava/lang/String;Ljava/lang/String;)V
+  method public,static leaveInPlace (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static leaveOver (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static settled (Lcom/crystalgui/desktop/window/WindowFrame;)Z
 com/crystalgui/desktop/window/SystemMenu
@@ -5125,6 +5129,7 @@ com/crystalgui/desktop/window/WindowFrame
   field public,static,final ACTION_ON_CLASS Ljava/lang/String;
   field public,static,final ACTIVE_CLASS Ljava/lang/String;
   field public,static,final ADOPTED_CHROME_CLASS Ljava/lang/String;
+  field public,static,final ADOPTED_CLASS Ljava/lang/String;
   field public,static,final CAPTION_ACTION_CLASS Ljava/lang/String;
   field public,static,final CAPTION_CHROME_CLASS Ljava/lang/String;
   field public,static,final CLOSE_CLASS Ljava/lang/String;
@@ -5132,6 +5137,7 @@ com/crystalgui/desktop/window/WindowFrame
   field public,static,final CONTENT_CLASS Ljava/lang/String;
   field public,static,final CONTROLS_CLASS Ljava/lang/String;
   field public,static,final FULLSCREEN_CLASS Ljava/lang/String;
+  field public,static,final HANDOVER_CLASS Ljava/lang/String;
   field public,static,final HUD_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final MAXIMIZED_CLASS Ljava/lang/String;
@@ -5218,7 +5224,9 @@ com/crystalgui/desktop/window/WindowFrame
   method public onUserResize (IIFF)V
   method public overlaySlot ()Lcom/crystalgui/ui/dom/UIElement;
   method public ownerWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public playFadeIn ()V
   method public playOpenAnimation ()V
+  method public playTakeoverFade (Ljava/lang/Runnable;)V
   method public policy ()Lcom/crystalgui/core/window/WindowPolicy;
   method public pressBlocked (Lcom/crystalgui/ui/dom/UIElement;)V
   method public progress ()F
@@ -5267,6 +5275,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public toggleFullscreen ()V
   method public toggleMaximized ()V
   method public top ()F
+  method public,static applicationClass (Ljava/lang/String;)Ljava/lang/String;
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/desktop/window/WindowIcon
   access public
@@ -8349,6 +8358,7 @@ com/crystalgui/render/texture/ArgbMath
 com/crystalgui/render/texture/CgUiBackdropFilter
   access public,final
   extends java/lang/Object
+  field public,static,final NONE Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   implements com/crystalgui/render/texture/CgUiDrawable
   implements com/crystalgui/render/texture/CornerRadiusAware
   method public <init> ()V
@@ -8358,7 +8368,6 @@ com/crystalgui/render/texture/CgUiBackdropFilter
   method public getChromatic ()F
   method public getEdgeHighlight ()F
   method public getEdgeWidth ()F
-  field public,static,final NONE Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public getFallbackColorArgb ()I
   method public getGlow ()F
   method public getIor ()F
@@ -8383,6 +8392,7 @@ com/crystalgui/render/texture/CgUiBackdropFilter
   method public setSaturation (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public setSpecular (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public setTintArgb (I)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
+  method public,static isActive (Lcom/crystalgui/render/texture/CgUiBackdropFilter;)Z
 com/crystalgui/render/texture/CgUiColorField
   access public,final
   extends java/lang/Object
@@ -8392,7 +8402,6 @@ com/crystalgui/render/texture/CgUiColorField
   method public setCornerRadius (FF)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setCornerRadius (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setGradient (II)Lcom/crystalgui/render/texture/CgUiColorField;
-  method public,static isActive (Lcom/crystalgui/render/texture/CgUiBackdropFilter;)Z
   method public setHue (F)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setInnerRadius (F)Lcom/crystalgui/render/texture/CgUiColorField;
   method public setMode (Lcom/crystalgui/render/texture/CgUiColorField$Mode;)Lcom/crystalgui/render/texture/CgUiColorField;

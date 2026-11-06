@@ -36,6 +36,8 @@ public final class StartingMark extends UIElement {
 
     /** On the mark; its icon is the {@code __window-icon__} child. */
     public static final String MARK_CLASS = "__starting-mark__";
+    /** How long the mark takes to grow and fade out: a window fading with it begins 100 ms in and ends with its growth. */
+    public static final long LEAVE_NANOS = 700_000_000L;
     /** The starter's backdrop and mark laid over its successor's content while they leave. */
     public static final String COVER_CLASS = "__starting-cover__";
 
@@ -52,7 +54,7 @@ public final class StartingMark extends UIElement {
      * @see com.crystalgraphics.loading.view.CgLogoLoadingView
      */
     private static final long IN_DELAY = 200_000_000L, PACE = 900_000_000L, FADE_NANOS = 315_000_000L,
-            OUT_NANOS = 700_000_000L;
+            OUT_NANOS = LEAVE_NANOS;
     private static final double SLOWER = 1.5, SETTLE_SLOWER = 1.5;
     private static final long RISE_NANOS = Math.round(PACE * SLOWER * PEAK);
     /**
@@ -98,6 +100,18 @@ public final class StartingMark extends UIElement {
      * is now: the mark fading as it grows, then the backdrop. Nothing when {@code starter} shows no mark yet.
      */
     public static void leaveOver(WindowFrame starter, WindowFrame successor) {
+        leave(starter, successor, false);
+    }
+
+    /**
+     * {@code starter}'s mark leaves where it stands, growing as it fades, so a starter that stays on top and fades can
+     * carry it. Nothing when it shows no mark yet.
+     */
+    public static void leaveInPlace(WindowFrame starter) {
+        leave(starter, starter, true);
+    }
+
+    private static void leave(WindowFrame starter, WindowFrame host, boolean replaceMark) {
         StartingMark mark = markOf(starter);
         if (mark == null || mark.in == null || mark.in.startNanos() == 0L) return;
         long now = System.nanoTime();
@@ -109,10 +123,12 @@ public final class StartingMark extends UIElement {
         cover.addClass(COVER_CLASS);
         StartingMark leaving = new StartingMark(mark.icon, mark.title, false);
         cover.append(leaving);
-        successor.content().append(cover);
+        host.content().append(cover);
+        // A NEW MARK, not the old one's second flight: its entry's is spent, and a second never played
+        if (replaceMark) leave(mark);
         // Stopped with the cover, should the application's window close before they end
         leaving.whileConnected(() -> BoxFlights.play(leaving, new CompositorAnimation(leaving, at, scaled(LEAVE_SCALE),
-                opacity, 0f, CENTRE, CENTRE, OUT_NANOS, stage(0.1, 0.8), OUT_NANOS, stage(0.1, 0.7)), null));
+                opacity, 0f, CENTRE, CENTRE, OUT_NANOS, stage(0.1, 0.8), OUT_NANOS, stage(0.35, 1.0)), null));
         cover.whileConnected(() -> BoxFlights.play(cover, new CompositorAnimation(cover, Transform.IDENTITY, Transform.IDENTITY,
                 1f, 0f, CENTRE, CENTRE, OUT_NANOS, stage(0.35, 1.0)), () -> leave(cover)));
     }

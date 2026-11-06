@@ -1744,18 +1744,61 @@ public class Desktop extends UIElement implements DataProvider {
         else frame.destroy();
     }
 
+    /** A frame this short is steady; this many in a row, the application has stopped holding the thread. */
+    private static final float STEADY_FRAME_SECONDS = 0.04f;
+    /** The view fades in this long after the mark begins to leave; it ends with the mark's growth. @see WindowAnimator */
+    private static final long CROSSFADE_DELAY_NANOS = 100_000_000L;
+    private static final int STEADY_FRAMES = 6, MAX_STEADY_WAIT_FRAMES = 300;
+
     /** {@code successor} where {@code starter} was on the taskbar, then the starter gone. */
     private void replaceStarting(WindowFrame starter, WindowFrame successor) {
         boolean minimised = starter.state() == WindowState.HIDDEN || starter.isMinimizing();
         registry.takePlace(successor, starter);
         Taskbar bar = taskbar();
         if (bar != null) bar.takePlace(successor, starter);
-        // NO CUT TO THE APPLICATION: its mark and backdrop leave over it, the loading screen's way out -- on its restore,
-        // for one built minimised
-        StartingMark.leaveOver(starter, successor);
-        // MINIMISED, it waits minimised: the build finished in the background, and a restore shows it ready
-        if (minimised) successor.hide();
-        starter.destroy();
+        // NO CUT TO THE APPLICATION. Minimised, it waits minimised (the build finished in the background, and a
+        // restore shows it ready) and its mark leaves over it on that restore. Shown, the starter stays on top and
+        // fades out, its mark growing as it goes, over the application drawn whole beneath it.
+        if (minimised) {
+            StartingMark.leaveOver(starter, successor);
+            successor.hide();
+            starter.destroy();
+            return;
+        }
+        // BEGUN ONCE FRAMES RUN SMOOTHLY: the application's build and restore hold the frame thread for hundreds of ms,
+        // and a fade begun inside them is spent before one frame shows it
+        UIDocument document = starter.document();
+        if (document == null || !WindowAnimator.isEnabled()) {
+            starter.destroy();
+            return;
+        }
+        // ABOVE EVERY ORDINARY WINDOW, NOW: the application's activation raises it over the starter a frame later, and
+        // a raise-after hid the starter for those frames. Raises hand out values below the pinned band.
+        starter.setStackOrder(PINNED_BAND - 1);
+        // THE APPLICATION IS NOT SEEN UNTIL THE VIEW COMES UP: beneath the glass it showed through as a dark ghost from the
+        // swap, a crossfade begun long before the mark had moved. Owned by it, so a starter closed first cannot leave it hidden.
+        successor.addClass(WindowFrame.HANDOVER_CLASS);
+        int[] state = { 0, 0 };   // smooth frames in a row, frames waited
+        long[] leaving = { 0L };   // when the mark began to leave
+        document.animation().every(successor, delta -> {
+            if (starter.state() == WindowState.DESTROYED || starter.isClosing()) {
+                successor.removeClass(WindowFrame.HANDOVER_CLASS);
+                return false;
+            }
+            if (leaving[0] == 0L) {
+                state[0] = delta <= STEADY_FRAME_SECONDS ? state[0] + 1 : 0;
+                if (state[0] < STEADY_FRAMES && ++state[1] < MAX_STEADY_WAIT_FRAMES) return true;
+                StartingMark.leaveInPlace(starter);
+                leaving[0] = System.nanoTime();
+            }
+            // THE VIEW COMES UP 100 ms INTO THE MARK'S GROWTH, not as it begins: begun with it, the view was settled
+            // before the mark had gone
+            if (System.nanoTime() - leaving[0] < CROSSFADE_DELAY_NANOS) return true;
+            successor.removeClass(WindowFrame.HANDOVER_CLASS);
+            successor.playFadeIn();
+            starter.playTakeoverFade(starter::destroy);
+            return false;
+        });
     }
 
     @Nullable

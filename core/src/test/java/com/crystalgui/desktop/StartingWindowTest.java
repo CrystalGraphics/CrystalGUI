@@ -110,8 +110,9 @@ public class StartingWindowTest extends UiDocumentTestBase {
         assertTrue("the record put back the window it had before the maximise", main.isMaximized());
     }
 
+    /** The starter fades out over the application, its mark growing, and goes once it is gone: no cover is laid over the application. */
     @Test
-    public void aMarkSeenLeavesOverTheApplicationsWindowAndIsGoneAfter() throws InterruptedException {
+    public void theStarterFadesOutOverTheApplicationAndGoesAfter() throws InterruptedException {
         Desktop.setAnimationsEnabled(true);
         desktop.applications().launchInStartingWindow(kind, null);
         frame();
@@ -121,10 +122,10 @@ public class StartingWindowTest extends UiDocumentTestBase {
         frames(3);
         WindowFrame main = desktop.registry().windows().get(0);
         assertEquals("test:slow", main.key());
-        assertTrue("the application cut in with no cover leaving over it", hasCover(main));
-        Thread.sleep(800);   // past the 700 ms out
-        frames(2);
-        assertFalse("the cover outlived its out", hasCover(main));
+        assertFalse("a second mark left over the first", hasCover(main));
+        Thread.sleep(850);   // past the 700 ms fade
+        frames(3);
+        assertFalse("the starter outlived the fade", desktop.isStarting(kind));
     }
 
     private static boolean hasCover(WindowFrame frame) {

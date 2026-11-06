@@ -139,6 +139,22 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     public static final String CONTENT_CLASS = "__content__";
 
     /**
+     * The class every window of an application wears, from its kind's id: {@code crystalgui:editor} is
+     * {@code __app-crystalgui-editor__}. An application's own sheet styles its frame and caption with it, the
+     * starting window included.
+     *
+     * <pre>{@code
+     * .__window__.__app-mymod-editor__ { background: #191A1C; backdrop-filter: none; }
+     * }</pre>
+     */
+    public static String applicationClass(String kindId) {
+        return "__app-" + kindId.toLowerCase().replaceAll("[^a-z0-9_-]", "-") + "__";
+    }
+
+    /** On a window once its application has put its chrome in the caption: the starting window has not, the loaded one has. */
+    public static final String ADOPTED_CLASS = "__adopted__";
+
+    /**
      * On the active window — the one the keyboard is talking to.
      *
      * <p>A <b>class</b>, not a pseudo-class, because this is state the compositor flips from its own
@@ -753,7 +769,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     public WindowFrame setContent(UIElement newContent) {
         if (newContent == null) return this;
         content.append(newContent);
-        if (newContent instanceof WindowChrome) adoptChrome((WindowChrome) newContent);
+        if (newContent instanceof WindowChrome) {
+            addClass(ADOPTED_CLASS);
+            adoptChrome((WindowChrome) newContent);
+        }
         return this;
     }
 
@@ -1647,6 +1666,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public WindowFrame setApplication(@Nullable ApplicationKind application) {
         this.application = application;
+        // Its application's own styling hook, so a starting window and the window it becomes look alike
+        if (application != null) addClass(applicationClass(application.id()));
         // A window with no icon of its own is drawn with the kind's. @see #iconName
         refreshIcon();
         if (owner != null) owner.registry().changed();
@@ -2494,6 +2515,19 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** The entry animation, for the one path that attaches a window without going through {@link #show}. */
     public void playOpenAnimation() {
         animator.playOpen();
+    }
+
+    /** The application's window, held unseen until its starting window's fade begins. */
+    public static final String HANDOVER_CLASS = "__handover__";
+
+    /** Fades in where it stands, under its starting window's fade-out. */
+    public void playFadeIn() {
+        animator.playFadeIn();
+    }
+
+    /** Fades out where it stands, then {@code then}: a starting window handing over to its application's. */
+    public void playTakeoverFade(Runnable then) {
+        animator.playFadeOut(then);
     }
 
     // ── Last measured box ───────────────────────────────────────────────────────────────────────
