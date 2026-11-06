@@ -105,11 +105,17 @@ if (!providers.gradleProperty("cgNoLanguage").isPresent) {
     }
 }
 
+// Whether CrystalGUI's own projects go on runtimeClasspath. Loom's dev run reads it as the mod's classpath, and
+// ModDevGradle below 1.21.10 ignores it. From 1.21.10 ModDevGradle reads it as the LIBRARY classpath
+// (`devRunLibraries`), a layer below the mods, where they would sit a second time beside their MOD_CLASSES
+// roots: two copies of every class, CrystalGraphics' listener discovery loading the lower one, and a static
+// registry declared twice (`Message 'crystalgui:probe/audience' is already declared`).
+val modsOnRuntimeClasspath = modernLoader == "fabric" || devRunLibraries == "additionalRuntimeClasspath"
+
 dependencies {
     // compileOnly: shadowJar bundles these manually (see each loader's build.gradle.kts).
-    // runtimeOnly: picked up by Fabric/Loom dev runs via Gradle's standard runtimeClasspath.
-    // ModDevGradle (Forge/NeoForge) dev runs ignore runtimeClasspath and instead use the
-    // mods{} sourceSet declarations in each loader's build.gradle.kts.
+    // runtimeOnly where `modsOnRuntimeClasspath`; a ModDevGradle run takes them as MOD_CLASSES roots
+    // (crystalgraphics-run.gradle.kts).
     "compileOnly"(project(common.path))
     "compileOnly"(project(":core"))
     // CrystalGraphics' common node of THIS Minecraft, through the composite's per-node substitution.
@@ -146,11 +152,13 @@ dependencies {
     // The shipped jar was never affected -- shadowJar bundles :language from `cgBundledProjects` -- so
     // this is a dev-run-only hole, and the one loader that shows it first is whichever runs the seam.
     // Same excludes as the two above, for the same NeoForge strict-version reason.
-    "runtimeOnly"(project(":language")) {
-        exclude(group = "org.apache.logging.log4j")
-        exclude(group = "com.google.code.gson")
+    if (modsOnRuntimeClasspath) {
+        "runtimeOnly"(project(":language")) {
+            exclude(group = "org.apache.logging.log4j")
+            exclude(group = "com.google.code.gson")
+        }
+        "runtimeOnly"(project(":runtime:mc:modern-shared"))
     }
-    "runtimeOnly"(project(":runtime:mc:modern-shared"))
 
     // Minecraft supplies log4j and gson. :core pins modern ones runtimeOnly for its tests and the
     // harness, and those reach a loader -- where NeoForge requires {strictly 2.19.0}/{strictly 2.10.1}
@@ -158,13 +166,15 @@ dependencies {
     //
     // Per-dependency, never on the configuration: excluding the groups from runtimeClasspath would
     // take Minecraft's own log4j with it, which Loom's dev run reads.
-    "runtimeOnly"(project(common.path)) {
-        exclude(group = "org.apache.logging.log4j")
-        exclude(group = "com.google.code.gson")
-    }
-    "runtimeOnly"(project(":core")) {
-        exclude(group = "org.apache.logging.log4j")
-        exclude(group = "com.google.code.gson")
+    if (modsOnRuntimeClasspath) {
+        "runtimeOnly"(project(common.path)) {
+            exclude(group = "org.apache.logging.log4j")
+            exclude(group = "com.google.code.gson")
+        }
+        "runtimeOnly"(project(":core")) {
+            exclude(group = "org.apache.logging.log4j")
+            exclude(group = "com.google.code.gson")
+        }
     }
     // Mixin compileOnly — loaders bundle it at runtime. A stub build has its signatures in the stub.
     if (!stubMode) "compileOnly"("org.spongepowered:mixin:${property("modern.mixin")}")
