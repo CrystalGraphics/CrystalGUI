@@ -5,6 +5,21 @@
     "https://raw.githubusercontent.com/CrystalGraphics/CrystalGUI/master/download/locations.json",
     "https://cdn.jsdelivr.net/gh/CrystalGraphics/CrystalGUI@master/download/locations.json"
   ],
+  "mirror": {
+    "repository": "mirror",
+    "release": "download-mirror",
+    "github": "CrystalGraphics/CrystalGUI",
+    "licences": {
+      "org.eclipse.": "EPL-2.0",
+      "ecj-": "EPL-2.0",
+      "rhino-": "MPL-2.0",
+      "cfr-": "MIT, (c) Lee Benfield",
+      "jna-": "Apache-2.0",
+      "org.osgi.": "Apache-2.0",
+      "osgi.": "Apache-2.0",
+      "intermediary-": "CC0-1.0"
+    }
+  },
   "repositories": {
     "maven-central": ["https://repo1.maven.org/maven2/{path}"],
     "forge": ["https://maven.minecraftforge.net/{path}", "https://maven.neoforged.net/releases/{path}", "https://maven.creeperhost.net/{path}"],

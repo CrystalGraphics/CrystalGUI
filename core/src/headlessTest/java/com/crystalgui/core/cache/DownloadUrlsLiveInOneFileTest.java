@@ -14,7 +14,6 @@ import java.nio.file.Paths;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.regex.Matcher;
@@ -79,20 +78,23 @@ public class DownloadUrlsLiveInOneFileTest {
         assertTrue("download/locations.json does not list:\n  " + String.join("\n  ", missing), missing.isEmpty());
     }
 
-    /**
-     * What the shipped file expands to, byte for byte the addresses {@code verifyDownloadLocations} fetched
-     * — the build reads the file with its own code, and this is what keeps the two readings the same.
-     */
+    /** The build's tasks read the file through {@code listing}; a running client through {@code find}. They must agree. */
     @Test
-    public void theShippedFileExpandsToTheAddressesTheBuildVerifies() {
+    public void theBuildAndTheRuntimeReadTheShippedFileAlike() throws IOException {
+        String root = System.getProperty("cgui.test.repoRoot");
+        Assume.assumeNotNull(root);
+        String text = new String(Files.readAllBytes(Paths.get(root, "download", "locations.json")), StandardCharsets.UTF_8);
         CgDownloadLocations shipped = CrystalGuiDownloads.LOCATIONS;
-        assertEquals(Arrays.asList(
-                        "https://repo1.maven.org/maven2/org/benf/cfr/0.152/cfr-0.152.jar",
-                        "https://github.com/CrystalGraphics/CrystalGUI/releases/download/download-mirror/cfr-0.152.jar"),
-                shipped.find("engine/8/cfr-0.152.jar").urls());
+        int compared = 0;
+        for (CgDownloadLocations.Line line : CgDownloadLocations.listing(text).lines()) {
+            if (line.template()) continue;
+            assertEquals(line.id(), line.urls(), shipped.find(line.id()).urls());
+            compared++;
+        }
+        assertTrue(compared > 100);
         assertEquals(Collections.singletonList(
                         "https://maven.minecraftforge.net/de/oceanlabs/mcp/mcp_config/1.20.1/mcp_config-1.20.1.zip"),
-                shipped.find("forge/mcp-config/1.20.1").urls());
+                shipped.find("forge/mcp-config/1.20.1").urls().subList(0, 1));
     }
 
     /** Main sources of {@code core/} and {@code language/}, and every loader's {@code src/main} and {@code src/lang}. */
