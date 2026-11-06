@@ -57,7 +57,16 @@ public final class HitRegions {
                 box -> !(ours(document, layer, box.node()) && !inert(document, box)),
                 box -> {
                     if (box.isStackingOnly() || inert(document, box)) return;
-                    Region region = Region.of(box, ours(document, layer, box.node()));
+                    boolean ours = ours(document, layer, box.node());
+                    // ITS CHILDREN TOO, as the live test sees them: a window's resize handles reach past its box.
+                    if (ours) {
+                        for (Box child : box.children()) {
+                            if (child.isStackingOnly() || inert(document, child)) continue;
+                            Region region = Region.of(child, true);
+                            if (region != null) out.add(region);
+                        }
+                    }
+                    Region region = Region.of(box, ours);
                     if (region != null) out.add(region);
                 });
         // What lies under every region of ours can only answer "the game's", which is also the answer for no region.
