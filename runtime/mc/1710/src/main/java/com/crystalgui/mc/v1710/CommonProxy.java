@@ -38,4 +38,3 @@ public class CommonProxy {
                 Arrays.asList("com.crystalgui.mc.v1710.ClientProxy")));
     }
 }
-}

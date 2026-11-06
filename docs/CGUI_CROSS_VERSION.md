@@ -17,7 +17,7 @@ core (contract + logic, Java 25 → 8)      ←  the only place behaviour lives
   └─ seam: an interface, Minecraft-free
        ├─ runtime/mc/modern/common   one class, Forge + NeoForge + Fabric, 1.13.2–26.3, //? directives
        │    └─ forge / neoforge / fabric branches: registration only, forward into common
-       ├─ runtime/mc/legacy/forge    Forge 1.8.9 · 1.10.2 · 1.12.2, directives in Game / ClientGame
+       ├─ runtime/mc/legacy/forge    Forge 1.8.9 · 1.10.2 · 1.12.2, directives in Game
        └─ runtime/mc/1710            Forge 1.7.10, no directives
 ```
 
@@ -34,7 +34,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
 | a permission or "who is this player" | CrystalGraphics' `CgPlayerQuery.isOperator` (`PlayerQueryModern`, `PlayerQueryLegacy`, `PlayerQuery1710`) |
 | client input, HUD, a screen | `mc.modern.client` (`CgUiInput`, `CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
-| a member renamed across versions | legacy `Game` / `client.ClientGame`; the controller's `replacements.string` |
+| a member renamed across versions | legacy `Game`; the controller's `replacements.string` |
 | a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
 
 ```bash
@@ -170,7 +170,7 @@ lists nothing inside a mod file — use `core.provider.Providers`).
 |---|---|---|
 | Modern, shared | `runtime/mc/modern/common/src/main/java/com/crystalgui/mc/modern/…` | `platform/LifecycleCrystalGUI` — the one class loaders talk to |
 | Modern, per loader | `runtime/mc/modern/{forge,neoforge,fabric}/src/main/java/com/crystalgui/mc/<loader>/` | `CrystalGUIForge`, `CrystalGUINeoForge`, `CrystalGUIFabricCommon` (+ client entries): events and channels, each body one forward |
-| Legacy Forge | `runtime/mc/legacy/forge/src/main/java/com/crystalgui/mc/legacy/` | `CrystalGUILegacy`, `CrystalGUILegacyClient`; renamed members through `Game` / `client.ClientGame` |
+| Legacy Forge | `runtime/mc/legacy/forge/src/main/java/com/crystalgui/mc/legacy/` | `CrystalGUILegacy`, `CrystalGUILegacyClient`; renamed members through `Game`; the client's level and player through `CgWorldQueries` and `CgPlayers` |
 | 1.7.10 | `runtime/mc/1710/src/main/java/com/crystalgui/mc/v1710/` | `CrystalGUI` (`@Mod`), `CommonProxy`, `ClientProxy` |
 | Language mod | the same trees' `src/lang` | its own entry classes; never named from `main` |
 
@@ -205,7 +205,7 @@ return server.getPlayerList().isOp(player.getGameProfile());
   active node; if you must, switch back before committing.
 - **A rename used everywhere** is a `replacements.string` in the controller, not a thousand directives —
   and its target must never appear in the sources.
-- **Several renamed members** — put them behind one accessor per side (legacy `Game`, `client.ClientGame`)
+- **Several renamed members** — put them behind one accessor per side (legacy `Game`)
   so the rest of the host reads the same on every version.
 - **Which spelling holds where**: the break table (§ *Plan it*), from `mcapi.py`.
 

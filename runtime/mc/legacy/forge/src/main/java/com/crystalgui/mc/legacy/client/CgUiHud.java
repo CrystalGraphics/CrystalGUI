@@ -1,7 +1,6 @@
 package com.crystalgui.mc.legacy.client;
 
-import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 
@@ -47,14 +46,12 @@ public final class CgUiHud {
 
         @Override
         public void enter() {
-            CgGL.fromHost();
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.enter();
         }
 
         @Override
         public void leave() {
-            CgGL.toHost();
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.leave();
         }
     };
 

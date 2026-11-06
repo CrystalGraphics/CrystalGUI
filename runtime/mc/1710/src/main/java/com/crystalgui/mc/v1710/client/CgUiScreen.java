@@ -1,11 +1,11 @@
 package com.crystalgui.mc.v1710.client;
 
+import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -223,19 +223,12 @@ public final class CgUiScreen extends GuiScreen {
 
         @Override
         public void enter() {
-            CgGL.fromHost();
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.enter();
         }
 
         @Override
         public void leave() {
-            CgGL.toHost();
-            org.lwjgl.opengl.GL13.glActiveTexture(org.lwjgl.opengl.GL13.GL_TEXTURE0);
-            org.lwjgl.opengl.GL20.glUseProgram(0);
-            org.lwjgl.opengl.GL11.glEnable(org.lwjgl.opengl.GL11.GL_TEXTURE_2D);
-            // The shadow cannot see the three lines above either, so tell it so rather than leaving it
-            // describing a context that no longer exists.
-            CgGlState.invalidateAllIfPresent();
+            CgHostPaint.leave();
         }
     };
 

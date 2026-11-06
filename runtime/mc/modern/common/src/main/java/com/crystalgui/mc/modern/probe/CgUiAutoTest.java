@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.probe;
 
+import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
@@ -15,7 +16,6 @@ import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.AutoTest;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
-import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.Screen;
@@ -92,7 +92,7 @@ public final class CgUiAutoTest {
      * 1.13 has no overlay: its splash blocks the thread instead.
      */
     private static boolean loading(Minecraft mc) {
-        return ClientGame.overlayUp(mc) || CgLoadingScreen.shown();
+        return CgMinecraftClient.overlayUp(mc) || CgLoadingScreen.shown();
     }
 
     private static final AutoTest.Host HOST = new AutoTest.Host() {
@@ -187,7 +187,7 @@ public final class CgUiAutoTest {
         /*mc.createWorldOpenFlows().checkForBackupAndLoad(name, () -> { });
         *///?} elif >=1.19 {
         WorldOpenFlows flows = mc.createWorldOpenFlows();
-        flows.loadLevel(ClientGame.screen(mc), name);
+        flows.loadLevel(CgMinecraftClient.screen(mc), name);
         //?} elif >=1.16 {
         /*mc.loadLevel(name);
         *///?} else {
@@ -222,11 +222,11 @@ public final class CgUiAutoTest {
         // painted matters because a capture proves only that a frame was read back -- with no live GL
         // context the screen's render() returns at once, and with no level Minecraft does not clear the
         // colour buffer, so a photograph of the main menu is indistinguishable from a working desktop.
-        int width = ClientGame.mainTarget(mc).width;
-        int height = ClientGame.mainTarget(mc).height;
+        int width = CgMinecraftClient.mainTarget(mc).width;
+        int height = CgMinecraftClient.mainTarget(mc).height;
         boolean painted = HostSession.isInstalled() && HostSession.session().hasPainted();
         // Which screen is up, since `painted` is the session's and says nothing about what is in front.
-        Screen up = ClientGame.screen(mc);
+        Screen up = CgMinecraftClient.screen(mc);
         String screen = up == null ? "none" : up.getClass().getSimpleName();
         PENDING_CAPTURES.incrementAndGet();
         // The callback fires once the PNG is written, on every version: encoded on the IO pool through
@@ -253,15 +253,15 @@ public final class CgUiAutoTest {
             }
         };
         //? if >=1.21.6 {
-        /*Screenshot.grab(gameDir, file.getName(), ClientGame.mainTarget(mc), 1, onWritten);
+        /*Screenshot.grab(gameDir, file.getName(), CgMinecraftClient.mainTarget(mc), 1, onWritten);
         *///?} elif >=1.17 {
         try {
-            Screenshot.grab(gameDir, file.getName(), ClientGame.mainTarget(mc), onWritten);
+            Screenshot.grab(gameDir, file.getName(), CgMinecraftClient.mainTarget(mc), onWritten);
         } catch (NoSuchMethodError before1171) {
-            grabWithSize(gameDir, file.getName(), ClientGame.mainTarget(mc), onWritten);
+            grabWithSize(gameDir, file.getName(), CgMinecraftClient.mainTarget(mc), onWritten);
         }
         //?} else {
-        /*RenderTarget target = ClientGame.mainTarget(mc);
+        /*RenderTarget target = CgMinecraftClient.mainTarget(mc);
         Screenshot.grab(gameDir, file.getName(), target.width, target.height, target, onWritten);
         *///?}
     }

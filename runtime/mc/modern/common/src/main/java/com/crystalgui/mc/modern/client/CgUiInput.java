@@ -1,13 +1,9 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgraphics.mc.modern.platform.HostKeys;
 import com.crystalgui.desktop.host.HostInput;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
-//? if >=26.3 {
-/*import com.crystalgraphics.platform.input.CgSdlKeyCodes;
-*///?} else {
-import com.crystalgraphics.platform.input.CgGlfwKeyCodes;
-//?}
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.input.HostPointer;
 
@@ -56,31 +52,6 @@ public final class CgUiInput {
     private static int rawY() {
         Minecraft mc = Minecraft.getInstance();
         return mc == null || mc.mouseHandler == null ? 0 : (int) mc.mouseHandler.ypos();
-    }
-
-    /**
-     * A key in this Minecraft's own numbering -- GLFW's before 26.3, SDL scancodes from it -- for a
-     * {@code KeyMapping} default or a synthetic press.
-     *
-     * <pre>{@code
-     * new KeyMapping("key.crystalgui.desktop", CgUiInput.hostKey(CgKeyCodes.KEY_LMENU), CATEGORY);
-     * }</pre>
-     */
-    public static int hostKey(int cgKey) {
-        //? if >=26.3 {
-        /*return CgSdlKeyCodes.toSdl(cgKey);
-        *///?} else {
-        return CgGlfwKeyCodes.toGlfw(cgKey);
-        //?}
-    }
-
-    /** {@link #hostKey} for a mouse button: SDL counts from 1 with middle second, GLFW as the engine does. */
-    public static int hostButton(int cgButton) {
-        //? if >=26.3 {
-        /*return CgSdlKeyCodes.mouseToSdl(cgButton);
-        *///?} else {
-        return cgButton;
-        //?}
     }
 
     /** @param button the host's numbering. @return whether the desktop consumed it */
@@ -137,7 +108,7 @@ public final class CgUiInput {
             //?}
             return;
         }
-        int code = hostKey(key.key());
+        int code = HostKeys.key(key.key());
         //? if >=1.21.9 {
         /*KeyEvent event = new KeyEvent(code, 0, 0);
         if (key.pressed()) screen.keyPressed(event);

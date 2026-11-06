@@ -20,8 +20,8 @@ import net.minecraftforge.fml.common.FMLCommonHandler;
 
 /**
  * The server-side members Minecraft renamed between 1.8.9 and 1.12.2, spelt once, so the rest of the
- * host reads the same on every plateau. The client's are in {@code client.ClientGame}, which a server
- * must never load.
+ * host reads the same on every plateau. The client's come from CrystalGraphics' {@code CgWorldQueries} and
+ * {@code CgPlayers}.
  */
 public final class Game {
 

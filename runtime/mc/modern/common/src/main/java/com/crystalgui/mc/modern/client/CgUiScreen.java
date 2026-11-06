@@ -1,5 +1,8 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgraphics.platform.service.CgHostPaint;
+import com.crystalgraphics.mc.modern.platform.HostGlHandoff;
+import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.CgPlatform;
@@ -99,7 +102,7 @@ public final class CgUiScreen extends Screen {
             return;
         }
         Minecraft mc = Minecraft.getInstance();
-        if (mc != null) ClientGame.setScreen(mc, new CgUiScreen());
+        if (mc != null) CgMinecraftClient.setScreen(mc, new CgUiScreen());
     }
 
     // ── What the rest of this loader reads ──────────────────────────────────────────────────────
@@ -143,8 +146,8 @@ public final class CgUiScreen extends Screen {
         /*minecraft.onTextInputFocusChange(this, true);
         *///?}
         //? if >=1.21.6 {
-        /*if (hudHiddenBefore == null) hudHiddenBefore = ClientGame.hudHidden(minecraft);
-        ClientGame.setHudHidden(minecraft, true);
+        /*if (hudHiddenBefore == null) hudHiddenBefore = CgMinecraftClient.hudHidden(minecraft);
+        CgMinecraftClient.setHudHidden(minecraft, true);
         *///?}
     }
 
@@ -194,9 +197,9 @@ public final class CgUiScreen extends Screen {
         HostSession session = HostSession.session();
         if (!session.isBuilt()) return;
         // The engine initialises on the first WORLD render and this screen also opens over the title
-        // screen, where there is none. @see CgUiHostGl#ensureContext
-        CgUiHostGl.ensureContext(surfaceWidth(), surfaceHeight());
-        if (!CgUiHostGl.contextIsLive()) return;
+        // screen, where there is none. @see HostGlHandoff#ensureContext
+        HostGlHandoff.ensureContext(surfaceWidth(), surfaceHeight());
+        if (!HostGlHandoff.contextIsLive()) return;
 
         float delta = session.frameDelta();
 
@@ -273,23 +276,23 @@ public final class CgUiScreen extends Screen {
         @Override
         public boolean ownScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && ClientGame.screen(mc) instanceof CgUiScreen;
+            return mc != null && CgMinecraftClient.screen(mc) instanceof CgUiScreen;
         }
 
         @Override
         public boolean anyScreenUp() {
             Minecraft mc = Minecraft.getInstance();
-            return mc != null && ClientGame.screen(mc) != null;
+            return mc != null && CgMinecraftClient.screen(mc) != null;
         }
 
         @Override
         public void enter() {
-            CgUiHostGl.enter();
+            CgHostPaint.enter();
         }
 
         @Override
         public void leave() {
-            CgUiHostGl.leave();
+            CgHostPaint.leave();
         }
     };
 
@@ -300,7 +303,7 @@ public final class CgUiScreen extends Screen {
         /*minecraft.onTextInputFocusChange(this, false);
         *///?}
         //? if >=1.21.6 {
-        /*if (hudHiddenBefore != null) ClientGame.setHudHidden(minecraft, hudHiddenBefore);
+        /*if (hudHiddenBefore != null) CgMinecraftClient.setHudHidden(minecraft, hudHiddenBefore);
         hudHiddenBefore = null;
         *///?}
     }

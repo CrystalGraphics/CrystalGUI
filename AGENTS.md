@@ -78,7 +78,7 @@ wildcard never reports.
 
 ## Supported versions
 
-Forge 1.7.10 · 1.8.8–1.12.2 · 1.13.2–1.21.11 · 26.1.1–26.3; NeoForge 1.20.2–26.3; Fabric 1.14.4–26.3 — with gaps. **Before code that differs by version**, read [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md) § *Supported versions*: which versions are refused and why, which run Java 8, 26.x's Vulkan and unobfuscated names, 26.3's SDL3 input (`CgUiInput.hostKey`), and JOML below 1.19.3.
+Forge 1.7.10 · 1.8.8–1.12.2 · 1.13.2–1.21.11 · 26.1.1–26.3; NeoForge 1.20.2–26.3; Fabric 1.14.4–26.3 — with gaps. **Before code that differs by version**, read [`docs/CGUI_BUILD.md`](docs/CGUI_BUILD.md) § *Supported versions*: which versions are refused and why, which run Java 8, 26.x's Vulkan and unobfuscated names, 26.3's SDL3 input (`HostKeys.key`), and JOML below 1.19.3.
 
 ---
 

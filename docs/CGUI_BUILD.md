@@ -305,7 +305,7 @@ in the pin catalog).
   with `-PcgGraphics=vulkan|opengl`. 26.3 under Vulkan still stands down (`CgGraphicsLifecycle.standDown`).
 - **26.3 windows through SDL3, and ships no GLFW**: its keys are SDL scancodes and its mouse buttons SDL's.
   A 26.3 node registers CrystalGraphics' `runtime/lwjgl/sdl` services instead of the GLFW ones, a host
-  names a key through `CgUiInput.hostKey`, and Fabric's input chain is SDL's event filter. Blaze3D's GPU
+  names a key through `HostKeys.key`, and Fabric's input chain is SDL's event filter. Blaze3D's GPU
   layer moved to `com.mojang.renderpearl`, a `replacements.string` in both Stonecutter scripts.
 - **Below 1.19.3 Minecraft ships no JOML**, and those instances take CrystalGraphics' `crystalgraphics-joml`
   companion (`prismInstanceJoml` in `local.properties`).

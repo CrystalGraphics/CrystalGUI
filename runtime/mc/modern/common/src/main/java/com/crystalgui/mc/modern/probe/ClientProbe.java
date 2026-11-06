@@ -1,5 +1,7 @@
 package com.crystalgui.mc.modern.probe;
 
+import com.crystalgraphics.mc.modern.platform.HostKeys;
+import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -9,7 +11,6 @@ import com.crystalgui.mc.modern.client.CgUiInput;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
-import com.crystalgui.mc.modern.client.ClientGame;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.client.gui.screens.ChatScreen;
@@ -80,16 +81,16 @@ public final class ClientProbe {
         public void openForeignScreen() {
             Minecraft mc = Minecraft.getInstance();
             //? if >=1.21.9 {
-            /*if (mc != null) ClientGame.setScreen(mc, new ChatScreen("", false));
+            /*if (mc != null) CgMinecraftClient.setScreen(mc, new ChatScreen("", false));
             *///?} else {
-            if (mc != null) ClientGame.setScreen(mc, new ChatScreen(""));
+            if (mc != null) CgMinecraftClient.setScreen(mc, new ChatScreen(""));
             //?}
         }
 
         @Override
         public void closeScreen() {
             Minecraft mc = Minecraft.getInstance();
-            if (mc != null) ClientGame.setScreen(mc, null);
+            if (mc != null) CgMinecraftClient.setScreen(mc, null);
         }
 
         @Override
@@ -121,13 +122,13 @@ public final class ClientProbe {
             Minecraft mc = Minecraft.getInstance();
             if (mc == null) return;
             //? if >=1.21.6 {
-            /*Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc), 1, message -> { });
+            /*Screenshot.grab(mc.gameDirectory, fileName, CgMinecraftClient.mainTarget(mc), 1, message -> { });
             *///?} elif >=1.17.1 {
-            Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc), message -> { });
+            Screenshot.grab(mc.gameDirectory, fileName, CgMinecraftClient.mainTarget(mc), message -> { });
             //?} else {
             /*// Before 1.17.1 grab also takes the frame's size.
-            Screenshot.grab(mc.gameDirectory, fileName, ClientGame.mainTarget(mc).width,
-                    ClientGame.mainTarget(mc).height, ClientGame.mainTarget(mc), message -> { });
+            Screenshot.grab(mc.gameDirectory, fileName, CgMinecraftClient.mainTarget(mc).width,
+                    CgMinecraftClient.mainTarget(mc).height, CgMinecraftClient.mainTarget(mc), message -> { });
             *///?}
         }
 
@@ -139,7 +140,7 @@ public final class ClientProbe {
 
         @Override
         public boolean offerMouse(int button, boolean pressed) {
-            return LifecycleCrystalGUI.offerMouse(CgUiInput.hostButton(button), pressed, 0f);
+            return LifecycleCrystalGUI.offerMouse(HostKeys.button(button), pressed, 0f);
         }
 
         @Override
@@ -149,7 +150,7 @@ public final class ClientProbe {
 
         @Override
         public int keyZ() {
-            return CgUiInput.hostKey(CgKeyCodes.KEY_Z);
+            return HostKeys.key(CgKeyCodes.KEY_Z);
         }
 
         @Override

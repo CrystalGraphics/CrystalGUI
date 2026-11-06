@@ -1,5 +1,6 @@
 package com.crystalgui.mc.modern.client;
 
+import com.crystalgraphics.mc.modern.platform.HostKeys;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -26,7 +27,7 @@ public final class CgUiKeybinds {
     //?}
 
     public static final KeyMapping OPEN_DESKTOP =
-            new KeyMapping("key.crystalgui.desktop", CgUiInput.hostKey(CgKeyCodes.KEY_LMENU), CATEGORY);
+            new KeyMapping("key.crystalgui.desktop", HostKeys.key(CgKeyCodes.KEY_LMENU), CATEGORY);
 
     /**
      * Every mapping a loader must register. Content adds to it through {@link #add}; a loader only
