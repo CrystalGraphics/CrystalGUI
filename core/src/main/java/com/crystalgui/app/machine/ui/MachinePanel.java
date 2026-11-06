@@ -1,6 +1,7 @@
 package com.crystalgui.app.machine.ui;
 
 import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgui.app.machine.MachineExample;
 import com.crystalgui.app.machine.MachineModel;
 import com.crystalgui.app.machine.MachineTrace;
 import com.crystalgui.net.window.ClientScope;
@@ -81,7 +82,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
      * {@code <machinepanel>} decodes into this class on the far side. @see UiType</p>
      */
     public static final UiType<MachinePanel, MachineModel> TYPE =
-            UiType.of("crystalgui:machine", MachinePanel::new);
+            UiType.of("crystalgui:machine", MachinePanel::new).application(MachineExample.ID, "Machine Example");
 
 
     /** On/off. Reports {@code toggle}. */
@@ -177,7 +178,7 @@ public final class MachinePanel extends UIElement implements Networked<MachineMo
 
     @Override
     public String title(MachineModel model) {
-        return "Machine control";
+        return "Machine Example";
     }
 
     @Override

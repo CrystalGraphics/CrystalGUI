@@ -110,6 +110,7 @@ public final class DesktopHost implements Disposable {
         desktop.useLocalWorld(services::localWorldDirectory);
         // What a pin, Start and an entry's menu launch against
         desktop.useWorkspace(this::workspace);
+        desktop.useConnection(() -> bound);
         desktop.persistAs(services.desktopId());
         this.mount = new DesktopWindowMount(document);
     }

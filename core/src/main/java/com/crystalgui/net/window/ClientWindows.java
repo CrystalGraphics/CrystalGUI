@@ -365,6 +365,9 @@ public final class ClientWindows {
         } catch (RuntimeException failed) {
             mounted.remove(session);
             CrystalGuiCore.LOGGER.error("Could not mount <{}>: {}", fresh.type(), failed.getMessage(), failed);
+            // The server's side too, or it holds a window nobody has and a second ask returns that one
+            session.closeFromClient("could not be mounted");
+            fresh.finish("could not be mounted", CloseReason.CLIENT.name(), true);
             return;
         }
         applySheets(fresh);

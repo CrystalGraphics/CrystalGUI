@@ -221,7 +221,7 @@ public class WindowPreview extends UIElement {
         titleTooltip.setText(text);
         // THE SAME TILE THE ENTRY BENEATH THIS DRAWS -- one WindowIcon for the strip, the preview and the
         // switcher, so a window's icon is one picture wherever it is shown. @see WindowIcon
-        icon.show(frame == null ? null : frame.iconName(), text);
+        icon.show(frame == null ? null : frame.iconName(), frame == null ? text : frame.iconTitle());
         syncThumbnail();
         return this;
     }

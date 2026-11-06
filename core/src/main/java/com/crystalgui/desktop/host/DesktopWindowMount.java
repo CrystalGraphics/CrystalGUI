@@ -5,15 +5,18 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.net.ViewCommand;
 import com.crystalgui.net.window.ClientWindowContext;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
+import com.crystalgui.net.window.UiType;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -102,6 +105,13 @@ public final class DesktopWindowMount implements WindowMount {
     public void bind(@Nullable CgProtocolConnection<Object> connection, @Nullable WindowMount preferred) {
         if (connection == null || connection == boundTo) return;
         boundTo = connection;
+        // THE DESKTOP'S TREE BELONGS TO ITS SEQUENCE, and a game ticks this connection on its own thread: what the
+        // server sends touches the tree, so it is delivered there. Inline where the document has no other sequence.
+        connection.dispatchThrough(work -> {
+            UiSequence sequence = document.sequence();
+            if (sequence == null || sequence.isCurrent()) work.run();
+            else sequence.execute(work);
+        });
         WindowMount mount = preferred == null ? this : preferred;
         ClientWindows.of(connection)
                 .setSheetSupply(sheetSupply())
@@ -132,8 +142,19 @@ public final class DesktopWindowMount implements WindowMount {
         // "there is unsaved work here" mean the same thing to the user, to the compositor and to the
         // server -- which asks the very same panels before closing a window itself.
         frame.setDiscardGuard(context::mayClose);
-        frame.setContent(context.root());
-        Desktop.of(document).addWindow(frame, false);
+        UiType.Application app = UiType.applicationOf(context.type());
+        // ITS APPLICATION'S WINDOW: the application's taskbar button, and its icon and hue
+        ApplicationKind kind = app == null ? null : Desktop.of(document).applications().byId(app.id());
+        if (kind != null) frame.setApplication(kind).markApplicationMain();
+        try {
+            frame.setContent(context.root());
+            Desktop.of(document).addWindow(frame, false);
+        } catch (RuntimeException failed) {
+            // Said to the user here, where the desktop is; the caller closes the server's side.
+            String name = app != null ? app.name() : frame.getTitle();
+            Desktop.of(document).reportFailure(app != null ? app.id() : null, name, name + " could not be opened.", failed);
+            throw failed;
+        }
 
         Mounted mounted = new Mounted(frame, context);
 

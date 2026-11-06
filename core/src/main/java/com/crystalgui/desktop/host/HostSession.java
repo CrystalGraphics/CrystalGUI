@@ -133,6 +133,18 @@ public final class HostSession {
         else owner.post(work);
     }
 
+    /**
+     * Runs {@code work} on the document without waiting: what a host does for a feed that builds or edits the desktop's tree,
+     * a server's window arriving over a connection. Inline when the document records on the host's thread.
+     *
+     * <pre>{@code
+     * HostSession.session().postToDocument(() -> connection.tick());
+     * }</pre>
+     */
+    public void postToDocument(Runnable work) {
+        post(work);
+    }
+
     /** Copies the host's answers for the document. Render thread, at every host entry. */
     private void refreshHost() {
         HostSnapshot copy = snapshot;
@@ -792,18 +804,14 @@ public final class HostSession {
     /**
      * Raises the primary window if that is what was asked for, and builds it if nothing is open.
      *
-     * <p><b>A desktop with nothing on it is a blank screen.</b> The compositor takes up no space until a
-     * window exists — an unused one must not swallow clicks meant for the game behind it — so an empty
-     * desktop has no taskbar either, and asking for the bare desktop before anything was ever opened
-     * would show the game and nothing else. The first show therefore builds the application whichever
-     * key asked for it; from then on the two keys differ as they should.</p>
+     * <p>The bare-desktop key launches nothing: only {@link #requestApplication()} builds the primary
+     * application, so an empty desktop stays empty.</p>
      */
     private void bringForward() {
         Desktop desktop = desktop();
         if (desktop == null) return;
 
-        boolean nothingOpen = desktop.registry().size() == 0;
-        if (!raiseOnShow && !nothingOpen) return;
+        if (!raiseOnShow) return;
         // No primary: the host opens every application itself, and an empty desktop stays empty
         if (primaryKind == null) {
             raiseOnShow = false;
@@ -812,8 +820,7 @@ public final class HostSession {
         }
 
         if (!ensurePrimaryWindow()) {
-            // Armed on the FAILURE rather than by the request alone: opening the bare desktop also wants
-            // an application when nothing is open, and that path never retried.
+            // Armed on the failure so the next frame retries the request.
             launchPending = true;
             return;
         }

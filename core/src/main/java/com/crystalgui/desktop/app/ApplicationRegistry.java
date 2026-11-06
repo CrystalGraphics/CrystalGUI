@@ -203,7 +203,7 @@ public final class ApplicationRegistry {
      * factory, because "this needs a world" and "the editor is broken" look identical from the outside
      * and the second is what a crash report says.</p>
      *
-     * @return the instance, or null when it could not be started
+     * @return the instance, or null when it could not be started, or ran as an {@link ApplicationKind#action}
      */
     @Nullable
     public Application launch(ApplicationKind kind, LaunchContext context) {
@@ -243,6 +243,7 @@ public final class ApplicationRegistry {
             // an extension's activate and a dock banner provider each get.
             CrystalGuiCore.LOGGER.error("[cgui] the application '{}' failed to launch: {}",
                     kind.id(), failed.getMessage(), failed);
+            desktop.reportFailure(kind.id(), kind.displayName(), kind.displayName() + " could not be opened.", failed);
             return null;
         }
         if (application == null) return null;

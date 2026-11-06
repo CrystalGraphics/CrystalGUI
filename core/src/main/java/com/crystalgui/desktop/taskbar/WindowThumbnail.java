@@ -129,7 +129,7 @@ public class WindowThumbnail extends UIElement {
             repaint();
         }
         this.frame = frame;
-        placeholder.show(frame == null ? null : frame.iconName(), frame == null ? null : frame.getTitle());
+        placeholder.show(frame == null ? null : frame.iconName(), frame == null ? null : frame.iconTitle());
         syncSize();
         return this;
     }

@@ -913,7 +913,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
             icon.setDisplayed(false);
             return;
         }
-        icon.show(declared ? name : null, getTitle());
+        icon.show(declared ? name : null, iconTitle());
         icon.setDisplayed(true);
     }
 
@@ -1201,6 +1201,14 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public boolean isDemandingAttention() {
         return demandingAttention;
+    }
+
+    /**
+     * What a window with no icon of its own keys its monogram tile on: its application's name, so the launcher, the
+     * taskbar entry and every window of one application wear one hue; its title for a window of nobody's.
+     */
+    public String iconTitle() {
+        return application != null ? application.displayName() : getTitle();
     }
 
     /** @see #isDemandingAttention() */

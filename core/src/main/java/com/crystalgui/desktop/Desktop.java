@@ -2,6 +2,7 @@ package com.crystalgui.desktop;
 
 import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.storage.config.CgLocalConfigStorage;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.StartingMark;
@@ -16,6 +17,8 @@ import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
+import com.crystalgui.core.async.UiSequence;
+import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.desktop.switcher.WindowSwitcher;
 import com.crystalgui.desktop.taskbar.Taskbar;
@@ -82,17 +85,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * main tree by construction. Its geometry is written from Java at <b>IMPORTANT</b> for the same reason
  * the overlay layer's is: the surface the compositor draws on must not be movable by a stylesheet.</p>
  *
- * <p><b>Zero-sized until a window exists</b>, which is what keeps it free rather than merely cheap.
- * An always-full-size overlay would sit in front of the root's own content and swallow every click that
- * missed a window — so it takes up no space and hit-tests nothing at all until there is genuinely a
- * compositor to be in front. Once a window IS open, clicks on bare desktop belong to the desktop (that
- * is what W2's empty-desktop blur means), and W7 removes the question entirely by making the editor
- * itself a frame.</p>
+ * <p><b>Full size when it is the surface, zero-sized when laid over someone else's screen with no window.</b>
+ * The surface's desktop always fills it: the taskbar, with its start button, is never empty. Laid over a
+ * game screen it takes no space and hit-tests nothing until a window exists, or it would swallow every
+ * click that missed one.</p>
  *
- * <p><b>Exists, not is visible.</b> A desktop whose every window is minimised is a desktop in use: it
- * still has a taskbar, and that strip is the only way any of those windows comes back. Keying this on
- * the window layer instead collapsed the whole desktop the moment the last window was minimised — see
- * {@code syncPresence}.</p>
+ * <p><b>A window exists, not is visible.</b> A desktop whose every window is minimised keeps its taskbar,
+ * the way those windows come back — see {@code syncPresence}.</p>
  *
  * <h3>The window layer is internal; the frames on it are public</h3>
  * <p>Exactly {@code UIDocument.windowOverlayLayer}'s arrangement, and for the same reason: a layer added
@@ -159,8 +158,8 @@ public class Desktop extends UIElement implements DataProvider {
      *
      * <p>It sits <em>over</em> the document's own content, which is the band model: the root's other
      * children are the desktop-content band, the desktop is the windows band above it, and the top
-     * layer is above both by construction. While no window is open the desktop is zero-sized and
-     * hit-tests nothing, so it cannot swallow clicks meant for the application underneath.</p>
+     * layer is above both by construction. Over a screen that is not ours, with no window open, it is
+     * zero-sized and hit-tests nothing, so it cannot swallow clicks meant for the screen underneath.</p>
      */
     public static Desktop of(UIDocument document) {
         Desktop existing = ifPresent(document);
@@ -278,6 +277,11 @@ public class Desktop extends UIElement implements DataProvider {
         onMouseDown.attachListener((element, event) -> deactivate(), false, false);
         windows.onMouseDown.attachListener((element, event) -> deactivate(), false, false);
 
+        // THE USER WORKING IN A WINDOW ENDS ITS ATTENTION FLASH: a press or a key landing anywhere inside it.
+        // Capture, so nothing in the content can swallow it first.
+        windows.onMouseDown.attachListener((element, event) -> seen(event.getTarget()), true, false);
+        windows.onKeyDown.attachListener((element, event) -> seen(event.getTarget()), true, false);
+
         // AND A RIGHT-CLICK ON BARE DESKTOP OPENS THE DESKTOP MENU -- the only affordance left once
         // every window is minimised, since the taskbar's menu needs the strip and a system menu needs a
         // window. Attached to BOTH for the same reason the deactivate listeners above are: the window
@@ -299,33 +303,11 @@ public class Desktop extends UIElement implements DataProvider {
                         ? ContextMenu.of(MenuId.DESKTOP_CONTEXT) : null);
     }
 
-    /**
-     * Fills the root while any window <b>exists</b>, and takes up no space at all while none does.
-     *
-     * <p><b>IMPORTANT origin</b>, matching {@code UIDocument.windowOverlayLayer}: this is the compositor's
-     * own surface, and a stylesheet that could move or resize it could put every window somewhere the
-     * clamp does not agree with. Everything else about a desktop — what it paints, what its taskbar
-     * looks like — stays in {@code ua/desktop.css} where a theme can reach it.</p>
-     *
-     * <p>The empty case is not an optimisation. A full-size overlay hit-tests, so an empty desktop
-     * sitting over an application's own root would eat every click that landed on bare background —
-     * a UI that had never opened a window would simply stop responding, and nothing about the symptom
-     * would point here.</p>
-     *
-     * <h3>"Live" is the REGISTRY, never the window layer</h3>
-     *
-     * <p>Written against the layer first, and it is the same mistake the taskbar exists to correct, one
-     * level down: the layer holds the <em>visible</em> windows, so minimising the last one emptied it
-     * and collapsed the whole desktop to 0×0 in the corner — <b>taking the taskbar with it</b>. Every
-     * window was retained and there was no longer anything on screen to bring one back with, which is
-     * precisely the failure W3 and W4 ship together to prevent. Reported from the harness as "the bar
-     * goes off screen to the top left", which is exactly what a zero-sized desktop at the origin looks
-     * like.</p>
-     *
-     * <p>A desktop with a hidden window is a desktop in use. The zero-sized case is for one that has
-     * never held a window at all — and once every window is genuinely gone, the surface goes back.</p>
-     */
-    /** The class the sheet sizes the compositor from. @see #syncPresence */
+    // Live (full size) while any window exists, or when the desktop is the surface; see syncPresence.
+    // The geometry is the sheet's (ua/desktop.css `desktop`, `desktop.__live__`), never a stylesheet's to move
+    // beyond that: a theme styles what the desktop paints, not where the compositor sits.
+    // Live is the REGISTRY, not the window layer: the layer holds only visible windows, so minimising the
+    // last one would collapse the desktop and its taskbar.
     /**
      * Whether the compositor is on the tree — true on a resume, false on a suspend.
      *
@@ -346,14 +328,9 @@ public class Desktop extends UIElement implements DataProvider {
     private boolean wholeSurface;
 
     private void syncPresence() {
-        // A CLASS, where the old engine wrote the size at IMPORTANT. Both halves of the geometry are in
-        // ua/desktop.css now -- the out-of-flow position on `desktop`, the full size on `desktop.__live__`
-        // -- because the new engine may not write into the cascade at all, and because state a widget
-        // flips from its own bookkeeping belongs on a class rather than in Java: a theme can then restyle
-        // it, and the base rule is the SAFE state (no space) rather than the dangerous one.
-        // Or the surface is ours: a desktop that IS the screen is full-size with nothing open, where one
-        // laid over a game must take no space until it holds a window. Without the first case an empty
-        // desktop is 0x0 and paints nothing at all, taskbar included.
+        // A class, not a size: ua/desktop.css sizes `desktop.__live__` full and the base rule takes no space,
+        // so forgetting it fails safe. Live when the desktop is the surface (its taskbar always shows) or
+        // holds a window; one laid over a game screen with none stays zero-sized.
         setClass(this, LIVE_CLASS, wholeSurface || isLive());
     }
 
@@ -510,6 +487,16 @@ public class Desktop extends UIElement implements DataProvider {
         activate(frame, false);
     }
 
+    /**
+     * Activates {@code frame} for something the user did (a taskbar click, the switcher, a preview) and ends its
+     * attention flash, which only user interaction does.
+     */
+    public void activateByUser(WindowFrame frame) {
+        if (frame == null || frame.desktop() != this) return;
+        frame.clearAttention();
+        activate(frame, false);
+    }
+
     /** @param programmatic see {@link WindowFrame#restoreFocus} — it decides whether focus rings. */
     public void activate(WindowFrame frame, boolean programmatic) {
         activate(frame, programmatic, true);
@@ -528,10 +515,8 @@ public class Desktop extends UIElement implements DataProvider {
         // that to mean anything. Restored as PERSISTED: it is coming out of retention, which is exactly
         // the distinction the flag carries.
         if (frame.state() == WindowState.HIDDEN) frame.show(true);
-        // SEEN. Activation is the only event that means the user has looked at it, which is why the
-        // flash is not on a timer -- one that gave up after a few seconds would be a notification you
-        // could miss by looking away. @see WindowFrame#isDemandingAttention()
-        frame.clearAttention();
+        // Attention is NOT cleared here: code activates freshly opened windows too, which would end the
+        // flash before anyone saw it. @see #activateByUser, WindowFrame#isDemandingAttention()
         // THE SHOW-DESKTOP MEMORY IS DROPPED HERE. Once a window has been used, "put it back how it was"
         // no longer describes anything the user would recognise, and a second Win+D should mean a fresh
         // minimise-all. Windows drops its own on exactly this event. @see #toggleShowDesktop()
@@ -677,6 +662,16 @@ public class Desktop extends UIElement implements DataProvider {
         return key == WindowFrame.WINDOW_FRAME ? activeWindow : null;
     }
 
+    private void seen(@Nullable Object target) {
+        for (UIElement walk = target instanceof UIElement ? (UIElement) target : null; walk != null;
+             walk = walk.parentElement()) {
+            if (walk instanceof WindowFrame) {
+                ((WindowFrame) walk).clearAttention();
+                return;
+            }
+        }
+    }
+
     private void focusMoved(@Nullable UIElement focused) {
         for (UIElement walk = focused; walk != null; walk = walk.parentElement()) {
             if (walk instanceof WindowFrame && ((WindowFrame) walk).desktop() == this) {
@@ -760,6 +755,22 @@ public class Desktop extends UIElement implements DataProvider {
             throw new IllegalStateException("a destroyed window cannot be reopened: " + frame.getTitle());
         }
         frame.setOwner(this);
+        try {
+            return attach(frame, activate);
+        } catch (RuntimeException failed) {
+            // Registered but never attached would be a taskbar entry for a window that is not there.
+            registry.withdrawn(frame);
+            frame.setOwner(null);
+            try {
+                if (frame.parent() != null) frame.parent().remove(frame);
+            } catch (RuntimeException ignored) {
+                // The tree refused the same way the attach did.
+            }
+            throw failed;
+        }
+    }
+
+    private <T extends WindowFrame> T attach(T frame, boolean activate) {
         registry.opened(frame);
         windows.append(frame);
         // BEFORE the animation and the activation below: a window restored from a record should open AT
@@ -794,6 +805,65 @@ public class Desktop extends UIElement implements DataProvider {
         activate(frame, true);
         return frame;
     }
+
+    /**
+     * Tells the user something could not be opened: a modal box over the desktop with a red mark, {@code message}
+     * and the cause's root message, and an OK.
+     *
+     * <pre>{@code
+     * try {
+     *     open();
+     * } catch (RuntimeException failed) {
+     *     desktop.reportFailure("Machine Example", "Machine Example could not be opened.", failed);
+     * }
+     * }</pre>
+     *
+     * <p>Callable from any thread: it posts to the document's sequence when it is on another. A desktop with no
+     * document yet reports nothing.</p>
+     *
+     * @param title   the caption: the application or window that failed
+     * @param message the sentence saying what did not happen
+     * @param cause   why, or null
+     */
+    public void reportFailure(String title, String message, @Nullable Throwable cause) {
+        reportFailure(null, title, message, cause);
+    }
+
+    /**
+     * As above, for an application: the box is that application's window, so it takes the application's taskbar
+     * button, flashes it for attention as Windows' does, and closes, minimises and switches like any window.
+     *
+     * <pre>{@code
+     * desktop.reportFailure("mymod:editor", "My Editor", "My Editor could not be opened.", failed);
+     * }</pre>
+     *
+     * <p>One box per application: a second failure brings the open one forward.</p>
+     *
+     * @param applicationId the {@code ApplicationKind} id, or null for a failure with no application
+     */
+    public void reportFailure(@Nullable String applicationId, String title, String message, @Nullable Throwable cause) {
+        UIDocument document = document();
+        if (document == null) return;
+        Runnable show = () -> {
+            WindowFrame open = applicationId == null ? null : failureWindows.get(applicationId);
+            if (open != null && open.state() != WindowState.DESTROYED && !open.isClosing()) {
+                activateByUser(open);
+                return;
+            }
+            ApplicationKind kind = applicationId == null ? null : applications().byId(applicationId);
+            WindowFrame box = FailureWindow.open(this, kind, title, message, cause);
+            if (applicationId != null) {
+                failureWindows.put(applicationId, box);
+                box.onDestroyed.connect(() -> failureWindows.remove(applicationId, box));
+            }
+        };
+        UiSequence sequence = document.sequence();
+        if (sequence != null && !sequence.isCurrent()) sequence.execute(show);
+        else show.run();
+    }
+
+    /** Each application's open failure window. */
+    private final Map<String, WindowFrame> failureWindows = new HashMap<>();
 
     /** Puts a hidden window back on the layer. Driven by {@link WindowFrame#show}, which owns the state. */
     public void reattach(WindowFrame frame) {
@@ -1449,6 +1519,21 @@ public class Desktop extends UIElement implements DataProvider {
         return this;
     }
 
+    @Nullable
+    private Supplier<CgProtocolConnection<Object>> connection;
+
+    /** Tells this desktop which connection its host is on. Asked at each use, since a host rebinds it on reconnect. */
+    public Desktop useConnection(@Nullable Supplier<CgProtocolConnection<Object>> connected) {
+        this.connection = connected;
+        return this;
+    }
+
+    /** The host's connection to its server, or null when there is none. What an application asks its server through. */
+    @Nullable
+    public CgProtocolConnection<Object> connection() {
+        return connection == null ? null : connection.get();
+    }
+
     /** The host's workspace, or null when there is no connection, as on a title screen. @see #useWorkspace */
     @Nullable
     public Workspace workspace() {
@@ -1549,6 +1634,24 @@ public class Desktop extends UIElement implements DataProvider {
     private static final float DEFAULT_WINDOW_FRACTION = 0.8f;
 
     /**
+     * Forgets every saved window size and position, and puts each open application's main window back at its default
+     * size ({@link ApplicationKind#windowSize}, else most of the screen). The next launch of anything opens at its default.
+     *
+     * <pre>{@code
+     * desktop.resetWindowPlacements();    // the taskbar's "Reset window sizes"
+     * }</pre>
+     *
+     * <p>A maximised window stays maximised; its restore size is what it would return to, and is not touched.</p>
+     */
+    public void resetWindowPlacements() {
+        pendingPlacements.clear();
+        for (WindowFrame frame : new ArrayList<>(registry.windows())) {
+            if (frame.isApplicationMain() && !frame.isMaximized()) sizeByDefault(frame);
+        }
+        savePersistedState();
+    }
+
+    /**
      * An application's main window that nobody sized and nothing recorded: its kind's
      * {@link ApplicationKind#windowSize}, else {@link #DEFAULT_WINDOW_FRACTION} of the desktop. The size only; the
      * cascade places it, as Windows' default position does. Any other window keeps fitting its content. On the first
@@ -1559,8 +1662,9 @@ public class Desktop extends UIElement implements DataProvider {
         if (area != null && area.width() > 0f && area.height() > 0f) {
             ApplicationKind kind = frame.application();
             boolean named = kind != null && kind.windowWidth() > 0f && kind.windowHeight() > 0f;
-            float width = Math.round(Math.min(area.width(), named ? kind.windowWidth() : area.width() * DEFAULT_WINDOW_FRACTION));
-            float height = Math.round(Math.min(area.height(), named ? kind.windowHeight() : area.height() * DEFAULT_WINDOW_FRACTION));
+            float fraction = kind != null && kind.windowFraction() > 0f ? kind.windowFraction() : DEFAULT_WINDOW_FRACTION;
+            float width = Math.round(Math.min(area.width(), named ? kind.windowWidth() : area.width() * fraction));
+            float height = Math.round(Math.min(area.height(), named ? kind.windowHeight() : area.height() * fraction));
             frame.resizeTo(width, height);
             return;
         }

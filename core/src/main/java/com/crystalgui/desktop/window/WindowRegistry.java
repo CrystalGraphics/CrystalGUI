@@ -200,6 +200,22 @@ public final class WindowRegistry {
         changed();
     }
 
+    /**
+     * Takes back an {@link #opened} whose window never made it onto the desktop, without going through a
+     * teardown that would touch the tree the failure came from.
+     *
+     * <p>A listener that throws on the notice is ignored: it threw on the open for the same reason.</p>
+     */
+    public void withdrawn(WindowFrame frame) {
+        live.remove(frame);
+        mru.remove(frame);
+        try {
+            changed();
+        } catch (RuntimeException ignored) {
+            // The open's own notice failed the same way.
+        }
+    }
+
     void destroyed(WindowFrame frame) {
         live.remove(frame);
         mru.remove(frame);

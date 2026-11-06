@@ -163,11 +163,6 @@ public final class FrameProfiler {
             else gear.removeClass(WindowFrame.ACTION_ON_CLASS);
         });
         desktop.addWindow(frame);
-        // AFTER addWindow, which is what places and sizes it -- a size written first is overwritten.
-        // Clamped to the work area: the bands below sum to well over a short desktop's height, and a
-        // window taller than the desktop pushes its own tabs off the bottom.
-        float available = desktop.box() == null ? 0f : desktop.box().height();
-        frame.resizeTo(720f, available > 0f ? Math.min(520f, available - 60f) : 520f);
         return frame;
     }
 

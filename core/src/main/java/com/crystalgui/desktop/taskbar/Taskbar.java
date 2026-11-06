@@ -451,7 +451,7 @@ public class Taskbar extends UIElement {
             if (frame != null) {
                 entry.setText(frame.getTitle());
                 setClass(entry, ICONIC_CLASS, frame.getTitle().isEmpty());
-                applyIcon(entry, frame.iconName());
+                applyIcon(entry, frame.iconName(), frame.iconTitle());
                 setClass(entry, LAUNCH_CLASS, false);
                 setClass(entry, ACTIVE_CLASS, frame == active);
                 setClass(entry, HIDDEN_CLASS, frame.state() == WindowState.HIDDEN);
@@ -462,7 +462,7 @@ public class Taskbar extends UIElement {
             } else if (entry.kind != null && entry.windows.isEmpty()) {
                 entry.setText(entry.kind.displayName());
                 setClass(entry, ICONIC_CLASS, false);
-                applyIcon(entry, entry.kind.icon());
+                applyIcon(entry, entry.kind.icon(), entry.kind.displayName());
                 setClass(entry, LAUNCH_CLASS, true);
                 setClass(entry, ACTIVE_CLASS, false);
                 setClass(entry, HIDDEN_CLASS, false);
@@ -485,7 +485,7 @@ public class Taskbar extends UIElement {
                 }
                 entry.setText(entry.kind.displayName());
                 setClass(entry, ICONIC_CLASS, false);
-                applyIcon(entry, first.iconName());
+                applyIcon(entry, first.iconName(), first.iconTitle());
                 setClass(entry, LAUNCH_CLASS, false);
                 setClass(entry, ACTIVE_CLASS, lit);
                 setClass(entry, HIDDEN_CLASS, allHidden);
@@ -846,6 +846,7 @@ public class Taskbar extends UIElement {
                 if (entry.kind != null) DesktopCommands.open(desktop, entry.kind);
                 return;
             }
+            frame.clearAttention();
             if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {
                 // POINTER activation, so focus lands without a ring: the user pointed at this. Restoring
                 // a hidden window is part of what activate() means -- see Desktop.activate.
@@ -979,7 +980,7 @@ public class Taskbar extends UIElement {
      * the badge's is: {@code setPreIcon} on an attached entry is a structural change the widget makes
      * about itself, not a child added from inside a parent's own attach.</p>
      */
-    private void applyIcon(Button entry, @Nullable String iconName) {
+    private void applyIcon(Button entry, @Nullable String iconName, String title) {
         UIElement slot = entry.getPreIcon();
         WindowIcon tile;
         if (slot instanceof WindowIcon existing) {
@@ -989,7 +990,7 @@ public class Taskbar extends UIElement {
             tile.addClass(ICON_CLASS);
             entry.setPreIcon(tile);
         }
-        tile.show(iconName, entry.getText());
+        tile.show(iconName, title);
     }
 
     /** On an attention entry between its pulses: the sheet fades it out. @see #setAttention */
@@ -997,13 +998,16 @@ public class Taskbar extends UIElement {
     /** On an attention entry once its pulses are over: the sheet settles it to the tint it holds. */
     public static final String FLASH_HELD_CLASS = "__flash-held__";
     /**
-     * Windows' flash, measured (FlashWindowEx, seven toggles at the 530 ms caret blink time): four pulses, one every
-     * four blinks, each lit for 750 ms of it, then held lit at four fifths. The sheet's transitions are its rise and
-     * fall: lit over 700 ms, unlit over 850 ms, held over 600 ms.
+     * Windows' flash, measured (FlashWindowEx, seven toggles): eleven pulses (counted on screen), one every 1.41 s,
+     * each lit for 500 ms of it, then held lit at four fifths. The sheet's transitions are its rise and
+     * fall: lit over 467 ms, unlit over 567 ms, held over 400 ms.
      */
-    private static final long FLASH_PERIOD_NANOS = 4L * 530_000_000L, FLASH_LIT_NANOS = 750_000_000L,
-            FLASH_SETTLE_NANOS = 1_000_000_000L;
-    private static final int PULSES = 4;
+    private static final long FLASH_PERIOD_NANOS = 1_413_000_000L, FLASH_LIT_NANOS = 500_000_000L,
+            FLASH_SETTLE_NANOS = 667_000_000L;
+    private static final int PULSES = 11;
+    /** On an entry whose attention just ended: the sheet fades the orange out over {@link #FLASH_ENDING_NANOS}. */
+    public static final String FLASH_ENDING_CLASS = "__flash-ending__";
+    private static final long FLASH_ENDING_NANOS = 450_000_000L;
 
     /**
      * Lights {@code entry} for a window wanting attention, pulsing it as Windows' {@code FlashWindowEx} does a window
@@ -1015,6 +1019,19 @@ public class Taskbar extends UIElement {
         if (!on) {
             entry.removeClass(FLASH_OFF_CLASS);
             entry.removeClass(FLASH_HELD_CLASS);
+            UIDocument ending = entry.document();
+            if (was && ending != null && WindowAnimator.isEnabled()) {
+                // The orange fades out to the entry's own state instead of cutting
+                entry.addClass(FLASH_ENDING_CLASS);
+                long begun = System.nanoTime();
+                ending.animation().every(entry, delta -> {
+                    if (entry.hasClass(ATTENTION_CLASS) || System.nanoTime() - begun >= FLASH_ENDING_NANOS) {
+                        entry.removeClass(FLASH_ENDING_CLASS);
+                        return false;
+                    }
+                    return true;
+                });
+            }
         }
         if (!on || was) return;
         UIDocument document = entry.document();

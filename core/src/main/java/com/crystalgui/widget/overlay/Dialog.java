@@ -445,8 +445,10 @@ public class Dialog extends UIElement {
         // against the screen, which is what "owned" is supposed to mean.
         if (!owned) {
             window.addOverlay(ensureBackdrop(), this);
-            window.promote(ensureBackdrop());
-            window.promote(this);
+            // Into the work area, not the top layer: the scrim and the dialog stay under a compositor's chrome,
+            // so a modal never dims or covers the taskbar.
+            window.promote(ensureBackdrop(), window.workArea());
+            window.promote(this, window.workArea());
         } else if (backdrop == null) {
             // THE BACKDROP GOES BESIDE THE DIALOG, not inside it: the sheet sizes it to 100% of its
             // containing block, and inside the dialog that is the dialog.

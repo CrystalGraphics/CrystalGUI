@@ -3,14 +3,9 @@ package com.crystalgui.app.machine;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
-import com.crystalgraphics.net.CgNetwork;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
-import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.machine.ui.MachinePanel;
-import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.fs.Resource;
 import com.crystalgui.net.window.ClientWindows;
 import com.crystalgui.net.window.Presentation;
 import com.crystalgui.net.window.ServerWindows;
@@ -43,19 +38,13 @@ public final class MachineExample {
 
     private static boolean registered;
 
-    /**
-     * The launcher's entry: asks the server for the panel, which lands as a tab of the Crystal Editor, and
-     * brings the editor forward. Needs a connection, so a standalone desktop lists it unavailable.
-     */
-    public static final ApplicationKind KIND = ApplicationKind.of("crystalgui:machine-example", "Machine Example")
+    /** The launcher's entry: asks the server for the panel, which opens as a window of its own. Needs a connection. */
+    /** The launcher entry's id, which the panel's type names as its application. */
+    public static final String ID = "crystalgui:machine-example";
+
+    public static final ApplicationKind KIND = ApplicationKind.of(ID, "Machine Example")
             .keywords("machine", "example", "server", "panel")
-            .singleInstance()
-            .launch(context -> {
-                requestPanel(CgNetwork.client());
-                Application editor = context.desktop().applications()
-                        .activateOrLaunch(CrystalEditor.KIND, context.workspace());
-                return new Forward(editor);
-            });
+            .action(context -> requestPanel(context.desktop().connection()));
 
     private MachineExample() {
     }
@@ -72,7 +61,7 @@ public final class MachineExample {
             ServerWindows.openable(MachinePanel.TYPE, (viewer, args) -> {
                 MachineTrace.log(MachineTrace.SERVER, "a client asked for a panel");
                 return MACHINE;
-            }, Presentation.EDITOR_TAB);
+            }, Presentation.WINDOW);
             CgEngineLifecycle.onServerTick(MACHINE::tick);
         }
     }
@@ -92,33 +81,5 @@ public final class MachineExample {
         ClientWindows.requestOpen(MachinePanel.TYPE, null, granted ->
                 MachineTrace.log(MachineTrace.CLIENT,
                         granted ? "the server is opening one" : "the server said no"));
-    }
-
-    /** The editor the panel lands in, standing for the request: closing the request closes nothing. */
-    private record Forward(Application editor) implements Application {
-
-        @Override
-        public ApplicationKind kind() {
-            return KIND;
-        }
-
-        @Override
-        public WindowFrame mainWindow() {
-            return editor.mainWindow();
-        }
-
-        @Override
-        public boolean open(Resource resource) {
-            return false;
-        }
-
-        @Override
-        public void activate() {
-            editor.activate();
-        }
-
-        @Override
-        public void dispose() {
-        }
     }
 }

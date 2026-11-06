@@ -11,6 +11,7 @@ import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.taskbar.TaskbarCombine;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowCommands;
+import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.ui.dom.UIElement;
@@ -50,6 +51,7 @@ public final class DesktopCommands {
     public static final String SWITCH_WINDOW = "desktop.switchWindow";
     public static final String SWITCH_WINDOW_BACK = "desktop.switchWindowBack";
     public static final String SHOW_DESKTOP = "desktop.showDesktop";
+    public static final String RESET_WINDOW_SIZES = "desktop.resetWindowSizes";
     /** The prefix of the row that opens an application from its menu, followed by the application's id. */
     public static final String OPEN_APPLICATION = "desktop.openApplication";
     public static final String PIN_TO_TASKBAR = "desktop.pinToTaskbar";
@@ -215,6 +217,14 @@ public final class DesktopCommands {
                     return desktop != null
                             && (desktop.isShowingDesktop() || desktop.registry().size() > 0);
                 }));
+
+        registry.register(Command.of(RESET_WINDOW_SIZES, "Reset window sizes")
+                .menu(MenuId.TASKBAR_CONTEXT, "8_reset", 10)
+                .run(context -> {
+                    Desktop desktop = desktopFor(context);
+                    if (desktop != null) desktop.resetWindowPlacements();
+                })
+                .enabledWhen(context -> desktopFor(context) != null));
     }
 
     /** Testing seam — {@code CommandRegistry.resetForTesting()} drops the registrations, not this flag. */
@@ -239,6 +249,8 @@ public final class DesktopCommands {
         Desktop desktop = desktopFor(context);
         ApplicationKind kind = kindFor(context);
         if (desktop == null || kind == null || desktop.applications().byId(kind.id()) == null) return List.of();
+        // A FAILED APPLICATION offers Close alone: there is nothing running to open another of or pin
+        if (isFailureWindow(context)) return List.of();
         return List.of(MenuEntry.Item.of(
                 Command.of(OPEN_APPLICATION + "." + kind.id(), kind.displayName())
                         .icon(kind.icon())
@@ -261,11 +273,17 @@ public final class DesktopCommands {
                 }));
     }
 
+    /** Whether the window the command is about is a failure box. @see FailureWindow */
+    private static boolean isFailureWindow(CommandContext context) {
+        WindowFrame frame = context.data().get(WindowFrame.WINDOW_FRAME);
+        return frame != null && frame.hasClass(FailureWindow.CLASS);
+    }
+
     /** Whether the application the command is about could be pinned: installed here, and pinnable. */
     private static boolean canPin(CommandContext context) {
         Desktop desktop = desktopFor(context);
         ApplicationKind kind = kindFor(context);
-        if (desktop == null || kind == null) return false;
+        if (desktop == null || kind == null || isFailureWindow(context)) return false;
         ApplicationKind installed = desktop.applications().byId(kind.id());
         return installed != null && installed.isPinnable();
     }

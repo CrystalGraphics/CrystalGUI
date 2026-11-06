@@ -185,6 +185,35 @@ public final class UiType<P extends UIElement & Networked<M>, M> {
         return new UiType<>(id, create);
     }
 
+    /**
+     * The application this panel belongs to, by name: what a failure to open it says it was, where the window's
+     * own title would mean nothing to someone who never saw it.
+     *
+     * <pre>{@code
+     * public static final UiType<MachinePanel, MachineModel> TYPE =
+     *         UiType.of("crystalgui:machine", MachinePanel::new).application("crystalgui:machine-example", "Machine Example");
+     * }</pre>
+     *
+     * <p>Read where only the type id is known, by {@link #applicationOf}; a type that names none is reported
+     * under its window's title.</p>
+     */
+    public UiType<P, M> application(String applicationId, String name) {
+        APPLICATIONS.put(id, new Application(applicationId, name));
+        return this;
+    }
+
+    /** An application as its panel type names it: the id its launcher entry has, and what it is called. */
+    public record Application(String id, String name) {
+    }
+
+    /** The application {@code typeId} was declared for, or null when its type named none or was never loaded here. */
+    @Nullable
+    public static Application applicationOf(String typeId) {
+        return APPLICATIONS.get(typeId);
+    }
+
+    private static final Map<String, Application> APPLICATIONS = new ConcurrentHashMap<>();
+
     /** What crosses the wire, and what both hosts key on. */
     public String id() {
         return id;

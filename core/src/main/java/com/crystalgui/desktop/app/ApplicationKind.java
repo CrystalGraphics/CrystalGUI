@@ -63,6 +63,7 @@ public final class ApplicationKind {
     @Nullable
     private Consumer<LaunchContext> autostart;
     private float windowWidth, windowHeight;
+    private float windowFraction;
     private boolean frozen;
 
     private ApplicationKind(String id, String displayName) {
@@ -100,6 +101,25 @@ public final class ApplicationKind {
         this.windowWidth = width;
         this.windowHeight = height;
         return this;
+    }
+
+    /**
+     * The size its main window opens at as a fraction of the desktop, for an application that is a small tool rather
+     * than a workspace: the default is most of the screen. A {@link #windowSize} in pixels wins over it.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:cues", "Cues").windowFraction(0.25f).launch(...);
+     * }</pre>
+     */
+    public ApplicationKind windowFraction(float fraction) {
+        check();
+        this.windowFraction = fraction;
+        return this;
+    }
+
+    /** @see #windowFraction; 0 when it names none */
+    public float windowFraction() {
+        return windowFraction;
     }
 
     /** @see #windowSize; 0 when it names none */
@@ -153,6 +173,30 @@ public final class ApplicationKind {
     public ApplicationKind launch(Function<LaunchContext, Application> factory) {
         check();
         this.factory = factory;
+        return this;
+    }
+
+    /**
+     * A launcher entry that runs {@code hook} and starts no application: whatever it opens is its own window,
+     * owned by whoever opened it, so nothing is registered as running, grouped or quit with it.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:panel", "Panel").action(ctx -> askServerForPanel());
+     * }</pre>
+     *
+     * <ul>
+     *   <li>{@link ApplicationRegistry#launch} answers null for it, which here means "ran", not "refused".</li>
+     *   <li>Never pinnable: a pin would have no window to bring back.</li>
+     *   <li>Replaces {@link #launch}; a kind has one or the other.</li>
+     * </ul>
+     */
+    public ApplicationKind action(Consumer<LaunchContext> hook) {
+        check();
+        this.factory = context -> {
+            hook.accept(context);
+            return null;
+        };
+        this.preventPinning = true;
         return this;
     }
 

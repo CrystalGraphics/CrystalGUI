@@ -239,7 +239,7 @@ public class WindowSwitcher extends UIElement {
         if (!open) return;
         WindowFrame chosen = selectedWindow();
         close();
-        if (chosen != null && chosen.state() != WindowState.DESTROYED) desktop.activate(chosen, false);
+        if (chosen != null && chosen.state() != WindowState.DESTROYED) desktop.activateByUser(chosen);
     }
 
     /**
@@ -596,7 +596,7 @@ public class WindowSwitcher extends UIElement {
         void show(WindowFrame frame) {
             title.setText(frame.getTitle());
             // THE SAME TILE THE TASKBAR AND THE PREVIEW DRAW. @see WindowIcon
-            iconSlot.show(frame.iconName(), frame.getTitle());
+            iconSlot.show(frame.iconName(), frame.iconTitle());
             thumbnail.setFrame(frame);
         }
 

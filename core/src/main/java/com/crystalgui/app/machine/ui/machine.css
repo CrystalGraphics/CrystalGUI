@@ -20,9 +20,10 @@
     padding: 12px;
     flex-direction: column;
     gap: 8px;
-    /* Wide enough for a demo entry's second line to sit on one row. At 320px every outcome
-       sentence wrapped to three lines and the strip was taller than the machine above it. */
-    width: 560px;
+    /* Fills its window up to a width where a demo entry's second line sits on one row (at 320px every outcome
+       sentence wrapped to three lines); narrower, the sentences wrap rather than run past the edge and scroll. */
+    width: 100%;
+    max-width: 560px;
 }
 
 .machine-row {
@@ -60,7 +61,10 @@
  * this box; left to size itself it would push the row past the panel edge.
  */
 .machine-wire {
-    width: 440px;
+    /* what is left of the row beside its badge, wrapping inside it: width 0 plus grow never asks for more */
+    width: 0px;
+    flex-grow: 1;
+    min-width: 0px;
     color: #E8B65A;
 }
 
@@ -144,6 +148,8 @@
 /* The sentence. Indented to the button's width so it hangs under the description, not the button. */
 .machine-outcome {
     margin-left: 128px;
+    /* takes the panel's width less the indent, so a long sentence wraps there instead of running on */
+    align-self: stretch;
     color: #9A9A9A;
 }
 
@@ -192,15 +198,6 @@
     display: flex;
 }
 
-/*
- * The result lines are narrower in here than in the panel around them: this box is inset by a
- * margin and its own padding, and .machine-wire is a fixed 440px because these lines are sized by
- * the sheet rather than by their text. Left alone, the badge plus the line overhangs the box by a
- * couple of pixels -- and an overhang is not clipped, it is drawn over whatever is beside it.
- */
-.machine-engine .machine-wire {
-    width: 400px;
-}
 
 /*
  * IDS ARE DOCUMENT-WIDE, and a nested panel does not get a namespace for them.

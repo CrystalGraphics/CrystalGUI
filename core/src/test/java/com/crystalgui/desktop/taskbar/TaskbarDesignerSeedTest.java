@@ -61,8 +61,7 @@ public class TaskbarDesignerSeedTest extends UiDocumentTestBase {
         UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        // A document, because the compositor takes up no space until one is open — and with no space the
-        // taskbar has no box for anything here to measure a radius against.
+        // A window, so the compositor is live and the taskbar has a box to measure a radius against.
         Desktop.of(document).addWindow(new WindowFrame("Welcome"));
         settle();
     }
