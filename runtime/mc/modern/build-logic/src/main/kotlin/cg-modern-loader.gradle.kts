@@ -97,7 +97,7 @@ val lang: SourceSet by sourceSets.creating {
 // finds `crystalgui_language` through its own MOD_CLASSES group -- `cgLangDevRunRoots` below, read by
 // crystalgraphics-run.gradle.kts, which replaces what mods {} declares. `-PcgNoLanguage` skips both.
 // Common's lang half too, which Loom's run reads from nowhere else: without it the language entrypoint
-// dies on ClassNotFoundException: com.crystalgui.mc.modern.lang.ScriptServiceModern.
+// dies on ClassNotFoundException for the classes it holds.
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
     dependencies {
         "runtimeOnly"(files(lang.output))
@@ -137,27 +137,17 @@ dependencies {
     // CgFiles.YAML's library: the shipped jar carries it relocated, a dev run takes it from here.
     "runtimeOnly"("org.yaml:snakeyaml:2.7")
 
-    // :language -- the grammars, ECJ and Rhino, plus the ScriptService seam. ON `lang` AND NOT ON
-    // `main` since J8: the language stack ships as its own jar, and this is what stops the host jar
-    // naming it. Its 1.20.x host half comes from the common node's own lang source set.
+    // :language -- the grammars, ECJ and Rhino. ON `lang` AND NOT ON `main` since J8: the language stack
+    // ships as its own jar, and this is what stops the host jar naming it.
     "langCompileOnly"(project(":language"))
-    "langCompileOnly"(project(":runtime:mc:modern-shared"))
     "langCompileOnly"(project(path = common.path, configuration = "commonLangOutput"))
-    // AND ON THE RUNTIME CLASSPATH, like :core and the common node above. compileOnly alone put it on
-    // no run at all: `LifecycleCrystalGUI.bootstrapClient` calls `ScriptService.install()`, so the first
-    // dev client to reach it died with
-    //
-    //     NoClassDefFoundError: com/crystalgui/language/platform/ScriptService
-    //
-    // The shipped jar was never affected -- shadowJar bundles :language from `cgBundledProjects` -- so
-    // this is a dev-run-only hole, and the one loader that shows it first is whichever runs the seam.
-    // Same excludes as the two above, for the same NeoForge strict-version reason.
+    // AND ON THE RUNTIME CLASSPATH, like :core and the common node above: a dev run has no merged jar to
+    // carry it. Same excludes as the two above, for the same NeoForge strict-version reason.
     if (modsOnRuntimeClasspath) {
         "runtimeOnly"(project(":language")) {
             exclude(group = "org.apache.logging.log4j")
             exclude(group = "com.google.code.gson")
         }
-        "runtimeOnly"(project(":runtime:mc:modern-shared"))
     }
 
     // Minecraft supplies log4j and gson. :core pins modern ones runtimeOnly for its tests and the
@@ -403,13 +393,11 @@ extra["cgDevRunClasses"] = cgDevRunClasses
 // with -PcgNoLanguage. `:language` itself stays in cgBundledProjects: no package of it is split.
 // Resources first: FML reads a mod's mods.toml from the first root named for it.
 evaluationDependsOn(":runtime:mc:forge-bootstrap")
-evaluationDependsOn(":runtime:mc:modern-shared")
 val cgLangDevRunRoots: FileCollection = if (providers.gradleProperty("cgNoLanguage").isPresent) files() else files(
     lang.output.resourcesDir,
     lang.output,
     common.extensions.getByType<SourceSetContainer>()["lang"].output,
     project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["lang"].output.classesDirs,
-    cgMainSourceSet(project(":runtime:mc:modern-shared")).output,
 )
 extra["cgLangDevRunRoots"] = cgLangDevRunRoots
 

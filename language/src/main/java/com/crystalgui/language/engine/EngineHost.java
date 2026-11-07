@@ -5,8 +5,6 @@ import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgraphics.storage.download.CgDownloadLocations;
 
 import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -239,8 +237,8 @@ public final class EngineHost implements Closeable {
      *
      * <h3>All three answers are legitimate deployments</h3>
      *
-     * <p>Extraction needs somewhere to write, which is {@link ScriptService#cacheRoot()} — so a process
-     * with no platform registered simply has no second candidate, exactly as before this existed. And a
+     * <p>Extraction needs somewhere to write, which is {@link ScriptService#cacheRoot()} — with no game
+     * the harness's {@code build/crystalgui-cache}. And a
      * jar that bundles no band yields an empty listing rather than an error: shipping the editor without
      * the engines is a supported build, and it degrades to grammar-only colouring like every other
      * absence in this stack.</p>
@@ -269,14 +267,14 @@ public final class EngineHost implements Closeable {
 
     /** The fallback: fetch the band this host needs, from where {@code download/locations.json} lists it. */
     private static EngineSource downloadedSource(CgProgress progress) {
-        Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
+        Path cacheRoot = ScriptService.cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
         return EngineSource.downloadedFrom(CrystalGuiDownloads.LOCATIONS, cacheRoot.resolve("engines"),
                 progress == null ? CgProgress.NONE : progress);
     }
 
     private static EngineSource bundledSource() {
-        Path cacheRoot = CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
+        Path cacheRoot = ScriptService.cacheRoot();
         if (cacheRoot == null) return EngineSource.NONE;
         return EngineSource.extractedFrom(EngineHost.class.getClassLoader(),
                 BUNDLED_ENGINES_ROOT, cacheRoot.resolve("engines"));

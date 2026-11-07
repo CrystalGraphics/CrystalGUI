@@ -1,131 +1,111 @@
 package com.crystalgui.language.platform;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.language.map.PlatformMappings;
+import com.crystalgui.language.map.ReadableView;
 
 import org.junit.After;
+import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.TemporaryFolder;
 
 import java.nio.file.Path;
-import java.nio.file.Paths;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-/**
- * The SPI's contract, which is mostly about what happens when there is <b>no</b> platform.
- *
- * <p>Off a Minecraft host — the harness, every other test, a dedicated server — nothing registers one,
- * and that path has to be as real as the registered one. A null slipping out of here would be found by
- * whichever caller forgot to check, which is the failure this pins against.</p>
- */
+/** What {@link ScriptService} works out from the running game: the mapping per version and namespace, and no game. */
 public class ScriptServiceTest {
 
+    private static final byte[] CLASS = {(byte) 0xCA, (byte) 0xFE, (byte) 0xBA, (byte) 0xBE};
+
+    @Rule
+    public final TemporaryFolder folder = new TemporaryFolder();
+
+    @Before
     @After
-    public void restoreDefault() {
-        CgPlatform.provide(ScriptServices.SERVICE, null);
+    public void noGame() {
+        FakeGame.clear();
+        PlatformMappings.resetForTesting();
+    }
+
+    private Path game(String version, String... classes) {
+        Set<String> present = Set.of(classes);
+        Path directory = folder.getRoot().toPath();
+        FakeGame.install(version, name -> present.contains(name) ? CLASS : null, directory);
+        return directory;
     }
 
     @Test
-    public void withNothingRegisteredTheCurrentPlatformIsNoneRatherThanNull() {
-        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
-    }
-
-    /** Every member of NONE answers, so no caller has to special-case the absent platform. */
-    @Test
-    public void noneAnswersEveryMember() {
-        ScriptService none = ScriptService.NONE;
-        assertNotNull("liveBytes", none.liveBytes());
-        assertNotNull("cacheRoot", none.cacheRoot());
-        assertTrue("mappings should be NONE", none.mappings().isNone());
-        assertTrue("probe should be NONE", none.namespaceProbe().isNone());
-    }
-
-    /** NONE reads the classloader, which is what makes it work in a plain JVM. */
-    @Test
-    public void nonesByteSourceReadsItsOwnClasses() throws Exception {
-        byte[] bytes = ScriptService.NONE.liveBytes()
-                .bytesOf("com/crystalgui/language/platform/ScriptService");
-        assertNotNull("NONE could not read a class it plainly ships", bytes);
-        assertTrue("not a class file", bytes.length > 4
-                && (bytes[0] & 0xFF) == 0xCA && (bytes[1] & 0xFF) == 0xFE);
+    public void withNoGameNothingIsLive() throws Exception {
+        assertFalse(ScriptService.live());
+        assertSame(ReadableView.ByteSource.NONE, ScriptService.liveBytes());
+        assertTrue(ScriptService.mappings().isNone());
+        assertTrue(ScriptService.namespaceProbe().isNone());
+        assertEquals("net/minecraft/world/World", ScriptService.runtimeClassName("net/minecraft/world/World"));
+        assertTrue(ScriptService.cacheRoot().endsWith(Path.of("build", "crystalgui-cache")));
+        assertNull(ScriptService.runningNodeClass());
     }
 
     @Test
-    public void registeringNullFallsBackRatherThanStoringIt() {
-        CgPlatform.provide(ScriptServices.SERVICE, null);
-        assertSame(ScriptService.NONE, CgPlatform.get(ScriptServices.SERVICE));
+    public void aGameCachesUnderItsDirectory() {
+        Path directory = game("1.20.1");
+        assertTrue(ScriptService.live());
+        assertTrue(ScriptService.cacheRoot().startsWith(directory));
     }
 
     @Test
-    public void aRegisteredPlatformIsWhatCurrentAnswers() {
-        ScriptService fake = fakePlatform(Paths.get("somewhere"));
-        CgPlatform.provide(ScriptServices.SERVICE, fake);
-        assertSame(fake, CgPlatform.get(ScriptServices.SERVICE));
+    public void minecraft1710TakesMcpStable12() {
+        game("1.7.10");
+        assertEquals("stable-12", ScriptService.mappings().cacheKey());
+        assertEquals("getBlock", ScriptService.namespaceProbe().readableMember());
     }
 
-    /**
-     * Coordinates are version-addressed, which is what removes cache invalidation entirely.
-     *
-     * <p>Two artifacts must never share a directory: an upgrade is then a miss rather than something
-     * that has to be detected and cleared.</p>
-     */
     @Test
-    public void coordinatesCacheKeyIsTheVersion() {
-        MappingCoordinates twelve = MappingCoordinates.of("1.7.10", "stable", "12", "https://x/");
-        MappingCoordinates thirteen = MappingCoordinates.of("1.7.10", "stable", "13", "https://x/");
-        assertEquals("stable-12", twelve.cacheKey());
-        assertFalse("two versions must not share a cache directory",
-                twelve.cacheKey().equals(thirteen.cacheKey()));
+    public void legacyForgeTakesTheNewestMcpAtOrBelowItsVersion() {
+        game("1.12.2");
+        assertEquals("stable-39-1.12", ScriptService.mappings().cacheKey());
+        game("1.8.9");
+        assertEquals("stable-22-1.8.9", ScriptService.mappings().cacheKey());
+        assertEquals("net/minecraft/world/World", ScriptService.namespaceProbe().internalName());
     }
 
-    /** A base URL is usable whether or not the caller remembered the trailing slash. */
     @Test
-    public void coordinatesJoinUrlsWithoutDoubledSlashes() {
-        assertEquals("https://x/conf/methods.csv",
-                MappingCoordinates.of("1.7.10", "stable", "12", "https://x/conf").urlOf("methods.csv"));
-        assertEquals("https://x/conf/methods.csv",
-                MappingCoordinates.of("1.7.10", "stable", "12", "https://x/conf/").urlOf("methods.csv"));
+    public void fabricIsToldByItsIntermediaryLevel() {
+        game("1.20.1", "net/minecraft/class_1937");
+        MappingCoordinates mappings = ScriptService.mappings();
+        assertEquals("intermediary-1.20.1", mappings.cacheKey());
+        assertEquals("net/minecraft/class_1937", ScriptService.namespaceProbe().internalName());
     }
 
-    /** Digests are optional per file, so a platform can be brought up before they are known. */
     @Test
-    public void anUnpinnedDigestIsNullRatherThanEmpty() {
-        MappingCoordinates coordinates = MappingCoordinates.of("1.7.10", "stable", "12", "https://x/")
-                .withDigest("methods.csv", "ABCDEF");
-        assertEquals("abcdef", coordinates.digestOf("methods.csv"));
-        assertNull(coordinates.digestOf("fields.csv"));
+    public void forgeFrom117KeepsOfficialClassNames() {
+        game("1.20.1", "net/minecraft/world/level/Level");
+        assertTrue(ScriptService.mappings().keepsReadableClassNames());
+        assertEquals("net/minecraft/world/level/Level", ScriptService.namespaceProbe().internalName());
     }
 
-    private static ScriptService fakePlatform(final Path cacheRoot) {
-        return new ScriptService() {
-            @Override
-            public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
-                return ScriptService.NONE.liveBytes();
-            }
+    @Test
+    public void forgeBefore117RunsMcpClassNames() {
+        game("1.16.5", "net/minecraft/world/World");
+        assertFalse(ScriptService.mappings().keepsReadableClassNames());
+        assertEquals("net/minecraft/world/World", ScriptService.namespaceProbe().internalName());
+    }
 
-            @Override
-            public Path cacheRoot() {
-                return cacheRoot;
-            }
+    @Test
+    public void forgeBefore1144TakesMcpStable() {
+        game("1.13.2", "net/minecraft/world/World");
+        assertEquals("stable-47-1.13.2", ScriptService.mappings().cacheKey());
+    }
 
-            @Override
-            public MappingCoordinates mappings() {
-                return MappingCoordinates.NONE;
-            }
-
-            @Override
-            public NamespaceProbe namespaceProbe() {
-                return NamespaceProbe.NONE;
-            }
-
-            @Override
-            public String runtimeClassName(String onDiskInternalName) {
-                return onDiskInternalName;
-            }
-        };
+    @Test
+    public void versionsCompareByNumber() {
+        assertTrue(ScriptService.compareVersions("1.12.2", "1.13") < 0);
+        assertTrue(ScriptService.compareVersions("26.2", "1.21.11") > 0);
+        assertEquals(0, ScriptService.compareVersions("1.21.6-pre1", "1.21.6"));
     }
 }

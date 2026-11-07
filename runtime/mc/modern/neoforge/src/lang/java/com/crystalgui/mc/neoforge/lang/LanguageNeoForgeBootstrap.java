@@ -8,7 +8,9 @@ import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.loading.FMLLoader;
 
 /**
- * The one {@code @Mod} class the language jar carries for NeoForge, whatever version it runs on.
+ * The one {@code @Mod} class the language jar carries for NeoForge, whatever version it runs on: what makes it a mod
+ * NeoForge lists, so CrystalGraphics reads its lifecycle listener. It runs nothing itself
+ * ({@code docs/CGUI_LANGUAGE_STACK.md} § 1a).
  *
  * @see com.crystalgui.mc.neoforge.NeoForgeBootstrap for the host's twin
  */

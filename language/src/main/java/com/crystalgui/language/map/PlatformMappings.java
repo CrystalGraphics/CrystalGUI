@@ -5,11 +5,9 @@ import com.crystalgui.language.platform.NamespaceProbe;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.job.CgJob;
 import com.crystalgraphics.job.CgJobLane;
-import com.crystalgraphics.job.progress.CgProgress;
 import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
 
+import java.nio.file.Path;
 import java.util.function.BooleanSupplier;
 
 import org.objectweb.asm.ClassReader;
@@ -21,12 +19,11 @@ import org.objectweb.asm.Opcodes;
 /**
  * Which namespace this runtime speaks, decided by asking it — and the mapping that follows.
  *
- * <h3>This module drives the acquisition; a platform only says how to run it</h3>
+ * <h3>This module drives the acquisition</h3>
  *
  * <p>Nothing outside {@code language/} needs to call anything. The first {@link #current()} probes,
- * applies a cached mapping on the calling thread, and hands a genuine download to
- * {@link ScriptService#runInBackground} — which is the one part a host knows better, since
- * {@code JobScheduler} is drained by {@code UIDocument.frame} and by nothing else.</p>
+ * applies a cached mapping on the calling thread, and hands a genuine download to the job pool
+ * ({@code CgJob.executor}), which needs no frame or tick to drain it, so a dedicated server fetches too.</p>
  *
  * <h3>Probed, never configured</h3>
  *
@@ -41,8 +38,7 @@ import org.objectweb.asm.Opcodes;
  *
  * <h3>Resolved once, and the fetch is never on the calling thread</h3>
  *
- * <p>The platform is registered during startup and never replaced, so this is a process-wide answer
- * computed once. But a first launch may need a download, and languages register from the client thread —
+ * <p>The game never changes under a process, so this is a process-wide answer computed once. But a first launch may need a download, and languages register from the client thread —
  * so the split is: <b>probe synchronously</b> (a class read), <b>parse synchronously when the cache is
  * already complete</b> (one pass over 630 KB, which is a launch cost nobody notices), and go to a
  * background thread <b>only when bytes actually have to be fetched</b>.</p>
@@ -67,7 +63,7 @@ public final class PlatformMappings {
      * hold: this reference is replaced once, when a background fetch completes.</p>
      */
     public static MappingSet current() {
-        if (!started) startLazily(true);
+        if (!started) startLazily();
         return current;
     }
 
@@ -94,8 +90,7 @@ public final class PlatformMappings {
      * <b>Begins acquisition now</b>, so the first analysis does not have to trigger it.
      *
      * <pre>{@code
-     * ScriptService.install();   // the service first -- this reads it
-     * PlatformMappings.start();      // from a loader's CLIENT bootstrap
+     * PlatformMappings.start();      // at the language mod's start, ahead of any editor
      * }</pre>
      *
      * <p>Without this the first caller of {@link #current()} is the first analysis, which therefore
@@ -112,39 +107,29 @@ public final class PlatformMappings {
      * <p>Idempotent and cheap to call from anywhere — the claim makes it one-shot per process.</p>
      */
     public static void start() {
-        if (!started) startLazily(false);
+        if (!started) startLazily();
     }
 
-    /**
-     * Probe, apply what is cached, and hand a download to the host — so a first {@code current()} never
-     * blocks its caller.
-     *
-     * <p>One-shot: there is exactly one artifact to acquire per process, and {@link #claim()} is what
-     * makes that true however many threads ask at once.</p>
-     */
-    /**
-     * @param viaHost whether the fetch goes to {@link ScriptService#runInBackground} or to a plain
-     *                thread. TRUE for {@link #current()}, whose caller is a live editor: the host puts
-     *                it in the status bar and makes it cancellable. FALSE for {@link #start()}, and not
-     *                merely because there is no viewer at mod init -- a host may implement
-     *                {@code runInBackground} with a queue only a FRAME drains, and on 1.7.10 it does.
-     *                Submitted before any {@code UIDocument} exists, such a job is never started at
-     *                all: no download, no report, and {@code current()} answering identity until
-     *                something opens a window. @see com.crystalgui.core.async.JobScheduler#drain
-     */
-    private static void startLazily(boolean viaHost) {
+    /** What a decision reads: the game's bytes, the cache, the mapping and the probe. */
+    record Inputs(ReadableView.ByteSource bytes, Path cacheRoot, MappingCoordinates coordinates,
+                  NamespaceProbe probe) {
+        static Inputs ofGame() {
+            if (!ScriptService.live()) return null;
+            return new Inputs(ScriptService.liveBytes(), ScriptService.cacheRoot(), ScriptService.mappings(),
+                    ScriptService.namespaceProbe());
+        }
+    }
+
+    // A test's platform, in place of the game's
+    private static volatile Inputs testInputs;
+
+    /** Probe, apply what is cached, and start a download on the job pool, which needs no frame to drain it. */
+    private static void startLazily() {
         if (!claim()) return;
-        // NOTHING MAY LEAVE HERE UNSAID. current() is called from inside `catch (Exception) -> null`
-        // misses -- PlatformTypeBytes reads a type that way -- so a throw out of the decision is
-        // indistinguishable from "that type is not here", and the claim is already taken: every later
-        // current() answers IDENTITY with nothing anywhere saying why. That is not hypothetical; it is
-        // how a Fabric client resolved no Minecraft class at all while its mappings sat on disk.
-        ScriptService needsFetch;
+        // Nothing may leave here: current() is called inside catch-to-null misses (PlatformTypeBytes), so a throw
+        // would read as "no such type" with the claim already taken, and identity names for good
+        Inputs needsFetch;
         try {
-            // THE DECISION INLINE, THE FETCH ON A THREAD. A mapping already cached is applied before
-            // this returns, so the caller's very next current() sees it -- which is the difference
-            // between the editor opening with readable names and opening with runtime ones and
-            // correcting itself.
             needsFetch = decide();
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.warn("[cgui] mappings: the decision failed; runtime names will be"
@@ -152,117 +137,60 @@ public final class PlatformMappings {
             return;
         }
         if (needsFetch == null) return;
-
-        // THE HOST SAYS HOW, THIS SAYS WHEN. A platform states the what, the where and the how; deciding
-        // that a fetch is owed is this module's job and used to be copied into every loader. The default
-        // is the job pool, which needs no drain, so a dedicated server is correct with no code at all, and a host with a UI
-        // overrides it to get a progress bar. @see ScriptService#runInBackground
-        ScriptService.BackgroundWork work = (progress, cancelled) -> {
-            // AND NOTHING MAY LEAVE THE FETCH EITHER. A host runs this on a thread of its own choosing
-            // and a job that dies reports where the job went, not here.
+        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> {
             try {
-                fetch(needsFetch, progress, cancelled);
+                fetch(needsFetch, () -> false);
             } catch (RuntimeException | LinkageError failed) {
                 CrystalGuiCore.LOGGER.warn("[cgui] mappings: the fetch failed; runtime names will be"
                         + " shown as they are", failed);
             }
-        };
-        if (viaHost) {
-            needsFetch.runInBackground("Downloading Minecraft mappings", work);
-            return;
-        }
-        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> work.run(CgProgress.NONE, () -> false));
+        });
     }
 
     /**
-     * The DECISION of a {@link #claim()}, <b>on the calling thread</b>. Returns the platform when a network
-     * fetch is still owed, and null when there is nothing left to do.
-     *
-     * <h3>Why a caller must run this itself rather than let a job do it</h3>
-     *
-     * <p>Split from the fetch because a mapping already in the cache must be applied <b>before the first
-     * analysis</b>, on whatever thread asked — otherwise the editor shows runtime names and then silently
-     * changes its mind a moment later, which reads as the names being unstable rather than as a load
-     * having completed. Only the network half is worth moving off the caller.</p>
-     *
-     * <p>Putting the whole of {@link #acquireClaimed} in a job puts this half in there too, and that is
-     * <b>not</b> merely late — it makes a cached mapping depend on the job running at all. Measured on
-     * {@code runObfClient}: {@code mcp_stable/12} was complete on disk, the claim was made at mod init, the
-     * job was submitted, and no branch of this method ever executed — no mapping line in any log of any run,
-     * and every compiled script cached under a key ending {@code -identity-8}. The script then called
-     * {@code Minecraft.getMinecraft()} against a runtime that only has {@code func_71410_x} and died with
-     * {@code NoSuchMethodError}. A cache read is a parse and costs nothing; there is no reason for it to be
-     * anywhere but here.</p>
+     * The decision of a {@link #claim()}, on the calling thread: a cached mapping is applied before this returns, so
+     * the first analysis already sees it. Returns what a network fetch still needs, or null when nothing is owed.
      */
-    static ScriptService decideClaimed() {
+    static Inputs decideClaimed() {
         return decide();
     }
 
-    private static ScriptService decide() {
-
-        ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-        if (platform == ScriptService.NONE) {
-            // SAID, because this was the one branch out of five that returned in silence -- and silence
-            // here is indistinguishable from every other way of ending up with identity names. It is also
-            // the branch a THREADING or CLASSLOADER fault arrives through: a worker that cannot see a
-            // service the client thread provided, or a second copy of this class defined inside the engine
-            // band, both present exactly as "no platform" and neither leaves any other trace.
-            CrystalGuiCore.LOGGER.warn("[cgui] mappings: NOT_CONFIGURED -- no script platform is"
-                    + " registered (asked from {}); runtime names will be shown as they are",
-                    Thread.currentThread().getName());
+    private static Inputs decide() {
+        Inputs in = testInputs != null ? testInputs : Inputs.ofGame();
+        if (in == null) {
+            // Said: a thread or classloader fault (a band's own copy of this class) arrives here too
+            CrystalGuiCore.LOGGER.info("[cgui] mappings: NOT_CONFIGURED -- no game (asked from {}); runtime names"
+                    + " will be shown as they are", Thread.currentThread().getName());
+            return null;
+        }
+        if (in.probe().isNone() || in.coordinates().isNone()) {
+            CrystalGuiCore.LOGGER.info("[cgui] mappings: NOT_CONFIGURED -- {}; runtime names will be shown as"
+                    + " they are", in.probe().isNone() ? "no namespace probe" : "no mapping coordinates");
             return null;
         }
 
-        NamespaceProbe probe = platform.namespaceProbe();
-        MappingCoordinates coordinates = platform.mappings();
-        if (probe.isNone() || coordinates.isNone()) {
-            // Nothing to decide, or nothing to fetch. Either way the runtime is taken as it is -- and it
-            // is SAID, because "this platform declares no mappings" and "the download failed" produce the
-            // same names on screen and are entirely different things to whoever is looking at them.
-            CrystalGuiCore.LOGGER.info("[cgui] mappings: NOT_CONFIGURED -- {} on {}; runtime names"
-                    + " will be shown as they are",
-                    probe.isNone() ? "no namespace probe" : "no mapping coordinates",
-                    platform.getClass().getName());
-            return null;
-        }
-
-        Boolean readable = isReadable(platform, probe);
+        Boolean readable = isReadable(in.bytes(), in.probe());
         if (readable == null) {
             CrystalGuiCore.LOGGER.warn("[cgui] could not read {} to tell which namespace this runtime"
-                    + " speaks; assuming it is already readable", probe.internalName());
+                    + " speaks; assuming it is already readable", in.probe().internalName());
             return null;
         }
         if (readable) {
             CrystalGuiCore.LOGGER.info("[cgui] the runtime already speaks readable names ({} declares"
-                    + " {})", probe.internalName(), probe.readableMember());
+                    + " {})", in.probe().internalName(), in.probe().readableMember());
             return null;
         }
 
-        if (MappingCache.isComplete(coordinates, platform.cacheRoot())) {
-            // ON THIS THREAD, deliberately: it is a parse and no network, and a mapping that is ready
-            // before the first analysis avoids a window where the editor shows runtime names and then
-            // silently changes its mind.
-            apply(MappingCache.load(coordinates, platform.cacheRoot()));
+        if (MappingCache.isComplete(in.coordinates(), in.cacheRoot())) {
+            // On this thread: a parse, no network, and ready before the first analysis
+            apply(MappingCache.load(in.coordinates(), in.cacheRoot()));
             return null;
         }
-
-        // Everything above was free. What is left is the network, and only the caller knows where that
-        // should run -- so it is handed back rather than done here. @see #begin @see #startLazily
-        return platform;
+        return in;
     }
 
-    /**
-     * The network half, on whatever thread the caller chose.
-     *
-     * <p>Indeterminate: the two CSVs are small and their host declares no length worth trusting, so a
-     * sweep is honest where a bar would be invented.</p>
-     */
-    private static void fetch(ScriptService platform, CgProgress progress,
-                              BooleanSupplier cancelled) {
-        MappingCoordinates coordinates = platform.mappings();
-        progress.begin("Downloading Minecraft mappings", -1);
-        progress.detail(coordinates.cacheKey());
-        apply(MappingCache.load(coordinates, platform.cacheRoot(), cancelled));
+    private static void fetch(Inputs in, BooleanSupplier cancelled) {
+        apply(MappingCache.load(in.coordinates(), in.cacheRoot(), cancelled));
     }
 
     private static void apply(MappingCache.Result result) {
@@ -287,10 +215,10 @@ public final class PlatformMappings {
      * behaviour: treating an unreadable probe as obfuscated would download a mapping and translate every
      * name through it on a runtime that never needed one, which is worse than doing nothing.</p>
      */
-    private static Boolean isReadable(ScriptService platform, NamespaceProbe probe) {
+    private static Boolean isReadable(ReadableView.ByteSource source, NamespaceProbe probe) {
         byte[] bytes;
         try {
-            bytes = platform.liveBytes().bytesOf(probe.internalName());
+            bytes = source.bytesOf(probe.internalName());
         } catch (Exception | LinkageError unavailable) {
             return null;
         }
@@ -323,5 +251,11 @@ public final class PlatformMappings {
     public static synchronized void resetForTesting() {
         current = MappingSet.IDENTITY;
         started = false;
+        testInputs = null;
+    }
+
+    /** Decides from {@code inputs} instead of the game's. For tests, with {@link #resetForTesting()} after. */
+    static void useForTesting(Inputs inputs) {
+        testInputs = inputs;
     }
 }

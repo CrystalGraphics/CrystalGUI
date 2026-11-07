@@ -12575,10 +12575,8 @@ com/crystalgui/text/syntax/LanguageRegistry
   method public,static capabilityChanged ()V
   method public,static contributors ()Ljava/util/List;
   method public,static contributorsSoFarForTesting ()Ljava/util/List;
-  method public,static firstRead ()Ljava/lang/Throwable;
   method public,static forFileName (Ljava/lang/String;)Lcom/crystalgui/text/syntax/LanguageRegistry$Entry;
   method public,static forLanguage (Lcom/crystalgui/text/syntax/Language;)Lcom/crystalgui/text/syntax/LanguageRegistry$Entry;
-  method public,static isBootstrapped ()Z
   method public,static isKnown (Ljava/lang/String;)Z
   method public,static registerExtensions (Lcom/crystalgui/text/syntax/LanguageRegistry$Entry;[Ljava/lang/String;)V
   method public,static registerGlobs (Lcom/crystalgui/text/syntax/LanguageRegistry$Entry;[Ljava/lang/String;)V

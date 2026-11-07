@@ -13,12 +13,7 @@ import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.text.lang.LanguageServices;
 import com.crystalgui.text.lang.Versioned;
 import com.crystalgui.language.map.PlatformMappings;
-import com.crystalgui.language.map.ReadableView;
-import com.crystalgui.language.platform.MappingCoordinates;
-import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
+import com.crystalgui.language.platform.FakeGame;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.diagnostic.DiagnosticSeverity;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -30,7 +25,6 @@ import org.junit.Test;
 import org.objectweb.asm.ClassWriter;
 import org.objectweb.asm.Opcodes;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -51,7 +45,7 @@ import static org.junit.Assert.fail;
  * red names, no completion, and a quick fix that could not offer the import because the type index had
  * never heard of the class.</p>
  *
- * <p>The fixture serves a class through {@link ScriptService#liveBytes()} that is <b>on no classpath at
+ * <p>The fixture serves a class through the game's live bytes that is <b>on no classpath at
  * all</b>. Nothing but the live route can resolve it, so this fails outright if the analyser falls back
  * to {@code ASTParser} — which is precisely what it did before, and what it still does everywhere no
  * platform is registered.</p>
@@ -66,7 +60,7 @@ public class LiveAnalysisTest {
     @Before
     @After
     public void forget() {
-        CgPlatform.provide(ScriptServices.SERVICE, null);
+        FakeGame.clear();
         PlatformMappings.resetForTesting();
     }
 
@@ -99,35 +93,10 @@ public class LiveAnalysisTest {
     }
 
     private void registerPlatform() {
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
-            @Override
-            public ReadableView.ByteSource liveBytes() {
-                return name -> {
-                    if (OWNER.equals(name)) return onlyInMemory();
-                    return NESTED.equals(name) ? nestedInMemory() : null;
-                };
-            }
-
-            @Override
-            public Path cacheRoot() {
-                return Paths.get("build", "crystalgui-test-cache").toAbsolutePath();
-            }
-
-            @Override
-            public MappingCoordinates mappings() {
-                return MappingCoordinates.NONE;
-            }
-
-            @Override
-            public NamespaceProbe namespaceProbe() {
-                return NamespaceProbe.NONE;
-            }
-
-            @Override
-            public String runtimeClassName(String onDiskInternalName) {
-                return onDiskInternalName;
-            }
-        });
+        FakeGame.install("", name -> {
+            if (OWNER.equals(name)) return onlyInMemory();
+            return NESTED.equals(name) ? nestedInMemory() : null;
+        }, Paths.get("build", "crystalgui-test-game").toAbsolutePath());
     }
 
     private SourceAnalyzer analyzerOverBand() throws Exception {

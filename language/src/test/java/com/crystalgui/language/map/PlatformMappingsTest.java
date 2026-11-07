@@ -2,9 +2,6 @@ package com.crystalgui.language.map;
 
 import com.crystalgui.language.platform.MappingCoordinates;
 import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
 
 import org.junit.After;
 import org.junit.Before;
@@ -32,7 +29,7 @@ import static org.junit.Assert.assertTrue;
  * because a probe that always answered "readable" would pass in dev — where the answer is right — and
  * ship a client that never translates a name.</p>
  *
- * <p>The probe reads through {@link ScriptService#liveBytes()}, so a fake platform serving synthesized
+ * <p>The probe reads through the game's live bytes, so fake inputs serving synthesized
  * class files exercises exactly the path a real one takes.</p>
  */
 public class PlatformMappingsTest {
@@ -53,7 +50,6 @@ public class PlatformMappingsTest {
     @Before
     @After
     public void forget() {
-        CgPlatform.provide(ScriptServices.SERVICE, null);
         PlatformMappings.resetForTesting();
     }
 
@@ -69,32 +65,9 @@ public class PlatformMappingsTest {
 
     /** A platform whose runtime declares {@code member} and whose mappings live in {@code upstream}. */
     private void register(String member, Path cacheRoot, MappingCoordinates coordinates) {
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
-            @Override
-            public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
-                return name -> WORLD.equals(name) ? classDeclaring(member) : null;
-            }
-
-            @Override
-            public Path cacheRoot() {
-                return cacheRoot;
-            }
-
-            @Override
-            public MappingCoordinates mappings() {
-                return coordinates;
-            }
-
-            @Override
-            public NamespaceProbe namespaceProbe() {
-                return NamespaceProbe.declaring(WORLD, "getBlock");
-            }
-
-            @Override
-            public String runtimeClassName(String onDiskInternalName) {
-                return onDiskInternalName;
-            }
-        });
+        PlatformMappings.useForTesting(new PlatformMappings.Inputs(
+                name -> WORLD.equals(name) ? classDeclaring(member) : null, cacheRoot, coordinates,
+                NamespaceProbe.declaring(WORLD, "getBlock")));
     }
 
     private MappingCoordinates upstream() throws IOException {
@@ -197,33 +170,9 @@ public class PlatformMappingsTest {
     @Test
     public void anUnreadableProbeDoesNotFetch() throws IOException {
         Path cache = folder.newFolder("cache").toPath();
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
-            @Override
-            public com.crystalgui.language.map.ReadableView.ByteSource liveBytes() {
-                return name -> null;
-            }
-
-            @Override
-            public Path cacheRoot() {
-                return cache;
-            }
-
-            @Override
-            public MappingCoordinates mappings() {
-                return MappingCoordinates.of("1.7.10", "stable", "12", "file:///nowhere/")
-                        .withFile("methods.csv");
-            }
-
-            @Override
-            public NamespaceProbe namespaceProbe() {
-                return NamespaceProbe.declaring(WORLD, "getBlock");
-            }
-
-            @Override
-            public String runtimeClassName(String onDiskInternalName) {
-                return onDiskInternalName;
-            }
-        });
+        PlatformMappings.useForTesting(new PlatformMappings.Inputs(name -> null, cache,
+                MappingCoordinates.of("1.7.10", "stable", "12", "file:///nowhere/").withFile("methods.csv"),
+                NamespaceProbe.declaring(WORLD, "getBlock")));
 
         assertTrue(PlatformMappings.current().isIdentity());
         assertFalse(Files.exists(cache.resolve("mappings")));

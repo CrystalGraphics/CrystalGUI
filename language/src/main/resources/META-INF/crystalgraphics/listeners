@@ -1,2 +1,2 @@
 # CrystalGraphics finds these in every mod (CgLifecycleListener): "<common|client> <class>" a line.
-common com.crystalgui.language.lifecycle.CgLanguageLifecycle
+common com.crystalgui.language.CgLanguageLifecycle

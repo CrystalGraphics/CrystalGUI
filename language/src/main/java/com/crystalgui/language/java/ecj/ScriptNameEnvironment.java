@@ -51,9 +51,8 @@ import java.util.Set;
  *
  * <p>This class is loaded by {@code EngineClassLoader}, which is child-first for everything outside
  * {@code java.*}, the bridge package and {@code com.crystalgui.text.*}. So naming
- * {@code ScriptServices} here gets the band's <em>own</em> copy of it, with its own statics — and since
- * {@code register()} runs on the host, the compiler reads a registry nothing ever wrote to, concludes
- * there is no platform, and resolves entirely from files. <b>Everything works and nothing is live.</b>
+ * {@code ScriptService} or {@code PlatformMappings} here gets the band's <em>own</em> copy, with its own
+ * statics: a mapping nothing ever resolved, so the compiler resolves entirely from files. <b>Everything works and nothing is live.</b>
  * That is not hypothetical: it is what the first version of this class did, undetectably, because a
  * file-based answer is a plausible answer.</p>
  *

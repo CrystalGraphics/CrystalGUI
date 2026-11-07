@@ -15,9 +15,8 @@ import com.crystalgraphics.platform.CgPlatform;
  * <p><b>It cannot ask the platform directly.</b> {@code ScriptService} lives in
  * {@code language.platform} and {@code ReadableView} in {@code language.map}, and neither package is
  * parent-first — so a child-side class naming one gets the band loader's own copy, with its own statics.
- * That failure is silent and total: {@code CgPlatform.provide(ScriptServices.SERVICE, …)} runs on the host, the compiler
- * reads a different registry, finds nothing, and quietly resolves against files as though no platform
- * were installed. Everything works and nothing is live.</p>
+ * The mapping a child-side copy reads is one nothing resolved, and its live bytes go unread: it quietly
+ * resolves against files as though there were no game. Everything works and nothing is live.</p>
  *
  * <p>So the host composes the whole answer and hands the child something made of JDK types — the same
  * rule {@link MemberNameMapper} states for {@code MappingSet}, the console for its {@code Consumer} and

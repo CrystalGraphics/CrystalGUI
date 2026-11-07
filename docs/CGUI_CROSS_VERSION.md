@@ -158,7 +158,7 @@ Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke`
 | Kind | Use when | How | Examples |
 |---|---|---|---|
 | **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `HostServices`, `fs.server.WorkspaceRoles`, `ServerSmoke.Host`, `HostSession.PaintHost` |
-| **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `ScriptServices.SERVICE`, `Providers.Copies.SERVICE` |
+| **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST`, `Providers.Copies.SERVICE` |
 | **`CgPlatformService`** (closed, CrystalGraphics) | the rendering framework cannot work without it | add an abstract method — **five implementations** must answer: `PlatformService1710`, `PlatformServiceLegacy`, `PlatformServiceModern`, the harness's `PlatformServiceHarness`, core's `TestPlatformService` | GL, input, sound, lifecycle |
 | **A hook into `LifecycleCrystalGUI`** (modern) / the legacy and 1.7.10 lifecycles | "when X happens in the game, run Y" | add a static method to the lifecycle; every loader's event forwards into it | `serverStarting`, `playerJoined`, `onServerTick` |
 

@@ -9,8 +9,7 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.language.java.assist.JdkSourceExtract;
-import com.crystalgui.language.platform.ScriptServices;
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgui.language.platform.ScriptService;
 
 import java.nio.file.Path;
 
@@ -141,14 +140,8 @@ public final class JdkSourceCommands {
         }
     }
 
-    /**
-     * Where the extract goes.
-     *
-     * <p>Read from the platform each time rather than captured, because a slot is filled by whichever
-     * loader registered it and this class must not care which — {@code ScriptService.NONE} answers a
-     * working-directory path, which is what the harness and every test get.</p>
-     */
+    /** Where the extract goes: the game's cache, or {@code build/crystalgui-cache} with no game. */
     private static Path cacheRoot() {
-        return CgPlatform.get(ScriptServices.SERVICE).cacheRoot();
+        return ScriptService.cacheRoot();
     }
 }

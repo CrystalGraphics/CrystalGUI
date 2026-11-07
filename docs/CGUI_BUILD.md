@@ -39,7 +39,7 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 | `runtime/mc/1710/` | Forge 1.7.10 host (RetroFuturaGradle). A module of its own on purpose |
 | `runtime/mc/modern/` | Stonecutter tree — `common`, `forge`, `neoforge`, `fabric` branches; a node per version, each depending on CrystalGraphics' node of the same version |
 | `runtime/mc/legacy/` | Forge 1.8.9 / 1.10.2 / 1.12.2 tree |
-| `runtime/mc/shared/`, `forge-bootstrap/`, `launchwrapper/` | Java 8 pieces merged once: mixin plugin, the Forge `@Mod` classes, LaunchWrapper helpers |
+| `runtime/mc/shared/`, `forge-bootstrap/` | Java 8 pieces merged once: mixin plugin, the Forge `@Mod` classes |
 | `runtime/mc/modern/build-logic/` | convention plugins (`cg-java`, `cg-modern-loader`, `cg-modern-common`, `cg-legacy-loader`, `cg-single-jar`, `cg-descriptors`) and `cgbuildlogic/` (`ProdSmoke`, `uniminedDevRun`, `DevRunDowngrade`, `ShadowUtils`) |
 | `gradle/module_integration/` | how CrystalGraphics is wired in: `composite.settings` (substitutions), `integration` (compile deps), `crystalgraphics-run` (ModDevGradle dev runs) |
 | `download/locations.json` | every runtime download address — see `download/CLAUDE.md` |
@@ -48,6 +48,12 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 **Two source sets per loader module**: `main` → the host jar, `lang` → the language jar. `:language` is
 on `langCompileOnly` only, so a host class naming it is a compile error. Where the host needs the other
 jar, it publishes a seam it cannot name (`CgUiAutoTest.onFrame`).
+
+**Both jars' mod descriptors are generated, never checked in.** `mods.toml`, `neoforge.mods.toml`,
+`fabric.mod.json` and `mcmod.info` come from `cgDescriptor` and `cgLangDescriptor` in
+`cg-descriptors.gradle.kts`, written to `build/descriptors/merged/` and `build/descriptors/language/` and merged into each jar. The language
+jar is a mod through these and its `@Mod` classes, and starts from a CrystalGraphics lifecycle listener:
+[`CGUI_LANGUAGE_STACK.md`](CGUI_LANGUAGE_STACK.md) § 1a.
 
 **Java levels are CrystalGraphics'** (its `docs/BUILD.md` § *Layout*). Never lower an abstract module's Java
 to suit a consumer — and javac does not check the API: a Java 9+ call fails on a Java 8 instance unless
@@ -337,7 +343,7 @@ in the pin catalog).
    is what lets a second host or the mirror serve it. `checkDownloadLocations` (in `check`) fails a node
    whose own version is not pinned, and `verifyScriptingCoverage` (online, run by the Release workflow)
    every release in its range. A version Mojang published nothing for takes MCP's names from the tables
-   in `ScriptServiceModern.mcpStable` and `ScriptServiceLegacy.MCP_STABLE`, which both checks read.
+   in `language`'s `ScriptService` (`modernMcp`, `LEGACY_MCP_STABLE`), which both checks read.
 7. **Docs**: the range in § *Supported versions* above and its one-line summary in `AGENTS.md` (and a refused version's reason), and the
    node list in that loader branch's `AGENTS.md` — in both repos.
 

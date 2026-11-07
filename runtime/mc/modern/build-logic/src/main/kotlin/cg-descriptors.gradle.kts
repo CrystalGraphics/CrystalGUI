@@ -75,8 +75,10 @@ registerDescriptorTasks(cgDescriptor, "cgui")
 // descriptor of its own -- the fat jars are retired and only the merged jar exists -- so this
 // registers the generator alone.
 //
-// CLIENT, and structurally: every entry point installs against a live Minecraft instance. A dedicated
-// server that finds it in `mods/` still loads the jar; nothing in it registers.
+// No entry class runs anything: the stack starts from its CrystalGraphics lifecycle listener
+// (META-INF/crystalgraphics/listeners), on a client behind the loading screen and on a dedicated server
+// as it starts. Each loader only needs to see a mod: 1.7.10's @Mod class, the Forge and NeoForge
+// bootstrappers, and on Fabric the descriptor alone. docs/CGUI_LANGUAGE_STACK.md § 1a has the whole path.
 val cgLangDescriptor = ModDescriptor(
     id = "crystalgui_language",
     name = "CrystalGUI Language",
@@ -85,9 +87,6 @@ val cgLangDescriptor = ModDescriptor(
     license = "LGPL-3.0-or-later",
     environment = Side.CLIENT,
     dependencies = listOf(
-        // AFTER, and required: this mod installs itself into seams the host owns -- CgPlatform's
-        // ScriptService slot and core's command registry -- so a language stack that loads first
-        // registers into nothing and reports success.
         // Shipped together, so exactly this version's host or later.
         Dependency("crystalgui", "[${property("modVersion")},)", ordering = Ordering.AFTER),
     ),
@@ -97,21 +96,13 @@ val cgLangDescriptor = ModDescriptor(
             commonEntry = "com.crystalgui.mc.v1710.lang.CrystalGuiLanguage",
             packFormat = 1,
         ).takeIf { has1710(project) },
-    ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy",
-        common = "com.crystalgui.mc.legacy.lang.CrystalGuiLanguageLegacy",
-    )) + modernVariants(project, mapOf(
+    ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy")) + modernVariants(project, mapOf(
         // The host's node mixins are the host's: naming them here too is a duplicate config to Fabric.
-        "forge" to LoaderEntries("com.crystalgui.mc.forge",
-            common = "com.crystalgui.mc.forge.lang.CrystalGuiLanguageForge", mixins = false),
-        "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge",
-            common = "com.crystalgui.mc.neoforge.lang.CrystalGuiLanguageNeoForge", mixins = false),
+        "forge" to LoaderEntries("com.crystalgui.mc.forge", mixins = false),
+        "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge", mixins = false),
         "fabric" to LoaderEntries("com.crystalgui.mc.fabric",
-            client = "com.crystalgui.mc.fabric.lang.CrystalGuiLanguageFabric",
             fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0", "crystalgui" to "*"), mixins = false),
     )),
-    // Its own mod, its own table: the language stack selects a variant exactly as the host does and
-    // shares nothing but the selector. Fabric alone needs a name here -- see the host's note above.
-    bootstrappers = mapOf("fabric" to "com.crystalgui.mc.fabric.lang.LanguageFabricBootstrap"),
 )
 
 registerDescriptorTasks(cgLangDescriptor, "cgui-lang", name = "language", checkShipped = false)

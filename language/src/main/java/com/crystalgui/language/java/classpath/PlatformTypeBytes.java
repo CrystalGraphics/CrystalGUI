@@ -5,16 +5,14 @@ import com.crystalgui.language.map.MappingSet;
 import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
 import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
 
 /**
  * The host's answer to {@link TypeBytes} — the live runtime, remapped, with a reflective floor.
  *
  * <h3>Host-side on purpose, and that is the whole reason this class exists</h3>
  *
- * <p>Everything it touches is child-first in {@code EngineClassLoader}: {@link ScriptServices} keeps a
- * static registry, {@link ReadableView} holds the mapping, {@link ReflectionOverlay} carries the ASM
+ * <p>Everything it touches is child-first in {@code EngineClassLoader}: {@link ScriptService} reads the
+ * game, {@link ReadableView} holds the mapping, {@link ReflectionOverlay} carries the ASM
  * synthesis. A compiler-side class naming any of them gets the band loader's <em>own</em> copy — and for
  * the registry that means reading a static nothing ever wrote to, because {@code register()} was called
  * on the host's copy. The compile then resolves against files as though no platform were installed:
@@ -79,8 +77,7 @@ public final class PlatformTypeBytes implements TypeBytes {
      * engines in one process translate differently.</p>
      */
     public static TypeBytes of() {
-        ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-        if (platform == ScriptService.NONE) return TypeBytes.NONE;
+        if (!ScriptService.live()) return TypeBytes.NONE;
         // A WAY TO TURN THE LIVE ROUTE OFF WITHOUT REMOVING THE PLATFORM, for diagnosis only.
         //
         // "Live" and "file-based" differ in exactly one place and produce identical behaviour nearly
@@ -93,19 +90,14 @@ public final class PlatformTypeBytes implements TypeBytes {
                     + "-Dcrystalgui.language.noLiveBytes -- diagnosis only");
             return TypeBytes.NONE;
         }
-        // A SERVICE IS NOT AUTOMATICALLY A LIVE RUNTIME. `cacheRoot()` is reason enough to register
-        // one -- extracting or downloading an engine band asks it where it may write -- and a host that
-        // registers for that alone has no transformed bytes to offer. Treating it as live puts a
-        // classloader view ahead of the classpath for every name, the JDK included.
-        ReadableView.ByteSource live = platform.liveBytes();
-        if (live == ReadableView.ByteSource.NONE) return TypeBytes.NONE;
+        ReadableView.ByteSource live = ScriptService.liveBytes();
         // SAID OUT LOUD, ONCE PER ENGINE, and it earns the line. "Live" and "inert" produce identical
         // behaviour for every script that only touches classes which are also on disk -- which is most
         // of them -- so without this there is no way to tell from a log whether §15.5 A is working or
         // was silently skipped. That is not a hypothetical failure: it is the one this class exists to
         // fix, and it survived a full test suite and a working client.
         System.err.println("[crystalgui] resolving against the live runtime through "
-                + platform.getClass().getName());
+                + ScriptService.runningNodeClass().getName());
         return new PlatformTypeBytes(live, PlatformTypeBytes.class.getClassLoader());
     }
 

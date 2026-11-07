@@ -223,7 +223,7 @@ registerSingleJarPipeline(SingleJarSpec(
 
     thinJars = listOfNotNull((":runtime:mc:1710" to "reobfLangThinJar").takeIf { has1710(project) }) +
         legacyNodes(project).map { it.path to "reobfLangThinShadowJar" } + modernThinJars("langThinShadowJar"),
-    libraryProjects = listOf(":language", ":runtime:mc:launchwrapper", ":runtime:mc:modern-shared"),
+    libraryProjects = listOf(":language"),
     serviceOwners = listOf(":language"),
 
     // ASM, AND ONLY ASM. Taffy and JOML are the host jar's; tree-sitter must NOT be relocated,
@@ -305,23 +305,16 @@ registerSingleJarPipeline(SingleJarSpec(
             "assets/crystalgui/download/",
         ))
         expectSingle.set(listOf("com/crystalgui/language/"))
-        // Counted by simple name, as the host jar's own note explains. The one class of the language
-        // half that must stay per node: it names Minecraft. What names none ships once, from
-        // :runtime:mc:modern-shared.
-        relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/lang/ScriptServiceModern.class" to modernCopies,
-        ))
+        // No class of the language half is per node: it reads the game through CrystalGraphics.
+        relocatedClasses.set(emptyMap())
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
-            // J11.0: the table, and the three bootstrappers the loaders actually construct.
+            // J11.0: the table, and the two mod classes Forge and NeoForge construct. Fabric constructs none.
             "META-INF/crystalgui_language/variants.json",
             "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
             "com/crystalgui/mc/neoforge/lang/LanguageNeoForgeBootstrap.class",
-            "com/crystalgui/mc/fabric/lang/LanguageFabricBootstrap.class",
-            // Both LaunchWrapper hosts' language halves name it, and only the merge brings it.
-            "com/crystalgui/mc/launchwrapper/LaunchWrapperBytes.class",
-            // Every modern node's language half names it, once.
-            "com/crystalgui/mc/shared/modern/MinecraftBytes.class",
+            // What starts the stack on every loader.
+            "META-INF/crystalgraphics/listeners",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             "assets/crystalgui/engines/8/index.txt",

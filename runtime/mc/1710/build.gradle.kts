@@ -679,8 +679,6 @@ val lang: SourceSet by sourceSets.creating {
 
 dependencies {
     "langCompileOnly"(project(":language"))
-    // What this host shares with Forge 1.8-1.12.2's; merged once into the language jar.
-    "langCompileOnly"(project(":runtime:mc:launchwrapper"))
     "langCompileOnly"("org.projectlombok:lombok:1.18.44")
     "langAnnotationProcessor"("org.projectlombok:lombok:1.18.44")
 }
@@ -695,10 +693,6 @@ dependencies {
 if (!providers.gradleProperty("cgNoLanguage").isPresent) {
     tasks.shadowJar {
         from(lang.output)
-        // Looked up here, lazily: that project is configured after this one.
-        val launchWrapperJar = project(":runtime:mc:launchwrapper").tasks.named<Jar>("jar")
-        dependsOn(launchWrapperJar)
-        from(launchWrapperJar.map { zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
     }
 }
 
@@ -834,7 +828,7 @@ tasks.named("assemble") { dependsOn(reobfThinJar) }
 // pipeline and none of them runs in a real client.
 //
 // 1.7.10 needs no mapping DOWNLOAD to be useful, unlike 1.20.x: MCP's data is what the readable
-// namespace is here, and `ScriptService1710` already states its coordinates.
+// namespace is here, and `ScriptService` already states its coordinates.
 // The per-loader `deployMods` is retired (J7): the root `deploySingleJars` installs the one artifact
 // into all four instances, and this one could only ever install the fat `reobfJar` nothing ships.
 

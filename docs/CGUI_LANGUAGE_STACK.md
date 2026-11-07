@@ -18,10 +18,72 @@ design and every failure in it therefore looks like something else.
 | Which engine versions can this JVM run? | `EngineBand.detect()` | One read of `java.specification.version`. Not a preference — a Java 8 JVM cannot load a newer class file, so the oldest band is the host's own ceiling |
 | Where are that band's jars? | `EngineSource` | `EngineHost.defaultSource()` = configured dir → bundled in the jar → downloaded |
 | What does a compile resolve against? | `ScriptNameEnvironment` | Three tiers, §4 |
-| What does this loader know that `language/` cannot work out? | `ScriptService` | Live bytes, mappings, namespace probe, **and `cacheRoot()`** |
+| What does the running game know that `language/` cannot work out? | `ScriptService`, over CrystalGraphics' `CgGameClasses` and `CgGameDirectory` | Live bytes, mappings, namespace probe, **and `cacheRoot()`**. No loader registers anything |
 
-`ScriptService.NONE` is a real deployment, not a test double: the harness, every unit test and a dedicated
-server run with no platform registered.
+No game (`ScriptService.live()` false) is a real deployment, not a test double: the harness and every unit test run
+that way, with no live bytes, no mappings, and a cache under `build/crystalgui-cache`. Tests fake a game with
+`FakeGame`, which provides CrystalGraphics' slots as a host would.
+
+---
+
+## 1a. The language jar is a mod, and starts itself
+
+`crystalgui-language-<version>.jar` is a **mod of its own**, id `crystalgui_language`, on every loader and version
+the host jar supports. It contains no per-loader code that does anything. Being a mod is what makes the stack run:
+CrystalGraphics finds lifecycle listeners in the jars the loader lists as mods.
+
+### What makes it a mod
+
+A loader recognises a mod by its **descriptor**, and Forge-family loaders also need an **`@Mod` class**. The language
+jar carries both. Only the `@Mod` classes are source files; the descriptors are generated.
+
+| Loader | Descriptor (generated) | `@Mod` class (source) |
+|---|---|---|
+| 1.7.10 | `mcmod.info` | `runtime/mc/1710/src/lang/.../CrystalGuiLanguage.java` |
+| Forge 1.8.9–1.12.2 | `mcmod.info` | `runtime/mc/forge-bootstrap/src/lang/.../LanguageForgeBootstrap.java` |
+| Forge 1.13.2–26.3 | `META-INF/mods.toml` | the same `LanguageForgeBootstrap` |
+| NeoForge | `META-INF/neoforge.mods.toml` | `runtime/mc/modern/neoforge/src/lang/.../LanguageNeoForgeBootstrap.java` |
+| Fabric | `fabric.mod.json`, entrypoint lists empty | none: Fabric lists a mod from its descriptor alone |
+
+**There is no `mods.toml` or `fabric.mod.json` in the source tree.** They are generated, for this jar and the host
+jar alike:
+
+1. **Declared** in `runtime/mc/modern/build-logic/src/main/kotlin/cg-descriptors.gradle.kts` as
+   `val cgLangDescriptor = ModDescriptor(...)`: id, name, licence, the dependency on `crystalgui`, and one variant
+   per loader and Minecraft version. The host's `cgDescriptor` is just above it.
+2. **Written** by `registerDescriptorTasks(cgLangDescriptor, "cgui-lang", name = "language", ...)` in the same script
+   (CrystalGraphics' `singlejar-logic`, `ModDescriptor.kt`), to `build/descriptors/language/`: `mcmod.info`,
+   `META-INF/mods.toml`, `META-INF/neoforge.mods.toml`, `fabric.mod.json`, `pack.mcmeta` and the variant table
+   `META-INF/crystalgui_language/variants.json`.
+3. **Merged** into the language jar's root by `languageJar`. `checkLanguageJar` fails the build when any of them, or
+   `META-INF/crystalgraphics/listeners`, is missing (`requiredEntries` in `cg-single-jar.gradle.kts`).
+
+A variant names no entry class. The Forge and NeoForge `@Mod` classes still pick the running version's variant
+(`ForgeStart`, `VariantBootstrap`), which refuses a version the jar does not support, and then construct nothing.
+
+### How it starts
+
+1. The loader lists `crystalgui_language` among its mods, with its jar.
+2. CrystalGraphics reads `META-INF/crystalgraphics/listeners` in every mod's root (`CgModLoader.roots()`, each era
+   answering from its loader's mod list) and from its own classloader (`CgListenerDiscovery`). The language jar's says:
+
+   ```
+   common com.crystalgui.language.CgLanguageLifecycle
+   ```
+
+3. `CgLanguageLifecycle` starts the stack: on a client in `onLoad`, as a load task behind the loading
+   screen, and on a dedicated server in `onServerStarting`.
+
+### What is easy to get wrong
+
+- **Removing the descriptor or the `@Mod` class removes the stack.** The jar would still be on the game's classpath,
+  but on ModLauncher no mod root would list it and the listeners file would go unread, so nothing would start and
+  nothing would say why.
+- **No code goes in the `@Mod` classes or into a variant entry.** Anything the stack needs from the game is a
+  CrystalGraphics platform service (`CgGameClasses`, `CgGameDirectory`), and anything it does at a game moment is
+  `CgLanguageLifecycle`.
+- **The host jar never names this jar.** Without it installed, no mod root holds the listeners file, and the editor
+  colours from core's built-in word-list lexer.
 
 ---
 
@@ -47,8 +109,8 @@ that this module could not find itself.
 ### The statics trap, which has already been paid for once
 
 A class loaded by the band gets the band's **own copy** of anything not on `PARENT_FIRST`, statics
-included. `ScriptNameEnvironment` names no `ScriptServices` for this reason: it would read a registry the
-host never wrote to, conclude there is no platform, and resolve entirely from files. *Everything works and
+included. `ScriptNameEnvironment` names no `ScriptService` or `PlatformMappings` for this reason: it would read a
+mapping nothing resolved, and resolve entirely from files. *Everything works and
 nothing is live* — and a file-based answer is plausible, so nothing reports it. The host composes
 `TypeBytes` and only `byte[]` crosses the gap.
 
@@ -67,10 +129,8 @@ EngineSource.firstOf(configuredSource(), bundledSource(), downloadedSource(progr
 - **downloaded** — the band's jars as `download/locations.json` lists them, each checked against the
   pin its own jar shipped with
 
-**Both of the last two begin by asking `ScriptService.cacheRoot()` where they may write.** That is the
-non-obvious coupling in this stack: a host that registers no `ScriptService` does not merely lose scripting,
-it loses the ability to extract *or* fetch an engine band. Registering one that answers `cacheRoot()` and
-declines the rest is a legitimate and useful configuration.
+**Both of the last two begin by asking `ScriptService.cacheRoot()` where they may write**: the game's
+`crystalgui/cache`, or `build/crystalgui-cache` with no game.
 
 ---
 
@@ -114,8 +174,8 @@ supplies the platform classes**, by design, because tier 2 was expected to infer
 |---|---|---|---|
 | Classpath route that fires | `java.class.path` | `getSources()` | `java.class.path` |
 | Platform classes | ECJ infers | `rt.jar` (Java 8) or inference | ECJ infers |
-| `ScriptService` | `NONE` | `ScriptService1710` / legacy's (live bytes, mappings) | `ScriptServiceModern` (live bytes, mappings, namespace probe) |
-| Live bytes (tier 1) | none | LaunchWrapper (`runtime/mc/launchwrapper`) | the loader that will run the class (`MinecraftBytes`) |
+| Mapping (`ScriptService.mappings()`) | none | MCP stable, by version | Mojang's names joined to SRG or intermediary, MCP stable before 1.14.4 |
+| Live bytes (tier 1, `CgGameClasses`) | none | LaunchWrapper's transformer chain (`GameClasses1710`, `GameClassesLegacy`) | the loader that will run the class (`GameClassesModern`) |
 | Compliance | 1.8 | 8 | the running JVM's band (**21** on the measured client) |
 
 The compliance row is what separates the hosts: from compliance 9 ECJ resolves module-aware, which is
@@ -259,12 +319,8 @@ nobody could verify. `MojangMappings` does that lookup; the digest comes back ta
 
 The first `current()` probes, applies a cached mapping **on the calling thread** — so the first analysis
 already has readable names rather than showing runtime ones and correcting itself — and hands a genuine
-download to `ScriptService.runInBackground`.
-
-That last seam is the only part a host knows better: `JobScheduler` is drained by `UIDocument.frame` and
-by nothing else, so a job submitted on a dedicated server is never run. The default is CrystalGraphics'
-job pool (`CgJob.executor`), which needs no drain and is right for a server, a test and the harness; a client overrides it to get a progress bar and a
-cancel. **A platform states the what, the where and the how — never the when.**
+download to CrystalGraphics' job pool (`CgJob.executor`), which needs no frame or tick to drain it, so a
+dedicated server, a test and the harness fetch alike. **No loader states anything: the game is read, never configured.**
 
 ### The loader is never named
 

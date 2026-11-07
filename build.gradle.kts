@@ -499,13 +499,12 @@ fun inMinecraftRange(range: String, version: String): Boolean {
 fun mcpStableTable(source: String, pattern: Regex): List<Pair<String, String>> =
     pattern.findAll(file(source).readText()).map { it.groupValues[1] to it.groupValues[2] }.toList()
 
+val scriptServiceSource = "language/src/main/java/com/crystalgui/language/platform/ScriptService.java"
 val modernMcpStable by lazy {
-    mcpStableTable("runtime/mc/modern/common/src/lang/java/com/crystalgui/mc/modern/lang/ScriptServiceModern.java",
-        Regex("""case "([\d.]+)": return "([\w.-]+)";""")).toMap()
+    mcpStableTable(scriptServiceSource, Regex("""case "([\d.]+)": return "([\w.-]+)";""")).toMap()
 }
 val legacyMcpStable by lazy {
-    mcpStableTable("runtime/mc/legacy/forge/src/lang/java/com/crystalgui/mc/legacy/lang/ScriptServiceLegacy.java",
-        Regex("""\{"([\d.]+)", "([\w.-]+)"\}"""))
+    mcpStableTable(scriptServiceSource, Regex("""\{"([\d.]+)", "([\w.-]+)"\}"""))
 }
 
 /**

@@ -2,8 +2,9 @@ package com.crystalgui.language.java;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.java.classpath.TypeIndex;
-import com.crystalgui.language.platform.ScriptServices;
-import com.crystalgui.mc.fabric.v1165.common.lang.NodeScriptService;
+import com.crystalgui.language.platform.FakeGame;
+import com.crystalgraphics.platform.service.CgGameClasses;
+import com.crystalgui.mc.fabric.v1165.common.lang.NodeGameClasses;
 
 import org.junit.After;
 import org.junit.Before;
@@ -22,7 +23,7 @@ import static org.junit.Assert.assertEquals;
  *
  * <p>The jar carries each host class once per (loader, Minecraft version), relocated into that node's
  * package, so one name would be offered up to 54 times. The running node is the one the
- * registered {@code ScriptService} sits in — here Fabric 1.16.5.</p>
+ * game host ({@code CgGameClasses}) sits in — here Fabric 1.16.5.</p>
  */
 public class NodeCopiesTypeIndexTest {
 
@@ -47,7 +48,7 @@ public class NodeCopiesTypeIndexTest {
 
     @After
     public void restore() {
-        CgPlatform.provide(ScriptServices.SERVICE, null);
+        FakeGame.clear();
     }
 
     private List<String> found(String query) {
@@ -59,7 +60,8 @@ public class NodeCopiesTypeIndexTest {
     /** Both mods' copies of other nodes go; a package that is no node's stays. */
     @Test
     public void onlyTheRunningNodesCopiesAreOffered() {
-        CgPlatform.provide(ScriptServices.SERVICE, new NodeScriptService());
+        FakeGame.clear();
+        CgPlatform.provide(CgGameClasses.HOST, new NodeGameClasses());
 
         assertEquals(List.of("com.crystalgui.mc.fabric.v1165.common.client.CgUiScreen"), found("CgUiScreen"));
         assertEquals(List.of("com.crystalgraphics.mc.modern.fabric.v1165.common.platform.Windows"), found("Windows"));

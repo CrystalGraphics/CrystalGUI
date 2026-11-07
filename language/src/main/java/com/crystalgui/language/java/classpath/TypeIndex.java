@@ -1,8 +1,6 @@
 package com.crystalgui.language.java.classpath;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.language.platform.ScriptService;
-import com.crystalgui.language.platform.ScriptServices;
 
 import com.crystalgui.text.SimilarNames;
 
@@ -704,9 +702,8 @@ public final class TypeIndex {
         // The same service that renamed the entry in the first place can produce the bytes, so this asks
         // it rather than teaching the index a second thing about obfuscation. @see #scan
         try {
-            ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-            if (platform == ScriptService.NONE) return null;
-            return platform.liveBytes().bytesOf(entry.binaryName().replace('.', '/'));
+            if (!ScriptService.live()) return null;
+            return ScriptService.liveBytes().bytesOf(entry.binaryName().replace('.', '/'));
         } catch (Exception | LinkageError unavailable) {
             // A kind nobody could read is a plain class, which is what the caller already defaults to.
             return null;
@@ -861,9 +858,8 @@ public final class TypeIndex {
         // Forge classes -- and never net.minecraft.client.Minecraft, so nothing could offer the import
         // either. @see ScriptService#runtimeClassName
         String internalName = path.substring(0, path.length() - ".class".length());
-        ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-        String binary = platform.runtimeClassName(internalName).replace('/', '.');
-        if (otherNode(binary, platform)) return;
+        String binary = ScriptService.runtimeClassName(internalName).replace('/', '.');
+        if (otherNode(binary)) return;
 
         // A NESTED TYPE IS INDEXED UNDER THE NAME AN AUTHOR WRITES, not discarded.
         //
@@ -934,13 +930,14 @@ public final class TypeIndex {
      *
      * <p>A merged jar carries each host class once per (loader, Minecraft version), relocated into that
      * node's package, and only the running node's are ever loaded — the rest would offer one name up to 54
-     * times. The running node is the platform's own {@link ScriptService}, which is that node's class.
-     * Where the service sits in no node package — a dev run, a test — nothing is hidden.</p>
+     * times. The running node is the package of {@link ScriptService#runningNodeClass()}, the game host's
+     * class. With no game, or a host in no node package (a dev run), nothing is hidden.</p>
      */
-    private static boolean otherNode(String binary, ScriptService platform) {
+    private static boolean otherNode(String binary) {
         Matcher node = NODE_PACKAGE.matcher(binary);
         if (!node.find()) return false;
-        String running = NODE_OF.get(platform.getClass());
+        Class<?> host = ScriptService.runningNodeClass();
+        String running = host == null ? null : NODE_OF.get(host);
         return running != null && !running.equals(node.group(1));
     }
 

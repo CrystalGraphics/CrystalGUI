@@ -1,164 +1,196 @@
 package com.crystalgui.language.platform;
 
+import com.crystalgui.core.storage.CrystalGuiStorage;
+import com.crystalgui.language.map.MojangMappings;
+import com.crystalgui.language.map.PlatformMappings;
 import com.crystalgui.language.map.ReadableView;
+import com.crystalgui.language.platform.MappingCoordinates.Source;
 
-import com.crystalgraphics.job.CgJob;
-import com.crystalgraphics.job.CgJobLane;
-import com.crystalgraphics.job.progress.CgProgress;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.service.CgGameClasses;
+import com.crystalgraphics.platform.service.CgGameDirectory;
 
+import javax.annotation.Nullable;
+import java.io.IOException;
 import java.nio.file.Path;
-import java.util.function.BooleanSupplier;
 import java.nio.file.Paths;
 
 /**
- * Everything a loader knows and {@code language/} cannot work out for itself.
+ * What the language stack needs to know about the game it runs in: where a class's live bytes come from, where to
+ * cache, which mapping this runtime needs, and what the runtime calls a class. Every answer is worked out from
+ * CrystalGraphics' {@link CgGameClasses} and {@link CgGameDirectory}, so no loader registers anything.
  *
- * <h3>What a platform contributes, and what it must not</h3>
+ * <pre>{@code
+ * if (ScriptService.live()) {
+ *     byte[] level = ScriptService.liveBytes().bytesOf("net/minecraft/world/level/Level");
+ * }
+ * Path cache = ScriptService.cacheRoot();                    // <game>/crystalgui/cache; build/crystalgui-cache with no game
+ * MappingCoordinates join = ScriptService.mappings();        // Fabric: intermediary joined to Mojang's names
+ * }</pre>
  *
- * <p>Two kinds of thing: <b>what to provide</b> — a route to live bytes, which mapping artifact this
- * environment needs, how to tell which namespace it is in — and <b>where to put it</b>. Nothing else.
- * Downloading, verifying, caching, parsing, remapping, namespace detection and compilation all belong to
- * this module, once.</p>
- *
- * <p>That split is the point rather than tidiness. A second loader should be an implementation of this
- * interface, not a second copy of the phase that built it — so {@link #liveBytes()} is the only member
- * that is genuinely code, and on Minecraft 1.7.10 it is about a dozen lines. Anything in a loader that
- * starts to look like logic is a design error and belongs behind this interface instead.</p>
- *
- * <h3>Registration mirrors {@code CgPlatform}</h3>
- *
- * <p>One bundle, registered by the loader, read through a static accessor — not a field per concern.
- * CrystalGraphics learned that one already: two registries is how a loader wires up half of something
- * and ends up with a working backend and a dead keyboard, which is why CrystalGUI has no platform
- * registry of its own and reads everything through {@code CgPlatform}.</p>
- *
- * <h3>{@link #NONE} is a real deployment, not a test double</h3>
- *
- * <p>The GL debug harness, every unit test, and a dedicated server all run with no platform registered.
- * There {@code liveBytes()} falls back to reading the classloader, there are no mappings, and the stack
- * behaves exactly as it did before this interface existed. Keeping that path real is what lets
- * {@code language/} run off a Minecraft host at all, which is the property the module exists for.</p>
+ * <ul>
+ *   <li>With no game ({@link #live()} false: the harness, a test) there are no live bytes, no mappings and no probe,
+ *       and every name is its own.</li>
+ *   <li>The mapping is chosen from the running version and from which namespace the runtime's classes are in, read
+ *       off its bytes, never from the loader's name.</li>
+ * </ul>
  */
-public interface ScriptService {
+public final class ScriptService {
 
-    /**
-     * Work that must not block its caller — a fetch, and nothing finer grained than that.
-     *
-     * @see ScriptService#runInBackground
-     */
-    interface BackgroundWork {
-        void run(CgProgress progress, BooleanSupplier cancelled);
-    }
+    // Fabric's intermediary name for Level: present only on a runtime that renames classes as well as members
+    private static final String FABRIC_LEVEL = "net/minecraft/class_1937";
+    // Level's official name: NeoForge, Forge from 1.17, and every dev run
+    private static final String OFFICIAL_LEVEL = "net/minecraft/world/level/Level";
+    // Level as MCP named it: Forge before 1.17, legacy Forge and 1.7.10
+    private static final String MCP_LEVEL = "net/minecraft/world/World";
 
-    /**
-     * <b>How this host runs background work.</b> {@code language/} decides what and when; only the host
-     * knows what it can run it on.
-     *
-     * <pre>{@code
-     * // A host with a UI, so the work reports into a status bar and can be cancelled:
-     * public void runInBackground(String title, BackgroundWork work) {
-     *     JobScheduler.shared().job(key, CgJobLane.BACKGROUND, context -> {
-     *         work.run(context.progress(), context::isCancelled);
-     *         return null;
-     *     }).submit();
-     * }
-     * }</pre>
-     *
-     * <p><b>The default is the job pool with no progress, the right answer for anything headless</b>: it
-     * needs no drain. A {@code JobScheduler} job reports back only when a frame drains it, so a host that
-     * overrides this with one claims a drained scheduler, and a host that is sometimes headless must answer
-     * for the side it is on.</p>
-     */
-    default void runInBackground(String title, BackgroundWork work) {
-        CgJob.executor(CgJobLane.BACKGROUND).execute(() -> work.run(CgProgress.NONE, () -> false));
-    }
+    /** 1.7.10's MCP set, matching {@code runtime/mc/1710/gradle.properties}. Parameter names are never resolved. */
+    private static final MappingCoordinates MCP_STABLE_12 = MappingCoordinates.of("1.7.10", "stable", "12")
+            .readable("methods.csv", Source.located("mcp/stable-12/methods.csv"), null)
+            .readable("fields.csv", Source.located("mcp/stable-12/fields.csv"), null);
 
-    /**
-     * No Minecraft host: read bytes off the classloader, no mappings, nothing to detect.
-     *
-     * <p>{@code cacheRoot()} is the working directory rather than a temporary one on purpose — a
-     * download that vanishes between runs is a download that happens every run.</p>
-     */
-    ScriptService NONE = new ScriptService() {
+    /** Each stable MCP release from 1.8 to 1.12.2, oldest first: a version takes the newest at or below it. */
+    private static final String[][] LEGACY_MCP_STABLE = {
+            {"1.8", "18-1.8"}, {"1.8.8", "20-1.8.8"}, {"1.8.9", "22-1.8.9"},
+            {"1.9", "24-1.9"}, {"1.9.4", "26-1.9.4"}, {"1.10", "29-1.10.2"},
+            {"1.11", "32-1.11"}, {"1.12", "39-1.12"},
+    };
 
-        @Override
-        public ReadableView.ByteSource liveBytes() {
-            return ReadableView.ByteSource.ofClassLoader(ScriptService.class.getClassLoader());
-        }
-
-        @Override
-        public Path cacheRoot() {
-            return Paths.get("build", "crystalgui-cache").toAbsolutePath().normalize();
-        }
-
-        @Override
-        public MappingCoordinates mappings() {
-            return MappingCoordinates.NONE;
-        }
-
-        @Override
-        public NamespaceProbe namespaceProbe() {
-            return NamespaceProbe.NONE;
-        }
-
-        @Override
-        public String runtimeClassName(String onDiskInternalName) {
-            return onDiskInternalName;
-        }
-
-        @Override
-        public String toString() {
-            return "ScriptService.NONE";
+    /** A class's bytes as the game runs it, transformers and mixins included. */
+    private static final ReadableView.ByteSource GAME = internalName -> {
+        try {
+            return CgGameClasses.bytes(internalName);
+        } catch (IOException unreadable) {
+            return null;
         }
     };
 
-    /**
-     * Where the <b>post-transform</b> bytes of a class come from.
-     *
-     * <p>The one member that is real per-platform code. It must answer with what will actually execute,
-     * transformers and mixins included — a class file read off disk is precisely the thing that lies on
-     * a Minecraft host, and {@link ReadableView.ByteSource#ofClassLoader} says so in its own javadoc.</p>
-     */
-    ReadableView.ByteSource liveBytes();
+    private ScriptService() {
+    }
+
+    /** Whether a game answers: false in the harness and in tests. */
+    public static boolean live() {
+        return CgGameClasses.present();
+    }
+
+    /** Where a class's post-transform bytes come from; {@link ReadableView.ByteSource#NONE} with no game. */
+    public static ReadableView.ByteSource liveBytes() {
+        return live() ? GAME : ReadableView.ByteSource.NONE;
+    }
+
+    /** Where this module downloads and extracts to: the game's {@code crystalgui/cache}, else {@code build/crystalgui-cache}. */
+    public static Path cacheRoot() {
+        if (!live()) return Paths.get("build", "crystalgui-cache").toAbsolutePath().normalize();
+        return CrystalGuiStorage.LAYOUT.cacheIn(CgGameDirectory.game()).toAbsolutePath().normalize();
+    }
 
     /**
-     * Root for anything this module downloads or extracts. Must survive a restart.
-     *
-     * <p>The platform answers "where", and the layout <em>beneath</em> it is this module's — so every
-     * platform ends up with the same tree and a mistake in it is fixed once rather than per loader.</p>
+     * What the runtime calls a class the classpath stores under another name: LaunchWrapper's Notch-to-SRG rename,
+     * then the mapping's (Fabric's intermediary). Identity in a dev run and with no game. For the type index, which
+     * scans jar entries.
      */
-    Path cacheRoot();
+    public static String runtimeClassName(String onDiskInternalName) {
+        return PlatformMappings.current().runtimeClass(CgGameClasses.runtimeName(onDiskInternalName));
+    }
 
-    /** Which mapping artifact this environment needs, or {@link MappingCoordinates#NONE}. */
-    MappingCoordinates mappings();
+    /** The class whose package names the merged jar's running node, or null with no game. */
+    @Nullable
+    public static Class<?> runningNodeClass() {
+        return live() ? CgPlatform.get(CgGameClasses.HOST).getClass() : null;
+    }
 
-    /** How to tell a readable runtime from an obfuscated one, or {@link NamespaceProbe#NONE}. */
-    NamespaceProbe namespaceProbe();
+    /** The mapping this runtime needs, or {@link MappingCoordinates#NONE}. */
+    public static MappingCoordinates mappings() {
+        String version = CgGameClasses.minecraftVersion();
+        if (version.isEmpty()) return MappingCoordinates.NONE;
+        if (version.equals("1.7.10")) return MCP_STABLE_12;
+        if (compareVersions(version, "1.13") < 0) {
+            // SRG members under MCP class names; the names are the running version's, not the node's
+            String mcp = legacyMcp(version);
+            Source names = Source.located("forge/mcp-stable/" + mcp);
+            return MappingCoordinates.of(version, "stable", mcp)
+                    .readable("methods.csv", names, "methods.csv")
+                    .readable("fields.csv", names, "fields.csv");
+        }
+        if (has(FABRIC_LEVEL)) {
+            return MappingCoordinates.of(version, "intermediary", version)
+                    .readable("client.txt", MojangMappings.clientMappings(version), null)
+                    .runtime("mappings.tiny", Source.located("fabric/intermediary/" + version), "mappings/mappings.tiny");
+        }
+        String mcp = modernMcp(version);
+        if (mcp != null) {
+            // Mojang published nothing before 1.14.4, so MCP's names are the readable ones
+            Source names = Source.located("forge/mcp-stable/" + mcp);
+            return MappingCoordinates.of(version, "stable", mcp)
+                    .readable("methods.csv", names, "methods.csv")
+                    .readable("fields.csv", names, "fields.csv");
+        }
+        MappingCoordinates srg = MappingCoordinates.of(version, "srg", version)
+                .readable("client.txt", MojangMappings.clientMappings(version), null)
+                .runtime("joined.tsrg", Source.located("forge/mcp-config/" + version), "config/joined.tsrg");
+        // Forge from 1.17 runs official class names with SRG members; MCPConfig's own classes
+        // (net/minecraft/src/C_NNNN_) are no runtime's
+        return has(OFFICIAL_LEVEL) ? srg.runtimeKeepsReadableClassNames() : srg;
+    }
 
     /**
-     * What the runtime calls a class the <b>classpath stores under another name</b>.
-     *
-     * <h3>What this is for, and what it is not</h3>
-     *
-     * <p>Only the type index, which is what offers a class you have not imported yet. It scans jar
-     * central directories, and on an obfuscated host those hold Notch names — so typing {@code Minecr}
-     * offered {@code MinecraftForge} and {@code MinecraftServer}, which are ordinary unobfuscated Forge
-     * classes, and never {@code net.minecraft.client.Minecraft}. Nothing could offer the import either,
-     * because nothing knew the class existed.</p>
-     *
-     * <p><b>Resolution does not need this.</b> Analysis, hover and documentation go through the live name
-     * environment, which asks about a name it is given rather than enumerating. This exists purely
-     * because a completion list has to know what there is <em>to</em> offer.</p>
-     *
-     * <h3>A translation rather than a listing</h3>
-     *
-     * <p>The index already walks every class file on the classpath, so handing it a rename costs one
-     * string operation per entry and nothing else — no enumeration to build, no list to hold, no class
-     * bytes read twice. The <em>kind</em> still comes from the real file, which is what keeps an
-     * interface's glyph an interface: obfuscation renames a class, it does not change its access flags.</p>
-     *
-     * <p>Internal names, with slashes, both ways. Returning the argument unchanged is the ordinary answer
-     * and the only one a development client, a plain JVM or any non-Minecraft host ever gives.</p>
+     * How to tell a readable runtime from an obfuscated one, or {@link NamespaceProbe#NONE}: a class and the member
+     * it declares under readable names ({@code getBlockState}, which Forge runs as {@code m_8055_} and Fabric as
+     * {@code method_8320}).
      */
-    String runtimeClassName(String onDiskInternalName);
+    public static NamespaceProbe namespaceProbe() {
+        String version = CgGameClasses.minecraftVersion();
+        if (version.isEmpty()) return NamespaceProbe.NONE;
+        if (version.equals("1.7.10")) return NamespaceProbe.declaring(MCP_LEVEL, "getBlock");
+        if (compareVersions(version, "1.13") < 0) return NamespaceProbe.declaring(MCP_LEVEL, "getBlockState");
+        String level = has(FABRIC_LEVEL) ? FABRIC_LEVEL : has(OFFICIAL_LEVEL) ? OFFICIAL_LEVEL : MCP_LEVEL;
+        return NamespaceProbe.declaring(level, "getBlockState");
+    }
+
+    private static boolean has(String internalName) {
+        try {
+            return CgGameClasses.bytes(internalName) != null;
+        } catch (IOException | LinkageError unreadable) {
+            return false;
+        }
+    }
+
+    /** MCP's stable release for a modern Forge version Mojang published no mappings for, or null. */
+    @Nullable
+    private static String modernMcp(String minecraft) {
+        switch (minecraft) {
+            case "1.13.2": return "47-1.13.2";
+            case "1.14.2": return "53-1.14.2";
+            case "1.14.3": return "56-1.14.3";
+            default: return null;
+        }
+    }
+
+    private static String legacyMcp(String minecraft) {
+        String chosen = LEGACY_MCP_STABLE[0][1];
+        for (String[] release : LEGACY_MCP_STABLE) {
+            if (compareVersions(release[0], minecraft) <= 0) chosen = release[1];
+        }
+        return chosen;
+    }
+
+    /** Compares dotted Minecraft versions by their numbers; a suffix ({@code -pre1}) is ignored. */
+    public static int compareVersions(String a, String b) {
+        String[] left = a.split("\\.");
+        String[] right = b.split("\\.");
+        for (int i = 0; i < Math.max(left.length, right.length); i++) {
+            int l = i < left.length ? leadingNumber(left[i]) : 0;
+            int r = i < right.length ? leadingNumber(right[i]) : 0;
+            if (l != r) return Integer.compare(l, r);
+        }
+        return 0;
+    }
+
+    private static int leadingNumber(String part) {
+        int value = 0;
+        for (int i = 0; i < part.length() && Character.isDigit(part.charAt(i)); i++) {
+            value = value * 10 + (part.charAt(i) - '0');
+        }
+        return value;
+    }
 }

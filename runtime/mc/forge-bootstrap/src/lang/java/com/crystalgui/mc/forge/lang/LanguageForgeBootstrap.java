@@ -9,7 +9,8 @@ import net.minecraftforge.fml.common.event.FMLPreInitializationEvent;
 
 /**
  * The language mod's one {@code @Mod} class for every Forge, as {@code com.crystalgui.mc.forge.ForgeBootstrap}
- * is the host's: its own mod id and variant table, and the same selector.
+ * is the host's: its own mod id and variant table, and the same selector. It runs nothing itself: being a mod Forge
+ * lists is what lets CrystalGraphics read the jar's lifecycle listener ({@code docs/CGUI_LANGUAGE_STACK.md} § 1a).
  */
 @Mod(value = LanguageForgeBootstrap.MODID, modid = LanguageForgeBootstrap.MODID, dependencies = "required-after:crystalgui",
         acceptableRemoteVersions = "*")

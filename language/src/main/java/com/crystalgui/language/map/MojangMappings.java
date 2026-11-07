@@ -1,20 +1,21 @@
-package com.crystalgui.mc.shared.modern;
+package com.crystalgui.language.map;
 
 import com.crystalgui.core.storage.CrystalGuiDownloads;
 import com.crystalgraphics.storage.cache.CgCacheFiles;
 import com.crystalgraphics.storage.download.CgDownload;
-import com.crystalgraphics.storage.download.CgDownloadLocations;
 import com.crystalgraphics.storage.download.CgDownloads;
 import com.crystalgui.language.platform.MappingCoordinates;
 
-import com.google.gson.JsonElement;
-import com.google.gson.JsonObject;
-import com.google.gson.JsonParser;
+import com.crystalgraphics.serialization.CgCodec;
+import com.crystalgraphics.serialization.CgCodecException;
+import com.crystalgraphics.serialization.CgCodecs;
+import com.crystalgraphics.serialization.format.CgFiles;
 
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.Reader;
 import java.nio.charset.StandardCharsets;
+import java.util.Collections;
+import java.util.List;
+import java.util.Map;
 
 /**
  * Where Mojang's official mappings for a Minecraft version live.
@@ -33,12 +34,6 @@ import java.nio.charset.StandardCharsets;
  *       published the bytes</b>; a version's entry never changes once released. Two hops — the manifest,
  *       then that version's own JSON — resolved once, on the fetching thread.</li>
  * </ul>
- *
- * <h3>Gson, at the version Minecraft ships</h3>
- *
- * <p>{@code new JsonParser().parse(...)} rather than {@code JsonParser.parseString(...)}: the latter is
- * a static added in Gson 2.8.6, and 1.7.10 ships 2.2.4. This class only runs on 1.20.x, but the rule is
- * the project's and costs nothing to keep — the deprecated form exists in every version.</p>
  */
 public final class MojangMappings {
 
@@ -68,45 +63,66 @@ public final class MojangMappings {
 
             private synchronized void resolve() throws IOException {
                 if (url != null) return;
-                JsonObject download = clientMappingsEntry(minecraftVersion);
-                url = download.get("url").getAsString();
+                Download download = clientMappingsEntry(minecraftVersion);
+                url = download.url();
                 // Tagged, because a digest without its algorithm is not a digest. @see CgCacheFiles
-                digest = download.has("sha1") ? "sha1:" + download.get("sha1").getAsString() : null;
+                digest = download.sha1() == null ? null : "sha1:" + download.sha1();
             }
         };
     }
 
     /** The {@code downloads.client_mappings} object for one version. */
-    private static JsonObject clientMappingsEntry(String minecraftVersion) throws IOException {
-        JsonObject manifest = read(CrystalGuiDownloads.located("mojang/version-manifest"));
+    private static Download clientMappingsEntry(String minecraftVersion) throws IOException {
+        Manifest manifest = read(CrystalGuiDownloads.located("mojang/version-manifest"), MANIFEST);
         String versionUrl = null;
-        for (JsonElement entry : manifest.getAsJsonArray("versions")) {
-            JsonObject version = entry.getAsJsonObject();
-            if (minecraftVersion.equals(version.get("id").getAsString())) {
-                versionUrl = version.get("url").getAsString();
+        for (Listed version : manifest.versions()) {
+            if (minecraftVersion.equals(version.id())) {
+                versionUrl = version.url();
                 break;
             }
         }
         if (versionUrl == null) {
             throw new IOException("Mojang's manifest lists no Minecraft " + minecraftVersion);
         }
-        JsonObject downloads = read(CgDownloads.from(versionUrl)).getAsJsonObject("downloads");
-        if (downloads == null || !downloads.has("client_mappings")) {
+        Download mappings = read(CgDownloads.from(versionUrl), VERSION).downloads().get("client_mappings");
+        if (mappings == null) {
             // True of every version before 1.14.4, and the message has to say so: "no mappings" and "the
             // download failed" produce the same runtime names and are entirely different things.
             throw new IOException("Minecraft " + minecraftVersion + " publishes no client mappings");
         }
-        return downloads.getAsJsonObject("client_mappings");
+        return mappings;
     }
 
-    private static JsonObject read(CgDownloads.Request request) throws IOException {
-        try (CgDownload download = request.named("Minecraft version manifest").open();
-             Reader json = new InputStreamReader(download.stream(), StandardCharsets.UTF_8)) {
-            JsonElement parsed = new JsonParser().parse(json);
-            if (parsed == null || !parsed.isJsonObject()) {
-                throw new IOException("expected a JSON object from " + download.url());
-            }
-            return parsed.getAsJsonObject();
+    private static <T> T read(CgDownloads.Request request, CgCodec<T> codec) throws IOException {
+        try (CgDownload download = request.named("Minecraft version manifest").open()) {
+            return CgFiles.JSON.fromText(codec, new String(download.stream().readAllBytes(), StandardCharsets.UTF_8));
+        } catch (CgCodecException unreadable) {
+            throw new IOException("Mojang's version JSON could not be read: " + unreadable.getMessage(), unreadable);
         }
     }
+
+    // The keys read from Mojang's JSON; the rest are ignored
+    private record Listed(String id, String url) {
+    }
+
+    private record Manifest(List<Listed> versions) {
+    }
+
+    private record Download(String url, String sha1) {
+    }
+
+    private record Version(Map<String, Download> downloads) {
+    }
+
+    private static final CgCodec<Listed> LISTED = CgCodecs.record(
+            CgCodecs.field("id", CgCodecs.STRING, Listed::id),
+            CgCodecs.field("url", CgCodecs.STRING, Listed::url), Listed::new);
+    private static final CgCodec<Manifest> MANIFEST = CgCodecs.record(
+            CgCodecs.field("versions", CgCodecs.listOf(LISTED), Manifest::versions), Manifest::new);
+    private static final CgCodec<Download> DOWNLOAD = CgCodecs.record(
+            CgCodecs.field("url", CgCodecs.STRING, Download::url),
+            CgCodecs.optionalField("sha1", CgCodecs.STRING, Download::sha1, null), Download::new);
+    private static final CgCodec<Version> VERSION = CgCodecs.record(
+            CgCodecs.fieldOr("downloads", CgCodecs.mapOf(CgCodecs.STRING, DOWNLOAD), Version::downloads,
+                    Collections.emptyMap()), Version::new);
 }

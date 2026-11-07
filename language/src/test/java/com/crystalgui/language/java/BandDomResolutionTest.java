@@ -5,12 +5,7 @@ import com.crystalgui.language.engine.EngineSource;
 import com.crystalgui.language.engine.JavaEngine;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.map.PlatformMappings;
-import com.crystalgui.language.map.ReadableView;
-import com.crystalgui.language.platform.MappingCoordinates;
-import com.crystalgui.language.platform.NamespaceProbe;
-import com.crystalgui.language.platform.ScriptService;
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.language.platform.ScriptServices;
+import com.crystalgui.language.platform.FakeGame;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionList;
@@ -23,7 +18,6 @@ import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
@@ -56,7 +50,7 @@ public class BandDomResolutionTest {
     @Before
     @After
     public void forget() {
-        CgPlatform.provide(ScriptServices.SERVICE, null);
+        FakeGame.clear();
         PlatformMappings.resetForTesting();
     }
 
@@ -74,32 +68,7 @@ public class BandDomResolutionTest {
      * fixture that takes the client's code path while resolving everything from the ordinary classpath.</p>
      */
     private void registerBarePlatform() {
-        CgPlatform.provide(ScriptServices.SERVICE, new ScriptService() {
-            @Override
-            public ReadableView.ByteSource liveBytes() {
-                return name -> null;
-            }
-
-            @Override
-            public Path cacheRoot() {
-                return Paths.get("build", "crystalgui-test-cache").toAbsolutePath();
-            }
-
-            @Override
-            public MappingCoordinates mappings() {
-                return MappingCoordinates.NONE;
-            }
-
-            @Override
-            public NamespaceProbe namespaceProbe() {
-                return NamespaceProbe.NONE;
-            }
-
-            @Override
-            public String runtimeClassName(String onDiskInternalName) {
-                return onDiskInternalName;
-            }
-        });
+        FakeGame.install("", name -> null, Paths.get("build", "crystalgui-test-game").toAbsolutePath());
     }
 
     /** Opens {@code band} explicitly rather than letting the host JVM choose one. */

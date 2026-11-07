@@ -14,7 +14,6 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
@@ -28,7 +27,7 @@ import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.platform.ScriptService;
-import com.crystalgui.language.platform.ScriptServices;
+import com.crystalgraphics.platform.service.CgGameClasses;
 import com.crystalgui.language.run.ScriptCommands;
 import com.crystalgui.probe.AutoTest;
 import com.crystalgui.text.TextBuffer;
@@ -43,59 +42,20 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  * <b>The unattended run's scripting half</b> — the checks that need the language stack.
  *
  * <pre>{@code
- * LanguageProbe.register(myHost);   // once, from the language mod's client init
+ * LanguageProbe.register();   // once, on a client: CgLanguageLifecycle
  * }</pre>
  *
  * <p>It lives in {@code language/} because every probe here names it: a script through the Run command,
- * live bytes out of the {@code ScriptService}, the member list a completion provider answers. The host's
+ * live bytes out of the game, the member list a completion provider answers. The host's
  * own autotest opens the editor and photographs it, which needs none of them — so an install without
  * this jar still runs the whole capture.</p>
  *
  * <p>Each probe is registered on a painted frame through {@link AutoTest#onFrame}, which is the seam
  * that exists precisely because this ships in a <em>second jar</em> and cannot be called by name from
- * the host.</p>
- *
- * <h3>What a host has to answer</h3>
- *
- * <p>Two things, and both are honestly per-game: whether there is a pre-transform view of a class, and
- * which member a mixin has added to which receiver. Everything else — the script run, the classpath
- * report, the six completion shapes, the constant-pool diff — is the same question on every loader, and
- * was 1.7.10's alone until this moved.</p>
+ * the host. The pre-transform view is {@code CgGameClasses.fileBytes} (LaunchWrapper only), and the
+ * member a CrystalGraphics mixin adds to {@code Minecraft} is spelled from the running version.</p>
  */
 public final class LanguageProbe {
-
-    /** What only the running game can answer. @see LanguageProbe */
-    public interface Host {
-
-        /**
-         * The <b>pre-transform</b> bytes of a class, or null where this platform has no such view.
-         *
-         * <p>The live-versus-raw diff is the whole of what the bytes probe proves: a member can exist
-         * only because a transformer produced it, and no list of file paths can ever resolve it. That
-         * needs both sides. LaunchWrapper hands out raw bytes publicly; ModLauncher and Knot expose no
-         * equivalent, so a host there answers null and the probe reports the comparison as unavailable
-         * rather than quietly proving nothing.</p>
-         */
-        @Nullable
-        byte[] rawBytesOf(String internalName);
-
-        /**
-         * A receiver expression ending in {@code .} whose type a mixin has added a member to, or null.
-         *
-         * <p>e.g. {@code "net.minecraft.client.Minecraft.getMinecraft()."} — and the member is
-         * {@link #mixinMember()}. Asked of the EDITOR rather than the compiler: a script calling it
-         * compiles, and that says nothing about whether anyone could have <em>written</em> the call.
-         * The compiler and the analyser reach live bytes through different entry points, and those two
-         * disagreeing is the defect this was built for — every script resolved perfectly while the
-         * member list beside it was empty.</p>
-         */
-        @Nullable
-        String mixinReceiver();
-
-        /** The member {@link #mixinReceiver()}'s type gained from a mixin. */
-        @Nullable
-        String mixinMember();
-    }
 
     /**
      * A script to compile and run once the editor is up, or null to run nothing.
@@ -163,7 +123,6 @@ public final class LanguageProbe {
     /** A newline, spelled once — a probe source is written inline and every one of them needs one. */
     private static final String NL = String.valueOf((char) 10);
 
-    private static Host host;
     private static boolean scriptRun;
     private static boolean bytesProbed;
     private static boolean completionProbed;
@@ -175,9 +134,8 @@ public final class LanguageProbe {
      * Puts every probe on the frame it belongs to. Off unless the unattended run is, so the language jar
      * costs the host nothing on an ordinary launch.
      */
-    public static void register(Host gameHost) {
+    public static void register() {
         if (!AutoTest.ENABLED) return;
-        host = gameHost;
         // BEFORE the capture frame, so a probe still leaves a photograph behind.
         if (RUN_SCRIPT_ON_FRAME > 0) {
             AutoTest.onFrame(RUN_SCRIPT_ON_FRAME, LanguageProbe::runScriptOnce);
@@ -301,13 +259,12 @@ public final class LanguageProbe {
         if (!AutoTest.ENABLED || BYTES_PROBE == null || bytesProbed) return;
         bytesProbed = true;
         try {
-            ScriptService platform = CgPlatform.get(ScriptServices.SERVICE);
-            if (platform == ScriptService.NONE) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: no platform registered");
+            if (!ScriptService.live()) {
+                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: no game");
                 return;
             }
-            byte[] live = platform.liveBytes().bytesOf(BYTES_PROBE);
-            byte[] raw = host == null ? null : host.rawBytesOf(BYTES_PROBE);
+            byte[] live = ScriptService.liveBytes().bytesOf(BYTES_PROBE);
+            byte[] raw = CgGameClasses.fileBytes(BYTES_PROBE);
             CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes: {} live={} raw={}",
                     BYTES_PROBE, live == null ? -1 : live.length, raw == null ? -1 : raw.length);
             if (raw == null) {
@@ -375,10 +332,10 @@ public final class LanguageProbe {
             openProbe("a type receiver", "System." + NL, "System.");
             openProbe("a call receiver", "new java.util.ArrayList<String>()." + NL,
                     "new java.util.ArrayList<String>().");
-            // THE MIXIN-ADDED MEMBER, and the one thing here a host has to spell. @see Host#mixinReceiver
-            String receiver = host == null ? null : host.mixinReceiver();
-            String member = host == null ? null : host.mixinMember();
-            if (receiver != null && member != null) {
+            // A member only CrystalGraphics' mixin on Minecraft declares: getMinecraft() before 1.13, getInstance() after
+            String receiver = mixinReceiver();
+            String member = "cgMixinProbe";
+            if (receiver != null) {
                 openProbe("a game receiver", receiver + NL, receiver, member);
             }
             openProbe("a jdk-only line", "String s = \"x\"; int n = s.length(); s." + NL, "s.");
@@ -577,5 +534,15 @@ public final class LanguageProbe {
     @Nullable
     private static String emptyToNull(String value) {
         return value == null || value.isEmpty() ? null : value;
+    }
+
+    /** The expression reaching the client's {@code Minecraft}, ending in {@code .}; null with no game. */
+    @Nullable
+    private static String mixinReceiver() {
+        String version = CgGameClasses.minecraftVersion();
+        if (version.isEmpty()) return null;
+        return ScriptService.compareVersions(version, "1.13") < 0
+                ? "net.minecraft.client.Minecraft.getMinecraft()."
+                : "net.minecraft.client.Minecraft.getInstance().";
     }
 }
