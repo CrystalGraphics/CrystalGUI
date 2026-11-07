@@ -260,9 +260,8 @@ public final class ScreenOverlay {
      * that should have driven it. It presented as "dragging does not work in overlay mode" rather than
      * as a coordinate or capture problem, because press and click were both fine.</p>
      *
-     * <p>The timestamp follows the same rule {@code CgUiInput.pumpMouse} records: a move must not carry
-     * a click time, or the multi-click detail counter drifts and a slow double-click registers as a
-     * triple.</p>
+     * <p>The timestamp follows {@code HostPointer.of}'s rule: a move must not carry a click time, or the
+     * multi-click detail counter drifts and a slow double-click registers as a triple.</p>
      */
     private void deliver(int xPx, int yPx, int button, boolean pressed, float wheel) {
         long millis = button < 0 ? -1L : System.currentTimeMillis();

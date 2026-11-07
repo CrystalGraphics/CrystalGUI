@@ -4,7 +4,6 @@ import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgraphics.mc.shared.FmlSide;
 import com.crystalgraphics.mc.shared.VariantEntry;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.neoforged.bus.api.IEventBus;
 import net.neoforged.fml.loading.FMLLoader;
@@ -73,9 +72,9 @@ public final class CrystalGUINeoForge implements VariantEntry {
                 modBus.addListener(ClientBus::onRegisterKeyMappings);
             }
 
+            // The earliest client-only mod-bus event on the main thread; the keys are CrystalGraphics'.
             private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
                 LifecycleCrystalGUI.bootstrapClient();
-                CgUiKeybinds.all().forEach(event::register);
             }
         }
     }

@@ -7,7 +7,6 @@ import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.client.CgUiInput;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 

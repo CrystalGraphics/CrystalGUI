@@ -2,20 +2,14 @@ package com.crystalgui.mc.forge;
 
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgraphics.mc.shared.VariantEntry;
-import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
 import net.minecraftforge.api.distmarker.Dist;
 //? if >=1.19 {
 import net.minecraftforge.client.event.RegisterKeyMappingsEvent;
-//?} elif >=1.18 {
-/*import net.minecraftforge.client.ClientRegistry;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
-*///?} elif >=1.17 {
-/*import net.minecraftforge.fmlclient.registry.ClientRegistry;
-import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
+//?} elif >=1.17 {
+/*import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?} else {
-/*import net.minecraftforge.fml.client.registry.ClientRegistry;
-import net.minecraftforge.fml.DeferredWorkQueue;
+/*import net.minecraftforge.fml.DeferredWorkQueue;
 import net.minecraftforge.fml.event.lifecycle.FMLClientSetupEvent;
 *///?}
 //? if >=1.21.6 {
@@ -159,27 +153,19 @@ public final class CrystalGUIForge implements VariantEntry {
             }
             *///?}
 
-            // Before Forge 41 keys are registered in client setup, on the main thread -- which Forge 29-31
-            // reach through DeferredWorkQueue rather than the event.
+            // The client's start, on the main thread: the key event from Forge 41, client setup before it -- which
+            // Forge 29-31 reach through DeferredWorkQueue. The keys themselves are CrystalGraphics'.
             //? if >=1.19 {
             private static void onRegisterKeyMappings(RegisterKeyMappingsEvent event) {
                 LifecycleCrystalGUI.bootstrapClient();
-                CgUiKeybinds.all().forEach(event::register);
             }
             //?} elif >=1.17 {
             /*private static void onClientSetup(FMLClientSetupEvent event) {
-                event.enqueueWork(ClientBus::registerKeys);
+                event.enqueueWork(LifecycleCrystalGUI::bootstrapClient);
             }
             *///?} else {
             /*private static void onClientSetup(FMLClientSetupEvent event) {
-                DeferredWorkQueue.runLater(ClientBus::registerKeys);
-            }
-            *///?}
-
-            //? if <1.19 {
-            /*private static void registerKeys() {
-                LifecycleCrystalGUI.bootstrapClient();
-                CgUiKeybinds.all().forEach(ClientRegistry::registerKeyBinding);
+                DeferredWorkQueue.runLater(LifecycleCrystalGUI::bootstrapClient);
             }
             *///?}
         }

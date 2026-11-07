@@ -63,4 +63,17 @@ public interface HostServices {
      * </ul>
      */
     void reinjectKey(CgSystemInput.Keyboard.Event key);
+
+    /**
+     * Puts the desktop on screen, touching no window: what the Show Desktop key does. Nothing, the default, for a host
+     * whose desktop is always up (the harness). Client thread.
+     *
+     * <pre>{@code
+     * public void showDesktop() {
+     *     if (HostSession.mayOpen()) minecraft.setScreen(new CgUiScreen());
+     * }
+     * }</pre>
+     */
+    default void showDesktop() {
+    }
 }

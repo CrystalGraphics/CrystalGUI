@@ -33,7 +33,8 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 | traffic between client and server | CrystalGraphics' `CgNetworkChannel` — `CrystalGraphicsForge.Network`, `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`, `NetworkChannel1710` — and `CgNetwork`, the connections their lifecycles drive |
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
 | a permission or "who is this player" | CrystalGraphics' `CgPlayerQuery.isOperator` (`PlayerQueryModern`, `PlayerQueryLegacy`, `PlayerQuery1710`) |
-| client input, HUD, a screen | `mc.modern.client` (`CgUiInput`, `CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
+| client input, a key binding | CrystalGraphics' `CgInputStage.SCREEN` (`docs/INPUT.md`) and `CgKeyBindings`, which every era's host fires and registers |
+| HUD, a screen | `mc.modern.client` (`CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
 | a member renamed across versions | legacy `Game`; the controller's `replacements.string` |
 | a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
 

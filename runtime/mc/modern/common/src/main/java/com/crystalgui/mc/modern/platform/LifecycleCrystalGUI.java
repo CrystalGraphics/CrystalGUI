@@ -3,7 +3,6 @@ package com.crystalgui.mc.modern.platform;
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.mc.modern.probe.CgUiAutoTest;
 import com.crystalgui.mc.modern.probe.ClientProbe;
@@ -36,16 +35,14 @@ public final class LifecycleCrystalGUI {
 
     /**
      * Client init, once. Everything client-side that has to be registered is registered from here, so a
-     * loader never enumerates it -- which is why {@link CgUiKeybinds#all()} must be read AFTER this runs.
+     * loader never enumerates it. The keys are CrystalGraphics' ({@code DesktopKeys}).
      */
     public static void bootstrapClient() {
-        // FIRST: the keybinds reach the session, and a key pressed before it exists would throw rather
-        // than open anything.
+        // FIRST: the keys reach the session, and a key pressed before it exists would open nothing.
         CgUiScreen.install();
         CgUiHud.attachStages();
         CgEngineLifecycle.onClientTick(CgUiAutoTest::tick);
         CgEngineLifecycle.onClientTick(ClientProbe::tick);
-        CgEngineLifecycle.onClientTick(CgUiKeybinds::tick);
 
         // THE CONNECTION PROBE is registered from HERE rather than from a common path: it is a client
         // class, and registering in client init keeps it off a server entirely; serverSmoke enumerates

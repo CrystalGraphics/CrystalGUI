@@ -39,9 +39,7 @@ import net.minecraft.network.chat.Component;
 /*import net.minecraft.network.chat.TextComponent;
 *///?}
 //? if >=1.21.9 {
-/*import net.minecraft.client.input.CharacterEvent;
-import net.minecraft.client.input.KeyEvent;
-import net.minecraft.client.input.MouseButtonEvent;
+/*import net.minecraft.client.input.KeyEvent;
 *///?}
 //? if >=26.3 {
 /*import java.util.Arrays;
@@ -51,11 +49,9 @@ import net.minecraft.client.input.PreeditEvent;
 /**
  * The CrystalGUI desktop as a 1.20.x {@link Screen} — <b>and nothing more than that</b>.
  *
- * <p>Minecraft's screen lifecycle mapped onto {@link HostSession}'s, plus the input overrides and the
- * GL handoff this version of the game needs. What opens, how big it is and when it is raised are
- * {@code HostSession}'s and are the same answer on every loader.</p>
- *
- * @see CgUiInput for the event translation
+ * <p>Minecraft's screen lifecycle mapped onto {@link HostSession}'s, plus the GL handoff this version of the
+ * game needs. What opens, how big it is and when it is raised are {@code HostSession}'s and are the same answer
+ * on every loader. Its input reaches the desktop through CrystalGraphics' {@code SCREEN} input stage.</p>
  */
 public final class CgUiScreen extends Screen {
 
@@ -256,22 +252,8 @@ public final class CgUiScreen extends Screen {
     }
     *///?}
 
-    /**
-     * The screen's own bracket — no {@code beforePaint}, unlike the HUD's.
-     *
-     * <p>1.20 posts no move event for a HUD, so that arm has to offer the pointer itself every frame.
-     * A screen gets {@link #mouseMoved} and would be told twice -- except on 1.13, which tells a screen
-     * of no move either.</p>
-     */
+    /** The screen's own bracket. */
     private static final HostSession.PaintHost PAINT_HOST = new HostSession.PaintHost() {
-
-        //? if <1.14 {
-        /*@Override
-        public void beforePaint() {
-            UIDocument window = window();
-            if (window != null) CgUiInput.mouseMoved(HostSession.session().input());
-        }
-        *///?}
 
         @Override
         public boolean ownScreenUp() {
@@ -332,71 +314,13 @@ public final class CgUiScreen extends Screen {
     }
 
     // ── Input ───────────────────────────────────────────────────────────────────────────────────
-
-    @Override
-    // 1.21.9 hands input as event objects.
-    //? if >=1.21.9 {
-    /*public boolean mouseClicked(MouseButtonEvent event, boolean doubleClick) {
-        UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(HostSession.session().input(), event.button(), true);
-    }
-
-    @Override
-    public boolean mouseReleased(MouseButtonEvent event) {
-        UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(HostSession.session().input(), event.button(), false);
-    }
-    *///?} else {
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(HostSession.session().input(), button, true);
-    }
-
-    @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        UIDocument window = window();
-        return window != null && CgUiInput.mouseButton(HostSession.session().input(), button, false);
-    }
-    //?}
-
-    //? if >=1.14 {
-    @Override
-    public void mouseMoved(double mouseX, double mouseY) {
-        UIDocument window = window();
-        if (window != null) CgUiInput.mouseMoved(HostSession.session().input());
-    }
-    //?}
+    // Every event reaches the desktop through CrystalGraphics' SCREEN input stage before this screen sees it
+    // (HostInputListener); what arrives here is what the desktop left.
 
     /**
-     * A drag is a move: the engine tracks the button itself through pointer capture, and reporting a
-     * press here would end the drag on its first pixel.
+     * An Escape the desktop left closes it. Escape is a cascade -- a live drag eats it, then a popover, then a
+     * modal -- so the screen closes only on one nothing wanted. shouldCloseOnEsc() is false for the same reason.
      */
-    @Override
-    //? if >=1.21.9 {
-    /*public boolean mouseDragged(MouseButtonEvent event, double dragX, double dragY) {
-    *///?} else {
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double dragX, double dragY) {
-    //?}
-        UIDocument window = window();
-        if (window == null) return false;
-        CgUiInput.mouseMoved(HostSession.session().input());
-        return true;
-    }
-
-    // 1.20.2 added the horizontal axis. Reached only when the loader's scroll event did not consume the
-    // scroll -- see CgUiHud -- which is the same on every version.
-    @Override
-    //? if >=1.20.2 {
-    /*public boolean mouseScrolled(double mouseX, double mouseY, double scrollX, double delta) {
-    *///?} elif >=1.14 {
-    public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-    //?} else {
-    /*public boolean mouseScrolled(double delta) {
-    *///?}
-        UIDocument window = window();
-        return window != null && CgUiInput.scrolled(HostSession.session().input(), delta);
-    }
-
     @Override
     //? if >=1.21.9 {
     /*public boolean keyPressed(KeyEvent event) {
@@ -404,44 +328,10 @@ public final class CgUiScreen extends Screen {
     *///?} else {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
     //?}
-        UIDocument window = window();
-        if (window == null) return false;
-        if (CgUiInput.key(HostSession.session().input(), keyCode, true)) return true;
-
-        // Escape is a cascade -- a live drag eats it, then a popover, then a modal -- so the screen
-        // closes only on one nothing wanted. shouldCloseOnEsc() is false for the same reason.
-        if (CgPlatform.input().translateKeyboardCodes(keyCode) == CgKeyCodes.KEY_ESCAPE) {
-            onClose();
-            return true;
-        }
-        return false;
+        if (CgPlatform.input().translateKeyboardCodes(keyCode) != CgKeyCodes.KEY_ESCAPE) return false;
+        onClose();
+        return true;
     }
-
-    //? if >=1.21.9 {
-    /*@Override
-    public boolean keyReleased(KeyEvent event) {
-        UIDocument window = window();
-        return window != null && CgUiInput.key(HostSession.session().input(), event.key(), false);
-    }
-
-    @Override
-    public boolean charTyped(CharacterEvent event) {
-        UIDocument window = window();
-        return window != null && CgUiInput.character(HostSession.session().input(), (char) event.codepoint());
-    }
-    *///?} else {
-    @Override
-    public boolean keyReleased(int keyCode, int scanCode, int modifiers) {
-        UIDocument window = window();
-        return window != null && CgUiInput.key(HostSession.session().input(), keyCode, false);
-    }
-
-    @Override
-    public boolean charTyped(char codePoint, int modifiers) {
-        UIDocument window = window();
-        return window != null && CgUiInput.character(HostSession.session().input(), codePoint);
-    }
-    //?}
 
     /**
      * A key the desktop dispatched on its own thread and left, handed back a frame late: what this screen does with

@@ -4,10 +4,12 @@ import com.crystalgui.mc.v1710.probe.CgUiAutoTest;
 import com.crystalgui.mc.v1710.client.CgUiHud;
 import com.crystalgui.mc.v1710.probe.CgUiConnectionProbe;
 import com.crystalgui.mc.v1710.probe.CgUiDesktopProbe;
-import com.crystalgui.mc.v1710.client.CgUiInput;
 import com.crystalgui.mc.v1710.client.CgUiScreen;
 
-/** The client half: the key binding, the input pump, the HUD and the probes. CrystalGraphics finds CrystalGUI's lifecycle. */
+/**
+ * The client half: the session, the HUD and the probes. CrystalGraphics finds CrystalGUI's lifecycle, which declares
+ * its keys, and carries its input.
+ */
 public class ClientProxy extends CommonProxy {
 
     @Override
@@ -18,8 +20,6 @@ public class ClientProxy extends CommonProxy {
         // before it exists would throw rather than open anything.
         CgUiScreen.install();
 
-        // THE POINTER IS THIS PLATFORM'S TO DRESS, and it is a property of the process rather than of
-        CgUiInput.register();
         // W14: pinned windows paint over the running game. Costs one no-op branch per frame when
         // nothing is pinned, which is every frame until somebody pins something.
         CgUiHud.register();

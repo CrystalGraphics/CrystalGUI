@@ -4753,6 +4753,11 @@ com/crystalgui/desktop/host/DesktopHost
   method public windowMount ()Lcom/crystalgui/desktop/host/DesktopWindowMount;
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public,static create (Lcom/crystalgui/desktop/host/HostServices;)Lcom/crystalgui/desktop/host/DesktopHost;
+com/crystalgui/desktop/host/DesktopKeys
+  access public,final
+  extends java/lang/Object
+  field public,static,final CATEGORY Ljava/lang/String;
+  method public,static declare ()V
 com/crystalgui/desktop/host/DesktopWindowMount
   access public,final
   extends java/lang/Object
@@ -4783,6 +4788,7 @@ com/crystalgui/desktop/host/HostServices
   field public,static,final DEFAULT_UI_SCALE F
   method public connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
   method public desktopId ()Ljava/lang/String;
+  method public showDesktop ()V
   method public,abstract reinjectKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)V
 com/crystalgui/desktop/host/HostSession
   access public,final

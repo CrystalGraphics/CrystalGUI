@@ -19,4 +19,9 @@ final class Host1710 implements HostServices {
         // keyTyped is a press, with its character beside its key; a release has no handler to reach.
         else if (screen != null && key.pressed()) ScreenKeys.type(screen, key.character(), key.key());
     }
+
+    @Override
+    public void showDesktop() {
+        CgUiScreen.openDesktop();
+    }
 }

@@ -3,13 +3,7 @@ package com.crystalgui.mc.fabric;
 import com.crystalgraphics.mc.shared.CrashVariant;
 import com.crystalgraphics.mc.shared.VariantEntry;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.mc.modern.client.CgUiKeybinds;
 import com.crystalgui.mc.modern.platform.LifecycleCrystalGUI;
-//? if >=26.1 {
-/*import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
-*///?} else {
-import net.fabricmc.fabric.api.client.keybinding.v1.KeyBindingHelper;
-//?}
 
 import static com.crystalgui.mc.modern.platform.CrystalGUI.NAME;
 
@@ -45,11 +39,6 @@ public final class CrystalGUIFabricCommon implements VariantEntry {
 
         static void registerClient() {
             LifecycleCrystalGUI.bootstrapClient();
-            //? if >=26.1 {
-            /*CgUiKeybinds.all().forEach(KeyMappingHelper::registerKeyMapping);
-            *///?} else {
-            CgUiKeybinds.all().forEach(KeyBindingHelper::registerKeyBinding);
-            //?}
         }
     }
 }

@@ -22,7 +22,6 @@ import net.minecraft.client.gui.GuiScreen;
 import net.minecraft.client.renderer.OpenGlHelper;
 
 import org.lwjgl.input.Keyboard;
-import org.lwjgl.input.Mouse;
 
 /**
  * <b>The Minecraft screen CrystalGUI draws into</b> — a {@code GuiScreen} over a {@link HostSession}.
@@ -37,11 +36,11 @@ import org.lwjgl.input.Mouse;
  * them, so pressing Escape and reopening gets the same unsaved documents back. Only game shutdown
  * disposes the session.</p>
  *
- * @see CgUiInput for why input does not arrive through this class at all
+ * <p>Its input reaches the desktop through CrystalGraphics' {@code SCREEN} input stage.</p>
  */
 public final class CgUiScreen extends GuiScreen {
 
-    /** Set by the pump when an Escape reached the window and nothing consumed it. @see CgUiInput */
+    /** Set when an Escape reached the desktop and nothing consumed it. @see #keyTyped */
     private boolean closeRequested;
 
     private int framesPainted;
@@ -112,11 +111,6 @@ public final class CgUiScreen extends GuiScreen {
         return HostSession.isInstalled() ? HostSession.session().desktop() : null;
     }
 
-    /** Whether the desktop has been built — read by the pump before it touches anything. */
-    static boolean isReady() {
-        return HostSession.isInstalled() && HostSession.session().isBuilt();
-    }
-
     /** Escape: the desktop plays itself off first, and the frame after it has, this closes. @see HostSession#requestHide */
     void requestClose() {
         if (!HostSession.session().requestHide(() -> closeRequested = true)) closeRequested = true;
@@ -164,17 +158,7 @@ public final class CgUiScreen extends GuiScreen {
 
         if (!session.isBuilt()) return;
 
-        // INPUT, DRAINED PER FRAME RATHER THAN PER TICK.
-        //
-        // Minecraft delivers input to a screen from GuiScreen.handleInput(), called from runTick(),
-        // which is driven by `new Timer(20.0F)`. So a GuiScreen's input is pumped at 20 Hz while
-        // drawScreen renders at 60+. For clicks and typing that is invisible; for anything CONTINUOUS it
-        // is not -- a resize handle or a split divider redraws three times a second per twelve frames of
-        // motion, which reads as the UI being slow to paint rather than as input being sampled coarsely.
-        //
-        // Draining here costs nothing extra: it is the same loop handleInput runs, moved to the frame
-        // clock. MC's own tick-rate call then finds an empty queue and does nothing.
-        pumpInput();
+        // Input arrived before this, through CrystalGraphics' SCREEN input stage, drained on the frame clock.
 
         // ONE HOST TICK, before anything reads the workspace: the client is repaired if the wire moved,
         // and the mount is re-asked.
@@ -263,72 +247,23 @@ public final class CgUiScreen extends GuiScreen {
     }
 
     // ── Input ───────────────────────────────────────────────────────────────────────────────────
-
-    /**
-     * Drains both input queues into the window, once per rendered frame.
-     *
-     * <p>The same body as {@code GuiScreen.handleInput}, on the frame clock instead of the tick clock.
-     * Guarded on {@code isCreated()} exactly as the original is — a headless or shutting-down client has
-     * neither device.</p>
-     */
-    private void pumpInput() {
-        if (!isReady()) return;
-        if (Mouse.isCreated()) {
-            while (Mouse.next()) handleMouseInput();
-        }
-        if (Keyboard.isCreated()) {
-            while (Keyboard.next()) handleKeyboardInput();
-        }
-    }
-
-    /**
-     * <b>The keyboard pump.</b> Minecraft calls this once per event from {@code GuiScreen.handleInput}
-     * with that event current — presses <em>and releases</em>, since that loop is unconditional.
-     *
-     * <p>No {@code super}: it forwards to {@link #keyTyped}, whose vanilla body closes the screen on
-     * Escape unconditionally. Escape is a cascade here — a live drag eats it, then the topmost popover,
-     * then a modal — so the window gets first refusal and the screen closes only on what is left over.</p>
-     */
-    @Override
-    public void handleKeyboardInput() {
-        UIDocument window = window();
-        if (window == null) return;
-        // consumeKeyboardEvent returns TRUE when the UI CONSUMED the key -- that return exists precisely
-        // so a host can act on what is LEFT OVER. Read as "unconsumed" it closed the screen on an Escape
-        // the window had already dealt with and stayed open on one nobody wanted.
-        boolean consumed = CgUiInput.pumpKeyboard(HostSession.session().input());
-        if (!consumed && Keyboard.getEventKeyState() && Keyboard.getEventKey() == Keyboard.KEY_ESCAPE) {
-            requestClose();
-        }
-    }
+    // Every event reaches the desktop through CrystalGraphics' SCREEN input stage before this screen sees it
+    // (HostInputListener); what arrives here is what the desktop left.
 
     /**
      * A key the desktop dispatched on its own thread and left, handed back a frame late: what this screen does with
-     * one nothing wanted. @see #handleKeyboardInput
+     * one nothing wanted. @see #keyTyped
      */
     void keyLeftByDesktop(CgSystemInput.Keyboard.Event key) {
         if (key.pressed() && key.key() == CgKeyCodes.KEY_ESCAPE) requestClose();
     }
 
-    /** <b>The mouse pump.</b> Once per event, same contract as above. */
-    @Override
-    public void handleMouseInput() {
-        UIDocument window = window();
-        if (window == null) return;
-        // Raw device height, never GuiScreen.height -- see CgUiInput.pumpMouse.
-        CgUiInput.pumpMouse(HostSession.session().input(), mc.displayHeight);
-    }
-
     /**
-     * <b>Deliberately empty — do not restore {@code super}.</b>
-     *
-     * <p>{@link GuiScreen#keyTyped} closes the screen on Escape unconditionally
-     * ({@code if (keyCode == 1) this.mc.displayGuiScreen(null)}), which would sit above CrystalGUI's own
-     * close-watcher cascade and shut the whole editor on the first Escape inside an open dropdown.
-     * Escape reaches the window through the pump like every other key.</p>
+     * An Escape the desktop left closes it; nothing else does here. <b>Never {@code super}</b>: vanilla's closes the
+     * screen at once on Escape, past the desktop's own play-off.
      */
     @Override
     protected void keyTyped(char typedChar, int keyCode) {
-        // Intentionally empty. @see #handleKeyboardInput
+        if (keyCode == Keyboard.KEY_ESCAPE) requestClose();
     }
 }

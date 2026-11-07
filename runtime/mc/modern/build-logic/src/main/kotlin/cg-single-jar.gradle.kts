@@ -164,11 +164,11 @@ registerSingleJarPipeline(SingleJarSpec(
         expectSingle.set(listOf("com/crystalgui/ui/"))
         // COUNTED BY SIMPLE NAME, so a probe class must not have a twin in another tree. J9's suffix
         // strip gave `mc1710` and `mc/modern` six pairs sharing a name -- CgUiScreen among them -- and
-        // this asked for 3 copies of CgUiScreen.class and found 4. `CgUiKeybinds` has no 1.7.10
-        // counterpart, so it counts the relocation and nothing else.
+        // this asked for 3 copies of CgUiScreen.class and found 4. `HostModern` has no twin of its simple
+        // name in another tree, so it counts the relocation and nothing else.
         relocatedClasses.set(mapOf(
             "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to modernCopies,
-            "com/crystalgui/mc/modern/client/CgUiKeybinds.class" to modernCopies,
+            "com/crystalgui/mc/modern/client/HostModern.class" to modernCopies,
         ))
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
