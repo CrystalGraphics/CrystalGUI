@@ -151,8 +151,8 @@ final class CgUiBackdrop {
      * our own bindings in flight.</p>
      */
     private CgGraphTexture[] targetsFor(int scale) {
-        int w = Math.max(1, Math.max(1, ctx.screenWidth) / scale);
-        int h = Math.max(1, Math.max(1, ctx.screenHeight) / scale);
+        int w = gridWidth() / scale;
+        int h = gridHeight() / scale;
         CgGraphTexture[] pair = blurTargets.get(scale);
         if (pair != null && (pair[0].getWidth() != w || pair[0].getHeight() != h)) {
             // Only a SURFACE resize reaches here; a radius change picks a different pair instead.
@@ -202,12 +202,34 @@ final class CgUiBackdrop {
      */
     private static final int FORCED_SCALE = Integer.getInteger("crystalgui.glass.forceScale", 0);
 
-    /** The scale a radius wants, capped at the largest the 4-tap box prefilter reduces cleanly. */
+    /** The largest working scale: what the 4-tap box prefilter reduces cleanly. */
+    private static final int MAX_SCALE = 4;
+
+    /**
+     * The width of the grid the capture and every blur target share: the surface rounded up to a whole
+     * {@link #MAX_SCALE}, so a blur texel covers exactly {@code scale} capture texels and one normalised rect is the
+     * same place in each. A surface height off that grid otherwise drifts the blurred sample by up to three rows,
+     * growing with distance from the capture's top: a maximised window's glass moved the taskbar's backdrop up.
+     */
+    private int gridWidth() {
+        return roundUp(Math.max(1, ctx.screenWidth));
+    }
+
+    /** @see #gridWidth */
+    private int gridHeight() {
+        return roundUp(Math.max(1, ctx.screenHeight));
+    }
+
+    private static int roundUp(int px) {
+        return (px + MAX_SCALE - 1) / MAX_SCALE * MAX_SCALE;
+    }
+
+    /** The scale a radius wants, capped at {@link #MAX_SCALE}. */
     private static int scaleFor(float radiusPx) {
         if (FORCED_SCALE == 1 || FORCED_SCALE == 2 || FORCED_SCALE == 4) return FORCED_SCALE;
         float sigma = radiusPx / REACH_PER_SIGMA;
         int scale = 1;
-        while (sigma / scale > MAX_WORKING_SIGMA && scale < 4) scale *= 2;
+        while (sigma / scale > MAX_WORKING_SIGMA && scale < MAX_SCALE) scale *= 2;
         return scale;
     }
 
@@ -299,25 +321,26 @@ final class CgUiBackdrop {
         // element, and the world visibly turns with the glass.
         // Y IS FLIPPED. GL framebuffers are bottom-left origin and the UI is top-left, so v runs the other
         // way; blitLayer carries the same flip spelled uv(0, 1, 1, 0). Relative to the CAPTURE's origin,
-        // since the capture is a region rather than the whole surface.
-        float u0 = (tl.x + origin[0] - capX0) / w;
-        float v0 = 1f - (tl.y + origin[1] - capY0) / h;
-        float ux = (tr.x - tl.x) / w, vx = -(tr.y - tl.y) / h;
-        float uy = (bl.x - tl.x) / w, vy = -(bl.y - tl.y) / h;
+        // since the capture is a region rather than the whole surface. Over the grid, which the textures are.
+        int gw = gridWidth(), gh = gridHeight();
+        float u0 = (tl.x + origin[0] - capX0) / gw;
+        float v0 = 1f - (tl.y + origin[1] - capY0) / gh;
+        float ux = (tr.x - tl.x) / gw, vx = -(tr.y - tl.y) / gh;
+        float uy = (bl.x - tl.x) / gw, vy = -(bl.y - tl.y) / gh;
 
         CgTexture sharp = capture;
         CgTexture blurred = blurredBackdrop(blurRadiusPx);
         if (sharp == null || blurred == null) return null;
         if (GEOMETRY_LOG && blurRadiusPx != loggedRadius) {
             loggedRadius = blurRadiusPx;
-            logGeometry(blurRadiusPx, px0, py0, px1, py1, w, h, v0, v0 + vy, blurred);
+            logGeometry(blurRadiusPx, px0, py0, px1, py1, gw, gh, v0, v0 + vy, blurred);
         }
         // WHAT THIS ELEMENT MAY SAMPLE, as the same normalised rect: its padded, clipped rect, inset half a texel
         // so a tap at the boundary never filters in the texels beyond it.
-        float halfU = 0.5f / w, halfV = 0.5f / h;
+        float halfU = 0.5f / gw, halfV = 0.5f / gh;
         return new CgUiPaintContext.Backdrop(sharp, blurred, u0, v0, ux, vx, uy, vy,
-                (wantX0 - capX0) / (float) w + halfU, 1f - (wantY1 - capY0) / (float) h + halfV,
-                (wantX1 - capX0) / (float) w - halfU, 1f - (wantY0 - capY0) / (float) h - halfV);
+                (wantX0 - capX0) / (float) gw + halfU, 1f - (wantY1 - capY0) / (float) gh + halfV,
+                (wantX1 - capX0) / (float) gw - halfU, 1f - (wantY0 - capY0) / (float) gh - halfV);
     }
 
     /**
@@ -430,7 +453,7 @@ final class CgUiBackdrop {
         // Queued draws go first: the capture reads the target.
         ctx.drain();
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
-        CgGraphTexture cap = captureTexture(w, h);
+        CgGraphTexture cap = captureTexture(gridWidth(), gridHeight());
 
         // Seed from the previous frame's union so a settled UI captures ONCE for every consumer, and
         // widen to whatever is being asked for now so the answer is never stale.
@@ -452,7 +475,7 @@ final class CgUiBackdrop {
 
         // 1. The scene, region only: a framebuffer this engine did not write, so a blit run when the frame executes,
         // in its place among the passes. 1b's clear goes with it.
-        final int bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = h;
+        final int bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = gridHeight();
         ctx.recordCallback("backdrop:scene", cap, () -> {
             CgFrameBuffer storage = cap.framebuffer();
             // THE SCENE BEHIND THE UI is whatever the host had bound when the frame began -- never the frame's own
@@ -664,8 +687,8 @@ final class CgUiBackdrop {
 
         // The fraction of each target the capture actually occupies. Identical in all of them, because
         // they are all the same fraction of the screen. @see #capX0
-        float fracW = capW / (float) Math.max(1, ctx.screenWidth);
-        float fracH = capH / (float) Math.max(1, ctx.screenHeight);
+        float fracW = capW / (float) gridWidth();
+        float fracH = capH / (float) gridHeight();
 
         CgTexture captured = capture;
         if (captured == null) return null;
@@ -692,8 +715,8 @@ final class CgUiBackdrop {
         // target's grid. A band of round(targetH * capH/H) texels spans capH source rows at capH/that
         // rows each, which is not `scale`: with capH odd, 344 texels covered 687 rows at 1.997 apiece
         // and the drift reached a full pixel by the bottom of the band, where a taskbar sits. Sized from
-        // ceil(capH/scale) instead, source row r lands at texel r/scale and the consumer's own
-        // v = 1 - r/H is exact at every scale.
+        // ceil(capH/scale) instead, source row r lands at texel r/scale, and the consumer's own
+        // v = 1 - r/gridHeight is exact at every scale because each target is the grid divided by its scale.
         int redW = (capW + scale - 1) / scale;
         int redH = (capH + scale - 1) / scale;
         float redFracW = redW / (float) blurA.getWidth();
@@ -705,8 +728,7 @@ final class CgUiBackdrop {
             // scale-1: exactly what makes each output texel a whole scale x scale block. _Bounds still
             // names the real content, so the overshoot clamps to the edge rather than reading the clear.
             downsamplePass(captured, blurA, scale, redW, redH,
-                    redW * scale / (float) Math.max(1, ctx.screenWidth),
-                    redH * scale / (float) Math.max(1, ctx.screenHeight), fracW, fracH);
+                    redW * scale / (float) gridWidth(), redH * scale / (float) gridHeight(), fracW, fracH);
             blurPass(blurA, blurB, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
             blurPass(blurB, blurA, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
             result = blurA;
