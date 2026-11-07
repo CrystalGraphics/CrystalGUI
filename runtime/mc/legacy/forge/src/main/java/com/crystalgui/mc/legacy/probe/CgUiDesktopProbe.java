@@ -2,7 +2,7 @@ package com.crystalgui.mc.legacy.probe;
 
 import com.crystalgraphics.platform.input.CgInputStage;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgraphics.world.CgPlayers;
+import com.crystalgraphics.platform.world.CgPlayers;
 import com.crystalgraphics.world.CgWorldQueries;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.mc.legacy.client.CgUiHud;

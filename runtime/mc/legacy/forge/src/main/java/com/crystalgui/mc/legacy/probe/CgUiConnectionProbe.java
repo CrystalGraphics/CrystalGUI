@@ -1,6 +1,6 @@
 package com.crystalgui.mc.legacy.probe;
 
-import com.crystalgraphics.world.CgPlayers;
+import com.crystalgraphics.platform.world.CgPlayers;
 import com.crystalgraphics.world.CgWorldQueries;
 import javax.annotation.Nullable;
 

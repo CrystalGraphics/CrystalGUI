@@ -32,7 +32,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 |---|---|
 | traffic between client and server | CrystalGraphics' `CgNetworkChannel` — `CrystalGraphicsForge.Network`, `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`, `NetworkChannel1710` — and `CgNetwork`, the connections their lifecycles drive |
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
-| a permission or "who is this player" | CrystalGraphics' `CgPlayerQuery.isOperator` (`PlayerQueryModern`, `PlayerQueryLegacy`, `PlayerQuery1710`) |
+| a permission or "who is this player" | CrystalGraphics' `CgPlayers.isOperator` (`PlayersModern`, `PlayersLegacy`, `Players1710`) |
 | client input, a key binding | CrystalGraphics' `CgInputStage.SCREEN` (`docs/INPUT.md`) and `CgKeyBindings`, which every era's host fires and registers |
 | HUD, a screen | `mc.modern.client` (`CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
 | a member renamed across versions | legacy `Game`; the controller's `replacements.string` |
@@ -185,7 +185,7 @@ Worked examples to copy — each is the complete pattern:
   `NetworkChannel1710`, each with a lifecycle forwarding joins, ticks and connects into `CgNetwork`;
   framing, routing and connections all in CrystalGraphics core, sessions in CrystalGUI's.
 - **A permission, or the server itself** — CrystalGraphics', not CrystalGUI's: `CgPlayers.isOperator`
-  (`PlayerQueryModern` has the directives for `isOp(GameProfile)` → `isOp(NameAndId)` at 1.21.9) and `CgServers`
+  (`PlayersModern` has the directives for `isOp(GameProfile)` → `isOp(NameAndId)` at 1.21.9) and `CgServers`
   (`ServersModern`, `ServersLegacy`, `Servers1710`). The engine's `ServerWorkspaceHost` reads them; no CrystalGUI host does.
 
 ## 4. Writing version-dependent code

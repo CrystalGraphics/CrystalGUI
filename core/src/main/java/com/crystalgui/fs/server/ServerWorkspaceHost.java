@@ -7,7 +7,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.CgPeer;
 import com.crystalgraphics.platform.service.CgServers;
-import com.crystalgraphics.world.CgPlayers;
+import com.crystalgraphics.platform.world.CgPlayers;
 
 /**
  * {@link WorkspaceHost.Host} over the running server: where its workspace is, who is asking and what they may do,

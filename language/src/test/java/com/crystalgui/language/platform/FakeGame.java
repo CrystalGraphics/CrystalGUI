@@ -14,7 +14,7 @@ import java.util.function.Function;
  * <pre>{@code
  * FakeGame.install("1.7.10", name -> WORLD.equals(name) ? worldBytes : null, folder.getRoot().toPath());
  * // ... ScriptService.live() is true, mappings() is 1.7.10's ...
- * FakeGame.clear();   // in @After, and in @Before when an earlier class may have left one
+ * FakeGame.clear();   // in @After
  * }</pre>
  */
 public final class FakeGame {
@@ -52,7 +52,5 @@ public final class FakeGame {
     public static void clear() {
         CgPlatform.provide(CgGameClasses.HOST, null);
         CgPlatform.provide(CgGameDirectory.HOST, null);
-        CgGameClasses.forgetForTesting();
-        CgGameDirectory.forgetForTesting();
     }
 }
