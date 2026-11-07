@@ -1786,7 +1786,9 @@ public class Desktop extends UIElement implements DataProvider {
                 return false;
             }
             if (leaving[0] == 0L) {
-                state[0] = delta <= STEADY_FRAME_SECONDS ? state[0] + 1 : 0;
+                // AND NOTHING STILL LOADING: the application's restore lands in replies over many frames, and one
+                // landing after the mark began to leave stopped it mid-growth
+                state[0] = delta <= STEADY_FRAME_SECONDS && !loading() ? state[0] + 1 : 0;
                 if (state[0] < STEADY_FRAMES && ++state[1] < MAX_STEADY_WAIT_FRAMES) return true;
                 StartingMark.leaveInPlace(starter);
                 leaving[0] = System.nanoTime();
@@ -1799,6 +1801,15 @@ public class Desktop extends UIElement implements DataProvider {
             starter.playTakeoverFade(starter::destroy);
             return false;
         });
+    }
+
+    /**
+     * Whether a file request is still out: an application's restore lands in its replies. Jobs are not counted, since
+     * one may run for the session.
+     */
+    private boolean loading() {
+        Workspace at = workspace();
+        return at != null && at.health().inFlight() > 0;
     }
 
     @Nullable

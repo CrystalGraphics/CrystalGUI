@@ -687,9 +687,10 @@ taskbar .__entry__.__busy__ .__progress__ {
 }
 
 /* Over everything its window's content stacks: an application's own panels go up to 7, and paint over an `auto` */
-/* An application's window beneath its starting window's glass, unseen until the handover fades it in. */
+/* An application's window beneath its starting window's glass, unseen until the handover fades it in. Drawn, barely:
+ * at 0 it is not drawn at all, and its first draw then stalled the frame mid-handover, freezing the leaving mark. */
 .__window__.__handover__ {
-    opacity: 0;
+    opacity: 0.003;
 }
 
 /* THE STARTING WINDOW'S BODY IS ITS FRAME'S GLASS under a dark wash, not the opaque fill an application's slot has:
