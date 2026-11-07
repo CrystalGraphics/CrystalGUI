@@ -122,7 +122,8 @@ public final class CgUiAutoTest {
         @Override
         public void openDesktop() {
             sinceOpen = 0;
-            CgUiScreen.openEditor();
+            if (AutoTest.opensBareDesktop()) CgUiScreen.openDesktop();
+            else CgUiScreen.openEditor();
         }
 
         @Override

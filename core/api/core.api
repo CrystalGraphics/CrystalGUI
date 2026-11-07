@@ -7952,6 +7952,7 @@ com/crystalgui/probe/AutoTest
   method public,static earlyCapture ()Ljava/lang/String;
   method public,static lateCapture ()Ljava/lang/String;
   method public,static onFrame (ILjava/lang/Runnable;)V
+  method public,static opensBareDesktop ()Z
   method public,static resolveWorld (Ljava/io/File;)Ljava/lang/String;
   method public,static runFrameSteps (I)V
   method public,static settled (Lcom/crystalgui/probe/AutoTest$Host;I)V
@@ -8029,6 +8030,11 @@ com/crystalgui/probe/DesktopProbe$Host
   method public,abstract presentation ()Lcom/crystalgui/core/window/DesktopPresentation;
   method public,abstract quit ()V
   method public,abstract shoot (Ljava/lang/String;)V
+com/crystalgui/probe/OpenCloseProbe
+  access public,final
+  extends java/lang/Object
+  field public,static,final KIND Ljava/lang/String;
+  method public,static enabled ()Z
 com/crystalgui/probe/ServerSmoke
   access public,final
   extends java/lang/Object

@@ -100,6 +100,14 @@ public final class AutoTest {
     }
 
     /**
+     * Whether a host's {@link Host#openDesktop} opens the desktop alone, with no application brought forward: a run
+     * that opens its own ({@link OpenCloseProbe}).
+     */
+    public static boolean opensBareDesktop() {
+        return OpenCloseProbe.enabled();
+    }
+
+    /**
      * Where the first capture goes.
      *
      * <p>Always suffixed, including when no late capture was asked for. 1.7.10 wrote the unsuffixed path
@@ -246,6 +254,7 @@ public final class AutoTest {
         });
         // A mod's renderer on CrystalGUI's stages, which every capture states the draws of. @see StageProbe
         StageProbe.start();
+        OpenCloseProbe.start();
         host.openDesktop();
     }
 
