@@ -265,6 +265,7 @@ only witness for what a dev run cannot see: relocation, remapping, downgrading a
 
 ```bash
 # the same unattended run prodSmoke arms, on the dev client; every -Dcrystalgui.* / -Dcrystalgraphics.* is forwarded
+# (any other -D never reaches the game, and the run names it)
 ./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true "-Dcrystalgui.autotest.world=*"
 # ...plus a probe: -Dcrystalgui.autotest.script=Probe.java, -Dcrystalgui.autotest.complete=true
 # ...and where the captures go: -Dcrystalgui.autotest.out=build/devSmoke/1171forge.png
