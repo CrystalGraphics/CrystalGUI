@@ -2363,7 +2363,7 @@ public final class CgUiPaintContext {
      * A layer's texture: each side a power of two from 32 up, never past the screen, so a layer that resizes by a
      * pixel keeps its size class and the executor's pool hands back the same texture next frame.
      */
-    private CgTextureDesc layerDesc(int width, int height) {
+    CgTextureDesc layerDesc(int width, int height) {
         return new CgTextureDesc(sizeClass(width, screenWidth), sizeClass(height, screenHeight), LAYER_FORMAT);
     }
 
@@ -2413,6 +2413,7 @@ public final class CgUiPaintContext {
                 CgTrace.add(UiTrace.FRAME, "surfaces-resized", 1);
                 surfaces.remove(key);
                 surface.released = true;
+                surface.releaseThumbnail(this);
                 releaseTexture(surface.target());
                 if (surface.checkTarget != null) releaseTexture(surface.checkTarget);
                 surface = null;
@@ -2446,6 +2447,18 @@ public final class CgUiPaintContext {
         int right = (int) Math.ceil(x1 - 1e-3f), bottom = (int) Math.ceil(y1 - 1e-3f);
         if (right - left > SURFACE_MAX || bottom - top > SURFACE_MAX) return layerRegion(x0, y0, x1, y1);
         return new LayerRegion(left, top, Math.max(0, right - left), Math.max(0, bottom - top));
+    }
+
+    /** Drawing a box's picture beside its frame: glass inside it is flat, with nothing behind it to filter. */
+    private boolean snapshotting;
+
+    /** @see #snapshotting */
+    public void setSnapshotting(boolean on) {
+        snapshotting = on;
+    }
+
+    boolean isSnapshotting() {
+        return snapshotting;
     }
 
     /** Surfaces being walked, innermost last, with the recording's operation count when each began. */
@@ -2580,6 +2593,7 @@ public final class CgUiPaintContext {
             if (frameId - surface.lastFrame < SURFACE_IDLE_FRAMES) continue;
             if (entry.getKey() instanceof Surface.Owner owner && owner.keepsSurface()) continue;
             surface.released = true;
+            surface.releaseThumbnail(this);
             releaseTexture(surface.target());
             if (surface.checkTarget != null) releaseTexture(surface.checkTarget);
             each.remove();

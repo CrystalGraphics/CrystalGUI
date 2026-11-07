@@ -42,7 +42,10 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 import java.util.function.BooleanSupplier;
 
 /**
@@ -318,6 +321,23 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     @Override
     public boolean keepsSurface() {
         return state == WindowState.HIDDEN;
+    }
+
+    /** What wants its picture: a thumbnail showing it. A window minimising wants it too. */
+    private final Set<Object> pictureWanters = Collections.newSetFromMap(new IdentityHashMap<>());
+
+    /**
+     * Asks for, or stops asking for, this window's picture on behalf of {@code by}: a window with glass is drawn
+     * into a surface only while something wants it.
+     */
+    public void wantPicture(Object by, boolean wanted) {
+        if (wanted ? !pictureWanters.add(by) : !pictureWanters.remove(by)) return;
+        if (wanted) repaint();
+    }
+
+    @Override
+    public boolean wantsPicture() {
+        return minimizing || !pictureWanters.isEmpty();
     }
 
     /** Its picture as it last painted, at rest; null before it first paints, or once nothing keeps it. */

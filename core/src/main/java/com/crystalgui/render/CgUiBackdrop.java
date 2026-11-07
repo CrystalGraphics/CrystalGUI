@@ -260,7 +260,7 @@ final class CgUiBackdrop {
      */
     @Nullable
     CgUiPaintContext.Backdrop forRect(float x, float y, float width, float height, float blurRadiusPx, float reach) {
-        if (!ctx.frameActive || width <= 0f || height <= 0f) return null;
+        if (!ctx.frameActive || width <= 0f || height <= 0f || ctx.isSnapshotting()) return null;
 
         // SURFACE PIXELS, so from the TRANSFORM chain — the opposite of the rule for placing a popup
         // ("position from getWindowX/Y, never from localToWorld"), and it inverts for the same reason

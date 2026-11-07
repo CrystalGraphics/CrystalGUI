@@ -121,8 +121,13 @@ public final class BoxPainter {
                     Matrix4f inner = new Matrix4f(base).translateLocal(-x, -y, 0f);
                     // GLASS IN IT: drawn into the target as any box, where its backdrop is the frame behind it -- a
                     // surface holds only the box, so a filter inside one blurs nothing
-                    if (box.hasBackdrop() || !paintSurface(box, ctx, inner, asContext, opacity)) {
+                    boolean glass = box.hasBackdrop();
+                    if (glass || !paintSurface(box, ctx, inner, asContext, opacity, true)) {
                         paintBoxIn(box, ctx, inner, asContext, opacity, false);
+                    }
+                    // ITS PICTURE TOO, while something wants it: drawn beside the frame with its glass flat.
+                    if (glass && box.node() instanceof Surface.Owner owner && owner.wantsPicture()) {
+                        paintSurface(box, ctx, inner, asContext, opacity, false);
                     }
                 } finally {
                     ctx.enterNode(outer);
@@ -137,7 +142,8 @@ public final class BoxPainter {
      * A box the compositor moves, drawn into its surface and composited from it under its node, its opacity and any
      * compositor fade applied there (render-graph G7): false, having drawn nothing, where it has none.
      */
-    private boolean paintSurface(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity) {
+    private boolean paintSurface(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext, float opacity,
+                                 boolean composite) {
         // AT REST: its own transform goes into the composite, so a flight or a turn keeps the picture. Where it has
         // one, `base` becomes base x turn^-1, turn being the transform in world space, and the composite base x turn x
         // base^-1 in the draw space.
@@ -173,7 +179,12 @@ public final class BoxPainter {
             }
             long degraded = ctx.textDegradedDrawCount();
             ctx.beginSurface(surface, region, !surface.drewAt(box, nodeX, nodeY, region));
-            paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true);
+            ctx.setSnapshotting(!composite);
+            try {
+                paintBoxIn(box, ctx, layerBase(ctx, base, region), asContext, 1f, true);
+            } finally {
+                ctx.setSnapshotting(false);
+            }
             // CHECK MODE: a surface that would have been kept was walked, and must have found nothing to draw -- unless
             // the replay check painted every keyed box in it anew.
             if (ctx.endSurface() && holds && !CgUiPaintContext.REPLAY_CHECK) {
@@ -181,7 +192,7 @@ public final class BoxPainter {
                 CrystalGuiCore.LOGGER.warn("[damage-check] {} would have been kept, but its walk damaged it",
                         layerLabel(box.node()));
             }
-            if (CgUiPaintContext.DAMAGE_CHECK) checkDamage(box, ctx, base, region, surface, asContext);
+            if (composite && CgUiPaintContext.DAMAGE_CHECK) checkDamage(box, ctx, base, region, surface, asContext);
             surface.drew(box, box.innerRevision(), nodeX, nodeY, region, epoch, stacking);
             // TEXT STILL GENERATING was not kept, and the surface must come back for it while nothing else changes.
             if (ctx.textDegradedDrawCount() != degraded) surface.walkAgain();
@@ -191,6 +202,8 @@ public final class BoxPainter {
                     box.width(), box.height());
             CgTrace.add(UiTrace.FRAME, "surfaces-painted", 1);
         }
+        // A PICTURE ALONE is composited nowhere: the frame has the box already.
+        if (!composite) return true;
         box.noteFadedNode(ctx.blitLayer(surface.target(), opacity, region, box.animatesOnCompositor(), turn),
                 ctx.frameId());
         if (turn == null) {

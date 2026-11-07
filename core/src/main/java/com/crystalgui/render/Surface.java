@@ -67,6 +67,14 @@ public final class Surface {
 
         /** Whether to keep its surface while it is not drawn: false lets it go after a few seconds unasked for. */
         boolean keepsSurface();
+
+        /**
+         * Whether something needs its picture now. A box with glass in it is drawn straight into the frame, so only
+         * while this is true is it also drawn into a surface, with its glass flat.
+         */
+        default boolean wantsPicture() {
+            return false;
+        }
     }
 
     /** The box's border box in the texture's pixels, top-down, and its size in the box's own units. */
@@ -130,6 +138,7 @@ public final class Surface {
     /** Records that the box was just drawn into it, as {@link #holds} names. */
     public void drew(Object box, long revision, int nodeX, int nodeY, LayerRegion region, long epoch, long stacking) {
         walkAgain = false;
+        drawCount++;
         this.box = box;
         this.revision = revision;
         this.nodeX = nodeX;
@@ -191,6 +200,137 @@ public final class Surface {
         float w = target.getWidth(), h = target.getHeight();
         ctx.drawLayer(target, x, y, width, height, pictureX0 / w, 1f - pictureY0 / h, pictureX1 / w,
                 1f - pictureY1 / h);
+    }
+
+    /** How often a kept thumbnail is rebuilt while its picture changes: a preview needs no more than this. */
+    private static final long THUMBNAIL_REFRESH_NANOS = 100L * 1_000_000L;
+
+    /** Walks that drew into it, so a kept thumbnail knows whether it trails the picture. */
+    private long drawCount;
+    @Nullable
+    private CgGraphTexture thumbnail;
+    private int thumbnailWidth, thumbnailHeight;
+    private long thumbnailDrawn = -1L, thumbnailAt;
+    private float thumbnailX0, thumbnailY0, thumbnailX1, thumbnailY1;
+    private boolean thumbnailStale;
+
+    /**
+     * Draws the box's picture into {@code (x, y, width, height)} as {@link #drawPicture} does, filtered down to
+     * {@code deviceWidth x deviceHeight} device pixels first: every output pixel the average of the texels it covers,
+     * where one bilinear tap of a picture four or five times larger flickers, text above all, as it moves.
+     *
+     * <pre>{@code
+     * surface.drawThumbnail(ctx, x, y, w, h, Math.round(w * scaleX), Math.round(h * scaleY));
+     * if (surface.thumbnailStale()) element.repaint();   // it trails the picture: asked again soon
+     * }</pre>
+     *
+     * <ul>
+     *   <li>The filtered copy is kept and rebuilt about every 100 ms while the picture changes, not each frame.</li>
+     *   <li>A picture under one and a half times the size asked for is drawn as {@link #drawPicture} does.</li>
+     * </ul>
+     */
+    public void drawThumbnail(CgUiPaintContext ctx, float x, float y, float width, float height, int deviceWidth,
+                              int deviceHeight) {
+        if (!hasPicture()) return;
+        CgGraphTexture kept = deviceWidth > 0 && deviceHeight > 0 ? filtered(ctx, deviceWidth, deviceHeight) : null;
+        if (kept == null) {
+            drawPicture(ctx, x, y, width, height);
+            return;
+        }
+        ctx.drawLayer(kept, x, y, width, height);
+    }
+
+    /** Whether the kept thumbnail trails the picture, so its owner asks to be painted again. */
+    public boolean thumbnailStale() {
+        return thumbnailStale;
+    }
+
+    /** Frees the kept thumbnail. */
+    void releaseThumbnail(CgUiPaintContext ctx) {
+        if (thumbnail != null) ctx.releaseTexture(thumbnail);
+        thumbnail = null;
+        thumbnailDrawn = -1L;
+    }
+
+    @Nullable
+    private CgGraphTexture filtered(CgUiPaintContext ctx, int deviceWidth, int deviceHeight) {
+        float sourceWidth = pictureX1 - pictureX0, sourceHeight = pictureY1 - pictureY0;
+        if (sourceWidth < deviceWidth * 1.5f && sourceHeight < deviceHeight * 1.5f) return null;
+        if (thumbnail == null || thumbnailWidth != deviceWidth || thumbnailHeight != deviceHeight) {
+            releaseThumbnail(ctx);
+            thumbnail = ctx.requestLayer("cgui_thumbnail", deviceWidth, deviceHeight);
+            ctx.warmUpLayer(thumbnail);
+            thumbnailWidth = deviceWidth;
+            thumbnailHeight = deviceHeight;
+        }
+        boolean moved = thumbnailX0 != pictureX0 || thumbnailY0 != pictureY0 || thumbnailX1 != pictureX1
+                || thumbnailY1 != pictureY1;
+        thumbnailStale = thumbnailDrawn != drawCount || moved;
+        long now = System.nanoTime();
+        if (thumbnailStale && (thumbnailDrawn == -1L || now - thumbnailAt >= THUMBNAIL_REFRESH_NANOS)) {
+            filterInto(ctx, thumbnail, sourceWidth, sourceHeight);
+            thumbnailDrawn = drawCount;
+            thumbnailX0 = pictureX0;
+            thumbnailY0 = pictureY0;
+            thumbnailX1 = pictureX1;
+            thumbnailY1 = pictureY1;
+            thumbnailAt = now;
+            thumbnailStale = false;
+        }
+        return thumbnailDrawn == -1L ? null : thumbnail;
+    }
+
+    /**
+     * The picture halved by a 2x2 box until under twice the target, then once more to the target: each pass is
+     * {@code gui_downsample}'s four taps, which at a half texel from the output's centre average one 2x2 block.
+     */
+    private void filterInto(CgUiPaintContext ctx, CgGraphTexture into, float sourceWidth, float sourceHeight) {
+        float tw = target.getWidth(), th = target.getHeight();
+        CgGraphTexture from = target;
+        float u0 = pictureX0 / tw, u1 = pictureX1 / tw, vTop = 1f - pictureY0 / th, vBottom = 1f - pictureY1 / th;
+        float w = sourceWidth, h = sourceHeight;
+        int goalWidth = into.getWidth(), goalHeight = into.getHeight();
+        while (w >= 2f * goalWidth && h >= 2f * goalHeight) {
+            int nextWidth = (int) Math.ceil(w / 2f), nextHeight = (int) Math.ceil(h / 2f);
+            CgGraphTexture mid = CgGraphTexture.transientTexture("cgui_thumbnail_mid",
+                    ctx.layerDesc(nextWidth, nextHeight));
+            filterPass(ctx, from, u0, vTop, u1, vBottom, 0.5f, mid, nextWidth, nextHeight);
+            from = mid;
+            u0 = 0f;
+            u1 = nextWidth / (float) mid.getWidth();
+            vTop = 1f;
+            vBottom = 1f - nextHeight / (float) mid.getHeight();
+            w = nextWidth;
+            h = nextHeight;
+        }
+        filterPass(ctx, from, u0, vTop, u1, vBottom, Math.max(0.25f, Math.min(w / goalWidth, h / goalHeight) / 4f),
+                into, goalWidth, goalHeight);
+    }
+
+    /** One filter pass: the source rect {@code (u0, vTop)-(u1, vBottom)} into the corner of {@code to}, {@code quadW x quadH}. */
+    private static void filterPass(CgUiPaintContext ctx, CgGraphTexture from, float u0, float vTop, float u1,
+                                   float vBottom, float offsetTexels, CgGraphTexture to, int quadW, int quadH) {
+        float halfU = 0.5f / Math.max(1, from.getWidth()), halfV = 0.5f / Math.max(1, from.getHeight());
+        ctx.downsampleMaterial.applyProperties(b -> {
+            b.sampler("_MainTex", 0, from);
+            b.vec2("_TexelSize", offsetTexels / Math.max(1, from.getWidth()),
+                    offsetTexels / Math.max(1, from.getHeight()));
+            b.vec4("_Bounds", u0 + halfU, vBottom + halfV, u1 - halfU, vTop - halfV);
+        });
+        ctx.beginLayerFbo(to, true);
+        ScissorStack.Saved saved = ctx.suspendScissor();
+        try {
+            ctx.withMaterial(ctx.downsampleMaterial, () -> {
+                ctx.poseStack.pushPose();
+                ctx.poseStack.setIdentity();
+                ctx.quad().at(0, 0).size(quadW, quadH).uv(u0, vTop, u1, vBottom).color(0xFFFFFFFF).submit();
+                ctx.flush();
+                ctx.poseStack.popPose();
+            });
+        } finally {
+            ctx.resumeScissor(saved);
+            ctx.endLayerFbo();
+        }
     }
 
     /** Starts a walk at {@code frame}, damaged everywhere with {@code full}. */

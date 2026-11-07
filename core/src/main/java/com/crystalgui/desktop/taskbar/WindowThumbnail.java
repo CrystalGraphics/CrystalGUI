@@ -34,6 +34,8 @@ import javax.annotation.Nullable;
  * <ul>
  *   <li>The picture is drawn on whole device pixels at a fixed device size, so a thumbnail that moves samples
  *       the same texels every frame. Off the pixel grid, a 4x minified window shimmers as it slides.</li>
+ *   <li>Its origin is snapped only once the panel stops moving: snapped while the panel slides, the picture steps
+ *       a pixel at a time against the smoothly moving glass, most visibly in the slide's slow tail.</li>
  *   <li>The box's size is written inline: a sheet rule sets the maximum, read once from the first layout, and
  *       nothing else may size the box. A sheet {@code transition} on {@code width} animates the box while the
  *       picture is drawn at its final size, centred and clipped, so a widening box never rescales it.</li>
@@ -104,6 +106,19 @@ public class WindowThumbnail extends UIElement {
         return this;
     }
 
+    /** A window with glass is drawn into a surface only while something wants its picture: this does while in the tree. */
+    @Override
+    protected void connected() {
+        super.connected();
+        if (frame != null) frame.wantPicture(this, true);
+    }
+
+    @Override
+    protected void disconnected() {
+        super.disconnected();
+        if (frame != null) frame.wantPicture(this, false);
+    }
+
     /** The window this shows, or null for none. */
     public WindowThumbnail setFrame(@Nullable WindowFrame frame) {
         return setFrame(frame, 0L);
@@ -128,7 +143,9 @@ public class WindowThumbnail extends UIElement {
             this.fadeNanos = fadeNanos;
             repaint();
         }
+        if (this.frame != null && this.frame != frame) this.frame.wantPicture(this, false);
         this.frame = frame;
+        if (frame != null && document() != null) frame.wantPicture(this, true);
         placeholder.show(frame == null ? null : frame.iconName(), frame == null ? null : frame.iconTitle());
         syncSize();
         return this;
@@ -242,8 +259,8 @@ public class WindowThumbnail extends UIElement {
         return fadeFrom != null || super.paintsDynamically();
     }
 
-    /** The two pictures' rects in this box during a cross-fade, {@code x, y, width, height}: scratch, per paint. */
-    private final float[] oldRect = new float[4], newRect = new float[4];
+    /** The two pictures' rects in this box during a cross-fade, {@code x, y, width, height, device width, device height}: scratch, per paint. */
+    private final float[] oldRect = new float[6], newRect = new float[6];
 
     /**
      * Draws the window's surface at its fitted size, centred on whole device pixels, clipped to this box.
@@ -256,14 +273,15 @@ public class WindowThumbnail extends UIElement {
     public void paintDecoration(CgUiPaintContext ctx, Box box) {
         super.paintDecoration(ctx, box);
         if (box.width() <= 0f || box.height() <= 0f) return;
+        notePose(ctx);
         Surface picture = frame == null ? null : frame.surface();
         boolean hasNew = false;
         if (picture != null && picture.pictureWidth() > 0f && picture.pictureHeight() > 0f) {
             if (Float.isNaN(fitWidth)) {
                 float scale = Math.min(box.width() / picture.pictureWidth(), box.height() / picture.pictureHeight());
-                place(ctx, box, picture.pictureWidth() * scale, picture.pictureHeight() * scale, newRect);
+                place(ctx, box, picture.pictureWidth() * scale, picture.pictureHeight() * scale, newRect, !moving);
             } else {
-                place(ctx, box, fitWidth, fitHeight, newRect);
+                place(ctx, box, fitWidth, fitHeight, newRect, !moving);
             }
             hasNew = true;
         }
@@ -275,11 +293,13 @@ public class WindowThumbnail extends UIElement {
                 fadeFrom = null;
                 in = 1f;
             } else {
-                place(ctx, box, fadeFromWidth, fadeFromHeight, oldRect);
+                place(ctx, box, fadeFromWidth, fadeFromHeight, oldRect, !moving);
                 drawOld(ctx, box, old, hasNew, 1f - in);
             }
         }
         if (hasNew) draw(ctx, box, picture, newRect, in, 0f, 0f, box.width(), box.height());
+        // The filtered copy is rebuilt about every 100 ms while the window changes: paint again to pick it up.
+        if (picture != null && picture.thumbnailStale()) repaint();
     }
 
     /** The old picture: opaque under the new one's rect, fading by {@code out} in the bands outside it. */
@@ -299,8 +319,22 @@ public class WindowThumbnail extends UIElement {
         draw(ctx, box, old, oldRect, out, ix1, iy0, ox1, iy1);
     }
 
-    /** {@code width x height} centred in the box, on whole device pixels, into {@code out}. */
-    private static void place(CgUiPaintContext ctx, Box box, float width, float height, float[] out) {
+    /** The pose's translation at the last paint, and whether it differed from the one before: the panel is moving. */
+    private float poseX = Float.NaN, poseY = Float.NaN;
+    private boolean moving;
+
+    /** Notes whether the panel moved since the last paint; a moving one is painted again next frame, to settle. */
+    private void notePose(CgUiPaintContext ctx) {
+        Matrix4f m = ctx.targetPose();
+        moving = !Float.isNaN(poseX) && (Math.abs(m.m30() - poseX) > 1e-3f || Math.abs(m.m31() - poseY) > 1e-3f);
+        poseX = m.m30();
+        poseY = m.m31();
+        // THE FRAME AFTER THE LAST MOVE paints once more, on the grid, or a picture that stopped mid-pixel stays there.
+        if (moving) repaint();
+    }
+
+    /** {@code width x height} centred in the box, into {@code out}: its origin on whole device pixels if {@code snap}. */
+    private static void place(CgUiPaintContext ctx, Box box, float width, float height, float[] out, boolean snap) {
         float x = (box.width() - width) / 2f, y = (box.height() - height) / 2f;
         if (ctx.isPoseAxisAligned()) {
             // The origin snapped and the size rounded once, in device pixels: snapping both edges instead lets
@@ -308,8 +342,10 @@ public class WindowThumbnail extends UIElement {
             Matrix4f m = ctx.targetPose();
             float sx = Math.abs(m.m00()), sy = Math.abs(m.m11());
             if (sx > 1e-6f && sy > 1e-6f) {
-                x = ctx.snapXToDevicePixel(x);
-                y = ctx.snapYToDevicePixel(y);
+                if (snap) {
+                    x = ctx.snapXToDevicePixel(x);
+                    y = ctx.snapYToDevicePixel(y);
+                }
                 width = Math.max(1f, Math.round(width * sx)) / sx;
                 height = Math.max(1f, Math.round(height * sy)) / sy;
             }
@@ -318,6 +354,11 @@ public class WindowThumbnail extends UIElement {
         out[1] = y;
         out[2] = width;
         out[3] = height;
+        // The size in device pixels, for the filtered copy; 0 where the pose is not axis-aligned.
+        Matrix4f pose = ctx.targetPose();
+        boolean flat = ctx.isPoseAxisAligned();
+        out[4] = flat ? Math.max(1f, Math.round(width * Math.abs(pose.m00()))) : 0f;
+        out[5] = flat ? Math.max(1f, Math.round(height * Math.abs(pose.m11()))) : 0f;
     }
 
     /** {@code picture} into {@code rect} at {@code opacity}, clipped to {@code (x0, y0)-(x1, y1)} and the box. */
@@ -333,7 +374,7 @@ public class WindowThumbnail extends UIElement {
         float previous = ctx.pushLayerOpacity(opacity);
         ctx.pushScissor(x0, y0, x1 - x0, y1 - y0);
         try {
-            picture.drawPicture(ctx, rect[0], rect[1], rect[2], rect[3]);
+            picture.drawThumbnail(ctx, rect[0], rect[1], rect[2], rect[3], (int) rect[4], (int) rect[5]);
         } finally {
             ctx.popScissor();
             ctx.popLayerOpacity(previous);

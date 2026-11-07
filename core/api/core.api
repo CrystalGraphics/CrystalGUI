@@ -5048,6 +5048,8 @@ com/crystalgui/desktop/taskbar/WindowThumbnail
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final PLACEHOLDER_CLASS Ljava/lang/String;
   field public,static,final THUMBNAIL_CLASS Ljava/lang/String;
+  method protected connected ()V
+  method protected disconnected ()V
   method public <init> ()V
   method public hasPicture ()Z
   method public isShowingPlaceholder ()Z
@@ -5285,6 +5287,8 @@ com/crystalgui/desktop/window/WindowFrame
   method public toggleFullscreen ()V
   method public toggleMaximized ()V
   method public top ()F
+  method public wantPicture (Ljava/lang/Object;Z)V
+  method public wantsPicture ()Z
   method public,static applicationClass (Ljava/lang/String;)Ljava/lang/String;
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/desktop/window/WindowIcon
@@ -8170,6 +8174,7 @@ com/crystalgui/render/CgUiPaintContext
   method public segmentDrawn ([F)Z
   method public setColor (I)V
   method public setPictureTint (I)V
+  method public setSnapshotting (Z)V
   method public shapes ()Lcom/crystalgraphics/gl/render/CgShapeTable;
   method public snapXToDevicePixel (F)F
   method public snapYToDevicePixel (F)F
@@ -8291,6 +8296,7 @@ com/crystalgui/render/Surface
   extends java/lang/Object
   method public damage (FFFF)V
   method public drawPicture (Lcom/crystalgui/render/CgUiPaintContext;FFFF)V
+  method public drawThumbnail (Lcom/crystalgui/render/CgUiPaintContext;FFFFII)V
   method public drew (Ljava/lang/Object;JIILcom/crystalgui/render/LayerRegion;JJ)V
   method public drewAt (Ljava/lang/Object;IILcom/crystalgui/render/LayerRegion;)Z
   method public hasPicture ()Z
@@ -8301,11 +8307,13 @@ com/crystalgui/render/Surface
   method public pictureWidth ()F
   method public pictured (FFFFFF)V
   method public target ()Lcom/crystalgraphics/render/graph/CgGraphTexture;
+  method public thumbnailStale ()Z
   method public visit (Lcom/crystalgui/render/Surface$Tenant;I)V
   method public walkAgain ()V
 com/crystalgui/render/Surface$Owner
   access public,abstract,interface
   extends java/lang/Object
+  method public wantsPicture ()Z
   method public,abstract keepsSurface ()Z
   method public,abstract surface (Lcom/crystalgui/render/Surface;)V
 com/crystalgui/render/Surface$Placement
