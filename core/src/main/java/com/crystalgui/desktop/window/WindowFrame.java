@@ -2598,13 +2598,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public float boxX() {
         Box box = box();
-        return box == null ? placedLeft : box.x();
+        return laidOut(box) ? box.x() : maximized ? 0f : placedLeft;
+    }
+
+    /** A reattached frame's box can exist yet be unplaced, at 0,0 and 0x0, until its first layout. */
+    private static boolean laidOut(Box box) {
+        return box != null && box.width() > 0f && box.height() > 0f;
     }
 
     /** @see #boxX() */
     public float boxY() {
         Box box = box();
-        return box == null ? placedTop : box.y();
+        return laidOut(box) ? box.y() : maximized ? 0f : placedTop;
     }
 
     /** @see #boxX() */
