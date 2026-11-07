@@ -144,6 +144,30 @@ public class StartingWindowTest extends UiDocumentTestBase {
         assertTrue(desktop.registry().windows().isEmpty());
     }
 
+    /** The application is built behind the mark, which is still on screen: closing the mark closes the application. */
+    @Test
+    public void closingTheStartingWindowAfterTheBuildClosesTheApplication() throws InterruptedException {
+        Desktop.setAnimationsEnabled(true);
+        desktop.applications().launchInStartingWindow(kind, null);
+        frames(3);
+        Thread.sleep(2150);   // the mark is whole: the application builds
+        frames(2);
+        assertEquals(1, built);
+        WindowFrame starter = null;
+        for (WindowFrame window : desktop.registry().windows()) {
+            if (window.content().hasClass(Desktop.STARTING_CLASS)) starter = window;
+        }
+        assertTrue("the mark was gone before it could be closed", starter != null && !starter.isClosing());
+
+        starter.requestClose();
+        for (int i = 0; i < 10; i++) {
+            Thread.sleep(40);
+            frame();
+        }
+        assertTrue("its application opened under the window that was closed", desktop.registry().windows().isEmpty());
+        assertTrue("its application kept running", desktop.applications().running(kind).isEmpty());
+    }
+
     @Test
     public void aDesktopClosedWhileStartingBuildsOnceItIsBack() {
         desktop.applications().launchInStartingWindow(kind, null);

@@ -1698,8 +1698,9 @@ public class Desktop extends UIElement implements DataProvider {
      * // a frame or more later: kind's factory adds its main window, which replaces the starter
      * }</pre>
      *
-     * <p>Closing it before the application has built cancels nothing by itself: the launcher asks
-     * {@link #isStarting}. {@link #endStartingWindow} takes it down when the launch fails.</p>
+     * <p>Closing it before the application has built cancels the launch: the launcher asks {@link #isStarting}.
+     * Closing it once the application has built, while its mark is still leaving, closes the application.
+     * {@link #endStartingWindow} takes it down when the launch fails.</p>
      */
     public WindowFrame openStartingWindow(ApplicationKind kind) {
         WindowFrame open = starting.get(kind.id());
@@ -1782,7 +1783,9 @@ public class Desktop extends UIElement implements DataProvider {
         long[] leaving = { 0L };   // when the mark began to leave
         document.animation().every(successor, delta -> {
             if (starter.state() == WindowState.DESTROYED || starter.isClosing()) {
-                successor.removeClass(WindowFrame.HANDOVER_CLASS);
+                // CLOSING THE STARTER CLOSES THE APPLICATION it was launching, which has not been seen yet: it is
+                // destroyed unseen, where closing it would play a close over an invisible window
+                if (successor.state() != WindowState.DESTROYED) successor.destroy();
                 return false;
             }
             if (leaving[0] == 0L) {
