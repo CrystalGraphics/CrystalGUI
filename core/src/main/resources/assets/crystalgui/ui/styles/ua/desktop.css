@@ -291,6 +291,43 @@ taskbar .__start-button__::part(pre-icon) {
     transition: overlay-tint 140ms ease-out;
 }
 
+/* SHOW DESKTOP: Windows' thin strip at the bar's right edge. Absolute, so the entries stay centred; the bar's own
+ * right padding is its width. Full height, square, with no face until the pointer is on it. */
+taskbar .__show-desktop__ {
+    position: absolute;
+    right: 0px;
+    top: 0px;
+    width: 8px;
+    height: 100%;
+    min-width: 0px;
+    min-height: 0px;
+    padding: 0px;
+    border-radius: 0px;
+    background: none;
+    background-color: transparent;
+    transition: background-color 140ms ease-out;
+    cursor: default;
+}
+
+taskbar .__show-desktop__:hover {
+    background-color: var(--taskbar-entry-hover-bg, #FFFFFF29);
+}
+
+taskbar .__show-desktop__:active {
+    background-color: var(--taskbar-entry-active-bg, #FFFFFF1A);
+}
+
+/* The hairline on its left, the one mark it has at rest. An element in the button's shadow tree, as the entries'
+ * pill is: a one-sided border is the documented trap. */
+taskbar .__show-desktop__::part(line) {
+    position: absolute;
+    left: 1px;
+    top: 40%;
+    width: 1px;
+    height: 30%;
+    background-color: var(--taskbar-edge-mid, #FFFFFF73);
+}
+
 launcher {
     flex-direction: column;
     width: 260px;

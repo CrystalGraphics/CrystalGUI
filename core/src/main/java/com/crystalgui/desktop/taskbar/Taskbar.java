@@ -125,7 +125,14 @@ public class Taskbar extends UIElement {
 
     public static final String EDGE_CLASS = "__edge__";
 
+    /** The show-desktop strip at the bar's right edge. */
+    public static final String SHOW_DESKTOP_CLASS = "__show-desktop__";
+    /** The hairline along that strip's left side, in its shadow tree. */
+    public static final String SHOW_DESKTOP_LINE_PART = "line";
+
     private final UIElement entries;
+
+    private final Button showDesktop;
 
     /** What CAN run, beside the strip that shows what IS running. @see #start() */
     private final LauncherButton start;
@@ -242,8 +249,17 @@ public class Taskbar extends UIElement {
         append(entries);
         reorder = new TaskbarReorder(this, entries);
 
-        // THE STRIP'S OWN CONTEXT MENU -- Windows' home for Show Desktop, and W13c's answer to a command
-        // that was registered, enabled, working and findable by nobody: the palette was its only route.
+        // SHOW DESKTOP at the bar's right edge, Windows': absolute, so the entries stay centred.
+        showDesktop = new ShowDesktopButton();
+        showDesktop.addClass(SHOW_DESKTOP_CLASS);
+        showDesktop.attachListener(() -> {
+            Desktop desktop = desktop();
+            if (desktop != null) desktop.toggleShowDesktop();
+        });
+        append(showDesktop);
+        nameOnTheBar(Tooltip.attach(showDesktop, "Show desktop"));
+
+        // THE STRIP'S OWN CONTEXT MENU, for the commands about the SET of windows.
         //
         // A right-click on an ENTRY never reaches here, because the entry's own handler consumes it and
         // opens the jump list instead -- which is the distinction the two menus exist for. This one is
@@ -289,6 +305,11 @@ public class Taskbar extends UIElement {
     /** The start button, and through it the launcher. */
     public LauncherButton start() {
         return start;
+    }
+
+    /** The strip at the bar's right edge that minimises every window, and puts them back. */
+    public Button showDesktopButton() {
+        return showDesktop;
     }
 
     /** The hover previews. One panel that moves between entries. @see TaskbarPreviews */
@@ -1196,6 +1217,17 @@ public class Taskbar extends UIElement {
     /** The island the entries sit in. */
     public UIElement entries() {
         return entries;
+    }
+
+    /** A bare button with a hairline in its shadow tree, which a Button refuses as a public child. */
+    private static final class ShowDesktopButton extends Button {
+        ShowDesktopButton() {
+            super(Button.NAME, "");
+            UIElement line = new UIElement();
+            line.set(Attribute.PART, SHOW_DESKTOP_LINE_PART);
+            line.setHitTest(false);
+            shadow().append(line);
+        }
     }
 
     /**

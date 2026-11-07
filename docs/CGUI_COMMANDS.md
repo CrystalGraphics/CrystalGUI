@@ -386,7 +386,7 @@ are bound; the 89 external sites are the older idiom the `binding` javadoc warns
 |---|---|---|---|
 | `desktop.frameStats` | Toggle Frame Stats ⃰ | — | `F7` |
 | `desktop.frameStatsDetail` | Frame Stats: Phase Breakdown ⃰ | — | `F8` |
-| `desktop.showDesktop` | Show Desktop ⃰ | TASKBAR_CONTEXT, DESKTOP_CONTEXT |  |
+| `desktop.showDesktop` | Show Desktop ⃰ | DESKTOP_CONTEXT |  |
 | `desktop.switchWindow` | Switch Window | DESKTOP_CONTEXT | `Mod+Tab` |
 | `desktop.switchWindowBack` | Switch Window (Back) | — | `Mod+Shift+Tab` |
 | `desktop.taskbarDesigner` | Design Taskbar… | TASKBAR_CONTEXT | `Mod+Alt+T` |

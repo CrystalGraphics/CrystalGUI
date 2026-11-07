@@ -115,6 +115,25 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         assertTrue("and says it is put away", entry.hasClass(Taskbar.HIDDEN_CLASS));
     }
 
+    /** The strip at the bar's right edge puts every window away, and a second press brings back what it took. */
+    @Test
+    public void theShowDesktopStripMinimisesAllAndPutsThemBack() {
+        build();
+        WindowFrame first = open("One");
+        WindowFrame second = open("Two");
+        Button strip = taskbar.showDesktopButton();
+
+        strip.onPressed.emit();
+        settle();
+        assertEquals(WindowState.HIDDEN, first.state());
+        assertEquals(WindowState.HIDDEN, second.state());
+
+        strip.onPressed.emit();
+        settle();
+        assertEquals(WindowState.VISIBLE, first.state());
+        assertEquals(WindowState.VISIBLE, second.state());
+    }
+
     /**
      * <b>Open order, and it does not move.</b> A bar whose entries jump on every activation is the
      * "never in the same place twice" menu bug wearing a strip — you can never learn where anything is.

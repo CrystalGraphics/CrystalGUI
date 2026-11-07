@@ -4964,6 +4964,8 @@ com/crystalgui/desktop/taskbar/Taskbar
   field public,static,final PROGRESS_CLASS Ljava/lang/String;
   field public,static,final REORDERING_CLASS Ljava/lang/String;
   field public,static,final RISING_CLASS Ljava/lang/String;
+  field public,static,final SHOW_DESKTOP_CLASS Ljava/lang/String;
+  field public,static,final SHOW_DESKTOP_LINE_PART Ljava/lang/String;
   field public,static,final START_CLASS Ljava/lang/String;
   field public,static,final TIP_CLASS Ljava/lang/String;
   method protected connected ()V
@@ -4977,6 +4979,7 @@ com/crystalgui/desktop/taskbar/Taskbar
   method public refresh ()V
   method public setBarVisible (Z)V
   method public setPreviewsSuppressed (Ljava/lang/Object;Z)V
+  method public showDesktopButton ()Lcom/crystalgui/widget/control/Button;
   method public start ()Lcom/crystalgui/desktop/launcher/LauncherButton;
   method public takePlace (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/taskbar/Taskbar;

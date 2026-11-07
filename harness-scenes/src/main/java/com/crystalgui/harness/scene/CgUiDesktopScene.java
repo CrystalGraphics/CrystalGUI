@@ -170,10 +170,8 @@ import org.joml.Vector2f;
  *       Escape puts the window back <em>exactly</em> where it was, Shift nudges finely, and any other
  *       key ends the mode and still does whatever it was going to do. This is the only way to move a
  *       window whose title bar has ended up off the work area. <i>(W13c)</i></li>
- *   <li><b>Right-click the taskbar itself</b> — the strip, not an entry — for <b>Show Desktop</b>.
- *       Everything minimises; run it again and exactly what it took comes back. Two menus on one strip,
- *       and the distinction is what they are about: an entry's names a window, the strip's names the
- *       desktop. <i>(W13c)</i></li>
+ *   <li><b>Click the thin strip at the taskbar's right edge</b> for <b>Show Desktop</b>.
+ *       Everything minimises; click again and exactly what it took comes back. <i>(W13c)</i></li>
  *   <li><b>Look for a chord beside Close. There isn't one.</b> {@code Ctrl+W} closes an editor tab —
  *       frequent, cheap, undoable — and a window takes its content with it, so the destructive one is
  *       deliberately not a keystroke away from the common one. <i>(W13a)</i></li>
