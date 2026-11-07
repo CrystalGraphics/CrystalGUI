@@ -3,6 +3,9 @@ package com.crystalgui.app.vfxlab;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
+import com.crystalgraphics.platform.gl.state.CgGlScope;
+import com.crystalgraphics.platform.gl.state.CgGlSlot;
+import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.render.stage.CgHostFrame;
@@ -197,16 +200,18 @@ final class VfxViewport extends UIElement {
             projection.setPerspective((float) Math.toRadians(60), aspect, 0.05f, 1000f);
         }
 
-        // A stage draws into the bound framebuffer; the host frame's id alone does not move it.
-        target.bind();
-        for (CgRenderStage stage : WORLD) {
-            stage.host().set(0f, width, height, target.getId()).view().set(atX, atY, atZ, view, projection);
-            stage.fire();
+        // A stage draws into the bound framebuffer; the host frame's id alone does not move it. The host's binding goes
+        // back, never 0: a host whose state cache assumes its main target skips the next bind of it otherwise.
+        try (CgGlScope ignored = CgGlState.save(CgGlSlot.FBO, CgGlSlot.VIEWPORT)) {
+            target.bind();
+            for (CgRenderStage stage : WORLD) {
+                stage.host().set(0f, width, height, target.getId()).view().set(atX, atY, atZ, view, projection);
+                stage.fire();
+            }
         }
         for (CgRenderStage stage : WORLD) {
             stage.host().set(tick, hostWidth, hostHeight, hostTarget).view().set(hostX, hostY, hostZ, hostView, hostProjection);
         }
-        target.unbind();
         picture = target.getColorTexture(0);
         particles = CgVfxSystem.particlesDrawn(target.getId());
     }
