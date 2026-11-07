@@ -86,18 +86,37 @@ public final class WindowAnimator {
      * A window arriving: Fluent's entrance, as WinUI's {@code ContentDialog} plays it ({@code ControlNormalAnimationDuration},
      * 250 ms, for the scale; {@code ControlFasterAnimationDuration}, 83 ms linear, for the fade).
      */
-    private static final long SHOW_NANOS = 250L * 1_000_000L;
+    private static final long SHOW_NANOS = 350L * 1_000_000L;
 
     /** @see #SHOW_NANOS */
-    private static final long SHOW_FADE_NANOS = 83L * 1_000_000L;
+    private static final long SHOW_FADE_NANOS = 120L * 1_000_000L;
     /** A starting window fades out this long: from 100 ms in to 560 ms, where its mark's growth ends. */
     private static final long TAKEOVER_NANOS = 460L * 1_000_000L;
 
     /** {@code DESTROY_WINDOW_ANIMATION_TIME} (150ms) — a window closing. */
-    private static final long DESTROY_NANOS = 125L * 1_000_000L;
+    private static final long DESTROY_NANOS = 200L * 1_000_000L;
 
     /** {@code MINIMIZE_WINDOW_ANIMATION_TIME} (400ms) — a window crossing the screen to the taskbar, and back. */
-    private static final long MINIMIZE_NANOS = 350L * 1_000_000L;
+    private static final long MINIMIZE_NANOS = 450L * 1_000_000L;
+
+    /** A restore fades in over this, well before its flight lands. */
+    private static final long RESTORE_FADE_NANOS = 330L * 1_000_000L;
+
+    /**
+     * A restore's flight: gentle off the button, long settle into place. Quad's first frame already covered a
+     * tenth of the way, which reads as a jump.
+     */
+    private static final CgEasing FLIGHT = CgEasings.cubicBezier(0.3, 0.0, 0.15, 1.0);
+
+    /** A minimise is shorter than a restore: it travels half the way and is gone. */
+    private static final long DEPARTURE_NANOS = 220L * 1_000_000L;
+
+    /** A minimise fades evenly over its flight. */
+    private static final CgEasing FLIGHT_FADE = CgEasings.LINEAR;
+
+    /** How far toward the button a minimise travels before it is gone: Windows' does not dock, it fades heading there. */
+    private static final float MINIMIZE_REACH = 0.55f;
+
 
     /** {@code WINDOW_ANIMATION_TIME} (250ms — unchanged) — a window changing SHAPE: maximise, restore-down. */
     private static final long SIZE_NANOS = 250L * 1_000_000L;
@@ -331,7 +350,8 @@ public final class WindowAnimator {
             playClose(then);
             return;
         }
-        start(NEUTRAL_MAPPING, into, 1f, 0f, CORNER, CORNER, MINIMIZE_NANOS, MOVING, then);
+        start(NEUTRAL_MAPPING, into, 1f, 0f, CORNER, CORNER, DEPARTURE_NANOS, MOVING,
+                DEPARTURE_NANOS, FLIGHT_FADE, then);
     }
 
     /** The window grows back out of its taskbar button — {@link #playMinimize} reversed. */
@@ -342,7 +362,8 @@ public final class WindowAnimator {
             playOpen();
             return;
         }
-        start(from, NEUTRAL_MAPPING, 0f, 1f, CORNER, CORNER, MINIMIZE_NANOS, MOVING, null);
+        start(from, NEUTRAL_MAPPING, 0f, 1f, CORNER, CORNER, MINIMIZE_NANOS, FLIGHT,
+                RESTORE_FADE_NANOS, CgEasings.OUT_QUAD, null);
     }
 
     /**
@@ -381,9 +402,9 @@ public final class WindowAnimator {
         // @see plan/engine-port.md 6.4
         return Transform.of(
                 Transform.Op.translate(
-                        LengthPercent.px(area.width() / 2f - frame.boxX()),
-                        LengthPercent.px(area.height() - frame.boxY())),
-                Transform.Op.scale(MINIMIZE_FALLBACK_SCALE, MINIMIZE_FALLBACK_SCALE));
+                        LengthPercent.px((area.width() / 2f - frame.boxX()) * MINIMIZE_REACH),
+                        LengthPercent.px((area.height() - frame.boxY()) * MINIMIZE_REACH)),
+                Transform.Op.scale(reach(MINIMIZE_FALLBACK_SCALE), reach(MINIMIZE_FALLBACK_SCALE)));
     }
 
     /**
@@ -415,9 +436,14 @@ public final class WindowAnimator {
         Vector2f origin = Box.originIn(to, space);
         return Transform.of(
                 Transform.Op.translate(
-                        LengthPercent.px(origin.x - frame.boxX()),
-                        LengthPercent.px(origin.y - frame.boxY())),
-                Transform.Op.scale(to.width() / selfW, to.height() / selfH));
+                        LengthPercent.px((origin.x - frame.boxX()) * MINIMIZE_REACH),
+                        LengthPercent.px((origin.y - frame.boxY()) * MINIMIZE_REACH)),
+                Transform.Op.scale(reach(to.width() / selfW), reach(to.height() / selfH)));
+    }
+
+    /** A scale partway from 1 to {@code full}, by {@link #MINIMIZE_REACH}. */
+    private static float reach(float full) {
+        return 1f + (full - 1f) * MINIMIZE_REACH;
     }
 
     /**
