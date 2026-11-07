@@ -1060,9 +1060,17 @@ public class Taskbar extends UIElement {
             entry.addClass(FLASH_HELD_CLASS);
             return;
         }
+        // UNLIT FOR ITS FIRST STYLED FRAME, so the first pulse rises like the rest: an entry first resolved lit has
+        // nothing to transition from and shows full orange at once.
+        entry.addClass(FLASH_OFF_CLASS);
+        boolean[] styled = {false};
         long start = System.nanoTime();
         document.animation().every(entry, delta -> {
             if (!entry.hasClass(ATTENTION_CLASS)) return false;
+            if (!styled[0]) {
+                styled[0] = true;
+                return true;
+            }
             long since = System.nanoTime() - start;
             long pulse = since / FLASH_PERIOD_NANOS, into = since % FLASH_PERIOD_NANOS;
             if (pulse >= PULSES - 1 && into >= FLASH_SETTLE_NANOS || pulse >= PULSES) {

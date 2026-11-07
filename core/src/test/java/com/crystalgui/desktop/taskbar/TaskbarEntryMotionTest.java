@@ -176,7 +176,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
      * <b>An arrival that settles must put the entry back the way it found it — and settling is what no
      * test could reach.</b>
      *
-     * <p>The hole this fell through: an arrival completes after 150ms of WALL time, which never elapses
+     * <p>The hole this fell through: an arrival completes after its fraction of a second of WALL time, which never elapses
      * across instant frames, so the opening branch of {@code finish()} had no coverage at all and took
      * the harness down the first time a real one settled — {@code NullPointerException} from the
      * {@code overflow} listener, because withdrawing the only candidate a property had resolved it to

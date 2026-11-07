@@ -72,8 +72,11 @@ import dev.vfyjxf.taffy.style.TaffyPosition;
  */
 final class TaskbarEntryMotion implements WindowMotion {
 
-    /** Short: a strip item opening or closing is a small local motion, not a window crossing the screen. */
-    private static final long DURATION_NANOS = 150L * 1_000_000L;
+    /** Short: a strip item opening or closing is a small local motion, not a window crossing the screen. Closing is a little quicker. */
+    private static final long CLOSE_NANOS = 280L * 1_000_000L;
+    /** Opening: the row parts gently, and the button fades in along the way. */
+    private static final long OPEN_NANOS = 400L * 1_000_000L;
+    private static final CgEasing OPEN_CURVE = CgEasings.OUT_CUBIC;
 
     /**
      * Decelerating in BOTH directions, against Fluent's advice that things leaving should accelerate.
@@ -81,7 +84,7 @@ final class TaskbarEntryMotion implements WindowMotion {
      * <p>The finding the window animations already record: an exit that speeds up is gone before the eye
      * follows it, and every production window manager decelerates everything.</p>
      */
-    private static final CgEasing CURVE = CgEasings.OUT_QUAD;
+    private static final CgEasing CLOSE_CURVE = CgEasings.OUT_CUBIC;
 
     private final UIElement entry;
     private final boolean opening;
@@ -217,8 +220,8 @@ final class TaskbarEntryMotion implements WindowMotion {
             return true;
         }
         long elapsed = System.nanoTime() - startNanos;
-        double progress = Math.min(1.0, elapsed / (double) DURATION_NANOS);
-        apply(CURVE.ease(progress));
+        double progress = Math.min(1.0, elapsed / (double) (opening ? OPEN_NANOS : CLOSE_NANOS));
+        apply((opening ? OPEN_CURVE : CLOSE_CURVE).ease(progress));
         if (progress < 1.0) return true;
         finish();
         return false;

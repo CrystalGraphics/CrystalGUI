@@ -78,7 +78,7 @@ public class PreviewPicturelessTest extends UiDocumentTestBase {
     private WindowFrame open(String title, float width, float height) {
         // OPENED WITH ANIMATIONS OFF, then handed straight back to the gesture under test — the rule the
         // document-animation tests already follow, reached from a new direction. A taskbar entry now ramps
-        // its own width open over 150ms of REAL time, and this fixture measures entry positions and hovers
+        // its own width open over half a second of REAL time, and this fixture measures entry positions and hovers
         // them by coordinate, so a document opened with animations on leaves every entry a sliver for the
         // whole test. The previews being tested here are unaffected: they animate on hover, not on open.
         // @see TaskbarEntryMotion
