@@ -1605,18 +1605,18 @@ menu.__jump-list__ {
      * snaps at the halfway point instead. That one cost four window animations. */
     transform: translate(0, 0%);
     clip-path: inset(0 0 0 0 round var(--radius-panel, 8px));
-    /* CLOSING, WinUI's 83ms linear fade, with `display` so the box is held for it. A transition plays the
-     * list of the state it goes TO, so the open below names its own. */
-    transition: opacity 83ms linear, display 83ms linear;
+    /* CLOSING: a short fade, with `display` so the box is held for it. A transition plays the list of the state
+     * it goes TO, so the open below names its own. */
+    transition: opacity 120ms ease-out, display 120ms ease-out;
 }
 
 /* The previews' open, WinUI's menu flyout: no opacity in the list, so it snaps in. */
 menu.__jump-list__:open {
-    /* A BEAT AFTER THE PRESS, as Windows' jump list: the slide waits 250ms, and the menu stays transparent until
-     * it starts (the 1ms opacity step at the same delay). `display` for the close: its `display: none` is
-     * written while this list is still in force. */
-    transition: transform 250ms 250ms cubic-bezier(0, 0, 0, 1), clip-path 250ms 250ms cubic-bezier(0, 0, 0, 1),
-            opacity 1ms 250ms linear, display 83ms linear;
+    /* A BEAT AFTER THE PRESS, as Windows' jump list: the slide waits 150ms, and the menu stays transparent until
+     * it starts. The curve is a soft ease-out, and opacity fades in over the first part of the slide rather than
+     * stepping on. `display` for the close: its `display: none` is written while this list is still in force. */
+    transition: transform 300ms 150ms cubic-bezier(0.2, 0.8, 0.2, 1), clip-path 300ms 150ms cubic-bezier(0.2, 0.8, 0.2, 1),
+            opacity 140ms 150ms ease-out, display 120ms ease-out;
 }
 
 /* Where the open starts, as the previews' placing state. Transparent too, for the unplaced first frame. */
