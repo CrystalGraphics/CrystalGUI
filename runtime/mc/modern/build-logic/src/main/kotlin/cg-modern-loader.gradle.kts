@@ -775,6 +775,20 @@ tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach 
     }
 }
 
+// Any other -D on a run's command line is named, once a build: a probe's switch the game never sees ran unmodified code.
+if (!rootProject.extra.has("cgWarnedUnforwarded")
+        && gradle.startParameter.taskNames.any { it.substringAfterLast(':').startsWith("run") }) {
+    rootProject.extra["cgWarnedUnforwarded"] = true
+    val unforwarded = gradle.startParameter.systemPropertiesArgs.keys
+        .filter { name -> !name.startsWith("crystalgui.") && !name.startsWith("crystalgraphics.")
+            && listOf("file.", "user.", "java.", "jdk.", "sun.", "os.", "line.", "path.", "http.", "https.", "javax.", "org.gradle.").none(name::startsWith) }   // the JVM's own, which Gradle passes
+        .sorted()
+    if (unforwarded.isNotEmpty()) {
+        logger.warn("-D " + unforwarded.joinToString(", ") + " never reach the game: a run forwards only -Dcrystalgui.*"
+            + " and -Dcrystalgraphics.*. Name a game switch under one of those.")
+    }
+}
+
 // The garbage collector as Minecraft's launcher runs it: G1 with a 50 ms pause goal. With the JVM's own 200 ms a
 // young collection during a world's first seconds paused the dev client 100-280 ms, a hitch no player sees.
 tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
