@@ -274,7 +274,10 @@ only witness for what a dev run cannot see: relocation, remapping, downgrading a
 #   -PcgGraphics=vulkan -PcgVulkanValidation    (NeoForge: earlyWindowControl = false in the run's config/fml.toml)
 ```
 
-A world comes from `runs/client/saves/` — copy the instance's save there. A server-side fault goes to
+A world comes from `runs/client/saves/` — copy the instance's save there. The shader toolchain a GL-era client
+fetches for its device is one folder for every dev client of the checkout, `CrystalGraphics/build/shader-toolchain`,
+and one for every prodSmoke instance of a launcher, `<PrismLauncher>/crystalgraphics/shader-toolchain`
+(`-Dcrystalgraphics.shaderToolchain.dir` names another). A server-side fault goes to
 `runServer` or `serverSmoke`. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; there
 `prodSmoke -PcgNoDeploy -PcgTargets=<one>` is the loop.
 

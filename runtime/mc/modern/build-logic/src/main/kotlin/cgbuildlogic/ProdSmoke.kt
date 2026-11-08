@@ -371,6 +371,7 @@ abstract class ProdSmoke : DefaultTask() {
             // A production client names no render-thread hold while loading; a smoke run should
             "-Dcrystalgraphics.loading.logHolds=true " +
             "-Dcrystalgui.autotest.lateFrame=${lateFrame()}" +
+            sharedToolchain(cfg) +
             extraProperties.get().joinToString("") { " -D$it" }
         if (' ' in extraProperties.get().joinToString("")) {
             throw GradleException("-PcgSmokeProps may hold no space: Prism splits a JvmArgs value on them")
@@ -383,6 +384,20 @@ abstract class ProdSmoke : DefaultTask() {
     }
 
     private fun isArmed(cfg: File) = cfg.readLines().any { it.startsWith(ARMED_MARKER) }
+
+    /**
+     * Every instance of the launcher fetches the shader toolchain into one folder, `<launcher>/crystalgraphics/
+     * shader-toolchain` beside its `instances`, rather than once per instance. Nothing where that path has a space.
+     */
+    private fun sharedToolchain(cfg: File): String {
+        val launcherRoot = cfg.absoluteFile.parentFile.parentFile.parentFile
+        val dir = File(launcherRoot, "crystalgraphics/shader-toolchain").absolutePath.replace('\\', '/')
+        if (' ' in dir) {
+            logger.lifecycle("[prodSmoke] {} has a space; each instance keeps its own shader toolchain", dir)
+            return ""
+        }
+        return " -Dcrystalgraphics.shaderToolchain.dir=$dir"
+    }
 
     /**
      * Whether a slow probe was asked for: the language probes answer after the late capture would otherwise

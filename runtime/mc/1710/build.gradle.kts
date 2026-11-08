@@ -261,6 +261,10 @@ tasks.named<JavaExec>(runTask) {
     if (providers.gradleProperty("cgStateVerify").isPresent) {
         systemProperty("crystalgraphics.state.verify", "true")
     }
+    // Every dev client of this checkout shares one shader toolchain folder, CrystalGraphics/build/shader-toolchain, as
+    // cgbuildlogic.shaderToolchainDevDir names it for every other node: that plugin is not on this script's classpath.
+    systemProperty("crystalgraphics.shaderToolchain.dir", System.getProperty("crystalgraphics.shaderToolchain.dir")
+        ?: gradle.includedBuild("CrystalGraphics").projectDir.resolve("build/shader-toolchain").absolutePath)
     // -PcgJvmArgs="-XX:StartFlightRecording=duration=60s,filename=build/client.jfr": JVM flags for the game, space-separated.
     providers.gradleProperty("cgJvmArgs").orNull?.let { jvmArgs(it.trim().split(Regex("\\s+"))) }
 
