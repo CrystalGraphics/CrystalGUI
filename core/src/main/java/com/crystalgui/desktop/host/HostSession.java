@@ -21,6 +21,9 @@ import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.Predicate;
 
 /**
  * <b>The one desktop a client has, and the application it opens with.</b>
@@ -107,9 +110,13 @@ public final class HostSession {
     private static volatile HostSession current;
 
     private final HostServices services;
+    /** Who is offered a key the desktop left, before the game is. */
+    /** Who is offered a key before the desktop, while no text field has focus. */
+    private final List<Predicate<CgSystemInput.Keyboard.Event>> hotKeys = new CopyOnWriteArrayList<>();
+    private final List<Predicate<CgSystemInput.Keyboard.Event>> keysLeft = new CopyOnWriteArrayList<>();
     @Nullable
     private final ApplicationKind primaryKind;
-    private final HostInput input = new HostInput(this::document);
+    private final HostInput input = new HostInput(this::document, this::offerHotKey);
 
     @Nullable
     private DesktopHost host;
@@ -751,8 +758,52 @@ public final class HostSession {
     /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
     private void returnUnhandledKeys() {
         for (CgSystemInput.Keyboard.Event key; (key = input.pollUnhandledKey()) != null; ) {
-            services.reinjectKey(key);
+            if (!offerLeftKey(key)) services.reinjectKey(key);
         }
+    }
+
+    /**
+     * Hears each key press and release the desktop left, before the game does: a HUD's keys that should work with the
+     * desktop up. Return true to take one; a key a focused field took never gets here. Render thread.
+     *
+     * <pre>{@code
+     * Runnable off = HostSession.session().onKeyLeft(event -> hud.key(event));
+     * off.run();   // when the HUD goes
+     * }</pre>
+     *
+     * @return what removes the listener
+     */
+    public Runnable onKeyLeft(Predicate<CgSystemInput.Keyboard.Event> listener) {
+        keysLeft.add(listener);
+        return () -> keysLeft.remove(listener);
+    }
+
+    /**
+     * Hears each key before the desktop does, unless a text field has focus: for a key the desktop would take itself
+     * (Tab moves focus). Return true to take it. Take only what is yours, since nothing the desktop would do with it
+     * then happens; keys it leaves go to {@link #onKeyLeft}. Render thread.
+     *
+     * @return what removes the listener
+     */
+    public Runnable onHotKey(Predicate<CgSystemInput.Keyboard.Event> listener) {
+        hotKeys.add(listener);
+        return () -> hotKeys.remove(listener);
+    }
+
+    private boolean offerHotKey(CgSystemInput.Keyboard.Event key) {
+        if (hotKeys.isEmpty() || textInputArea() != null) return false;
+        for (Predicate<CgSystemInput.Keyboard.Event> listener : hotKeys) {
+            if (listener.test(key)) return true;
+        }
+        return false;
+    }
+
+    /** Offers {@code key} to the {@link #onKeyLeft} listeners in order; true if one took it. For a host that answers a key itself. */
+    public boolean offerLeftKey(CgSystemInput.Keyboard.Event key) {
+        for (Predicate<CgSystemInput.Keyboard.Event> listener : keysLeft) {
+            if (listener.test(key)) return true;
+        }
+        return false;
     }
 
     // ── Building ────────────────────────────────────────────────────────────────────────────────

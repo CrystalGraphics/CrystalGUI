@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <title>Cues</title>
+  <defs>
+    <linearGradient id="cues-tile" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#33373F"/><stop offset="1" stop-color="#0E1013"/>
+    </linearGradient>
+    <radialGradient id="cues-light" cx="0.25" cy="0.15" r="0.8">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.3"/><stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <rect width="64" height="64" rx="14" fill="url(#cues-tile)"/>
+  <rect width="64" height="64" rx="14" fill="url(#cues-light)"/>
+        <circle cx="32" cy="32" r="17" fill="none" stroke="#FFD27A" stroke-opacity="0.5" stroke-width="1.6"/>
+        <defs><radialGradient id="cu-ring" gradientUnits="userSpaceOnUse" cx="32" cy="32" r="13"><stop offset="0" stop-color="#FFFFFF" stop-opacity="1"/><stop offset="0.25" stop-color="#FFE3A3" stop-opacity="0.9"/><stop offset="0.6" stop-color="#FF9F0A" stop-opacity="0.35"/><stop offset="1" stop-color="#FF9F0A" stop-opacity="0"/></radialGradient></defs>
+  <circle cx="32" cy="32" r="13" fill="url(#cu-ring)"/>
+        <polygon points="35.57,32.66 46.77,30.79 35.41,30.77" fill="#FFFFFF"/><polygon points="35.12,33.84 43.96,35.28 35.63,32.01" fill="#FFD27A"/><polygon points="34.08,34.97 48.62,45.89 35.30,33.51" fill="#FF9F0A"/><polygon points="33.72,35.19 45.84,46.60 35.10,33.89" fill="#FFFFFF"/><polygon points="32.63,35.57 37.97,44.73 34.35,34.77" fill="#FF453A"/><polygon points="30.74,35.40 30.67,46.69 32.63,35.57" fill="#FFFFFF"/><polygon points="30.15,35.12 27.80,47.19 31.98,35.63" fill="#FFD27A"/><polygon points="29.16,34.26 20.62,47.47 30.69,35.38" fill="#FF9F0A"/><polygon points="28.66,33.40 18.40,42.60 29.82,34.90" fill="#FFFFFF"/><polygon points="28.37,31.99 16.26,36.21 28.86,33.82" fill="#FF453A"/><polygon points="28.41,31.47 11.85,34.37 28.64,33.35" fill="#FFFFFF"/><polygon points="29.15,29.76 21.01,27.35 28.41,31.51" fill="#FFD27A"/><polygon points="29.56,29.32 21.03,25.02 28.54,30.92" fill="#FF9F0A"/><polygon points="30.79,28.58 25.12,22.04 29.23,29.66" fill="#FFFFFF"/><polygon points="31.66,28.39 24.09,10.84 29.88,29.05" fill="#FF453A"/><polygon points="33.28,28.61 33.95,11.85 31.39,28.42" fill="#FFFFFF"/><polygon points="34.41,29.29 37.37,21.19 32.71,28.44" fill="#FFD27A"/><polygon points="34.72,29.61 43.49,14.65 33.14,28.56" fill="#FF9F0A"/><polygon points="35.16,30.23 42.05,22.15 33.83,28.87" fill="#FFFFFF"/><polygon points="35.62,32.23 45.34,29.28 35.24,30.37" fill="#FF453A"/>
+</svg>

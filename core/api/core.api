@@ -22,6 +22,47 @@ com/crystalgui/app/crystaleditor/CrystalEditor
   field public,static,final ID Ljava/lang/String;
   field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
   field public,static,final SCRIPTING Ljava/lang/String;
+com/crystalgui/app/cues/CueSelection
+  access public,final
+  extends java/lang/Object
+  method public age ()D
+  method public at (DDD)Lcom/crystalgui/app/cues/CueSelection;
+  method public current ()Ljava/lang/String;
+  method public duration ()D
+  method public failure ()Ljava/lang/String;
+  method public fire ()V
+  method public fires ()I
+  method public hit ()Ljava/util/List;
+  method public ids ()Ljava/util/List;
+  method public kind ()Lcom/crystalgraphics/cue/CgCueDefinition$Kind;
+  method public namespaces ([Ljava/lang/String;)Lcom/crystalgui/app/cues/CueSelection;
+  method public normal (FFF)Lcom/crystalgui/app/cues/CueSelection;
+  method public placement (Lcom/crystalgui/app/cues/CueSelection$Placement;)Lcom/crystalgui/app/cues/CueSelection;
+  method public play (Ljava/lang/String;)V
+  method public refresh ()Lcom/crystalgui/app/cues/CueSelection;
+  method public seek (D)V
+  method public state ()Lcom/crystalgui/app/cues/CueSelection$State;
+  method public step (I)V
+  method public version ()I
+  method public,static client ()Lcom/crystalgui/app/cues/CueSelection;
+com/crystalgui/app/cues/CueSelection$Placement
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract place (Lcom/crystalgraphics/cue/CgCueParameters;)V
+com/crystalgui/app/cues/CueSelection$State
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final FAILED Lcom/crystalgui/app/cues/CueSelection$State;
+  field public,static,final IDLE Lcom/crystalgui/app/cues/CueSelection$State;
+  field public,static,final LOADING Lcom/crystalgui/app/cues/CueSelection$State;
+  field public,static,final PLAYING Lcom/crystalgui/app/cues/CueSelection$State;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/app/cues/CueSelection$State;
+  method public,static values ()[Lcom/crystalgui/app/cues/CueSelection$State;
+com/crystalgui/app/cues/CueSelector
+  access public,final
+  extends java/lang/Object
+  field public,static,final ID Ljava/lang/String;
+  field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
 com/crystalgui/app/frameprofiler/BuffersTab
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -4807,7 +4848,10 @@ com/crystalgui/desktop/host/HostSession
   method public input ()Lcom/crystalgui/desktop/host/HostInput;
   method public isBuilt ()Z
   method public offerKey (ICZ)Z
+  method public offerLeftKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
   method public offerMouse (Lcom/crystalgui/desktop/host/HostSession$PaintHost;ZIIIZF)Z
+  method public onHotKey (Ljava/util/function/Predicate;)Ljava/lang/Runnable;
+  method public onKeyLeft (Ljava/util/function/Predicate;)Ljava/lang/Runnable;
   method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FLcom/crystalgui/desktop/host/HostSession$PaintHost;)V
   method public postToDocument (Ljava/lang/Runnable;)V
   method public preload ()V

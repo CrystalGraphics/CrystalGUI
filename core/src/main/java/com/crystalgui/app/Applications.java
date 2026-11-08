@@ -1,6 +1,7 @@
 package com.crystalgui.app;
 
 import com.crystalgui.app.crystaleditor.CrystalEditor;
+import com.crystalgui.app.cues.CueSelector;
 import com.crystalgui.app.frameprofiler.FrameProfiler;
 import com.crystalgui.app.machine.MachineExample;
 import com.crystalgui.app.vfxlab.VfxLab;
@@ -30,6 +31,7 @@ public final class Applications implements ApplicationKinds {
     public void register(ApplicationRegistry applications) {
         applications.install(CrystalEditor.KIND);
         applications.install(VfxLab.KIND);
+        applications.install(CueSelector.KIND);
         applications.install(MachineExample.KIND);
         // AN INSTRUMENT, not a product, and installed all the same: the frames worth measuring are an
         // editor's and a game client's, and a profiler reachable only from a harness scene can see

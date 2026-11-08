@@ -1134,3 +1134,14 @@ markupview .__markup-header-cell__ {
 markupview .__markup-table__ {
     border-color: var(--markup-table-rule, #3A3D42);
 }
+
+/* ── TREE TWISTIES ────────────────────────────────────────────────────────────────────────────────
+ * Every tree's expander brightens under the pointer. A panel that draws its own twisty overrides the rest
+ * with a more specific selector (`calltreetab .__twisty__`); this is the default for those that do not. */
+.__twisty__ {
+    color: var(--tree-twisty-fg, #9AA0AA);
+}
+
+.__twisty__:hover {
+    color: var(--tree-twisty-hover-fg, #FFFFFF);
+}

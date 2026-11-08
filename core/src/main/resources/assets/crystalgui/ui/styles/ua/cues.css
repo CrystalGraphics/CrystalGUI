@@ -1,0 +1,24 @@
+/* The cue picker (app.cues.CueSelector): a filter box, a panel a namespace with its cues as a compacted tree, a status line. */
+.cue-selector { width: 100%; height: 100%; flex-direction: column; padding: 6px; gap: 6px; }
+.cue-selector-search { width: 100%; }
+.cue-selector-columns { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; gap: 6px; }
+.cue-selector-panel { width: 0px; flex-grow: 1; height: 100%; flex-direction: column;
+    background-color: var(--surface-panel, #191A1C); border: 1px solid var(--border-base, #393B40); }
+.cue-selector-header { width: 100%; padding: 4px 8px; background-color: var(--surface-base, #26282B); color: var(--fg-secondary, #9DA0A8); font-size: 11; }
+/* Three rows at the window's smallest (22px each, inside its 4px padding): a picker showing no cue is no picker. */
+.cue-selector-tree { width: 100%; height: 0px; flex-grow: 1; min-height: 74px; background: none; padding: 4px; }
+.cue-selector-row { flex-direction: column; height: 22px; color: var(--fg, #DFE1E5); font-size: 12; cursor: pointer; }
+.cue-selector-line { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; align-items: center; gap: 3px; }
+.cue-selector-row:hover { background-color: var(--hover-bg, #2E3033); }
+/* Accent is for what plays; the folders over it only warm. */
+.cue-selector-row.cue-selector-lit { color: var(--warning, #CCA700); }
+.cue-selector-row.cue-selector-current { color: var(--warning-icon, #FFAF0F); background-color: var(--surface-raised, #2B2B2B); }
+.cue-selector-row.cue-selector-failed { color: var(--error, #F14C4C); }
+.cue-selector-row .__twisty__ { width: 12px; height: 12px; flex-shrink: 0; }
+.cue-selector-row.__collapsed__ .__twisty__ { overlay: shape("chevron-right"); }
+.cue-selector-row.__expanded__ .__twisty__ { overlay: shape("chevron-down"); }
+.cue-selector-prefix { color: var(--fg-secondary, #9DA0A8); }
+.cue-selector-count { margin-left: auto; margin-right: 6px; color: var(--fg-secondary, #9DA0A8); font-size: 10; }
+/* One line: narrowed, it elides rather than wrapping, so the window's smallest height does not depend on its width. */
+.cue-selector-status { color: var(--fg-secondary, #9DA0A8); font-size: 11; align-self: center; max-width: 100%; white-space: nowrap;
+    text-overflow: ellipsis; }

@@ -5,6 +5,7 @@ import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 /**
@@ -26,9 +27,16 @@ import java.util.function.Supplier;
 public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keyboard {
 
     private final Supplier<UIDocument> document;
+    /** Offered each key before the document; true takes it. */
+    private final Predicate<CgSystemInput.Keyboard.Event> first;
 
     HostInput(Supplier<UIDocument> document) {
+        this(document, key -> false);
+    }
+
+    HostInput(Supplier<UIDocument> document, Predicate<CgSystemInput.Keyboard.Event> first) {
         this.document = document;
+        this.first = first;
     }
 
     @Override
@@ -43,6 +51,7 @@ public final class HostInput implements CgSystemInput.Mouse, CgSystemInput.Keybo
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
         UIDocument target = document.get();
         if (target == null) return false;
+        if (first.test(event)) return true;
         DocumentDriver<?> driver = target.driver();
         return driver != null ? driver.consumeKeyboardEvent(event) : target.input().consumeKeyboardEvent(event);
     }
