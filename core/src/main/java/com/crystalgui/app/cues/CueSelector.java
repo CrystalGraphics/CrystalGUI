@@ -288,6 +288,7 @@ public final class CueSelector {
             if (selection.state() == CueSelection.State.LOADING) return "loading";
             double duration = selection.duration();
             if (finished()) return String.format(Locale.ROOT, "done  |  %.1f s  |  fires %d", duration, selection.fires());
+            if (duration <= 0) return String.format(Locale.ROOT, "playing  |  %.1f s  |  fires %d", selection.age(), selection.fires());
             return String.format(Locale.ROOT, "playing  |  %.1f / %.1f s  |  fires %d", shown(), duration, selection.fires());
         }
 
@@ -326,6 +327,7 @@ public final class CueSelector {
                 view.count.setText(item.children.isEmpty() ? "" : String.valueOf(item.count));
                 boolean current = item.cue != null && item.cue.equals(selection.current());
                 view.toggleClass("cue-selector-current", current);
+                view.toggleClass("cue-selector-folder", item.cue == null);
                 view.toggleClass("cue-selector-lit", lit(item));
                 view.toggleClass("cue-selector-failed", current && selection.state() == CueSelection.State.FAILED);
             }

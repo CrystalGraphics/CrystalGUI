@@ -7,6 +7,7 @@ import com.crystalgraphics.asset.load.CgLoadPriority;
 import com.crystalgraphics.asset.load.CgVfxAssets;
 import com.crystalgraphics.asset.registry.CgAssetEntry;
 import com.crystalgraphics.cue.CgCueDefinition;
+import com.crystalgraphics.cue.CgCueInspector;
 import com.crystalgraphics.cue.CgCueManager;
 import com.crystalgraphics.cue.CgCueParameters;
 import com.crystalgraphics.cue.CgCuePlaying;
@@ -161,9 +162,10 @@ public final class CueSelection {
         return age;
     }
 
-    /** The hit's length in seconds: its longest sequence's. */
+    /** The hit's length in seconds: its longest sequence's, else when its last system completed; 0 while that is unknown. */
     public double duration() {
-        return duration;
+        double systems = CgCueInspector.client().duration();
+        return systems > 0 ? systems : duration;
     }
 
     /** How many times a cue has fired since this selection was made. */
@@ -260,7 +262,9 @@ public final class CueSelection {
             }
         } else if (state == State.PLAYING) {
             // A tick function gets the raw delta: each system scales it by the world's dilation itself
-            age += dt * CgWorld.client().timeDilation();
+            // Stepped or sought, the inspector holds where the hit stands
+            CgCueInspector inspector = CgCueInspector.client();
+            age = inspector.paused() ? inspector.age() : age + dt * CgWorld.client().timeDilation();
         }
     }
 
