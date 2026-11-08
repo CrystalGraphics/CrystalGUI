@@ -7,7 +7,6 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
@@ -180,11 +179,9 @@ public final class CgUiScreen extends GuiScreen {
     /**
      * The screen's own bracket. Differs from the HUD's in what it hands back on the way out.
      *
-     * <p><b>Minecraft writes GL state behind CrystalGraphics' back, so the shadow is dropped on the way
-     * in.</b> {@code CgGlStateManager} keeps a CPU-side shadow and elides redundant calls, which is only
-     * sound while every write goes through {@code CgGL} — and Minecraft sets blend, depth, texture and
-     * program state straight through {@code GL11}/{@code OpenGlHelper} every frame. Getting it wrong
-     * produces a MISSING GL call: wrong rendering, no exception. @see CrystalGraphics/AGENTS.md</p>
+     * <p><b>A host section</b> ({@code CgHostPaint}): its opening drops CrystalGraphics' state shadow, which
+     * Minecraft's own writes through {@code GL11}/{@code OpenGlHelper} never reach, and its close is the host's
+     * repair.</p>
      *
      * <p><b>And on the way out Minecraft gets back the state its own renderer assumes.</b> It presents by
      * drawing one fixed-function quad — {@code Framebuffer.framebufferRender}: {@code enableTexture2D()},

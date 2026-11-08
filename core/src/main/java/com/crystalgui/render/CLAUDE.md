@@ -10,21 +10,21 @@
 ### `CgUiPaintContext` — one per document, and `UiGpu`
 
 `document.paintContext()` gives a document its own. **It records** (`render-graph` G4): every draw of a frame is a
-chunk in one `CgRecording`, touching no GL; `seal()` builds it into a `UiFrame` that refers back to nothing, and
-`UiGpu` — the render thread's half, one per process — executes it and composites it onto the host's target. A layer
-is a pass on a texture the executor lends for the frame; the target around it ends its pass at the layer and
-continues in another after, so passes run in the order they were made and a read follows the write it sees.
-`flush()` ends the open chunks and executes nothing. Raw GL a widget needs goes in a callback pass
-(`recordCallback`), never inline, and a texture paint keeps across frames is `requestLayer`'s — made when the frame
-executes, freed by `releaseTexture` — never a framebuffer made in paint. **`recordFrame` to `seal` is GL-free**:
-`-Dcrystalgraphics.gl.threadCheck=true` logs every `CgGL` call inside it (today only glyph-atlas uploads, G2.2's).
+chunk in one `CgRecording`; `seal()` builds it into a `UiFrame` that refers back to nothing, and `UiGpu` — the render
+thread's half, one per process — executes it and composites it onto the host's target. A layer is a pass on a texture
+the executor lends for the frame; the target around it ends its pass at the layer and continues in another after, so
+passes run in the order they were made and a read follows the write it sees. `flush()` ends the open chunks and
+executes nothing. **CrystalGUI holds no GL state and makes no GL call** (`rhi` H3): a texture paint keeps across
+frames is `requestLayer`'s — made when the frame executes, freed by `releaseTexture` — its pixels written by
+`ctx.update`, and the scene behind the UI is `CgGraphTexture.current()`, copied (`recordCopy`). The executor takes
+and gives back the host's state round every execution, inside the host's section (`CgHostPaint`, a stage's firing).
 Between frames the context draws immediately, and a draw there must `flush()` or it lands in the next frame.
 
 ```java
 CgUiPaintContext ctx = document.paintContext();   // first call on the render thread
-ctx.beginFrame(w, h);                             // inline: the host's GL state saved, recording starts
+ctx.beginFrame(w, h);                             // inline: recording starts
 document.paint(ctx);
-ctx.endFrame();                                   // sealed, executed, composited, the host's state back
+ctx.endFrame();                                   // sealed, executed, composited
 
 ctx.recordFrame(w, h);                            // split: no GL from here...
 document.paint(ctx);
@@ -34,7 +34,7 @@ UiGpu.present(frame);                             // render thread
 
 | Group | Methods |
 |---|---|
-| Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split, with `UiGpu.presentAgain(w,h)` showing the last frame again when no new one was sealed — the whole tree records into `UiGpu`'s frame target, composited onto the host's once |
+| Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split, with `UiGpu.presentAgain(w,h)` showing the last frame again when no new one was sealed — the whole tree records into the context's frame target, composited onto the host's once |
 | Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
 
 > **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
@@ -73,18 +73,20 @@ UiGpu.present(frame);                             // render thread
 | Clip | `pushScissor` / `popScissor` — a whole-pixel clip entry every draw is stamped with, no flush (a real scissor inside a snapshot or capture, under a node that is not a whole-pixel translation, or past the clip chain's depth; `-Dcrystalgui.paint.squareClips=false` everywhere) — and `pushRoundedClip` / `popRoundedClip`, a rounded rect stamped the same way (`CgClipTable`), no layer and no flush |
 | Material | `withMaterial(material, body)` |
 | Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `surface(key, region)` |
+| Pixels | `update(texture, x, y, w, h, rgba)` into a requested texture, recorded |
 | Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |
 
 > **`UiGpu.destroy()` must be called on GL-context destruction** (`CgUiLifecycle.onDestroy` does). It frees
-> what nothing else sweeps: the frame target, the readback, and each paint context's surfaces, backdrop and
-> icon-raster textures — all made outside any registry — and the contexts' renderers. Not what is borrowed from
-> CrystalGraphics' registries (materials, the fallback white pixel, font atlases): `destroyContext()` sweeps those,
-> and freeing them here would be a double free.
+> what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
+> requested from the graph, which no registry holds (`CgExecutor.freeStorage`) — and the contexts' renderers. Not
+> what is borrowed from CrystalGraphics' registries (materials, the fallback white pixel, font atlases):
+> `destroyContext()` sweeps those, and freeing them here would be a double free.
 
-> **The whole tree paints into `frameFbo` and is composited onto the host's target once.** So the
-> finished picture is a texture this engine owns — the backdrop samples it, a readback sees the UI and
-> not the world behind it, and the format is the same on every loader — for one screen-sized RGBA8 and
-> one full-screen quad a frame. **It is not multisampled**, and was until the quad materials learned to
+> **The whole tree paints into the context's frame target and is composited onto the host's target once.** So the
+> finished picture is a texture this engine owns — the backdrop samples it, the trace's photograph sees the UI and
+> not the world behind it (`UiPhotograph`, a graph readback), and the format is the same on every loader — for one
+> screen-sized RGBA8 and one full-screen quad a frame. It is a requested texture, remade when the surface changes size;
+> each context has its own, so two documents of two sizes never resize one. **It is not multisampled**, and was until the quad materials learned to
 > antialias themselves: four samples bought a 33MB renderbuffer at 1920x1080 that had to be *resolved*
 > before anything could read it, once in `endFrame` and again on every backdrop capture, which is what
 > made that capture expensive. A colour texture is sampleable as it stands, so one buffer does what the

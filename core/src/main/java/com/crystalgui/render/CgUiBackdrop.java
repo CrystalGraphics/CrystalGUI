@@ -2,11 +2,7 @@ package com.crystalgui.render;
 
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlScope;
-import com.crystalgraphics.platform.gl.state.CgGlSlot;
-import com.crystalgraphics.platform.gl.state.CgGlState;
+import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.trace.CgGpuTrace;
@@ -387,11 +383,11 @@ final class CgUiBackdrop {
      * <p><b>"So far" includes the LAYER STACK, and missing that is what made the first version draw
      * nothing.</b> A masked or faded subtree paints into a layer FBO of its own and is not composited
      * back until it finishes, so at the moment a glass element inside one draws, its siblings are in
-     * that layer — not in {@code ctx.frameFbo}, and certainly not in the scene. Capturing only those two
+     * that layer — not in {@code ctx.frameTarget}, and certainly not in the scene. Capturing only those two
      * produced a flat, empty backdrop: on screen, a panel with nothing but its own rim, which reads as
      * the blur being broken rather than as the capture looking in the wrong place.</p>
      *
-     * <p>So every live target is composited in paint order — scene, then {@code ctx.frameFbo}, then each
+     * <p>So every live target is composited in paint order — scene, then {@code ctx.frameTarget}, then each
      * enclosing layer from outermost inward. That is the definition of "behind this element", and the
      * stack is at most a few deep because it is nesting depth rather than element count.</p>
      */
@@ -471,29 +467,14 @@ final class CgUiBackdrop {
 
         // The capture occupies the target's TOP-LEFT corner in UI terms, which is the TOP-left in GL
         // terms too - hence h - capH as the GL y origin. Everything downstream reads the same sub-rect.
-        int glY0 = h - (capY0 + capH), glY1 = h - capY0;
+        int glY0 = h - (capY0 + capH);
 
-        // 1. The scene, region only: a framebuffer this engine did not write, so a blit run when the frame executes,
-        // in its place among the passes. 1b's clear goes with it.
-        final int bx0 = capX0, bw = capW, bh = capH, by0 = glY0, by1 = glY1, th = gridHeight();
-        ctx.recordCallback("backdrop:scene", cap, () -> {
-            CgFrameBuffer storage = cap.framebuffer();
-            // THE SCENE BEHIND THE UI is whatever the host had bound when the frame began -- never the frame's own
-            // target, which holds the UI alone -- read when this executes. @see UiGpu#sceneTarget
-            CgFrameBuffer.blitFrom(UiGpu.get().sceneTarget(), storage.getId(), bx0, by0, bx0 + bw, by1,
-                    0, th - bh, bw, th, CgGL.GL_COLOR_BUFFER_BIT, CgGL.GL_NEAREST);
-            // ALPHA ONLY, so raw: CgFrameBuffer.clear opens all four channels before it clears, and through it
-            // this erased the scene it was meant to mark opaque -- glass over the world sampled black.
-            try (CgGlScope ignored = CgGlState.save(CgGlSlot.FBO, CgGlSlot.COLOR_MASK, CgGlSlot.SCISSOR)) {
-                CgGL.glBindFramebuffer(CgGL.GL_FRAMEBUFFER, storage.getId());
-                CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
-                CgGL.glColorMask(false, false, false, true);
-                CgGL.glClearColor(0f, 0f, 0f, 1f);
-                CgGL.glClear(CgGL.GL_COLOR_BUFFER_BIT);
-            }
-        });
+        // 1. The scene, region only: the host's target as it stood when the frame began, never the frame's own target,
+        // which holds the UI alone. A copy, in its place among the passes.
+        ctx.recordCopy(CgGraphTexture.current(), capX0, glY0, capW, capH, cap, 0, gridHeight() - capH);
 
-        // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE.
+        // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE: alpha written alone,
+        // the first draw into the capture below.
         //
         // Everything downstream is premultiplied: gui_blur carries alpha through its taps ("PREMULTIPLIED
         // ALPHA IS CARRIED THROUGH, NOT DISCARDED"), and gui_backdrop_filter's cg_backdrop un-premultiplies with
@@ -511,7 +492,7 @@ final class CgUiBackdrop {
         // cannot brighten anything, so ANY local amplification in this path is arithmetic, and the only
         // division in the path is the un-premultiply.
         //
-        // ONE ALPHA-ONLY CLEAR fixes it at the source instead of special-casing the consumer. An opaque
+        // ONE ALPHA-ONLY WRITE fixes it at the source instead of special-casing the consumer. An opaque
         // image is trivially premultiplied (rgb * 1 == rgb), so cg_backdrop's divide becomes a no-op that
         // still guards genuinely premultiplied content, and the layers composited below -- premultiplied
         // `over` onto an opaque destination -- leave alpha at 1 rather than at src_a^2 + (1 - src_a),
@@ -541,7 +522,7 @@ final class CgUiBackdrop {
                     region == null ? frame.target().getHeight() : region.height()});
         }
 
-        // KEEP the scene blit above -- see ctx.beginLayerFbo(fbo, clear).
+        // KEEP the scene copied above -- see ctx.beginLayerFbo(target, clear).
         final int fx0 = capX0, fy0 = capY0, fw = capW, fh = capH;
         ctx.beginLayerFbo(cap, false);
         try {
@@ -551,6 +532,7 @@ final class CgUiBackdrop {
             // an OPAQUE BLACK one erases it completely. Those two produce an identical-looking flat
             // panel downstream, and only the alpha channel tells them apart.
             withoutScissor(() -> {
+                ctx.fillAlpha(fw, fh);
                 drawOver(ctx.frameTarget, 0, 0, w, h, fx0, fy0, fw, fh);
                 for (int i = 0; i < enclosing.size(); i++) {
                     int[] at = placed.get(i);
@@ -873,7 +855,7 @@ final class CgUiBackdrop {
     // ---- GLASS PROBE -------------------------------------------------------------------------
     // -Dcrystalgui.glass.probe=true. Off by default and one boolean read per frame when off.
     //
-    // CPU-side timing only: CgGL exposes neither glFinish nor a timer query, so GPU work started here
+    // CPU-side timing only: nothing here waits for the GPU, so GPU work started here
     // may well be paid for later in the frame. That makes the STAGE figures a lower bound and the FRAME
     // PERIOD the honest number -- which is the one that matters, since the question is what opening the
     // desktop costs. Read them together: if the stages barely move and the period doubles, the cost is
@@ -920,17 +902,13 @@ final class CgUiBackdrop {
 
     /** Frees the storage of every texture this made: teardown, with no frame to record a release into. */
     void delete() {
-        deleteNow(capture);
+        if (capture != null) CgExecutor.freeStorage(capture);
         capture = null;
         for (CgGraphTexture[] pair : blurTargets.values()) {
-            deleteNow(pair[0]);
-            deleteNow(pair[1]);
+            for (CgGraphTexture target : pair) {
+                if (target != null) CgExecutor.freeStorage(target);
+            }
         }
         blurTargets.clear();
-    }
-
-    private static void deleteNow(@Nullable CgGraphTexture requested) {
-        CgFrameBuffer storage = requested == null ? null : requested.framebuffer();
-        if (storage != null) storage.delete();
     }
 }

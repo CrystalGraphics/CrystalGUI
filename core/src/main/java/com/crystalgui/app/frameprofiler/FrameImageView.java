@@ -1,7 +1,5 @@
 package com.crystalgui.app.frameprofiler;
 
-import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgui.render.CgUiPaintContext;
@@ -56,9 +54,8 @@ public class FrameImageView extends UIElement {
     }
 
     /**
-     * RGBA, not the RGB it is stored as: GL unpacks rows on four-byte boundaries by default, and a row of an odd width
-     * in RGB is not one. TOP ROW FIRST, as the picture is stored: the paint context draws in a top-left space, where
-     * UV row 0 is the top. Reversed, it drew upside down.
+     * RGBA, the layer's own format, not the RGB it is stored as. TOP ROW FIRST, as the picture is stored: the paint
+     * context draws in a top-left space, where UV row 0 is the top. Reversed, it drew upside down.
      */
     private static ByteBuffer rgba(CgFrameImages.Image image) {
         int w = image.width();
@@ -88,8 +85,7 @@ public class FrameImageView extends UIElement {
         if (pending != null) {
             ByteBuffer pixels = pending;
             pending = null;
-            ctx.upload(texture, target -> ((CgTexture2D) target.getColorTexture(0))
-                    .upload(iw, ih, pixels, CgGL.GL_RGBA, CgGL.GL_UNSIGNED_BYTE));
+            ctx.update(texture, 0, 0, iw, ih, pixels);
         }
         float scale = Math.min(box.width() / iw, box.height() / ih);
         float w = iw * scale;

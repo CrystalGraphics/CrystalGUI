@@ -3,8 +3,8 @@ package com.crystalgui.render;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.api.texture.CgTexture;
+import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.api.PoseStack;
 
@@ -559,18 +559,13 @@ public final class SvgRasterCache {
         shadows.clear();
         deleteNow(shadowCoverage);
         deleteNow(shadowAxis);
-        shadowCoverage = shadowAxis = null;
-        if (atlas != null) {
-            CgFrameBuffer storage = atlas.framebuffer();
-            if (storage != null) storage.delete();
-            atlas = null;
-        }
+        deleteNow(atlas);
+        shadowCoverage = shadowAxis = atlas = null;
         shelfX = shelfY = shelfHeight = 0;
     }
 
+    /** Teardown: no frame will record a release. */
     private static void deleteNow(CgGraphTexture texture) {
-        if (texture == null) return;
-        CgFrameBuffer storage = texture.framebuffer();
-        if (storage != null) storage.delete();
+        if (texture != null) CgExecutor.freeStorage(texture);
     }
 }
