@@ -1,6 +1,5 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
@@ -8,6 +7,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
+import com.crystalgraphics.platform.PlatformServiceHarness;
 
 import java.util.HashMap;
 import java.util.HashSet;
@@ -48,8 +48,6 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     /** And in a light one — well under a frame of GPU time. */
     private static final int LIGHT = 20;
 
-    private static final int GL_TIMEOUT_EXPIRED = 0x911B;
-
     private static final int[] KIND_QUADS = {HEAVY, LIGHT, 1};
     private static final String[] KIND_NAMES = {"heavy", "light", "empty"};
 
@@ -78,6 +76,11 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
         CgTrace.clear();
         CgTrace.enable(CgGpuTrace.GPU.name());
         log("timer queries: " + CgGpuTrace.probe());
+        if (PlatformServiceHarness.vulkan()) {
+            // CONTROL waits for the GPU mid-frame, which the tracked device submits only at the frame's end
+            log("SKIP on vulkan: no wait for the GPU mid-frame on this device; the gate is GL's");
+            running = false;
+        }
     }
 
     @Override
@@ -85,7 +88,7 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
         if (!running) return;
         long previous = painted - 1L;
         if (previous >= WARM && previous < WARM + PHASE) {
-            fences.put(previous, CgGL.glFenceSync(CgGL.GL_SYNC_GPU_COMMANDS_COMPLETE, 0));
+            fences.put(previous, PlatformServiceHarness.fence());
         }
         // BEFORE the boundary: a fence signalled here means the frame's queries had finished when the
         // boundary collected.
@@ -99,13 +102,13 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
         boolean control = painted >= WARM + 2 * PHASE && painted < WARM + 3 * PHASE;
         long t0 = 0L;
         if (control) {
-            waitForGpu();
+            PlatformServiceHarness.finishGpu();
             t0 = System.nanoTime();
         }
         int quads = control ? KIND_QUADS[(int) (index % 3)] : heavy ? HEAVY : LIGHT;
         paint(ctx, quads);
         if (control) {
-            waitForGpu();
+            PlatformServiceHarness.finishGpu();
             waited.put(index, System.nanoTime() - t0);
         }
         if (latency) awaiting.add(index);
@@ -131,10 +134,10 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     private void pollFences(long boundary) {
         for (Iterator<Map.Entry<Long, Long>> it = fences.entrySet().iterator(); it.hasNext(); ) {
             Map.Entry<Long, Long> fence = it.next();
-            if (!signalled(CgGL.glClientWaitSync(fence.getValue(), 0, 0L))) continue;
+            if (!PlatformServiceHarness.fenceSignalled(fence.getValue())) continue;
             worstGpuDone = Math.max(worstGpuDone, (int) (boundary - fence.getKey()));
             gpuDoneAt.put(fence.getKey(), boundary);
-            CgGL.glDeleteSync(fence.getValue());
+            PlatformServiceHarness.deleteFence(fence.getValue());
             it.remove();
         }
     }
@@ -205,28 +208,13 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
         log(pass ? "PASS" : "FAIL");
     }
 
-    /**
-     * glFinish, spelled with what the facade has: a fence, flushed, then SPUN on. A blocking wait may
-     * sleep, and a sleep on Windows wakes on a timer tick — up to 15.6 ms late.
-     */
-    private static void waitForGpu() {
-        long sync = CgGL.glFenceSync(CgGL.GL_SYNC_GPU_COMMANDS_COMPLETE, 0);
-        int flags = CgGL.GL_SYNC_FLUSH_COMMANDS_BIT;
-        while (!signalled(CgGL.glClientWaitSync(sync, flags, 0L))) flags = 0;
-        CgGL.glDeleteSync(sync);
-    }
-
-    private static boolean signalled(int waitResult) {
-        return waitResult != GL_TIMEOUT_EXPIRED;
-    }
-
     private static void log(String line) {
         System.out.println("[gpu-trace-probe] " + line);
     }
 
     @Override
     public void dispose() {
-        for (long fence : fences.values()) CgGL.glDeleteSync(fence);
+        for (long fence : fences.values()) PlatformServiceHarness.deleteFence(fence);
         CgGpuTrace.dispose();
         CgTrace.disableAll();
     }

@@ -15,9 +15,6 @@ import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgui.desktop.host.DesktopKeys;
 import com.crystalgui.desktop.host.HostSession;
-import com.crystalgraphics.platform.gl.state.CgGlScope;
-import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiGpu;
 
@@ -189,11 +186,9 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     private CgUiPaintContext.Warm warm;
     private int warmWidth, warmHeight;
 
-    /** Every domain saved: a compile's commit may bind, and the warm frame applies render state. */
+    /** A load task's render part: inside the frame's host section, whose close is the host's repair. */
     private void stepWarm() {
-        try (CgGlScope ignored = CgGlState.saveAll()) {
-            if (warm.step(warmWidth, warmHeight)) warm = null;
-        }
+        if (warm.step(warmWidth, warmHeight)) warm = null;
     }
     
     /**
@@ -267,11 +262,10 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
      * stylesheets and sprites are all about to die with the process regardless. Clearing them here
      * would be ceremony, not correctness.</p>
      *
-     * <p>What remains is the one thing genuinely nobody else frees. {@link CgUiPaintContext}'s layer
-     * FBO pool is built with {@code CgFrameBuffer.createOwned}, which bypasses
-     * {@code CgFrameBufferRegistry} — so {@code CgFrameBufferRegistry.deleteAll()} does not reach it.
-     * Releasing it here matches the engine's own convention of explicit, complete teardown rather
-     * than leaving it to process death.</p>
+     * <p>What remains is the one thing genuinely nobody else frees: the textures each {@link CgUiPaintContext}
+     * requested from the graph — its frame target, surfaces, backdrop and icon rasters — which no registry holds.
+     * Releasing them here matches the engine's own convention of explicit, complete teardown rather than leaving it
+     * to process death.</p>
      *
      * <p>Isolated so a failure is logged rather than escaping into engine teardown — the engine
      * already isolates this listener as a whole, but keeping it local means the log names CrystalGUI

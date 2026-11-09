@@ -19,11 +19,8 @@ import net.minecraft.client.Minecraft;
  *
  * <h3>GL state</h3>
  *
- * <p>The discipline {@code CgUiScreen} documents applies verbatim: {@code CgGlStateManager} keeps a
- * CPU-side shadow and elides redundant calls, and Minecraft has just drawn its HUD (or a whole screen)
- * straight through {@code GL11}/{@code OpenGlHelper} without telling it. Getting this wrong produces a
- * MISSING GL call rather than an error, which shows up as the hotbar rendering wrong on the next frame
- * and points nowhere near here.</p>
+ * <p>{@code CgUiScreen}'s bracket, a host section: Minecraft has just drawn its HUD (or a whole screen) straight
+ * through {@code GL11}/{@code OpenGlHelper}, and the section's opening drops the state shadow that never saw it.</p>
  */
 @SideOnly(Side.CLIENT)
 public final class CgUiHud {
@@ -36,9 +33,8 @@ public final class CgUiHud {
     /**
      * What only this Minecraft can answer about a paint.
      *
-     * <p>The bracket is an invalidate on both sides: cheap — it drops the shadow, it does not read the
-     * driver — and there is no earlier point that stays true, since Minecraft's own GUI pass runs
-     * between frames.</p>
+     * <p>The bracket is a host section, opened here: there is no earlier point that stays true, since Minecraft's
+     * own GUI pass runs between frames.</p>
      *
      * @see HostSession.PaintHost
      */

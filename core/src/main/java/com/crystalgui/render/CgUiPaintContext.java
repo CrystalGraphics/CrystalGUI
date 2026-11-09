@@ -11,30 +11,23 @@ import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.material.CgMaterialValues;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
+import com.crystalgraphics.api.state.CgColorMask;
 import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.platform.gl.state.CgGlSlot;
 import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgraphics.gl.framebuffer.CgPixelReadback;
-import com.crystalgraphics.gl.texture.CgHostSamplers;
-import com.crystalgraphics.platform.gl.state.CgGlCensus;
-import com.crystalgraphics.platform.gl.state.CgGlScope;
-import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.gl.render.CgClipTable;
 import com.crystalgraphics.gl.render.CgVectorRenderer;
 import com.crystalgraphics.gl.render.CgQuadRenderer;
 import com.crystalgraphics.gl.render.CgShapeTable;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.render.draw.CgBindingTable;
 import com.crystalgraphics.render.draw.CgDrawChunk;
 import com.crystalgraphics.render.draw.CgInstanceKind;
 import com.crystalgraphics.render.world.CgPipelinePrecache;
 import com.crystalgraphics.render.draw.CgPassConstants;
-import com.crystalgraphics.render.graph.CgUpload;
+import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
 import com.crystalgraphics.render.graph.CgFrameGraph;
@@ -48,14 +41,9 @@ import com.crystalgraphics.render.graph.CgReplay;
 import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.render.graph.CgTextureDesc;
-import com.crystalgraphics.platform.gl.CgCapabilities;
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.text.render.CgTextRenderer;
-import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgTrace;
-import com.crystalgraphics.job.CgJob;
-import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.text.atlas.CgGlyphAtlas;
@@ -77,12 +65,12 @@ import org.jspecify.annotations.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.function.Consumer;
 import java.util.HashMap;
-import java.util.IdentityHashMap;
 import java.util.Iterator;
 import java.util.LinkedHashSet;
 import java.util.Deque;
@@ -98,7 +86,7 @@ import java.util.Set;
  * <pre>{@code
  * CgUiPaintContext ctx = document.paintContext();
  *
- * ctx.beginFrame(w, h);              // inline: the host's state saved, then recording
+ * ctx.beginFrame(w, h);              // inline: recording, on the render thread
  * document.paint(ctx);
  * ctx.endFrame();                    // sealed, executed, composited
  *
@@ -261,24 +249,19 @@ public final class CgUiPaintContext {
         // What the walks noted never reached the textures: each surface is drawn whole next time.
         for (Surface surface : surfaces.values()) surface.invalidate();
         walkingDepth = 0;
-        imported.clear();
         layerStack.clear();
-        CgGL.exitGlFree();
         gpu.abortFrame();
         frameActive = false;
     }
 
     /**
      * A paint context for one document — {@link com.crystalgui.ui.dom.UIDocument#paintContext()} makes it. On the render
-     * thread: its font and text renderer are set up there.
+     * thread, inside the host's section: its font and text renderer are set up there.
      */
     public static CgUiPaintContext create() {
-        // Before any frame's scope: what construction binds would otherwise stay bound for the host.
-        try (CgGlScope ignored = CgGlState.saveAll()) {
-            CgUiPaintContext context = new CgUiPaintContext();
-            context.gpu.track(context);
-            return context;
-        }
+        CgUiPaintContext context = new CgUiPaintContext();
+        context.gpu.track(context);
+        return context;
     }
 
     /**
@@ -335,6 +318,8 @@ public final class CgUiPaintContext {
     private final CgMaterial maskMaterial;
     /** {@link #maskMaterial}'s pass state with the alpha-multiply blend a mask composite draws under, and its base. */
     private CgRenderState maskState, maskStateBase;
+    /** {@link #boxModelMaterial}'s pass state writing alpha alone, for {@link #fillAlpha}, and its base. */
+    private CgRenderState alphaState, alphaStateBase;
 
     /**
      * The box material again, for {@link #blitLayer}: a quad drawn while it is current is stamped
@@ -436,31 +421,17 @@ public final class CgUiPaintContext {
     private final CgRecording present = new CgRecording();
     /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
     private final CgPassConstants passConstants = new CgPassConstants();
-    /** The frame's own target, as the recording names it: {@link UiGpu}'s. */
-    final CgGraphTexture frameTarget;
+    /**
+     * The frame's own target: the whole tree records into it and it is composited onto the host's target once, so the
+     * finished picture is a texture this engine owns — the backdrop samples it, a photograph sees the UI rather than
+     * the world behind it, and its format is the same on every loader. Not multisampled: every UI material antialiases
+     * its own edges. Requested at the first frame and again when the surface changes size; null before.
+     */
+    @Nullable
+    CgGraphTexture frameTarget;
     /** Builds a sealed frame's two recordings; the frames come back to it when presented. */
     private final CgFrameBuilder builder = new CgFrameBuilder();
     private final CgFrameGraph graph = new CgFrameGraph();
-    /** A caller's framebuffer as the recording names it: one per framebuffer a frame, so a read finds its write. */
-    private final Map<CgFrameBuffer, CgGraphTexture> imported = new IdentityHashMap<>();
-
-    /** {@code fbo} as this frame's recording names it. */
-    CgGraphTexture imported(CgFrameBuffer fbo) {
-        if (fbo == gpu.frameFbo) return frameTarget;
-        CgGraphTexture target = imported.get(fbo);
-        if (target == null) imported.put(fbo, target = CgGraphTexture.imported("cgui_target", fbo));
-        return target;
-    }
-
-    /**
-     * Runs {@code body} with GL when the frame executes, after everything recorded before this call, with
-     * {@code target} bound: for drawing that is not recorded, such as a blit of a framebuffer this engine did not
-     * write.
-     */
-    void recordCallback(String name, CgGraphTexture target, Runnable body) {
-        drain();
-        recording.callback(name, target, body);
-    }
 
     /** Points the pass constants at a {@code width x height} target, top-left origin; chunks from now take them. */
     private void targetConstants(int width, int height) {
@@ -546,7 +517,6 @@ public final class CgUiPaintContext {
 
     private CgUiPaintContext() {
         this.gpu = UiGpu.get();
-        this.frameTarget = gpu.frameTarget;
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this);
         this.boxModelMaterial = CgMaterial.load(BOX_SHADER);
@@ -817,12 +787,12 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Starts a frame inline: saves the host's GL state, then {@link #recordFrame}. Pair with {@link #endFrame}. GL a
-     * paint hook still issues while recording is inside the saved state.
+     * Starts a frame inline, on the render thread: {@link #recordFrame}, with the GPU's time for the frame counted from
+     * here. Pair with {@link #endFrame}.
      */
     public void beginFrame(int screenWidth, int screenHeight) {
         if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
-        gpu.beginFrame(screenWidth, screenHeight);
+        gpu.beginFrame();
         recordFrame(screenWidth, screenHeight);
     }
 
@@ -833,7 +803,6 @@ public final class CgUiPaintContext {
     public void recordFrame(int screenWidth, int screenHeight) {
         frameId++;
         if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
-        CgGL.enterGlFree("ui recording");
         // A page evicted names a layer another page now holds. New glyphs do not move an epoch: a segment whose text
         // drew without its glyphs is not kept (endSegment), and growth keeps the atlas's texture and its id.
         long evicted = CgFontRegistry.get().getAtlasEvictionGeneration();
@@ -887,6 +856,11 @@ public final class CgUiPaintContext {
         recordFlushes(true);
         for (CgGraphTexture released : pendingReleases) recording.release(released);
         pendingReleases.clear();
+        int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
+        if (frameTarget == null || frameTarget.getWidth() != w || frameTarget.getHeight() != h) {
+            if (frameTarget != null) recording.release(frameTarget);
+            frameTarget = requestTexture("cgui_frame", w, h, LAYER_FORMAT);
+        }
         recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), passConstants);
         frameActive = true; // must be set before the pool warms a slot — quad() requires an active frame
 
@@ -896,10 +870,7 @@ public final class CgUiPaintContext {
         backdrop.prepareFrame();
     }
 
-    /**
-     * Unbinds the box-model material and restores GL state via the saved {@link CgGlScope}. Call once
-     * after the whole UI tree has painted.
-     */
+    /** Seals the frame {@link #beginFrame} started and presents it. Once, after the whole tree has painted. */
     public void endFrame() {
         if (!frameActive) return;
         gpu.endFrame(seal());
@@ -928,7 +899,6 @@ public final class CgUiPaintContext {
         } finally {
             recording.reset();
             present.reset();
-            imported.clear();
             recordFlushes(false);
         }
         CgTrace.zoneDone(UiTrace.FRAME, "glend:build", timed);
@@ -939,7 +909,6 @@ public final class CgUiPaintContext {
         renderer.end();
         poseStack.popPose();
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
-        CgGL.exitGlFree();
         return frame;
     }
 
@@ -2626,18 +2595,13 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Draws a fully transparent quad into a framebuffer this context will draw into later, as its first draw.
+     * Draws a fully transparent quad into a requested texture this context will draw into later, as its first draw.
      *
      * <p>On at least one NVIDIA driver a lazily compiled program's first draw into a never-drawn framebuffer, in the
      * same frame, produced nothing: the masked content was missing on frame 1 and correct from frame 2. Warming a
-     * target as it is made moves that first draw onto throwaway content. Call it for a framebuffer you own and hand
-     * to {@link #beginLayerFbo(CgFrameBuffer)}; a layer's own texture comes from the executor's pool.</p>
+     * target as it is made moves that first draw onto throwaway content. A layer's own texture comes from the
+     * executor's pool and needs none.</p>
      */
-    public void warmUpLayer(CgFrameBuffer fbo) {
-        warmUpLayer(imported(fbo));
-    }
-
-    /** {@link #warmUpLayer(CgFrameBuffer)} for a texture the recording makes: a requested one, warmed as it is made. */
     public void warmUpLayer(CgGraphTexture target) {
         CgMaterial previousMaterial = currentMaterial;
         beginLayer(target, true, null);
@@ -2687,35 +2651,17 @@ public final class CgUiPaintContext {
         return beginLayer(CgGraphTexture.transientTexture("cgui_layer", layerDesc(width, height)), true, region);
     }
 
-    /**
-     * As {@link #beginLayerFbo(LayerRegion)}, but rendering into a target the CALLER owns and keeps — a window's
-     * photograph, which outlives the frame and is the size of what it captures. The viewport and ortho are set from
-     * {@code fbo}'s own dimensions, so a caller drawing at ordinary coordinates fills it. Neither allocates nor
-     * frees: a {@code createOwned} framebuffer is its maker's to delete.
-     */
-    public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo) {
-        return beginLayer(imported(fbo), true, null);
-    }
-
-    /**
-     * As {@link #beginLayerFbo(CgFrameBuffer)}, but able to KEEP what the target already holds: the backdrop's
-     * capture seeds its target with the scene before drawing the UI over it, and a clear would throw that away.
-     */
-    public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo, boolean clear) {
-        return beginLayer(imported(fbo), clear, null);
-    }
-
-    /** As {@link #beginLayerFbo(LayerRegion)}, into a target the caller keeps. */
-    public CgGraphTexture beginLayerFbo(CgFrameBuffer fbo, LayerRegion region) {
-        return beginLayer(imported(fbo), true, region);
-    }
-
     /** As {@link #beginLayerFbo(LayerRegion)}, into a texture that outlives the frame. */
     public CgGraphTexture beginLayerFbo(CgGraphTexture target, LayerRegion region) {
         return beginLayer(target, true, region);
     }
 
-    /** As {@link #beginLayerFbo(CgFrameBuffer, boolean)}, into a texture the recording makes and keeps. */
+    /**
+     * As {@link #beginLayerFbo(LayerRegion)}, into a {@link #requestLayer requested} texture whole — a window's
+     * photograph, the size of what it captures, with the viewport and ortho its own — and able to KEEP what it already
+     * holds: the backdrop's capture seeds it with the scene before drawing the UI over it, which a clear would throw
+     * away.
+     */
     public CgGraphTexture beginLayerFbo(CgGraphTexture target, boolean clear) {
         return beginLayer(target, clear, null);
     }
@@ -2774,18 +2720,20 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Records {@code upload} into {@code target} — a {@link #requestLayer requested} texture — run on the render thread
-     * before anything recorded after it reads the texture. Inside a frame.
+     * Writes RGBA8 pixels into a {@code w} x {@code h} region at {@code (x, y)} of {@code target} — a
+     * {@link #requestLayer requested} texture — before anything recorded after it reads the texture. {@code rgba}'s
+     * first row lands in the texture's row 0, which UV row 0 samples: a picture stored top row first draws upright.
+     * Copied now. Inside a frame.
      *
      * <pre>{@code
-     * ctx.upload(picture, fbo -> ((CgTexture2D) fbo.getColorTexture(0)).upload(w, h, rgba, GL_RGBA, GL_UNSIGNED_BYTE));
+     * ctx.update(picture, 0, 0, w, h, rgba);
      * ctx.drawImage(picture, x, y, w, h, 0f, 0f, 1f, 1f, 0xFFFFFFFF);
      * }</pre>
      */
-    public void upload(CgGraphTexture target, CgUpload upload) {
-        if (!frameActive) throw new IllegalStateException("upload() outside a frame");
+    public void update(CgGraphTexture target, int x, int y, int w, int h, ByteBuffer rgba) {
+        if (!frameActive) throw new IllegalStateException("update() outside a frame");
         drain();
-        recording.upload(target, upload);
+        recording.update(target, 0, x, y, w, h, rgba);
     }
 
     /**
@@ -2799,12 +2747,6 @@ public final class CgUiPaintContext {
         }
         drain();
         recording.release(requested);
-    }
-
-    /** Frees a requested texture's storage now: teardown, with no frame to record a release into. */
-    private static void deleteNow(CgGraphTexture requested) {
-        CgFrameBuffer storage = requested.framebuffer();
-        if (storage != null) storage.delete();
     }
 
     /**
@@ -2896,14 +2838,15 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * The finished frame onto the host's target — whatever is bound when it executes, which is the host's once
-     * {@link UiGpu} has restored its state. A recording of one draw, of its own.
+     * The finished frame onto the host's target, the one bound when it executes: a recording of one draw, of its own,
+     * and the trace's photograph of the frame target when one is due.
      */
     private void recordPresent() {
         targetConstants(screenWidth, screenHeight);
         recorder.recordInto(present, CgGraphTexture.current(), CgLoad.load(), passConstants);
         blitLayer(frameTarget, 1f, new LayerRegion(0, 0, screenWidth, screenHeight));
         recorder.stop();
+        UiPhotograph.recordIfDue(present, frameTarget);
     }
 
     /**
@@ -2915,11 +2858,6 @@ public final class CgUiPaintContext {
      *
      * <p>Same material and flipped V as {@link #blitLayer}, for the same reasons.</p>
      */
-    public void drawLayer(CgFrameBuffer fbo, float x, float y, float width, float height) {
-        drawLayer(imported(fbo), x, y, width, height);
-    }
-
-    /** {@link #drawLayer(CgFrameBuffer, float, float, float, float)} for a {@link #requestLayer requested} texture. */
     public void drawLayer(CgGraphTexture layer, float x, float y, float width, float height) {
         drawLayer(layer, x, y, width, height, 0f, 1f, 1f, 0f);   // V flipped — see blitLayer's javadoc
     }
@@ -2992,16 +2930,6 @@ public final class CgUiPaintContext {
         return backdrop.forRect(x, y, width, height, blurRadiusPx, reach);
     }
 
-    /** {@link #blitLayer(CgGraphTexture, float, LayerRegion)} for a framebuffer the caller owns, whole. */
-    public void blitLayer(CgFrameBuffer fbo, float opacity) {
-        blitLayer(imported(fbo), opacity, new LayerRegion(0, 0, fbo.getWidth(), fbo.getHeight()));
-    }
-
-    /** {@link #blitLayer(CgGraphTexture, float, LayerRegion)} for a framebuffer the caller owns. */
-    public void blitLayer(CgFrameBuffer fbo, float opacity, LayerRegion region) {
-        blitLayer(imported(fbo), opacity, region);
-    }
-
     /**
      * Composites {@code region}'s corner of a finished layer back at {@code region}'s own position in the target
      * being drawn into, at {@code opacity}. Give it the region {@link #beginLayerFbo(LayerRegion)} was opened with:
@@ -3066,6 +2994,44 @@ public final class CgUiPaintContext {
         }
         CgTrace.zoneDone(UiTrace.FRAME, "layer:blit", timed);
         return effect;
+    }
+
+    /**
+     * Copies a region of {@code from} into {@code to}, in their bottom-left pixels, before anything recorded after it
+     * reads {@code to}: the scene behind the UI ({@link CgGraphTexture#current()}) into the backdrop's capture.
+     */
+    void recordCopy(CgGraphTexture from, int x, int y, int w, int h, CgGraphTexture to, int tx, int ty) {
+        drain();
+        recording.copy(from, x, y, w, h, to, tx, ty, w, h, false);
+    }
+
+    /**
+     * Writes alpha 1 over {@code (0, 0, width, height)} of the current target, its colour kept: a copy of a target this
+     * engine did not write holds whatever alpha its owner left, and everything downstream reads it premultiplied.
+     */
+    void fillAlpha(int width, int height) {
+        flush();
+        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
+        CgMaterial was = currentMaterial;
+        CgRenderState base = boxModelMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
+        if (base != alphaStateBase) {
+            alphaStateBase = base;
+            alphaState = base.withColorMask(CgColorMask.of(false, false, false, true));
+        }
+        renderer.useMaterial(boxModelMaterial, alphaState);
+        activePath = InstancePath.QUAD;
+        currentTexture = null;
+        poseStack.pushPose();
+        poseStack.setIdentity();
+        try {
+            bindTexture(whitePixel);
+            quad().at(0, 0).size(width, height).color(0xFF000000).submit();
+            flush();
+        } finally {
+            poseStack.popPose();
+            bindQuadPath(was != null ? was : boxModelMaterial);
+            currentTexture = null;
+        }
     }
 
     /** The target being drawn into: the innermost layer, or the frame's own target when none is open. */
@@ -3145,17 +3111,18 @@ public final class CgUiPaintContext {
         layerStack.clear();
 
         recording.reset();
-        imported.clear();
         for (Surface surface : surfaces.values()) {
             surface.released = true;
-            deleteNow(surface.target());
-            if (surface.checkTarget != null) deleteNow(surface.checkTarget);
+            CgExecutor.freeStorage(surface.target());
+            if (surface.checkTarget != null) CgExecutor.freeStorage(surface.checkTarget);
         }
         surfaces.clear();
-        for (CgGraphTexture released : pendingReleases) deleteNow(released);
+        for (CgGraphTexture released : pendingReleases) CgExecutor.freeStorage(released);
         pendingReleases.clear();
+        if (frameTarget != null) CgExecutor.freeStorage(frameTarget);
+        frameTarget = null;
 
-        // createOwned, so no registry sweeps these — the same reason the layer pool is freed here.
+        // Requested textures: no registry sweeps them.
         backdrop.delete();
         svgRaster.delete();
 

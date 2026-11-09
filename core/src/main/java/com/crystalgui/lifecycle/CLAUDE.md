@@ -29,12 +29,12 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 > materials all die with the process. Do not add cache-clearing or material-invalidation to
 > `onContextDestroy`; it is ceremony, not correctness.
 
-What `onContextDestroy` legitimately does is release the one thing nobody else frees: `CgUiPaintContext`'s
-layer FBO pool is built with `CgFrameBuffer.createOwned`, which bypasses `CgFrameBufferRegistry`, so
-`deleteAll()` never reaches it.
+What `onContextDestroy` legitimately does is release the one thing nobody else frees: the textures each
+`CgUiPaintContext` requested from the graph (its frame target, surfaces, backdrop, icon rasters), which no registry
+holds.
 
 **`onContextDestroy` fires before CrystalGraphics frees anything** — the only window in which a listener can
-release its own FBOs/renderers while the context is whole. Listeners dispatch in *reverse*
+release its own textures/renderers while the context is whole. Listeners dispatch in *reverse*
 registration order.
 
 > **Registration is CrystalGraphics' discovery**: `core/src/main/resources/META-INF/crystalgraphics/listeners`

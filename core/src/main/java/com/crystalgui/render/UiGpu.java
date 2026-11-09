@@ -1,19 +1,8 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
-import com.crystalgraphics.gl.framebuffer.CgPixelReadback;
-import com.crystalgraphics.gl.texture.CgHostSamplers;
-import com.crystalgraphics.platform.gl.CgCapabilities;
-import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlCensus;
-import com.crystalgraphics.platform.gl.state.CgGlScope;
-import com.crystalgraphics.platform.gl.state.CgGlSlot;
-import com.crystalgraphics.platform.gl.state.CgGlState;
 import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
-import com.crystalgraphics.render.graph.CgGraphTexture;
-import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
@@ -24,21 +13,19 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The GL half of a UI frame, on the render thread: the GL state a host hands over and gets back, the frame's own
- * target, executing what a {@link CgUiPaintContext} recorded, and compositing it onto the host's target. One per
- * process; a paint context calls it from {@code beginFrame}/{@code endFrame}.
+ * The render thread's half of a UI frame: executing what a {@link CgUiPaintContext} recorded and compositing it onto
+ * the host's target, and the last frame kept for {@link #redraw} and {@link #presentAgain}. One per process; a paint
+ * context calls it from {@code beginFrame}/{@code endFrame}.
  *
  * <pre>{@code
- * UiFrame frame = ctx.seal();          // recorded and built, on the document's thread
- * UiGpu.present(frame);              // render thread: the host's state saved, executed, composited, restored
+ * UiFrame frame = ctx.seal();        // recorded and built, on the document's thread
+ * UiGpu.present(frame);              // render thread, inside the host's section: executed, composited
  * }</pre>
  *
- * <p>A paint context used inline does the same around its recording: {@code beginFrame} saves the host's state
- * first, so GL a paint hook still issues while recording is covered too.</p>
- *
  * <ul>
- *   <li>{@link #destroy()} on GL context destruction: the frame target is {@code createOwned}, so no registry
- *       sweeps it, and neither does anything sweep the textures paint contexts made.</li>
+ *   <li>Every call on the render thread, inside a host section (a stage's firing, {@code CgHostPaint}): the executor
+ *       takes and gives back the host's state, and the section's close is the host's repair.</li>
+ *   <li>{@link #destroy()} on GL context destruction: nothing sweeps the textures paint contexts requested.</li>
  *   <li>Being static, the instance outlives the context that built it; nothing may hold it across a destroy.</li>
  * </ul>
  */
@@ -49,24 +36,6 @@ public final class UiGpu {
     @Nullable
     private static UiGpu instance;
 
-    /**
-     * The frame's own target: the whole tree records into it and it is composited onto the host's target once, so
-     * the finished picture is a texture this engine owns — the backdrop samples it, a readback sees the UI rather
-     * than the world behind it, and its format is the same on every loader. Not multisampled: every UI material
-     * antialiases its own edges. Starts 1x1 and follows the surface.
-     */
-    final CgFrameBuffer frameFbo = CgFrameBuffer.createOwned("cgui_frame", 1, 1, CgUiPaintContext.LAYER_FORMAT);
-    /** {@link #frameFbo}, as a recording names it. */
-    final CgGraphTexture frameTarget = CgGraphTexture.imported("cgui_frame", frameFbo);
-
-    @Nullable
-    private CgGlScope glScope;
-    private boolean samplersParked;
-    /** The draw target bound when the frame began: the scene behind the UI, which the backdrop reads. */
-    private int sceneFboId;
-    /** Built on the first frame a picture is asked for; three in flight covers a GPU two frames behind. */
-    @Nullable
-    private CgPixelReadback frameImages;
     /** The last presented frame and its composite, kept for {@link #redraw} and {@link #presentAgain}. */
     @Nullable
     private CgFrame lastFrame;
@@ -77,20 +46,19 @@ public final class UiGpu {
     @Nullable
     private CgFrameBuilder lastPresentBuilder;
     private int lastWidth, lastHeight;
+    /** Set while {@link #warm} runs: the frame executes, then is recycled instead of composited and kept. */
+    private boolean warming;
+    /** Whether {@link #beginFrame} opened the GPU's time and nothing has closed it. */
+    private boolean timing;
     /** Every paint context made, for {@link #destroy()} to free what each made. */
     private final List<WeakReference<CgUiPaintContext>> contexts = new ArrayList<>();
 
     private UiGpu() {
     }
 
-    /** The instance, built on first use, on the render thread. */
+    /** The instance, built on first use. */
     static UiGpu get() {
-        if (instance == null) {
-            // Built before any frame's scope: the framebuffer it makes would otherwise stay bound for the host.
-            try (CgGlScope ignored = CgGlState.saveAll()) {
-                instance = new UiGpu();
-            }
-        }
+        if (instance == null) instance = new UiGpu();
         return instance;
     }
 
@@ -99,43 +67,16 @@ public final class UiGpu {
         contexts.add(new WeakReference<>(context));
     }
 
-    /** The scene behind the UI: what was bound when the frame began. Render thread, inside a frame's execution. */
-    int sceneTarget() {
-        return sceneFboId;
-    }
-
-    /** Saves the host's GL state and sizes the frame target. Render thread. */
-    void beginFrame(int width, int height) {
-        // What the host handed us, off unless -Dcrystalgraphics.host.census. Before the scope reads anything.
-        CgGlCensus.at("gui");
-        // Everything the UI asks of the GPU this frame, the composite included.
+    /** Opens the GPU's time for one frame: everything the UI asks of the GPU, the composite included. Render thread. */
+    void beginFrame() {
         CgGpuTrace.begin(GPU_UI);
-        glScope = CgGlState.save(
-                CgGlSlot.FBO, CgGlSlot.PROGRAM, CgGlSlot.TEXTURES, CgGlSlot.BLEND,
-                CgGlSlot.DEPTH, CgGlSlot.CULL, CgGlSlot.VIEWPORT, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.SCISSOR, CgGlSlot.COLOR_MASK,
-                // The host's VAO back: Minecraft 1.17+ skips its own bind while it believes its VAO is
-                // still current, so leaving ours bound failed its next GUI draw ("Array object is not active").
-                CgGlSlot.VERTEX_INPUT);
-        disableFixedFunctionAlphaTest();
-        // Every channel, alpha included: a host that leaves alpha writes off (1.21.6+ does) leaves the frame's alpha
-        // at 0, and the premultiplied composite then ADDS the UI to the scene.
-        CgGL.glColorMask(true, true, true, true);
-        // A frame owns the whole surface; a clip the host left on would cut every pass. Saved above, so it goes back.
-        CgGL.glDisable(CgGL.GL_SCISSOR_TEST);
-        // The host's sampler objects override our textures' filtering and wrapping on the units they hold
-        // (Minecraft 1.21.5+ leaves three bound). Off until the composite, which samples too.
-        CgHostSamplers.park();
-        samplersParked = true;
-        sceneFboId = CgGlState.drawFramebuffer();   // the scope above just read it: no glGet
-        int w = Math.max(1, width), h = Math.max(1, height);
-        if (frameFbo.getWidth() != w || frameFbo.getHeight() != h) frameFbo.resize(w, h);
+        timing = true;
     }
 
-    /** Executes a sealed frame onto the host's bound target, saving and restoring the host's GL state around it. */
+    /** Executes a sealed frame and composites it onto the host's target. Render thread, inside a host section. */
     public static void present(UiFrame frame) {
         UiGpu gpu = get();
-        gpu.beginFrame(frame.width(), frame.height());
+        gpu.beginFrame();
         gpu.endFrame(frame);
     }
 
@@ -151,7 +92,7 @@ public final class UiGpu {
      */
     public static void warm(UiFrame frame) {
         UiGpu gpu = get();
-        gpu.beginFrame(frame.width(), frame.height());
+        gpu.beginFrame();
         gpu.warming = true;
         try {
             gpu.endFrame(frame);
@@ -160,13 +101,7 @@ public final class UiGpu {
         }
     }
 
-    /** Set while {@link #warm} runs: the frame executes, then is recycled instead of composited and kept. */
-    private boolean warming;
-
-    /**
-     * Executes the frame, photographs the result for the trace when due, gives the host its state back, and executes
-     * the composite onto the host's target, which the restored scope has bound again. Hands the frame's buffers back.
-     */
+    /** Executes the frame, composites it, and keeps it; a frame that threw hands its buffers back. */
     void endFrame(UiFrame frame) {
         boolean executed = false;
         try {
@@ -178,14 +113,15 @@ public final class UiGpu {
             } else {
                 frame.builder.recycle(frame.frame);
                 frame.builder.recycle(frame.present);
+                if (!executed) abortFrame();
             }
         }
     }
 
     /**
      * Executes the last presented frame again, with its {@link UiFrame#values()} as they stand now, and composites it:
-     * a compositor's scroll, move or fade with nothing recorded or built. The host's state is saved and restored
-     * around it, as for {@link #present}. A no-op where {@link #presentAgain} would be one.
+     * a compositor's scroll, move or fade with nothing recorded or built. A no-op where {@link #presentAgain} would be
+     * one.
      *
      * <pre>{@code
      * frame.values().translate(listBox.scrolledNode(frame.frameId()), 0f, -scrolledPx);
@@ -202,7 +138,7 @@ public final class UiGpu {
     public static void redraw(int width, int height, boolean keepRequested) {
         UiGpu gpu = instance;
         if (gpu == null || gpu.lastFrame == null || width != gpu.lastWidth || height != gpu.lastHeight) return;
-        gpu.beginFrame(width, height);
+        gpu.beginFrame();
         boolean executed = false;
         try {
             gpu.executeAgain(gpu.lastFrame, gpu.lastPresent, keepRequested);
@@ -213,9 +149,9 @@ public final class UiGpu {
     }
 
     /**
-     * Composites the last presented frame onto the bound host target again, recording and executing nothing else:
-     * for a host frame that arrives before a new frame was sealed. The host's state is saved and restored around it,
-     * as for {@link #present}. A no-op when nothing was presented, or when the surface is not the size it was.
+     * Composites the last presented frame onto the host's target again, recording and executing nothing else: for a
+     * host frame that arrives before a new frame was sealed. A no-op when nothing was presented, or when the surface
+     * is not the size it was.
      *
      * <pre>{@code
      * UiFrame next = sequence.poll();
@@ -223,19 +159,12 @@ public final class UiGpu {
      * else UiGpu.presentAgain(width, height);
      * }</pre>
      *
-     * <p>What it shows is the frame target as the last execution left it — with several documents presenting through
-     * one process, the last of them.</p>
+     * <p>What it shows is that frame's target as the last execution left it.</p>
      */
     public static void presentAgain(int width, int height) {
         UiGpu gpu = instance;
         if (gpu == null || gpu.lastPresent == null || width != gpu.lastWidth || height != gpu.lastHeight) return;
-        if (gpu.frameFbo.getWidth() != Math.max(1, width) || gpu.frameFbo.getHeight() != Math.max(1, height)) return;
-        CgHostSamplers.park();
-        try {
-            gpu.composite(gpu.lastPresent);
-        } finally {
-            CgHostSamplers.unpark();
-        }
+        CgExecutor.executeAgain(gpu.lastPresent, false);
     }
 
     private void keep(UiFrame frame) {
@@ -253,110 +182,46 @@ public final class UiGpu {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         CgExecutor.execute(frame);
         CgTrace.zoneDone(UiTrace.FRAME, "glend:execute", timed);
-        finish(present);
+        if (!warming) composite(present, false);
+        finish();
     }
 
     private void executeAgain(CgFrame frame, CgFrame present, boolean keepRequested) {
         long timed = CgTrace.stamp(UiTrace.FRAME);
         CgExecutor.executeAgain(frame, keepRequested);
         CgTrace.zoneDone(UiTrace.FRAME, "glend:execute", timed);
-        finish(present);
+        composite(present, true);
+        finish();
     }
 
-    /** After the frame's execution: the trace's photograph, the host's state back, the composite. */
-    private void finish(CgFrame present) {
+    /** The finished frame target onto the host's target: one draw, and the photograph when one was recorded. */
+    private static void composite(CgFrame present, boolean again) {
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        captureFrameImage();
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:captureImage", timed);
+        if (again) CgExecutor.executeAgain(present, false);
+        else CgExecutor.execute(present);
+        CgTrace.zoneDone(UiTrace.FRAME, "glend:composite", timed);
+    }
 
-        if (glScope != null) {
-            // Timed: the first GL call after a long frame's submission is where a driver whose queue is full makes
-            // the CPU wait for the GPU.
-            timed = CgTrace.stamp(UiTrace.FRAME);
-            glScope.close();
-            glScope = null;
-            CgTrace.zoneDone(UiTrace.FRAME, "glend:restoreState", timed);
-        }
-        if (!warming) composite(present);
-        unparkSamplers();
-        CgGpuTrace.end();
+    private void finish() {
+        endTiming();
         // The other half of the frame the document opened: reports and clears. A no-op when none was opened.
         UiTrace.frameEnd();
     }
 
-    /** The finished frame target onto the host's bound target: one draw, after the host's state is back. */
-    private void composite(CgFrame present) {
-        // SCOPED, because the composite runs after the frame's own restore and would otherwise leave our program and
-        // render state bound for the host. Minecraft's final present is fixed-function and never unbinds a program,
-        // so its blit of its own framebuffer ran through our vertex shader and the window showed a flat fill while
-        // the framebuffer held the whole UI; the depth state left behind stopped terrain occluding itself. The slots
-        // are everything a material bind can write.
-        try (CgGlScope ignored = CgGlState.save(CgGlSlot.PROGRAM, CgGlSlot.TEXTURES,
-                CgGlSlot.BLEND, CgGlSlot.DEPTH, CgGlSlot.CULL,
-                CgGlSlot.STENCIL, CgGlSlot.COLOR_MASK, CgGlSlot.ALPHA_TEST,
-                CgGlSlot.VERTEX_INPUT)) {
-            // Again: the restore just handed the host's alpha test back, and the composite is clipped by the
-            // picture's ACCUMULATED alpha -- a 7% panel would be discarded whole on the way to the screen.
-            disableFixedFunctionAlphaTest();
-            CgExecutor.execute(present);
-        }
-    }
-
-    /** Gives a frame that threw part-way its GL state back. */
+    /** Closes the GPU's time of a frame that threw part-way. */
     void abortFrame() {
-        unparkSamplers();
-        if (glScope != null) {
-            glScope.close();
-            glScope = null;
-        }
+        endTiming();
     }
 
-    private void unparkSamplers() {
-        if (!samplersParked) return;
-        samplersParked = false;
-        CgHostSamplers.unpark();
+    private void endTiming() {
+        if (!timing) return;
+        timing = false;
+        CgGpuTrace.end();
     }
 
     /**
-     * Turns off the host's fixed-function alpha test for a UI pass.
-     *
-     * <p>Minecraft 1.7.10 leaves {@code GL_ALPHA_TEST} on with {@code glAlphaFunc(GL_GREATER, 0.1)} through GUI
-     * rendering, and a compatibility profile applies it to programmable draws too. Nothing in a material's render
-     * state models it, so every fragment the UI writes at 10% alpha or less was discarded — a gradient's shoulder,
-     * a 6% fill, the outer sliver of every antialiased edge — read as "the soft parts are missing", never as one GL
-     * flag. The harness cannot see it: its context has no fixed-function test to leave on.</p>
-     *
-     * <p>Guarded on the profile: on a core profile {@code glDisable(GL_ALPHA_TEST)} is {@code GL_INVALID_ENUM}.</p>
-     */
-    private static void disableFixedFunctionAlphaTest() {
-        if (CgCapabilities.detect().isCoreProfile()) return;
-        CgGL.glDisable(CgGL.GL_ALPHA_TEST);
-    }
-
-    /**
-     * Photographs the finished frame for the trace when one is due, and files whatever earlier requests have read
-     * back. Never waits on the GPU. @see CgFrameImages
-     */
-    private void captureFrameImage() {
-        long frame = CgTrace.currentFrameIndex();
-        boolean due = CgFrameImages.isDue(frame);
-        if (!due && (frameImages == null || !frameImages.isPending())) return;
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        if (frameImages == null) frameImages = new CgPixelReadback(3);
-        frameImages.poll(pixels -> CgFrameImages.put(pixels.tag(), pixels.width(), pixels.height(), pixels.rgb()));
-        CgTrace.zoneDone(UiTrace.FRAME, "glend:image:poll", timed);
-        if (due) {
-            timed = CgTrace.stamp(UiTrace.FRAME);
-            frameImages.request(frameFbo.getId(), frameFbo.getWidth(), frameFbo.getHeight(),
-                    CgFrameImages.width(), frame);
-            CgTrace.zoneDone(UiTrace.FRAME, "glend:image:request", timed);
-        }
-    }
-
-    /**
-     * Frees the frame target, the readback, and everything each paint context made, and drops the instance. On GL
-     * context destruction — game shutdown — so it protects no later context; it is complete teardown of what
-     * nothing else sweeps. Idempotent.
+     * Frees everything each paint context made and drops the instance. On GL context destruction — game shutdown — so
+     * it protects no later context; it is complete teardown of what nothing else sweeps. Idempotent.
      */
     public static void destroy() {
         UiGpu gpu = instance;
@@ -366,12 +231,9 @@ public final class UiGpu {
             if (context != null) context.release();
         }
         gpu.contexts.clear();
-        gpu.glScope = null;
         gpu.lastFrame = null;
         gpu.lastPresent = null;
         gpu.lastShown = null;
-        gpu.frameFbo.delete();
-        if (gpu.frameImages != null) gpu.frameImages.delete();
         instance = null;
     }
 
