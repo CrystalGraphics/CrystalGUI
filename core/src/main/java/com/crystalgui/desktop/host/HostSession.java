@@ -632,8 +632,11 @@ public final class HostSession {
         return desktop == null || document() == null ? null : desktop.screenOverlay();
     }
 
-    /** The order CrystalGUI's windows draw at on {@link CgRenderStage#HUD} and {@link CgRenderStage#SCREEN}. */
-    public static final int COMPOSITOR = 0;
+    /**
+     * The order CrystalGUI's windows draw at on {@link CgRenderStage#HUD} and {@link CgRenderStage#SCREEN}: the game's
+     * own interface, {@link CgRenderStage#VIEWPORT_WIDGETS}.
+     */
+    public static final int COMPOSITOR = CgRenderStage.VIEWPORT_WIDGETS;
 
     /**
      * Puts the pinned windows on CrystalGraphics' GUI stages: over the HUD, and over a screen that is not ours. Once, on

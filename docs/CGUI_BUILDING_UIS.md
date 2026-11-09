@@ -1381,7 +1381,9 @@ badge.close();   // and it stops
   camera. `frame.host().width()`/`height()` are the surface's device pixels.
 - **Once a frame each**, on the render thread, from the game's own screen and HUD hooks. `SCREEN` fires once whoever's
   screen is up; neither fires on a server, and Fabric below 1.16 has no `SCREEN`.
-- **Below `COMPOSITOR` is under the pinned windows**, above it over them; ties draw in registration order. Over
+- **Below `COMPOSITOR` is under the pinned windows**, above it over them; ties draw in registration order.
+  `COMPOSITOR` is CrystalGraphics' `CgRenderStage.VIEWPORT_WIDGETS`. Anything that follows a point in the world (a
+  damage number, a name plate) registers at `CgRenderStage.WORLD_WIDGETS`, under every window. Over
   CrystalGUI's own screen the desktop is drawn by the screen, before `SCREEN` fires: everything there is over it.
 - **What you record executes at once**, onto the game's target, after the renderers before you. Nothing is kept:
   record every frame.
