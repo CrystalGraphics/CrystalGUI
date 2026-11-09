@@ -12,7 +12,7 @@ package com.crystalgui.style.property.visual.text;
  * workaround is optional.</p>
  *
  * <p>The initial value here is {@link #OUTSET} rather than {@code CENTER}: there is no compatibility
- * obligation to inherit a default everyone works around. @see com.crystalgraphics.api.text.CgStrokeAlign</p>
+ * obligation to inherit a default everyone works around. @see com.crystalgraphics.text.style.CgTextLayer.Align</p>
  */
 public enum StrokeAlign {
     /** Half outside, half inside. {@code -webkit-text-stroke}'s behaviour; thins the glyph. */

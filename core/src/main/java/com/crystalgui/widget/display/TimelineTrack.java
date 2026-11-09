@@ -5,8 +5,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.render.text.FontFamilyCache;
-import com.crystalgui.render.text.TextShadowStyle;
-import com.crystalgui.render.text.TextStrokeStyle;
+import com.crystalgui.render.text.CssTextStyle;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.box.Measurable;
@@ -311,17 +310,29 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
         float y = top + (height - ink) * 0.5f;
 
         CgTextDraw draw = ctx.text()
-                .text(shown).family(font).at(x, y).color(argb)
+                .text(shown).family(font).at(x, y)
                 .pose(ctx.getPoseStack());
-        // BOTH ARE INHERITABLE, so a declaration anywhere above reaches these glyphs exactly as it
-        // reaches a label's. A widget that draws its own text and skips them leaves the properties
-        // cascading correctly and drawing nothing, which is indistinguishable from their not existing.
-        // currentcolor follows what is ACTUALLY drawn, which here is the caller's argb.
+        // currentcolor follows what is drawn, which here is the caller's argb.
         GeneralGroup general = getStyle().getGeneralGroup();
-        TextStrokeStyle.applyTo(draw, font, general, computedStyle(), argb);
-        TextShadowStyle.applyTo(draw, general, argb);
+        textStyleFor(argb).applyTo(draw, font, general, computedStyle(), argb);
         draw.submit();
     }
+
+    /** One style per label colour of a paint, so labels alternating colours do not rebuild one each. */
+    private CssTextStyle textStyleFor(int argb) {
+        for (int i = 0; i < textStyles.length; i++) {
+            if (textStyles[i] != null && textStyleColors[i] == argb) return textStyles[i];
+        }
+        int slot = nextTextStyle;
+        nextTextStyle = (nextTextStyle + 1) % textStyles.length;
+        if (textStyles[slot] == null) textStyles[slot] = new CssTextStyle();
+        textStyleColors[slot] = argb;
+        return textStyles[slot];
+    }
+
+    private final CssTextStyle[] textStyles = new CssTextStyle[4];
+    private final int[] textStyleColors = new int[4];
+    private int nextTextStyle;
 
     /** Below this a label is not worth the draw call. */
     private static final float MIN_LABEL_WIDTH = 14f;

@@ -42,7 +42,7 @@ public final class TypographyLab {
 
     /**
      * How a stroke width is spelled: pixels, or a share of the font size. <b>{@code em} is written as a
-     * percentage</b> -- {@code TextStrokeStyle} resolves the width against the font size, so {@code 15%} is
+     * percentage</b> -- {@code CssTextStyle} resolves the width against the font size, so {@code 15%} is
      * 0.15em, while a literal {@code em} does not parse there. The gallery's text lab spells it the same way.
      */
     static final List<String> UNITS = List.of("px", "%");

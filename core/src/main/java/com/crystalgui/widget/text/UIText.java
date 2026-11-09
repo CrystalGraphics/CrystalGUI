@@ -14,10 +14,10 @@ import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.text.TextShadowStyle;
-import com.crystalgui.render.text.TextStrokeStyle;
+import com.crystalgui.render.text.CssTextStyle;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.ComputedStyle;
+import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.HighlightStyle;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -406,6 +406,9 @@ public final class UIText extends UIElement implements Measurable {
         return heldGroup;
     }
 
+    /** The cascade's colour, stroke and shadows as a text style, rebuilt when they change. */
+    private final CssTextStyle textStyle = new CssTextStyle();
+
     /** @see #resolveFamily */
     @Nullable
     private CgFontFamily heldFamily;
@@ -729,12 +732,8 @@ public final class UIText extends UIElement implements Measurable {
         ComputedStyle computed = computedStyle();
         CgTextDraw draw = ctx.text().layout(layout).family(family)
                 .at(contentX, contentY)
-                .color(color)
                 .pose(ctx.getPoseStack());
-        TextStrokeStyle.applyTo(draw, family, general, computed, color);
-        // The shadows ride the same draw, keyed ahead of the text: one call when they share its atlas.
-        TextShadowStyle.applyTo(draw, general, color);
-        appendHighlightShadows(draw, layout, color);
+        applyTextStyle(draw, family, general, computed, layout, color);
         // OVERFLOW CLIPS THE ELEMENT'S OWN TEXT, as CSS's does -- the painter's scissor covers only its children, and
         // a squeezed tab's label ran on under the next tab. Only when the line is wider than the box: a scissor
         // breaks the batch, and every button's label is `overflow: hidden`.
@@ -755,15 +754,15 @@ public final class UIText extends UIElement implements Measurable {
 
     /**
      * The stroke's reach and every outer {@code text-shadow}, the element's and its highlights', so a layer
-     * holding this label is not cut off at its box. @see TextShadowStyle#inkOverflow
+     * holding this label is not cut off at its box. @see CssTextStyle#inkOverflow
      */
     @Override
     public InkOverflow inkOverflow() {
         var general = getStyle().getGeneralGroup();
-        float stroke = TextStrokeStyle.outwardPx(general);
-        InkOverflow ink = TextShadowStyle.inkOverflow(general.textShadow(), stroke);
+        float stroke = CssTextStyle.outwardPx(general);
+        InkOverflow ink = CssTextStyle.inkOverflow(general.textShadow(), stroke);
         for (HighlightStyle style : shapedHighlights.values()) {
-            InkOverflow highlight = TextShadowStyle.inkOverflow(style.textShadow(), stroke);
+            InkOverflow highlight = CssTextStyle.inkOverflow(style.textShadow(), stroke);
             ink = new InkOverflow(Math.max(ink.left(), highlight.left()), Math.max(ink.top(), highlight.top()),
                     Math.max(ink.right(), highlight.right()), Math.max(ink.bottom(), highlight.bottom()));
         }
@@ -771,45 +770,43 @@ public final class UIText extends UIElement implements Measurable {
     }
 
     /**
-     * Each {@code ::highlight} that sets {@code text-shadow} casts it from its own glyphs alone.
+     * The cascade's text style on {@code draw}. Each {@code ::highlight} that sets {@code text-shadow} casts it from its
+     * own glyphs alone.
      *
-     * <p>A glyph's highlight is its run's, read as {@link #paintHighlightBands} reads it: shaping breaks a
-     * run at every span boundary, so one run never spans two highlights. Glyphs are counted in the order
-     * {@code CgBakedGlyphs} lays them, line by line and run by run.</p>
+     * <p>A glyph's highlight is its run's, read as {@link #paintHighlightBands} reads it: shaping breaks a run at every
+     * span boundary, so one run never spans two highlights. Glyphs are counted in the order {@code CgBakedGlyphs} lays
+     * them, line by line and run by run.</p>
      */
-    private void appendHighlightShadows(CgTextDraw draw, CgTextLayout layout, int inheritedColor) {
+    private void applyTextStyle(CgTextDraw draw, CgFontFamily family, GeneralGroup general, ComputedStyle computed,
+                                CgTextLayout layout, int color) {
         HighlightStyle[] perChar = highlightPerChar;
-        if (perChar == null) return;
         List<HighlightStyle> scoped = null;
         int[] scopes = null;
-        int glyph = 0;
-        for (List<CgShapedRun> line : layout.lines()) {
-            for (CgShapedRun run : line) {
-                int count = run.glyphIds() == null ? 0 : run.glyphIds().length;
-                int at = run.sourceStart();
-                HighlightStyle style = at >= 0 && at < perChar.length ? perChar[at] : null;
-                if (style != null && !style.textShadow().isEmpty()) {
-                    if (scoped == null) {
-                        scoped = new ArrayList<>();
-                        scopes = new int[layout.baked().glyphCount()];
-                        Arrays.fill(scopes, -1);
+        if (perChar != null) {
+            int glyph = 0;
+            for (List<CgShapedRun> line : layout.lines()) {
+                for (CgShapedRun run : line) {
+                    int count = run.glyphIds() == null ? 0 : run.glyphIds().length;
+                    int at = run.sourceStart();
+                    HighlightStyle style = at >= 0 && at < perChar.length ? perChar[at] : null;
+                    if (style != null && !style.textShadow().isEmpty()) {
+                        if (scoped == null) {
+                            scoped = new ArrayList<>();
+                            scopes = new int[layout.baked().glyphCount()];
+                            Arrays.fill(scopes, -1);
+                        }
+                        int scope = scoped.indexOf(style);
+                        if (scope < 0) {
+                            scope = scoped.size();
+                            scoped.add(style);
+                        }
+                        Arrays.fill(scopes, glyph, Math.min(scopes.length, glyph + count), scope);
                     }
-                    int scope = scoped.indexOf(style);
-                    if (scope < 0) {
-                        scope = scoped.size();
-                        scoped.add(style);
-                    }
-                    Arrays.fill(scopes, glyph, Math.min(scopes.length, glyph + count), scope);
+                    glyph += count;
                 }
-                glyph += count;
             }
         }
-        if (scoped == null) return;
-        draw.shadowScopes(scopes);
-        for (int i = 0; i < scoped.size(); i++) {
-            HighlightStyle style = scoped.get(i);
-            TextShadowStyle.appendScoped(draw, style.textShadow(), i, style.color(inheritedColor));
-        }
+        textStyle.applyTo(draw, family, general, computed, color, scoped == null ? List.of() : scoped, scopes);
     }
 
     /**

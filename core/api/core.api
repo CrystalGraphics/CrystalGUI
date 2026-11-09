@@ -8382,6 +8382,14 @@ com/crystalgui/render/UiGpu
   method public,static presented ()Lcom/crystalgui/render/UiFrame;
   method public,static redraw (IIZ)V
   method public,static warm (Lcom/crystalgui/render/UiFrame;)V
+com/crystalgui/render/text/CssTextStyle
+  access public,final
+  extends java/lang/Object
+  method public <init> ()V
+  method public applyTo (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgraphics/api/font/CgFontFamily;Lcom/crystalgui/style/GeneralGroup;Lcom/crystalgui/style/ComputedStyle;I)V
+  method public applyTo (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgraphics/api/font/CgFontFamily;Lcom/crystalgui/style/GeneralGroup;Lcom/crystalgui/style/ComputedStyle;ILjava/util/List;[I)V
+  method public,static inkOverflow (Lcom/crystalgui/style/property/visual/shadow/ShadowList;F)Lcom/crystalgui/render/InkOverflow;
+  method public,static outwardPx (Lcom/crystalgui/style/GeneralGroup;)F
 com/crystalgui/render/text/FontFamilyCache
   access public,final
   extends java/lang/Object
@@ -8391,17 +8399,6 @@ com/crystalgui/render/text/FontFamilyCache
   method public,static resolveGroup (Ljava/util/List;I)Lcom/crystalgraphics/api/font/CgFontFamilyGroup;
   method public,static useLocale (Ljava/util/Locale;)V
   method public,static useSystemFonts (Lcom/crystalgraphics/api/font/CgSystemFonts;)V
-com/crystalgui/render/text/TextShadowStyle
-  access public,final
-  extends java/lang/Object
-  method public,static appendScoped (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgui/style/property/visual/shadow/ShadowList;II)V
-  method public,static applyTo (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgui/style/GeneralGroup;I)V
-  method public,static inkOverflow (Lcom/crystalgui/style/property/visual/shadow/ShadowList;F)Lcom/crystalgui/render/InkOverflow;
-com/crystalgui/render/text/TextStrokeStyle
-  access public,final
-  extends java/lang/Object
-  method public,static applyTo (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgraphics/api/font/CgFontFamily;Lcom/crystalgui/style/GeneralGroup;Lcom/crystalgui/style/ComputedStyle;I)V
-  method public,static outwardPx (Lcom/crystalgui/style/GeneralGroup;)F
 com/crystalgui/render/texture/ArgbMath
   access public,final
   extends java/lang/Object

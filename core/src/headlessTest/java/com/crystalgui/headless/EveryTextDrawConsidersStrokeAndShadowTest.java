@@ -24,15 +24,14 @@ import static org.junit.Assert.assertTrue;
  * how {@code TextField} ignored the stroke for the whole life of that feature.</p>
  *
  * <p>So this pins the rule rather than the call sites that exist today: reach {@code ctx.text()}
- * and you must also name {@link com.crystalgui.render.text.TextStrokeStyle} and
- * {@link com.crystalgui.render.text.TextShadowStyle}. Deciding NOT to apply one is fine and needs no
- * exemption; what the test refuses is a file that never considered the question.</p>
+ * and you must also name {@link com.crystalgui.render.text.CssTextStyle}. Deciding NOT to apply it is
+ * fine and needs no exemption; what the test refuses is a file that never considered the question.</p>
  */
 public class EveryTextDrawConsidersStrokeAndShadowTest {
 
     /** Starting a text draw at all, in code rather than in a javadoc example. */
     private static final String DRAW = "ctx.text()";
-    private static final List<String> HELPERS = List.of("TextStrokeStyle", "TextShadowStyle");
+    private static final List<String> HELPERS = List.of("CssTextStyle");
 
     @Test
     public void everyFileThatDrawsTextNamesTheInheritedStyleHelpers() throws IOException {

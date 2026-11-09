@@ -173,7 +173,7 @@ public class StylePropertyRegistry {
      *
      * <p>CSS Text Decoration 4's grammar, which adds a non-negative spread and {@code inset} to Level 3's.
      * Painted by the text renderer as Chrome paints it: each glyph's own shadow, blurred per glyph with
-     * sigma half the radius. @see ShadowList @see com.crystalgui.render.text.TextShadowStyle</p>
+     * sigma half the radius. @see ShadowList @see com.crystalgui.render.text.CssTextStyle</p>
      */
     public static final StyleProperty<ShadowList> TEXT_SHADOW =
             create(new ShadowListProperty("text-shadow", ShadowGrammar.TEXT_LEVEL_4)).setInheritable(true);
@@ -376,8 +376,7 @@ public class StylePropertyRegistry {
      * {@code em} through {@code FontRelativeLengthValue}, which the shared {@link LengthPercent}
      * parser must not, since its percentages are fractions of a BOX everywhere else.</p>
      *
-     * <p>The backend takes em and converts per draw, since only it knows the effective raster size
-     * — see {@code CgTextStroke#widthEm}.</p>
+     * <p>{@code CssTextStyle} resolves it to pixels at the font size, an outline layer's width.</p>
      */
     public static final StyleProperty<LengthPercent> TEXT_STROKE_WIDTH =
             create(new LengthPercentProperty("text-stroke-width", LengthPercent.ZERO,

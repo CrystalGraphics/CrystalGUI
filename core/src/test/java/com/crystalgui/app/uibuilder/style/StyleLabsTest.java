@@ -287,7 +287,7 @@ public class StyleLabsTest {
     /**
      * <b>A stroke written in em comes back as the pixels it was set to.</b>
      *
-     * <p>This engine spells a font-relative stroke width as a percentage -- {@code TextStrokeStyle}
+     * <p>This engine spells a font-relative stroke width as a percentage -- {@code CssTextStyle}
      * resolves the property against the font size, so {@code 15%} is 0.15em -- which means switching the
      * unit converts rather than re-authors. Rounding that conversion to two places lost the drag's own
      * precision: 2.9px came back as 2.899, and the field and the measured caption disagreed about one

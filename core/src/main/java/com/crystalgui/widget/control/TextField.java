@@ -11,8 +11,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.text.FontFamilyCache;
-import com.crystalgui.render.text.TextShadowStyle;
-import com.crystalgui.render.text.TextStrokeStyle;
+import com.crystalgui.render.text.CssTextStyle;
 import com.crystalgui.style.PseudoClasses;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
 import com.crystalgui.text.Rope;
@@ -1210,6 +1209,9 @@ public class TextField extends UIElement implements Measurable {
 
     // ── Measurement ─────────────────────────────────────────────────────────
 
+    /** The cascade's colour, stroke and shadows as a text style, rebuilt when they change. */
+    private final CssTextStyle textStyle = new CssTextStyle();
+
     /** Style-driven, exactly as UIText resolves it — cached by (paths, size), so an unchanged
      * font-family/font-size returns the same instance. */
     private CgFontFamily resolveFamily() {
@@ -1372,11 +1374,11 @@ public class TextField extends UIElement implements Measurable {
 
     // ── Painting ────────────────────────────────────────────────────────────
 
-    /** The stroke's reach and every outer {@code text-shadow}. @see TextShadowStyle#inkOverflow */
+    /** The stroke's reach and every outer {@code text-shadow}. @see CssTextStyle#inkOverflow */
     @Override
     public InkOverflow inkOverflow() {
         var styleGen = getStyle().getGeneralGroup();
-        return TextShadowStyle.inkOverflow(styleGen.textShadow(), TextStrokeStyle.outwardPx(styleGen));
+        return CssTextStyle.inkOverflow(styleGen.textShadow(), CssTextStyle.outwardPx(styleGen));
     }
 
     @Override
@@ -1467,15 +1469,9 @@ public class TextField extends UIElement implements Measurable {
             CgTextDraw draw = ctx.text()
                     .at(originX, originY)
                     .text(shown)
-                    .color(shownColor)
                     .family(family);
-            // text-stroke is INHERITABLE, so a declaration anywhere above reaches this field's glyphs
-            // exactly as it reaches a label's -- a widget that draws its own text and skips this leaves
-            // the property computing correctly and doing nothing. currentcolor follows what is ACTUALLY
-            // drawn, so a placeholder outlines in the dimmed colour rather than the full one.
-            TextStrokeStyle.applyTo(draw, family, styleGen, computedStyle(), shownColor);
-            // text-shadow inherits the same way, and its currentcolor is the colour actually drawn.
-            TextShadowStyle.applyTo(draw, styleGen, shownColor);
+            // currentcolor follows what is drawn, so a placeholder outlines in its dimmed colour.
+            textStyle.applyTo(draw, family, styleGen, computedStyle(), shownColor);
             draw.submit();
             if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
         }

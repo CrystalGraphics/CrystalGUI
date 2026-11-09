@@ -952,7 +952,7 @@ public final class CgUiPaintContext {
      *
      * <pre>{@code
      * ctx.text().text("Hello world").font(font).at(20f, 40f).color(0xFFFFFFFF).submit();
-     * ctx.text().layout(layout).family(family).at(x, y).stroke(0.08f, 0xFF000000).submit();
+     * ctx.text().layout(layout).family(family).at(x, y).style(OUTLINED).submit();     // a CgTextStyle
      * }</pre>
      *
      * <p>Never call {@code .pose(...)}, {@code .clip(...)} or {@code .node(...)} on it: they drop the context's.</p>

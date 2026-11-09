@@ -835,11 +835,12 @@ a prefix of both longhands. Its tokenizer respects parentheses, so `rgb(11, 93, 
 token — `outline`'s splits on whitespace and cannot. `transition: text-stroke` reaches both halves
 through `TextStrokeShorthand.transitionNameMatches`.
 
-**The route to the backend is one private method.** `UIText.strokeFor` reads the `ComputedStyle`,
-resolves the width against the font size, maps the two keywords, and hands `CgTextStroke` to
-`CgTextDraw.stroke(...)`. Everything below that is CrystalGraphics': the stroke rides on the
-GLYPH QUADS — `CG_QUAD_CUSTOM0` the colour, `CG_QUAD_CUSTOM1` the width, alignment and paint order —
-so changing it costs no flush, and outlined text batches with plain text in one draw call.
+**The route to the backend is one class.** `CssTextStyle`, one per widget, reads the `ComputedStyle` and
+builds CrystalGraphics' `CgTextStyle` from it: the text's colour as a fill layer, the stroke as an outline
+layer (its width resolved against the font size, `stroke-align` its align, `paint-order` whether it sits
+under the fill or over it as a ring, a mitre join), and each `text-shadow` as a shadow layer. It rebuilds
+only when one of those inputs changes. Everything below that is CrystalGraphics': each layer is its own
+run of glyph quads, in one draw call per layer while they share an atlas page.
 
 ### Four things that are easy to get wrong
 
@@ -865,7 +866,7 @@ was and only the padding grows, which is why a lower scale was measured and reje
 similar ceiling for less memory and lost shape on Arabic at every range.
 
 Ask `CgFontRegistry.maxStrokeWidthEm(family)`, or `UIText.maxStrokeWidthEm()`, for the real number.
-`CgTextStroke.MAX_FIELD_WIDTH_EM` is the NARROW band — the reach every face has, and less than half
+`CgTextLayer.MAX_FIELD_WIDTH_EM` is the NARROW band — the reach every face has, and less than half
 of what most have. A stroke keeps its label on the distance-field tier down to the size below which
 msdfgen's own rule says the field cannot antialias, and is dropped under that; the shader clamps to what the field holds, keeping a TEXEL of headroom so the
 edge still has a gradient to antialias across — a texel, not a screen pixel, because the shoulder
@@ -992,7 +993,7 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
   six, with `line-height` driving its selection rect and vertical centring — its caret is sized from
   font metrics instead, see §8c. `text-shadow` is CSS Text Decoration 4's list — offset, blur,
   a non-negative spread, `inset`, `currentcolor` — painted by both text widgets through
-  `TextShadowStyle`, per glyph and in the text's own draw: outer shadows under the text last-first,
+  `CssTextStyle`, as shadow layers of the text's own style: outer shadows under the text last-first,
   insets over it. A small reach reads the glyph's distance field; a blur or spread past the field's
   range reads a worker-built cell from the bitmap atlas (Skia's mask blur), and a decoration's shadow
   is an analytic rect blur. A `::highlight` may carry its own. Still missing: `text-align`; and

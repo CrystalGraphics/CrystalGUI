@@ -2,7 +2,7 @@ package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleEngine;
-import com.crystalgraphics.api.text.CgTextStroke;
+import com.crystalgraphics.text.style.CgTextLayer;
 import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.config.HarnessContext;
@@ -757,13 +757,13 @@ public class CgUiGalleryScene extends UiDocumentScene {
     /**
      * The cap for the face the specimens are actually drawn in.
      *
-     * <p>Not {@link CgTextStroke#MAX_FIELD_WIDTH_EM}: that is the narrow band every face can hold,
+     * <p>Not {@link CgTextLayer#MAX_FIELD_WIDTH_EM}: that is the narrow band every face can hold,
      * and this lab's face is banded wider, so reading the constant would cap the slider at under half
      * of what the field really carries.</p>
      */
     private float textLabStrokeCapEm() {
         return textLabSpecimens.isEmpty()
-                ? CgTextStroke.MAX_FIELD_WIDTH_EM
+                ? CgTextLayer.MAX_FIELD_WIDTH_EM
                 : textLabSpecimens.get(0).maxStrokeWidthEm();
     }
 
