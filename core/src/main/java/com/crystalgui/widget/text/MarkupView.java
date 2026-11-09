@@ -710,7 +710,7 @@ public class MarkupView extends UIElement {
             }
             if (rows.isEmpty()) return;
 
-            // FROM THE CASCADE, never a number here -- something has to hand `CgVectorRenderer` an ARGB
+            // FROM THE CASCADE, never a number here -- something has to hand `CgCurveBatch` an ARGB
             // int, and the node already knows one. Same trick `NodePort.typeColor` uses to keep a palette
             // in the sheet. ONE colour for every line: an interior rule and the outer edge are the same
             // object seen from different sides, and drawing the head's darker made the table read as two

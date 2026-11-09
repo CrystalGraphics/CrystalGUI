@@ -1,9 +1,6 @@
 package com.crystalgui.probe;
 
 import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.gl.render.CgQuadRenderer;
-import com.crystalgraphics.render.graph.CgLoad;
-import com.crystalgraphics.render.graph.CgPassRecorder;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.desktop.host.HostSession;
@@ -21,8 +18,6 @@ final class StageProbe {
     private static final int MARK = 0xFFFF00FF;
 
     private static boolean started;
-    private static CgPassRecorder recorder;
-    private static CgQuadRenderer quads;
     private static CgMaterial material;
     private static int screenDrew, hudDrew;
 
@@ -48,18 +43,7 @@ final class StageProbe {
     }
 
     private static void draw(CgStageFrame frame) {
-        if (quads == null) {
-            recorder = new CgPassRecorder();
-            quads = CgQuadRenderer.create();
-            quads.sink(recorder);
-            material = CgMaterial.load("crystalgui:shaders/stage_probe.shader");
-        }
-        recorder.recordInto(frame.recording(), frame.target(), CgLoad.load(), frame.constants());
-        quads.useMaterial(material);
-        quads.begin();
-        quads.quad().at(4f, 4f).size(12f, 12f).color(MARK).submit();
-        quads.flush();
-        quads.end();
-        recorder.stop();
+        if (material == null) material = CgMaterial.load("crystalgui:shaders/stage_probe.shader");
+        frame.canvas().quad(material).at(4f, 4f).size(12f, 12f).color(MARK).submit();
     }
 }

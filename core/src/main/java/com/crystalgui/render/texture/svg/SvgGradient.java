@@ -20,7 +20,7 @@ import java.util.Map;
  *
  * <h3>Evaluated on the CPU, per triangle</h3>
  *
- * <p>{@code CgVectorRenderer.Triangle} takes one flat colour, so the gradient is realised by subdivision —
+ * <p>{@code CgCurveBatch.Triangle} takes one flat colour, so the gradient is realised by subdivision —
  * the fill is cut fine enough along the gradient's own direction that a flat colour per triangle is
  * indistinguishable from a ramp. That costs triangles and no shader work at all, which is the right trade
  * at icon sizes: a paint-server material would mean a second shader, a second bind, and a per-shape uniform

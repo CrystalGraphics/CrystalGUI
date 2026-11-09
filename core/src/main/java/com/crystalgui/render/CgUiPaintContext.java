@@ -16,10 +16,10 @@ import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.gl.render.CgClipTable;
-import com.crystalgraphics.gl.render.CgVectorRenderer;
-import com.crystalgraphics.gl.render.CgQuadRenderer;
-import com.crystalgraphics.gl.render.CgShapeTable;
+import com.crystalgraphics.render.canvas.CgClipTable;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
+import com.crystalgraphics.render.canvas.CgQuadBatch;
+import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgraphics.render.draw.CgBindingTable;
@@ -33,7 +33,7 @@ import com.crystalgraphics.render.graph.CgFrameBuilder;
 import com.crystalgraphics.render.graph.CgFrameGraph;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
-import com.crystalgraphics.render.graph.CgPassRecorder;
+import com.crystalgraphics.render.canvas.CgCanvas;
 import com.crystalgraphics.render.graph.CgRasterPass;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgTargetCompare;
@@ -241,9 +241,7 @@ public final class CgUiPaintContext {
     /** Leaves a frame that threw part-way: its batches closed, its GL state back, and no frame open. */
     private void abortFrame() {
         endTextPath();
-        renderer.end();   // safe unbegun: begin() may be what never ran; what it flushes goes with the recording
-        recordFlushes(false);
-        recorder.abandon();
+        recorder.abandon();   // what the renderers drew into the frame goes with it
         recording.reset();
         present.reset();
         // What the walks noted never reached the textures: each surface is drawn whole next time.
@@ -357,26 +355,12 @@ public final class CgUiPaintContext {
     @Getter
     final PoseStack poseStack;
 
-    /**
-     * Basic wrapper over {@link com.crystalgraphics.gl.render.CgQuadRenderer}.
-     * Works only for quads.
-     * <br>
-     * <b>Currently intended for immediate flushing, despite it being inefficient and going against the idea of "Batching"</b>
-     */
+    /** Quads and curves on {@link #recorder}, under this context's material, pose and clip. */
     @Getter
     private final CgUiRenderer renderer;
 
     // ── Text ─────────────────────────────────────────────────────────────────
-    /**
-     * Owned independently of {@link #renderer}, though both now reach the GPU the same way:
-     * CrystalGraphics' {@code CgTextRenderer} batches glyphs through its own
-     * {@code CgQuadRenderer}, exactly as {@link CgUiRenderer} does for box-model quads.
-     *
-     * <p>They stay separate instances rather than sharing one because each batches across its own
-     * {@code begin()}/{@code end()} window against its own material — only the CPU-side accumulation
-     * buffer is per-instance state, while the unit-quad mesh and the instance SSBO behind them
-     * are class-wide and shared regardless.</p>
-     */
+    /** Glyphs: drained into {@link #recorder} while it records, as the canvas current on this thread. */
     @Getter
     private final CgTextRenderer textRenderer;
 
@@ -397,7 +381,7 @@ public final class CgUiPaintContext {
      *                     in and this is what puts them back — the stack always describes the target
      *                     being drawn into, which is what lets {@code applyScissorIfNeeded} stay a
      *                     one-argument flip.
-     * @param savedView    the enclosing target's view owner. @see CgPassRecorder#view
+     * @param savedView    the enclosing target's view owner. @see CgCanvas#view
      * @param savedSpatial the node drawing was in, for a target with a space of its own, which sets nodes aside
      */
     record LayerFrame(CgGraphTexture target, int enclosingWidth, int enclosingHeight, ScissorStack.Saved savedScissor,
@@ -415,8 +399,8 @@ public final class CgUiPaintContext {
     // another after, so passes are created in the order they must run and every read follows the write it sees.
 
     private final CgRecording recording = new CgRecording();
-    /** What every renderer of this context flushes into: the passes of {@link #recording} or {@link #present}. */
-    private final CgPassRecorder recorder = new CgPassRecorder();
+    /** What this context draws into: the passes of {@link #recording} or {@link #present}; drawn at once between frames. */
+    private final CgCanvas recorder = new CgCanvas();
     /** The finished frame onto the host's target, recorded and executed once the host's target is bound again. */
     private final CgRecording present = new CgRecording();
     /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
@@ -456,27 +440,8 @@ public final class CgUiPaintContext {
     private CgMaterial currentMaterial;
 
     /**
-     * Which of the two instanced paths is currently bound. Quads and curves have separate instance
-     * buffers and separate materials, and GL has exactly one program bound at a time, so they cannot
-     * both be live.
-     *
-     * <p><b>The switch has to flush, and that is a correctness requirement rather than a tidiness
-     * one.</b> The UI paints in painter's order: whatever is submitted later must land on top.
-     * Letting queued quads survive a switch to curves would draw them after the curves regardless of
-     * submission order, so a stroke under a panel would jump on top of it — and only when the two
-     * happened to batch together, which makes it look like a z-order bug in the widget rather than a
-     * batching bug here.</p>
-     *
-     * <p>Because every switch flushes the outgoing path, <b>at most one path ever holds pending
-     * work</b>, which is what makes {@link CgUiRenderer#flush()} safe to run over both in any order.</p>
-     */
-    /**
-     * Which renderer last bound a GL program.
-     *
-     * <p>{@code TEXT} is the one that is not this class's own renderer. {@code CgTextRenderer} owns a
-     * separate {@code CgQuadRenderer} and binds {@code text.shader} itself, so without a state for it
-     * this field would claim {@code CURVE} while GL actually had the text program bound — and
-     * {@link #beginCurvePath()}'s early-return would then submit curve instances against it.</p>
+     * Which path draws next. The canvas keeps painter's order across them; what this tracks is the text batch, which
+     * must end before a quad or curve so its glyphs land under what follows.
      */
     private enum InstancePath { QUAD, CURVE, TEXT }
 
@@ -518,7 +483,7 @@ public final class CgUiPaintContext {
     private CgUiPaintContext() {
         this.gpu = UiGpu.get();
         this.poseStack = new PoseStack();
-        this.renderer = new CgUiRenderer(this);
+        this.renderer = new CgUiRenderer(this, recorder);
         this.boxModelMaterial = CgMaterial.load(BOX_SHADER);
         this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
         this.layerBlitMaterial = CgMaterial.newInstance(BOX_SHADER);
@@ -537,15 +502,6 @@ public final class CgUiPaintContext {
                 bindQuadPath(boxModelMaterial);
                 currentTexture = null;
             });
-    }
-
-    /**
-     * Inside a frame everything this context's renderers flush is recorded; outside one they draw at once, as any
-     * renderer does — a scene drawing a label over the finished frame uses them that way.
-     */
-    private void recordFlushes(boolean recorded) {
-        renderer.sink(recorded ? recorder : null);
-        textRenderer.sink(recorded ? recorder : null);
     }
 
     /**
@@ -841,9 +797,6 @@ public final class CgUiPaintContext {
 
         poseStack.pushPose();
         timed = CgTrace.stamp(UiTrace.FRAME);
-        renderer.begin();
-        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:renderer.begin", timed);
-        timed = CgTrace.stamp(UiTrace.FRAME);
         bindQuadPath(boxModelMaterial);
         CgTrace.zoneDone(UiTrace.FRAME, "glbegin:bindQuadPath", timed);
         currentMaterial = boxModelMaterial;
@@ -853,7 +806,6 @@ public final class CgUiPaintContext {
         // The frame's clock, which a material reading CG_TIME animates by -- a shader graph's Time node.
         passConstants.time(CgFrameClock.seconds());
         targetConstants(screenWidth, screenHeight);
-        recordFlushes(true);
         for (CgGraphTexture released : pendingReleases) recording.release(released);
         pendingReleases.clear();
         int w = Math.max(1, screenWidth), h = Math.max(1, screenHeight);
@@ -899,14 +851,12 @@ public final class CgUiPaintContext {
         } finally {
             recording.reset();
             present.reset();
-            recordFlushes(false);
         }
         CgTrace.zoneDone(UiTrace.FRAME, "glend:build", timed);
 
         currentMaterial = null;
         currentTexture = null;
         frameActive = false;
-        renderer.end();
         poseStack.popPose();
         if (!poseStack.clear()) throw new IllegalStateException("Unpopped stack(s) in UI frame");
         return frame;
@@ -946,7 +896,7 @@ public final class CgUiPaintContext {
         // sites that can actually be handed a fallback (here and CgUiSprite).
         CgTrace.add(UiTrace.FRAME, "drawcalls", 1);
         boolean missing = texture.isMissing();
-        CgQuadRenderer.Quad q = quad().at(x, y).size(width, height).color(argb);
+        CgQuadBatch.Quad q = quad().at(x, y).size(width, height).color(argb);
         (missing ? q : q.uv(u0, v0, u1, v1)).submit();
         flush();
     }
@@ -1163,11 +1113,8 @@ public final class CgUiPaintContext {
         // bound before it.
         beginQuadPath();
         if (texture == currentTexture) return;
-        // Whatever is queued was submitted against the texture bound NOW: switching first would draw it
-        // with this one. A cached icon relies on this -- it submits its quad and leaves the flush to
-        // whoever changes the texture next, so a run of icons from the atlas is one draw.
-        renderer.flushQuads();
-        renderer.bindTexture(0, texture);   // recorded: the draw binds it when it executes
+        // Quads already submitted keep theirs: each item carries its texture, so a run of atlas icons is one draw.
+        renderer.bindTexture(0, texture);
         currentTexture = texture;
     }
 
@@ -1175,7 +1122,7 @@ public final class CgUiPaintContext {
      * Starts a fluent quad, already carrying this context's {@code PoseStack} transform.
      *
      * <p>Build and {@code submit()} in one expression — the returned instance is
-     * {@code CgQuadRenderer}'s shared per-renderer scratch object, so holding it past the
+     * {@code CgQuadBatch}'s shared per-renderer scratch object, so holding it past the
      * {@code submit()} is not safe (the next {@code quad()} resets and reuses it).</p>
      *
      * <pre>{@code
@@ -1189,9 +1136,9 @@ public final class CgUiPaintContext {
      * every logical-space coordinate in this API assumes. Defaults are the full UV rect and opaque
      * white, so a solid fill needs neither.</p>
      */
-    public CgQuadRenderer.Quad quad() {
+    public CgQuadBatch.Quad quad() {
         beginQuadPath();
-        CgQuadRenderer.Quad quad = renderer.quad();
+        CgQuadBatch.Quad quad = renderer.quad();
         return currentMaterial == layerBlitMaterial ? quad.custom2(CgShapeTable.PREMULTIPLIED) : quad;
     }
 
@@ -1245,7 +1192,7 @@ public final class CgUiPaintContext {
      * applied it, and overwriting it silently drops {@code uiScale} and the element transform. Same
      * rule, same reason, as {@link #quad()}.</p>
      *
-     * <p>The returned object is {@code CgVectorRenderer}'s shared per-renderer scratch instance, so
+     * <p>The returned object is {@code CgCurveBatch}'s shared per-renderer scratch instance, so
      * build it and {@code submit()} in one expression rather than holding it — the next
      * {@code curve()} call resets and reuses it. Use {@code retainedCurve()} on the renderer for
      * something held across frames.</p>
@@ -1255,7 +1202,7 @@ public final class CgUiPaintContext {
      * the two per element therefore costs a draw call each way — batch strokes together where it is
      * convenient, but correctness never depends on doing so.</p>
      */
-    public CgVectorRenderer.Curve curve() {
+    public CgCurveBatch.Curve curve() {
         beginCurvePath();
         return renderer.curve();
     }
@@ -1263,7 +1210,7 @@ public final class CgUiPaintContext {
     /**
      * Starts a filled triangle, with this context's pose already applied — the fill-mode twin of
      * {@link #curve()}. Goes through the exact same material path as {@link #curve()} (it shares
-     * one {@code CgVectorRenderer} and one {@code gui_curve.shader} binding, not a third one), so
+     * one {@code CgCurveBatch} and one {@code gui_curve.shader} binding, not a third one), so
      * switching between {@code quad()}/{@code curve()}/{@code triangle()} costs a flush only when
      * moving to or from the quad path — alternating {@code curve()} and {@code triangle()} is free.
      *
@@ -1275,25 +1222,25 @@ public final class CgUiPaintContext {
      * <p><b>Never call {@code .pose(...)} on the result</b> — same rule as {@link #quad()}/{@link
      * #curve()}, for the same reason.</p>
      */
-    public CgVectorRenderer.Triangle triangle() {
+    public CgCurveBatch.Triangle triangle() {
         beginCurvePath();
         return renderer.triangle();
     }
 
     /**
      * Starts a cell — one span of a scanline tessellation, with exact-area antialiasing on the edges it
-     * marks soft; see {@link CgVectorRenderer.Cell}. Same material path as {@link #curve()} and
+     * marks soft; see {@link CgCurveBatch.Cell}. Same material path as {@link #curve()} and
      * {@link #triangle()}, so mixing the three costs nothing.
      *
      * <pre>{@code
      * ctx.filledCell().points(x0, y0, x1, y1, x2, y2, x3, y3)
-     *         .softEdges(CgVectorRenderer.CELL_LEFT | CgVectorRenderer.CELL_RIGHT)
+     *         .softEdges(CgCurveBatch.CELL_LEFT | CgCurveBatch.CELL_RIGHT)
      *         .color(argb).submit();
      * }</pre>
      *
      * <p><b>Never call {@code .pose(...)} on the result</b> — same rule as {@link #quad()}.</p>
      */
-    public CgVectorRenderer.Cell filledCell() {
+    public CgCurveBatch.Cell filledCell() {
         beginCurvePath();
         return renderer.filledCell();
     }
@@ -1315,7 +1262,6 @@ public final class CgUiPaintContext {
         // name it: quads (a fill, an image) and curves (every SVG icon) are different problems.
         CgTrace.add(UiTrace.FRAME, "quadpath-switches", 1);
         endTextPath();
-        renderer.flushCurves();
         // bindQuadPath sets activePath itself — the one place it is assigned for this path.
         bindQuadPath(currentMaterial != null ? currentMaterial : boxModelMaterial);
         currentTexture = null;
@@ -1328,7 +1274,6 @@ public final class CgUiPaintContext {
         // alternation per row in any list.
         CgTrace.add(UiTrace.FRAME, "curvepath-switches", 1);
         endTextPath();
-        renderer.flushQuads();
         activePath = InstancePath.CURVE;
         // Layer opacity is a material property, so it has to be re-applied on the material actually
         // being bound — the value living on boxModelMaterial says nothing about this one.
@@ -1776,9 +1721,9 @@ public final class CgUiPaintContext {
     /** Snapshots kept past which they are all dropped, and every kept segment with them. */
     private static final int KEPT_SNAPSHOTS = 4096;
 
-    /** Where each open segment started, in {@link CgPassRecorder#chunksTaken}: segments nest. */
+    /** Where each open segment started, in {@link CgCanvas#chunksTaken}: segments nest. */
     private long[] segmentStarts = new long[8];
-    /** Per open segment, the recorder's {@link CgPassRecorder#stateChanges} where it started. */
+    /** Per open segment, the recorder's {@link CgCanvas#stateChanges} where it started. */
     private long[] segmentStates = new long[8];
     /** Per open segment, {@link #textDegradedDrawCount} where it started. */
     private long[] segmentDegraded = new long[8];
@@ -1979,7 +1924,7 @@ public final class CgUiPaintContext {
     /** The current draw space into the bound target's pixels, and back; recomputed after a node or target change. */
     private final Matrix4f drawToTarget = new Matrix4f(), targetToDraw = new Matrix4f(), targetPose = new Matrix4f();
     private boolean drawToTargetValid;
-    /** The view owner of the passes being recorded. @see CgPassRecorder#view */
+    /** The view owner of the passes being recorded. @see CgCanvas#view */
     private int viewOwner;
 
     /**
@@ -2111,17 +2056,8 @@ public final class CgUiPaintContext {
      * automatic. {@link #currentTexture} is invalidated on both sides of the switch since a different
      * material may wire its sampler differently even for what looks like "the same" texture reference.</p>
      *
-     * <p><b>{@code bind()} must run AFTER {@code drawBody}, not before.</b> {@code applyProperties(...)}
-     * is CPU-only — it marks a dirty flag but doesn't upload anything; the GPU-side upload only
-     * happens inside {@code bind()}'s own dirty-check. {@code drawBody} (e.g. {@code CgUiRect}'s
-     * lambda) is exactly where the caller sets its own per-instance properties (corner radius, border,
-     * fill, ...) — binding before that ran would upload whatever was dirty from the *previous* draw
-     * call on this material, one draw stale. Invisible for a single static drawable re-drawing the
-     * same values every frame; badly broken for two different instances of the same drawable
-     * alternating every frame (e.g. a cross-fade), where each draw would render with the other's
-     * properties. `bind()` is safe to call unconditionally here (not just on a material switch) —
-     * its own `ProgramKey`/`wiredPrograms` caching makes a repeat bind of an already-current variant
-     * just a dirty re-check, not a recompile.</p>
+     * <p>Properties {@code drawBody} applies reach the quads it submits after them: a quad captures its material's
+     * values at submit, and a change between two quads starts a new draw.</p>
      */
     public void withMaterial(CgMaterial material, Runnable drawBody) {
         flush();
@@ -2131,28 +2067,11 @@ public final class CgUiPaintContext {
         // when that box replayed. Cleared, so a material without a sampler binds the same in every frame.
         renderer.bindTexture(0, null);
         material.applyProperties(layerOpacityBinder);
-
-        // useMaterial() is called TWICE around drawBody on purpose, and both calls are load-bearing.
-        //
-        // The first satisfies CgQuadRenderer's precondition — Quad.submit() throws unless a material
-        // is active, since that call is the renderer's only confirmation its instance buffer is
-        // attached to the bound program — and auto-flushes anything still queued for the previous
-        // material, whose shader those instances were computed against.
-        //
-        // The second preserves the bind-AFTER-drawBody invariant documented above. drawBody sets its
-        // per-instance properties (corner radii, border, fill) via applyProperties, which is CPU-only
-        // — the GPU upload happens inside bind(). useMaterial() rebinds on every call even for the
-        // same instance, so this second call is what actually uploads what drawBody just set. Without
-        // it the draw would run with whatever was dirty from the *previous* use of this material:
-        // invisible for a static drawable repeating identical values, badly wrong for two instances
-        // alternating every frame, which is exactly the cross-fade bug this ordering was written to fix.
+        // Each quad captures the material's values as it is submitted, so what drawBody applies draws with it.
         bindQuadPath(material);
         drawBody.run();
-        bindQuadPath(material);
         flush();
 
-        // Properties before the bind here, so the restored box-model material uploads the current
-        // layer opacity on this bind rather than trailing a frame behind.
         boxModelMaterial.applyProperties(layerOpacityBinder);
         bindQuadPath(boxModelMaterial);
         currentMaterial = boxModelMaterial;
@@ -3126,7 +3045,6 @@ public final class CgUiPaintContext {
         backdrop.delete();
         svgRaster.delete();
 
-        renderer.delete();
         textRenderer.delete();
 
         currentTexture = null;

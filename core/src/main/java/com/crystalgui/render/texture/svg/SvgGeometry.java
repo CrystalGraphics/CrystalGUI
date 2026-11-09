@@ -212,7 +212,7 @@ final class SvgGeometry {
         return new Segments(packed, packedCaps);
     }
 
-    /** Mirrors {@code CgVectorRenderer.CAP_BUTT} / {@code CAP_ROUND}; see {@link Segments#caps()}. */
+    /** Mirrors {@code CgCurveBatch.CAP_BUTT} / {@code CAP_ROUND}; see {@link Segments#caps()}. */
     private static final int CAP_BUTT = 0;
     private static final int CAP_ROUND = 1;
 

@@ -1,6 +1,6 @@
 package com.crystalgui.render.texture.svg;
 
-import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.job.CgJob;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.util.io.CgIO;
@@ -625,7 +625,7 @@ public final class SvgDocument {
             SvgScene.Stroke stroke = node.stroke();
             if (stroke != null) {
                 // Both ends, because SVG has no per-end linecap: stroke.cap() is the one value
-                // `stroke-linecap` parsed, not the start/end pair CgVectorRenderer packs.
+                // `stroke-linecap` parsed, not the start/end pair CgCurveBatch packs.
                 SvgGeometry.Segments segments = SvgGeometry.segmentsOf(
                         node.contours(), stroke.cap(), stroke.cap());
                 if (segments.data().length > 0) {
@@ -671,7 +671,7 @@ public final class SvgDocument {
      *
      * <p>On the document rather than in an {@code SvgRenderer}, because a renderer here would be a class
      * with no state: the geometry is the document's, the transform is the caller's, and the batching is
-     * {@code CgVectorRenderer}'s. A stateless class between two things that already have the data is a
+     * {@code CgCurveBatch}'s. A stateless class between two things that already have the data is a
      * layer, not a seam.</p>
      *
      * <p><b>Retained mode was considered and does not help.</b> {@code retainedCurve()} lets a caller keep
@@ -880,7 +880,7 @@ public final class SvgDocument {
             int cell = i / 8;
             // Every edge the tessellator marked as outline is antialiased by exact area, every seam is a
             // half-open step; the quad reading owes nothing to a feather, an offset or the sample count.
-            CgVectorRenderer.Cell out = ctx.filledCell()
+            CgCurveBatch.Cell out = ctx.filledCell()
                                            .points(x + q[i] * scale, y + q[i + 1] * scale,
                             x + q[i + 2] * scale, y + q[i + 3] * scale,
                             x + q[i + 4] * scale, y + q[i + 5] * scale,

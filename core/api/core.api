@@ -8137,9 +8137,6 @@ com/crystalgui/render/CgUiPaintContext
   method public backdropFor (FFFFFF)Lcom/crystalgui/render/CgUiPaintContext$Backdrop;
   method public beginDamageCheck (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;)V
   method public beginFrame (II)V
-  method public beginLayerFbo (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
-  method public beginLayerFbo (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;Lcom/crystalgui/render/LayerRegion;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
-  method public beginLayerFbo (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;Z)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public beginLayerFbo (Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgui/render/LayerRegion;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public beginLayerFbo (Lcom/crystalgraphics/render/graph/CgGraphTexture;Z)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public beginLayerFbo (Lcom/crystalgui/render/LayerRegion;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
@@ -8148,8 +8145,6 @@ com/crystalgui/render/CgUiPaintContext
   method public beginSurface (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;Z)V
   method public bindCompositeTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)V
   method public bindTexture (Lcom/crystalgraphics/api/texture/CgTexture;)V
-  method public blitLayer (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;F)V
-  method public blitLayer (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;FLcom/crystalgui/render/LayerRegion;)V
   method public blitLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FLcom/crystalgui/render/LayerRegion;)I
   method public blitLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FLcom/crystalgui/render/LayerRegion;Z)I
   method public blitLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FLcom/crystalgui/render/LayerRegion;ZLorg/joml/Matrix4f;)I
@@ -8157,11 +8152,10 @@ com/crystalgui/render/CgUiPaintContext
   method public clipInDraw ([F)Z
   method public compareSurface (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;Ljava/lang/String;)V
   method public compositeMask (Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgui/render/LayerRegion;)V
-  method public curve ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Curve;
+  method public curve ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Curve;
   method public damageCheckTarget (Lcom/crystalgui/render/Surface;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public deviceScale ()F
   method public drawImage (Lcom/crystalgraphics/api/texture/CgTexture;FFFFFFFFI)V
-  method public drawLayer (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;FFFF)V
   method public drawLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FFFF)V
   method public drawLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FFFFFFFF)V
   method public drawToTarget ()Lorg/joml/Matrix4f;
@@ -8174,7 +8168,7 @@ com/crystalgui/render/CgUiPaintContext
   method public endSurface ()Z
   method public enterNode (I)I
   method public fillRect (FFFFI)V
-  method public filledCell ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Cell;
+  method public filledCell ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Cell;
   method public flush ()V
   method public frameId ()J
   method public getColor ()I
@@ -8206,7 +8200,7 @@ com/crystalgui/render/CgUiPaintContext
   method public pushLayerOpacity (F)F
   method public pushRoundedClip (FFFF[F[F[F)Z
   method public pushScissor (FFFF)V
-  method public quad ()Lcom/crystalgraphics/gl/render/CgQuadRenderer$Quad;
+  method public quad ()Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
   method public reapplyScissor ()V
   method public recordFrame (II)V
   method public rect ()Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -8219,7 +8213,7 @@ com/crystalgui/render/CgUiPaintContext
   method public setColor (I)V
   method public setPictureTint (I)V
   method public setSnapshotting (Z)V
-  method public shapes ()Lcom/crystalgraphics/gl/render/CgShapeTable;
+  method public shapes ()Lcom/crystalgraphics/render/canvas/CgShapeTable;
   method public snapXToDevicePixel (F)F
   method public snapYToDevicePixel (F)F
   method public spatialNode ()I
@@ -8234,10 +8228,9 @@ com/crystalgui/render/CgUiPaintContext
   method public text ()Lcom/crystalgraphics/text/render/CgTextRenderer;
   method public textDegradedDrawCount ()J
   method public textGamma (Lcom/crystalgraphics/text/render/CgTextGamma;)V
-  method public triangle ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Triangle;
-  method public upload (Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgraphics/render/graph/CgUpload;)V
+  method public triangle ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Triangle;
+  method public update (Lcom/crystalgraphics/render/graph/CgGraphTexture;IIIILjava/nio/ByteBuffer;)V
   method public walkingSurface ()Lcom/crystalgui/render/Surface;
-  method public warmUpLayer (Lcom/crystalgraphics/gl/framebuffer/CgFrameBuffer;)V
   method public warmUpLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;)V
   method public withLayerOpacity (FLjava/lang/Runnable;)V
   method public withMaterial (Lcom/crystalgraphics/api/material/CgMaterial;Ljava/lang/Runnable;)V
@@ -8274,11 +8267,11 @@ com/crystalgui/render/CgUiPaintContext$Warm
 com/crystalgui/render/CgUiRenderer
   access public,final
   extends java/lang/Object
-  method public curve ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Curve;
-  method public filledCell ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Cell;
+  method public curve ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Curve;
+  method public filledCell ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Cell;
   method public flush ()V
-  method public quad ()Lcom/crystalgraphics/gl/render/CgQuadRenderer$Quad;
-  method public triangle ()Lcom/crystalgraphics/gl/render/CgVectorRenderer$Triangle;
+  method public quad ()Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
+  method public triangle ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Triangle;
   method public useCurveMaterial (Lcom/crystalgraphics/api/material/CgMaterial;)V
   method public useMaterial (Lcom/crystalgraphics/api/material/CgMaterial;)V
 com/crystalgui/render/InkOverflow
@@ -8313,7 +8306,7 @@ com/crystalgui/render/ScissorStack
   access public,final
   extends java/lang/Object
   field public,static,final MAX_DEPTH I
-  method public <init> (Lcom/crystalgraphics/render/graph/CgPassRecorder;)V
+  method public <init> (Lcom/crystalgraphics/render/canvas/CgCanvas;)V
   method public applyScissorIfNeeded (I)V
   method public clearScissorIfNeeded ()V
   method public currentH ()I

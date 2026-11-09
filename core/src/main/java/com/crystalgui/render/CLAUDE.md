@@ -37,14 +37,9 @@ UiGpu.present(frame);                             // render thread
 | Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split, with `UiGpu.presentAgain(w,h)` showing the last frame again when no new one was sealed — the whole tree records into the context's frame target, composited onto the host's once |
 | Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
 
-> **`curve()` is `quad()`'s twin, and switching between them flushes.** Bézier strokes go through
-> `CgVectorRenderer` with their own instance kind and their own material (`gui_curve.shader`). Every switch
-> ends the outgoing path's chunk, which is a **painter's-order requirement, not tidiness**: quads still queued
-> across a switch would land after the curves regardless of submission order, so a stroke under a panel would
-> jump on top — and only when the two happened to batch together, which reads as a z-order bug in the widget
-> rather than in the context. Because every switch flushes, at most one path ever holds pending work, which is
-> what makes `CgUiRenderer.flush()` safe to run over both in any order. Alternating them per element breaks the
-> batch each way; correctness never depends on batching.
+> **`curve()` is `quad()`'s twin.** Bézier strokes are `CgCurveBatch` items with their own instance kind and
+> material (`gui_curve.shader`), on the same canvas: a switch between the two ends the outgoing run, so painter's
+> order holds whatever the batching. Alternating them per element breaks the batch each way.
 >
 > `curve()` applies the `PoseStack` exactly as `quad()` does — **never call `.pose(...)` on the result** —
 > and stroke widths are scaled by the pose too, so a 2px stroke stays 2 *logical* px at any `uiScale`,
@@ -64,10 +59,10 @@ UiGpu.present(frame);                             // render thread
 > over per-draw scratch rather than writing them inline. Per-draw scratch is not part of a drawable's
 > value: nothing in it is read by `equals` and nothing survives the draw.
 >
-> `quad()` returns `CgQuadRenderer.Quad` — `ctx.quad().at(x,y).size(w,h).uv(...).color(argb).submit()`,
+> `quad()` returns `CgQuadBatch.Quad` — `ctx.quad().at(x,y).size(w,h).uv(...).color(argb).submit()`,
 > then `flush()` to draw (`submit()` only queues). **Never call `.pose(...)` on it**: `CgUiRenderer.quad()`
 > is the single place the `PoseStack` is applied, and overwriting it silently drops `uiScale` and the
-> element transform. It's re-applied per call because `CgQuadRenderer.quad()` resets the scratch
+> element transform. It's re-applied per call because `CgCanvas.quad()` resets the scratch
 > instance's pose to null. The returned object is that shared scratch — build and `submit()` in one
 > expression, never hold it.
 | Clip | `pushScissor` / `popScissor` — a whole-pixel clip entry every draw is stamped with, no flush (a real scissor inside a snapshot or capture, under a node that is not a whole-pixel translation, or past the clip chain's depth; `-Dcrystalgui.paint.squareClips=false` everywhere) — and `pushRoundedClip` / `popRoundedClip`, a rounded rect stamped the same way (`CgClipTable`), no layer and no flush |
@@ -167,19 +162,15 @@ did. Under a node the
 
 ### Supporting classes
 
-- **`CgUiRenderer`** — thin wrapper over CrystalGraphics' `CgQuadRenderer` **and `CgVectorRenderer`**:
-  instanced unit quads whose per-instance record (`origin` + `right`/`up` edge vectors, UVs, colour)
-  lives in a class-wide SSBO on the frame ring (`CgBufferLifetime.FRAME`). The `PoseStack` matrix is baked in at `submit()` time by
-  `Quad.pose(...)` — three transforms per quad rather than four corners, and affine-correct under
-  `transform:`. **Material bind/unbind is owned by `CgQuadRenderer.useMaterial()`**, which must be
-  called before any `submit()` and again every frame; never call `material.bind()` yourself. Text goes
-  through the same renderer (CrystalGraphics' `CgTextRenderer` owns its own `CgQuadRenderer` instance).
-  The curve half mirrors all of it — `curve()` applies the pose, `useCurveMaterial()` binds, and
-  `flushQuads()`/`flushCurves()` exist so `CgUiPaintContext` can flush one path without the other when
-  it switches between them.
+- **`CgUiRenderer`** — the paint context's items on its `CgCanvas` (CrystalGraphics' `render/canvas`): each
+  `quad()`/`curve()` starts a canvas item with the context's current material (`useMaterial`,
+  `useCurveMaterial`), state and hand-bound texture, and the `PoseStack` baked in at `submit()` — three transforms
+  per quad, affine-correct under `transform:`. An item captures its material's values as it is submitted, so a
+  drawable's `applyProperties` reaches the quads after it. Text drawn while the context records lands on the same
+  canvas, in order (`CgCanvas.current()`).
 - **`ScissorStack`** — the paint context's allocation-free nested clip stack (16 levels), top-left rects
   flipped per target. It touches no GL: each level becomes a whole-pixel clip entry or a link in the recorder's
-  scissor chain (`CgPassRecorder`), recorded in the node it was pushed under, so a moved node's clips move with it.
+  scissor chain (`CgCanvas`), recorded in the node it was pushed under, so a moved node's clips move with it.
 - **`FontFamilyCache`** — `(font-family stack, target px)` → `CgFontFamily`, cached. Reference
   equality on the result is therefore meaningful and is relied on by `UIText`. An entry is a resource
   path (`crystalgui:ui/fonts/x.ttf` — it holds a `:` or `/`, or ends in a font extension), an installed

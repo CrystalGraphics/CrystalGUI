@@ -54,7 +54,7 @@
 > keeps the bug, silently, while still rendering something plausible.
 
 > **All three declare `#pragma cg_use quad`, and any new CrystalGUI shader must too.** Everything
-> here draws through `CgQuadRenderer`, whose per-instance buffer supplies `CG_QUAD_WORLD_POS` /
+> here draws through `CgQuadBatch`, whose per-instance buffer supplies `CG_QUAD_WORLD_POS` /
 > `CG_QUAD_UV` / `CG_QUAD_COLOR` — the pragma is what wires it, during parsing, before anything can
 > compile. Omitting it is a parse error naming the missing line (it used to be a GLSL error about an
 > undefined `QUAD_DATA`, reported four layers up as an unrelated `#pragma cg_feature` complaint).

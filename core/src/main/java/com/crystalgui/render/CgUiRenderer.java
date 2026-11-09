@@ -3,227 +3,95 @@ package com.crystalgui.render;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.gl.render.CgVectorRenderer;
-import com.crystalgraphics.gl.render.CgQuadRenderer;
-import com.crystalgraphics.render.draw.CgChunkSink;
+import com.crystalgraphics.render.canvas.CgCanvas;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
+import com.crystalgraphics.render.canvas.CgQuadBatch;
 
 /**
- * Thin wrapper over {@link CgQuadRenderer} — CrystalGUI's whole box-model quad path.
+ * The paint context's quads and curves on its {@link CgCanvas}: each item started with the context's current
+ * material, state and hand-bound texture, its pose, clip entry and nodes. A run of items that share those is one draw.
  *
- * <h3>Why instanced quads rather than a vertex stream</h3>
- * <p>This used to wrap {@code CgBatchRenderer}, writing four transformed vertices per quad through a
- * {@code PoseStack}-aware {@code CgVertexConsumer}. {@link CgQuadRenderer} expresses the same thing as
- * one per-instance record — {@code origin} plus the two edge vectors {@code right}/{@code up} — living
- * in a class-wide SSBO, with a single shared unit-quad mesh drawn instanced.</p>
- *
- * <p>The pose is no longer applied per vertex on the CPU here: {@link CgQuadRenderer.Quad#pose} bakes
- * it at submit time by running {@code origin} through {@code transformPosition} and {@code right}/
- * {@code up} through {@code transformDirection}. That is three transforms per quad instead of four,
- * and it stays correct under the full affine {@code transform:} can produce — rotation, scale and skew
- * all act on the two edge vectors exactly as they would on the four corners.</p>
- *
- * <p>It also puts UI quads on the same path CrystalGraphics' own {@code CgTextRenderer} already uses,
- * so text and box-model geometry no longer reach the GPU through two different renderers.</p>
- *
- * <h3>Material binding is not ours to do</h3>
- * <p>{@link CgQuadRenderer#useMaterial} owns bind/unbind and must be called before any
- * {@code submit()} — {@code submit()} throws otherwise, since that call is the renderer's only
- * confirmation that its instance buffer is actually attached to the bound material. Callers therefore
- * go through {@link #useMaterial(CgMaterial)} and never call {@code material.bind()} themselves.</p>
+ * <h3>Positions are written unrounded, deliberately</h3>
+ * <p>Snapping each transformed corner made a 1-logical-pixel border 1px on one widget and 2px on its neighbour at a
+ * fractional {@code uiScale}. Neither Minecraft's GUI nor Blink snaps here; the one snap that matters is the root
+ * origin's ({@code UIWindow.resolveRootPlacement}).</p>
  */
 public final class CgUiRenderer {
 
-    private final CgQuadRenderer renderer;
-    private final CgVectorRenderer vectorRenderer;
     private final CgUiPaintContext ctx;
+    private final CgCanvas canvas;
 
-    CgUiRenderer(CgUiPaintContext ctx) {
-        this.renderer = CgQuadRenderer.create();
-        this.vectorRenderer = CgVectorRenderer.create();
+    private CgMaterial quadMaterial;
+    private CgRenderState quadState;
+    private CgTexture quadTexture;
+    private CgMaterial curveMaterial;
+
+    CgUiRenderer(CgUiPaintContext ctx, CgCanvas canvas) {
         this.ctx = ctx;
+        this.canvas = canvas;
     }
 
-    void begin() {
-        renderer.begin();
-        vectorRenderer.begin();
-    }
-
-    /** Where both paths' flushes go. @see CgQuadRenderer#sink */
-    void sink(CgChunkSink sink) {
-        renderer.sink(sink);
-        vectorRenderer.sink(sink);
-    }
-
-    void end() {
-        renderer.end();
-        vectorRenderer.end();
-    }
-
-    /**
-     * Flushes whatever is queued on either path — the only point at which anything is uploaded or
-     * drawn. {@code submit()} alone never touches the GPU.
-     *
-     * <p>Flushing both is safe in either order because <b>at most one path ever holds pending work</b>:
-     * {@link CgUiPaintContext} flushes the outgoing path when it switches between quads and curves,
-     * which it must do anyway to swap the bound material. An empty flush is a cheap early return.</p>
-     */
+    /** Ends the open run: into the recording while the context records, else drawn now. */
     public void flush() {
-        renderer.flush();
-        vectorRenderer.flush();
+        canvas.flush();
     }
 
-    /**
-     * Flushes only the quad path. Called by {@link CgUiPaintContext} when switching to curves —
-     * the quads must reach the GPU while <em>their</em> material is still bound.
-     */
-    void flushQuads() {
-        renderer.flush();
-    }
-
-    /** Flushes only the curve path, for the same reason in the other direction. */
-    void flushCurves() {
-        vectorRenderer.flush();
-    }
-
-    /**
-     * Binds {@code material} and marks it as the owner of subsequent {@link #quad()} submissions.
-     *
-     * <p>Must be called again every frame, even for the same material — other rendering sharing this
-     * GL context can rebind a different program between two of our frames, so "bound once" is not
-     * "still bound". Switching materials auto-flushes whatever was queued for the previous one, since
-     * those instances were computed against its shader.</p>
-     */
+    /** The material later {@link #quad()}s draw with, under its own state; drops the hand-bound texture. */
     public void useMaterial(CgMaterial material) {
-        renderer.useMaterial(material);
+        useMaterial(material, null);
     }
 
-    /**
-     * A texture bound to {@code unit} by hand for the quads queued next; wins over the material's sampler there. Null
-     * gives the unit back to the material.
-     */
-    void bindTexture(int unit, CgTexture texture) {
-        renderer.bindTexture(unit, texture);
-    }
-
-    /** As {@link #useMaterial(CgMaterial)}, under {@code state} instead of the render state the material declares. */
+    /** As {@link #useMaterial(CgMaterial)}, under {@code state} instead of the material's. */
     void useMaterial(CgMaterial material, CgRenderState state) {
-        renderer.useMaterial(material, state);
+        quadMaterial = material;
+        quadState = state;
+        quadTexture = null;
     }
 
-    /**
-     * The curve-path equivalent of {@link #useMaterial(CgMaterial)}.
-     *
-     * <p>Separate because {@link CgVectorRenderer} has its own instance buffer and its own
-     * bind/unbind bookkeeping — a curve material and a quad material are never interchangeable, and
-     * a single {@code useMaterial} taking both would silently let a caller submit quads against
-     * {@code gui_curve.shader}, which declares no {@code QUAD_DATA} and would draw nothing.</p>
-     */
+    /** Unit 0 for later quads, over the material's sampler there; null gives it back to the material. */
+    void bindTexture(int unit, CgTexture texture) {
+        if (unit != 0) throw new IllegalArgumentException("only unit 0 is bound by hand: " + unit);
+        quadTexture = texture;
+    }
+
+    /** The material later curves, triangles and cells draw with. */
     public void useCurveMaterial(CgMaterial material) {
-        vectorRenderer.useMaterial(material);
+        curveMaterial = material;
     }
 
     /**
-     * Starts a quad, <b>with this context's pose already applied</b>.
-     *
-     * <p>The single place the {@code PoseStack} is bound to a quad. {@code CgQuadRenderer.quad()}
-     * resets its scratch instance — including setting {@code pose} back to {@code null} — so the pose
-     * is re-applied here on every call rather than being sticky. Callers therefore keep passing plain
-     * logical-space coordinates and cannot forget the transform; forgetting it would draw at
-     * unscaled, untranslated screen coordinates, which looks like a layout bug rather than a missing
-     * matrix.</p>
-     *
-     * <p>CPU-side only — {@code submit()} queues, {@link #flush()} draws.</p>
-     *
-     * <h3>Positions are written unrounded, deliberately</h3>
-     * <p>Do not add a snap-to-whole-pixels here. An earlier version of this path (the old
-     * {@code VertexWriter}) rounded each transformed vertex, which is what made a 1-logical-pixel
-     * border render 1px on one widget and 2px on its neighbour at a fractional {@code uiScale} —
-     * adjacent elements sit at different fractional offsets, so each independently rounds a
-     * different way. Measured on Ore's tab rail: at scale 2 every border run is exactly 2px, at 1.5
-     * they scatter between 1 and 2 with no pattern.</p>
-     *
-     * <p>Neither reference implementation snaps at this level. Minecraft 1.21's
-     * {@code BufferBuilder.addVertex} writes raw floats, {@code POSITION} is non-normalised
-     * {@code FLOAT}×3, and none of its GUI vertex shaders contains a rounding intrinsic — vanilla's
-     * pixel alignment falls out of its GUI API being int-only in logical space over an integer
-     * {@code guiScale}, never an explicit round.</p>
-     *
-     * <p>CrystalGUI already has the snap that matters, at the root origin:
-     * {@code UIWindow.resolveRootPlacement} rounds {@code leftPos}/{@code topPos}. That one keeps an
-     * unzoomed UI aligned and stays. A second snap here only destroys sub-pixel placement.</p>
+     * A quad with the context's pose, clip and nodes applied. Never call {@code .pose(...)} on it: that drops
+     * {@code uiScale} and the element's transform.
      */
-    public CgQuadRenderer.Quad quad() {
+    public CgQuadBatch.Quad quad() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit quads outside beginFrame()/endFrame()");
+        if (quadMaterial == null) throw new IllegalStateException("no quad material: useMaterial first");
+        CgQuadBatch.Quad quad = canvas.quad(quadMaterial).state(quadState);
+        if (quadTexture != null) quad.texture(0, quadTexture);
+        return quad.pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry()).node(ctx.spatialNode(), ctx.effectNode());
+    }
 
-        return renderer.quad().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
+    /** A Bézier stroke, posed as {@link #quad()}; its width scales with the pose, so it is in logical pixels. */
+    public CgCurveBatch.Curve curve() {
+        return canvas.curve(curveMaterial()).pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
                 .node(ctx.spatialNode(), ctx.effectNode());
     }
 
-    /**
-     * Starts a Bézier stroke, <b>with this context's pose already applied</b> — the curve-path twin
-     * of {@link #quad()}, and the single place the {@code PoseStack} is bound to a curve.
-     *
-     * <p>Same reasoning throughout: {@code CgVectorRenderer.curve()} resets its scratch instance
-     * (clearing {@code pose} back to {@code null}), so the pose is re-applied on every call rather
-     * than being sticky, and callers keep passing plain logical-space coordinates.</p>
-     *
-     * <p><b>Stroke widths follow the pose's scale.</b> {@code CgVectorRenderer.Curve#submit} bakes the
-     * pose into the control points and scales {@code width}/{@code feather} by its uniform scale, so
-     * a width passed here is in the same logical units as the coordinates — a 2px stroke stays 2
-     * logical px at any {@code uiScale}, exactly as a 2px border does. That is the behaviour a caller
-     * expects and the reason widths are not passed pre-scaled.</p>
-     *
-     * <p>Positions are written unrounded, for the identical reason spelled out on {@link #quad()} —
-     * and more so here, since a curve's antialiased edge is derived from a continuous distance field
-     * and snapping its control points would quantise the whole stroke, not just its extremities.</p>
-     *
-     * <p>CPU-side only — {@code submit()} queues, {@link #flush()} draws.</p>
-     */
-    public CgVectorRenderer.Curve curve() {
+    /** A filled triangle, posed as {@link #curve()}: its corner radius and feather scale with the pose. */
+    public CgCurveBatch.Triangle triangle() {
+        return canvas.triangle(curveMaterial()).pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
+                .node(ctx.spatialNode(), ctx.effectNode());
+    }
+
+    /** A cell of a tessellated fill, posed as {@link #curve()}; coverage is exact area in device pixels. */
+    public CgCurveBatch.Cell filledCell() {
+        return canvas.cell(curveMaterial()).pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
+                .node(ctx.spatialNode(), ctx.effectNode());
+    }
+
+    private CgMaterial curveMaterial() {
         if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit curves outside beginFrame()/endFrame()");
-
-        return vectorRenderer.curve().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
-                .node(ctx.spatialNode(), ctx.effectNode());
-    }
-
-    /**
-     * Starts a filled triangle, <b>with this context's pose already applied</b> — the fill-mode
-     * twin of {@link #curve()}. Shares the same {@code CgVectorRenderer} and the same curve material,
-     * so submitting a triangle does <em>not</em> switch material paths any differently than
-     * submitting a curve does — see {@code CgUiPaintContext.beginCurvePath()}.
-     *
-     * <p>Same pose/scale/unrounded-coordinates conventions as {@link #curve()}: corner radius and
-     * feather scale with the pose exactly as a stroke width would, since both are distances in the
-     * same space as the points.</p>
-     */
-    public CgVectorRenderer.Triangle triangle() {
-        if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit triangles outside beginFrame()/endFrame()");
-
-        return vectorRenderer.triangle().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
-                .node(ctx.spatialNode(), ctx.effectNode());
-    }
-
-    /**
-     * Starts a cell, <b>with this context's pose already applied</b> — the four-cornered twin of
-     * {@link #triangle()}, for a tessellated fill. Same pose and unrounded-coordinate conventions;
-     * coverage is exact area in device pixels, so there is no width or feather to scale.
-     */
-    public CgVectorRenderer.Cell filledCell() {
-        if (!ctx.isFrameActive()) throw new IllegalStateException("Cannot submit quads outside beginFrame()/endFrame()");
-
-        return vectorRenderer.cell().pose(ctx.getPoseStack().last().pose()).clip(ctx.clipEntry())
-                .node(ctx.spatialNode(), ctx.effectNode());
-    }
-
-    /**
-     * Releases what this renderer owns.
-     *
-     * <p>Called by {@link CgUiPaintContext#destroy()}. {@link CgQuadRenderer#delete()} only unbinds
-     * the material it left bound — the shared unit-quad mesh and instance buffer are class-wide and
-     * registry-owned, so they deliberately outlive any one renderer.</p>
-     */
-    void delete() {
-        renderer.delete();
-        vectorRenderer.delete();
+        if (curveMaterial == null) throw new IllegalStateException("no curve material: useCurveMaterial first");
+        return curveMaterial;
     }
 }

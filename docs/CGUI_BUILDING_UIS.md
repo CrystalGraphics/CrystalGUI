@@ -1360,20 +1360,10 @@ at one of CrystalGraphics' **GUI stages**, `CgRenderStage.SCREEN` (over a screen
 `HostSession.COMPOSITOR`, so the order you register at says which side of them you land on.
 
 ```java
-CgPassRecorder recorder = new CgPassRecorder();
-CgQuadRenderer quads = CgQuadRenderer.create();
-quads.sink(recorder);
 CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // declares #pragma cg_use quad
 
-CgRenderStage.Registration badge = CgRenderStage.HUD.register(HostSession.COMPOSITOR + 1, frame -> {   // over the windows
-    recorder.recordInto(frame.recording(), frame.target(), CgLoad.load(), frame.constants());
-    quads.useMaterial(material);
-    quads.begin();
-    quads.quad().at(8f, 8f).size(32f, 32f).color(0xFFFF8800).submit();
-    quads.flush();
-    quads.end();
-    recorder.stop();
-});
+CgRenderStage.Registration badge = CgRenderStage.HUD.register(HostSession.COMPOSITOR + 1, frame ->   // over the windows
+        frame.canvas().quad(material).at(8f, 8f).size(32f, 32f).color(0xFFFF8800).submit());
 badge.close();   // and it stops
 ```
 

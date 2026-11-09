@@ -16,7 +16,7 @@ import org.jetbrains.annotations.Nullable;
  * <h3>Why a cell soup rather than vertices plus indices</h3>
  *
  * <p>lyon emits indexed geometry because its consumers upload a vertex buffer and an index buffer. This
- * engine's consumer is {@code CgVectorRenderer}, which draws each cell as an <b>instance</b> carrying
+ * engine's consumer is {@code CgCurveBatch}, which draws each cell as an <b>instance</b> carrying
  * its own four corners and computing exact-area coverage on whichever of its edges are on the outline —
  * so an index buffer would be dereferenced on the CPU and thrown away every frame. Eight floats per cell
  * is the format the draw path actually wants, and the per-edge antialiasing is what lyon pays a

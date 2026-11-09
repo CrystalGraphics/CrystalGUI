@@ -157,7 +157,7 @@ per-pixel, live, from geometry — the same mechanism that keeps graph wires and
 - Resolution-independent, with no atlas, no bake, no texture memory, no shader work.
 - Tint is a per-instance colour, so a theme recolours the set for free.
 - Editing the `.svg` hot-reloads; there is nothing to regenerate.
-- Reuses `CgVectorRenderer`, which already exists and already batches.
+- Reuses `CgCurveBatch`, which already exists and already batches.
 
 **Against**
 - Cost scales with **segments × icons on screen**, which is the one axis where an atlas wins outright.
@@ -165,7 +165,7 @@ per-pixel, live, from geometry — the same mechanism that keeps graph wires and
 
 ### It fills too, which removes the one thing §3 held back for MSDF
 
-**"Stroked only" was listed here as E's defining limit, and it is not one.** `CgVectorRenderer` has a fill
+**"Stroked only" was listed here as E's defining limit, and it is not one.** `CgCurveBatch` has a fill
 reading of the same record — `triangle()`, and since 2026-09-08 `cell()`, a convex quad with exact-area
 coverage on whichever edges are marked as outline — so a filled interior needs no new GPU path at all, only
 a decomposition on the CPU. `SvgTriangulator` does it as a **scanline trapezoid decomposition**: cut the
@@ -271,7 +271,7 @@ about **3,400 instances a frame**. The JetBrains mark, which is the pathological
 typical one, is **1,832 fill triangles** on its own.
 
 All of it goes out in **one instanced draw call**. `ctx.curve()` and `ctx.triangle()` share a single
-`CgVectorRenderer` and a single `gui_curve.shader` binding, so alternating strokes and fills costs nothing;
+`CgCurveBatch` and a single `gui_curve.shader` binding, so alternating strokes and fills costs nothing;
 `beginCurvePath()` early-returns once the path is current, `useMaterial` re-flushes only when the material
 *reference* changes, and `submit()` only appends to a CPU buffer that grows rather than draws. One
 `flush()` at the end issues one `drawInstanced`. The six icons in the harness scene — 2,173 instances,
@@ -338,7 +338,7 @@ and the per-type palette lives in CSS next to the port-colour palette that alrea
 > **Read this box, not the plan below it.** Everything in §5 is the MSDF-bake route: parse SVG into an
 > `MSDFShape`, generate a distance field, pack it into an atlas, draw it as a textured quad. **None of it
 > was built and none of it should be.** Approach E (§2b) draws SVG geometry directly through
-> `CgVectorRenderer` — resolution-independent, full colour, one draw call, no atlas, no texture memory, and
+> `CgCurveBatch` — resolution-independent, full colour, one draw call, no atlas, no texture memory, and
 > a `.svg` edit hot-reloads with nothing to regenerate. The bake exists to buy crispness at scale, and E
 > already has that by construction.
 >
@@ -515,7 +515,7 @@ is genuinely bound to CrystalGUI, and only in its `render` half.
 
 Two triggers to actually do it, either of which makes the geometry half CrystalGraphics' business:
 
-1. **A second consumer outside CrystalGUI** — shader-graph node artwork drawn through `CgVectorRenderer`
+1. **A second consumer outside CrystalGUI** — shader-graph node artwork drawn through `CgCurveBatch`
    without a paint context, say.
 2. **The MSDF bake path in §5.** `MSDFShape` and the msdfgen bindings live in CrystalGraphics, and
    SVG→`MSDFShape` is a conversion between two of its own types. If that is ever built, the parser has to
@@ -538,7 +538,7 @@ IntelliJ's raster of the same file** (`plan/svg-fix/`). Three things were wrong,
 2. A trapezoid drawn as two triangles: the half that owns the right wall claims every pixel on the seam
    row at full coverage even when that pixel is inside the LEFT wall's ramp, since it does not know the
    left wall exists. A bright row across every band boundary at every fractional scale. Fixed by
-   `CgVectorRenderer.Cell` — one instance per cell, all four edges known, exact area on the outline ones,
+   `CgCurveBatch.Cell` — one instance per cell, all four edges known, exact area on the outline ones,
    half-open pixel-centre ownership on the seams.
 3. And the one no single-owner scheme can fix: a cell thinner than a pixel. At 20 device px a corner arc
    is eight cells inside two pixel rows and the circle's cells are a quarter of a pixel tall. Whichever

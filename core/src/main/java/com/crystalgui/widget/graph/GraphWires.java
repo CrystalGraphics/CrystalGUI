@@ -239,7 +239,7 @@ final class GraphWires {
      * renderer's 1.5px reconstruction filter clips the peak of anything narrower than 0.75:
      * 0.75 gives a 1.5px wire at alpha 1.00, 0.5 a 1px wire at 0.83, 0.35 a 0.7px wire at 0.73.
      * 0.5 is the classic hairline and is where this sits — 0.75 was solid but read heavy against
-     * the small nodes of a zoomed-out graph. See {@code CgVectorRenderer.FEATHER_ANTIALIAS}.</p>
+     * the small nodes of a zoomed-out graph. See {@code CgCurveBatch.FEATHER_ANTIALIAS}.</p>
      */
     private static final float MIN_DEVICE_HALF_WIDTH = 0.5f;
 

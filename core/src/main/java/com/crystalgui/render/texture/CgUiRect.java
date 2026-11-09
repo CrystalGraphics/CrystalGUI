@@ -1,7 +1,7 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.gl.render.CgQuadRenderer;
-import com.crystalgraphics.gl.render.CgShapeTable;
+import com.crystalgraphics.render.canvas.CgQuadBatch;
+import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.gl.texture.CgTexture2D;
 import com.crystalgui.render.CgUiPaintContext;
 
@@ -408,7 +408,7 @@ public final class CgUiRect implements CgUiDrawable {
             // other site that can be handed a fallback.
             if (missing || (!sprite.hasBorder() && isPlain())) {
                 ctx.bindTexture(resolved);
-                CgQuadRenderer.Quad q = ctx.quad().at(x, y).size(width, height).color(tint);
+                CgQuadBatch.Quad q = ctx.quad().at(x, y).size(width, height).color(tint);
                 if (!missing) q.uv(sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
                 q.submit();
                 ctx.flush();

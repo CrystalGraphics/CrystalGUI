@@ -2,7 +2,7 @@ package com.crystalgui.render;
 
 import java.util.Arrays;
 
-import com.crystalgraphics.render.graph.CgPassRecorder;
+import com.crystalgraphics.render.canvas.CgCanvas;
 
 /**
  * Allocation-free nested clip region stack.
@@ -28,7 +28,7 @@ import com.crystalgraphics.render.graph.CgPassRecorder;
 public final class ScissorStack {
 
     /** How deep clips nest; the recorder's chain is as deep. */
-    public static final int MAX_DEPTH = CgPassRecorder.MAX_SCISSORS;
+    public static final int MAX_DEPTH = CgCanvas.MAX_SCISSORS;
 
     /** Per level, x, y, w, h: cut by every level above it, and as pushed. */
     private final int[] stack = new int[MAX_DEPTH * 4];
@@ -40,9 +40,9 @@ public final class ScissorStack {
     private final int[] clips = new int[MAX_DEPTH], restores = new int[MAX_DEPTH];
     private int depth;
     /** Where an applied stack goes: the scissor chain of the chunks recorded after it. */
-    private final CgPassRecorder recorder;
+    private final CgCanvas recorder;
 
-    public ScissorStack(CgPassRecorder recorder) {
+    public ScissorStack(CgCanvas recorder) {
         this.recorder = recorder;
     }
 

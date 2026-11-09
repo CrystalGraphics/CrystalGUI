@@ -1,6 +1,6 @@
 package com.crystalgui.render.texture.svg;
 
-import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
 
 import java.util.Map;
 
@@ -37,7 +37,7 @@ public record SvgStyle(SvgColor.Paint fill, SvgColor.Paint stroke,
      */
     public static final SvgStyle ROOT = new SvgStyle(
             SvgColor.Paint.of(0xFF000000), SvgColor.Paint.NONE,
-            1f, CgVectorRenderer.CAP_BUTT, false, 1f, 1f, 1f);
+            1f, CgCurveBatch.CAP_BUTT, false, 1f, 1f, 1f);
 
     /**
      * This style with one element's attributes applied over it.
@@ -138,7 +138,7 @@ public record SvgStyle(SvgColor.Paint fill, SvgColor.Paint stroke,
         return SvgColor.withOpacity(stroke.argb(), strokeOpacity * opacity);
     }
 
-    /** Half-width, which is what {@code CgVectorRenderer.Curve.width} takes. */
+    /** Half-width, which is what {@code CgCurveBatch.Curve.width} takes. */
     public float strokeHalfWidth() {
         return strokeWidth / 2f;
     }
@@ -146,9 +146,9 @@ public record SvgStyle(SvgColor.Paint fill, SvgColor.Paint stroke,
     /** {@code butt} / {@code round} / {@code square}, SVG's own three keywords. */
     public static int parseCap(String raw) {
         return switch (raw.trim()) {
-            case "round" -> CgVectorRenderer.CAP_ROUND;
-            case "square" -> CgVectorRenderer.CAP_SQUARE;
-            default -> CgVectorRenderer.CAP_BUTT;
+            case "round" -> CgCurveBatch.CAP_ROUND;
+            case "square" -> CgCurveBatch.CAP_SQUARE;
+            default -> CgCurveBatch.CAP_BUTT;
         };
     }
 

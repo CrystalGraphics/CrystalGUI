@@ -1,6 +1,6 @@
 package com.crystalgui.widget.composite;
 
-import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.style.StyleGroup;
@@ -52,7 +52,7 @@ import java.util.List;
  * rather than a single polygon in one colour. That is this chart's own design rather than Chart.js's,
  * and it is what makes a six-attribute sheet readable at a glance: each attribute owns a wedge.</p>
  *
- * <p>Each wedge marks {@link CgVectorRenderer#EDGE_P1_P2} as its silhouette — the rim — so only the
+ * <p>Each wedge marks {@link CgCurveBatch#EDGE_P1_P2} as its silhouette — the rim — so only the
  * outer edge is antialiased and the two spokes into the centre stay hard. Feathering all three would
  * put a soft seam between every neighbouring pair, which reads as a hairline crack through the fan.</p>
  *
@@ -683,7 +683,7 @@ public class RadarChart extends UIElement {
                 continue;
             }
 
-            CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
+            CgCurveBatch.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
             if (axisGradient == AxisGradient.TOWARD_CENTRE) {
                 // The far end is the midpoint of the RIM, which is where this wedge's bisector actually
                 // leaves it -- the rim is a chord rather than an arc, so its own two ends are nearer the
@@ -698,7 +698,7 @@ public class RadarChart extends UIElement {
             }
             // The RIM is the outline; the two spokes are seams against the neighbouring wedges.
             // Feathering those would draw a soft crack down every one of them.
-            wedge.silhouetteEdge(CgVectorRenderer.EDGE_P1_P2).submit();
+            wedge.silhouetteEdge(CgCurveBatch.EDGE_P1_P2).submit();
         }
     }
 
@@ -730,7 +730,7 @@ public class RadarChart extends UIElement {
             float qy = ay + (by - ay) * m;
             int qc = ArgbMath.lerp(from, to, m);
 
-            CgVectorRenderer.Triangle wedge = ctx.triangle().points(cx, cy, px, py, qx, qy);
+            CgCurveBatch.Triangle wedge = ctx.triangle().points(cx, cy, px, py, qx, qy);
             if (fade) {
                 // ONE ramp is one axis of variation, and the fade needs it -- so the hue is flat across
                 // the slice and steps at its edges. Iso-lines parallel to the outer edge put t = 0 at
@@ -755,7 +755,7 @@ public class RadarChart extends UIElement {
             }
             // Only the rim is an outline. Every other edge here is a seam -- against the next slice or
             // the next wedge -- and feathering those draws a soft crack down each one.
-            wedge.silhouetteEdge(CgVectorRenderer.EDGE_P1_P2).submit();
+            wedge.silhouetteEdge(CgCurveBatch.EDGE_P1_P2).submit();
 
             px = qx;
             py = qy;

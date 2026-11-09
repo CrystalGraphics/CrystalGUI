@@ -1,6 +1,6 @@
 package com.crystalgui.render.texture.svg;
 
-import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -15,7 +15,7 @@ import java.util.List;
  * {@code nonzero}, never {@code evenodd}.</p>
  *
  * <pre>{@code
- * List<SvgPath.Polyline> outline = SvgStroker.outline(contours, halfWidth, CgVectorRenderer.CAP_BUTT, 16);
+ * List<SvgPath.Polyline> outline = SvgStroker.outline(contours, halfWidth, CgCurveBatch.CAP_BUTT, 16);
  * SvgTessellator.tessellate(outline, false, gradientPaint);
  * }</pre>
  */
@@ -30,7 +30,7 @@ final class SvgStroker {
     /**
      * @param contours  the stroked path, already in the space the outline is wanted in
      * @param halfWidth half the stroke width, in that space
-     * @param cap       a {@code CgVectorRenderer} cap, for an open contour's two ends
+     * @param cap       a {@code CgCurveBatch} cap, for an open contour's two ends
      * @param steps     segments per quarter turn of a round join or cap, as {@link SvgPath#parse(String, int)}
      */
     static List<SvgPath.Polyline> outline(List<SvgPath.Polyline> contours, float halfWidth, int cap, int steps) {
@@ -126,10 +126,10 @@ final class SvgStroker {
             dy = -dy;
         }
         float from = end ? h : -h;
-        if (cap == CgVectorRenderer.CAP_SQUARE) {
+        if (cap == CgCurveBatch.CAP_SQUARE) {
             ring.add(new float[]{at[0] + normal[0] * from + dx * h, at[1] + normal[1] * from + dy * h});
             ring.add(new float[]{at[0] - normal[0] * from + dx * h, at[1] - normal[1] * from + dy * h});
-        } else if (cap == CgVectorRenderer.CAP_ROUND) {
+        } else if (cap == CgCurveBatch.CAP_ROUND) {
             float ux = normal[0] * from, uy = normal[1] * from;
             float sweep = (float) (Math.signum(ux * dy - uy * dx) * Math.PI);
             arc(ring, at, ux, uy, sweep, steps);

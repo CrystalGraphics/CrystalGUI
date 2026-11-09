@@ -3,7 +3,7 @@ package com.crystalgui.harness.scene;
 import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.api.text.CgTextStroke;
-import com.crystalgraphics.gl.render.CgVectorRenderer;
+import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.config.HarnessContext;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -2568,7 +2568,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
          * halfWidth*sqrt(2) along one axis only when the stroke is not axis-aligned.
          */
         private void paintCaps(CgUiPaintContext ctx, float x, float y) {
-            int[] caps = { CgVectorRenderer.CAP_BUTT, CgVectorRenderer.CAP_ROUND, CgVectorRenderer.CAP_SQUARE };
+            int[] caps = { CgCurveBatch.CAP_BUTT, CgCurveBatch.CAP_ROUND, CgCurveBatch.CAP_SQUARE };
             for (int i = 0; i < caps.length; i++) {
                 float cy = y + 16 + i * 21;
                 ctx.curve().line(x + 40, cy, x + 150, cy).width(7f).cap(caps[i]).color(0xFFFFC24D).submit();
@@ -2591,7 +2591,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 float cx = x + 26 + i * 50;
                 float feather = i * 1.7f;
                 ctx.curve().line(cx, y + 14, cx, y + 60)
-                        .width(6f).feather(feather).cap(CgVectorRenderer.CAP_ROUND)
+                        .width(6f).feather(feather).cap(CgCurveBatch.CAP_ROUND)
                         .color(0xFF6CC4FF).submit();
             }
         }
@@ -2602,7 +2602,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 float cx = x + 10 + i * 46;
                 float w = 0.4f + i * 1.5f;
                 ctx.curve().from(cx, y + 58).via(cx + 12, y + 18).to(cx + 24, y + 58)
-                        .width(w).cap(CgVectorRenderer.CAP_ROUND).color(hue(i / 9f)).submit();
+                        .width(w).cap(CgCurveBatch.CAP_ROUND).color(hue(i / 9f)).submit();
             }
         }
 
@@ -2614,7 +2614,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 ctx.curve().from(x + 16, cy).via(x + 210, cy + (i - 2) * 9).to(x + 404, cy)
                         .width(1f + i * 1.6f, 1f + (4 - i) * 1.6f)
                         .colors(hue(h0), hue(h0 + 0.4f))
-                        .cap(CgVectorRenderer.CAP_ROUND)
+                        .cap(CgCurveBatch.CAP_ROUND)
                         .submit();
             }
         }
@@ -2634,7 +2634,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 int argb = (alphas[pass] << 24) | (tint & 0x00FFFFFF);
                 ctx.curve().from(x + 20, y + 52).via(x + 210, y + 52 - bow * 2f).to(x + 400, y + 52)
                         .width(widths[pass]).feather(feathers[pass])
-                        .cap(CgVectorRenderer.CAP_ROUND).color(argb).submit();
+                        .cap(CgCurveBatch.CAP_ROUND).color(argb).submit();
             }
         }
 
@@ -2650,7 +2650,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                                 cx + 124, y + 38)
                         .width(6f, 2f)
                         .colors(hue(i / 3f), hue(i / 3f + 0.35f))
-                        .cap(CgVectorRenderer.CAP_ROUND)
+                        .cap(CgCurveBatch.CAP_ROUND)
                         .submit();
             }
         }
@@ -2675,7 +2675,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 float ym = 2f * trueMidY - (y0 + y1) * 0.5f;
                 ctx.curve().from(x0, y0).via(xm, ym).to(x1, y1)
                         .width(3.5f).colors(hue(t0 + t * 0.1f), hue(t1 + t * 0.1f))
-                        .cap(CgVectorRenderer.CAP_ROUND).submit();
+                        .cap(CgCurveBatch.CAP_ROUND).submit();
             }
         }
 
@@ -2696,7 +2696,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                         .to(x + 402, y + 84)
                         .width(6f * (1f - p) + 0.6f, 0.6f + 6f * p)
                         .colors(hue(p * 0.5f + t * 0.05f), hue(p * 0.5f + 0.3f + t * 0.05f))
-                        .cap(CgVectorRenderer.CAP_ROUND)
+                        .cap(CgCurveBatch.CAP_ROUND)
                         .submit();
             }
         }
@@ -2730,7 +2730,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                                     dstX, dstY[d])
                             .width(2.5f)
                             .colors(srcColor[s], dstColor[d])
-                            .cap(CgVectorRenderer.CAP_ROUND)
+                            .cap(CgCurveBatch.CAP_ROUND)
                             .submit();
                 }
             }
@@ -2755,7 +2755,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 ctx.curve().from(cx, cy).via(bx, by).to(ex, ey)
                         .width(4.5f, 1f)
                         .colors(0xFFFFFFFF, hue(i / (float) spokes + t * 0.08f))
-                        .cap(CgVectorRenderer.CAP_ROUND)
+                        .cap(CgCurveBatch.CAP_ROUND)
                         .submit();
             }
         }
@@ -2784,7 +2784,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                         .to(cx + (float) Math.cos(a1) * r1, cy + (float) Math.sin(a1) * r1)
                         .width(0.8f + 5f * u0, 0.8f + 5f * u1)
                         .colors(hue(u0 + t * 0.1f), hue(u1 + t * 0.1f))
-                        .cap(CgVectorRenderer.CAP_ROUND)
+                        .cap(CgCurveBatch.CAP_ROUND)
                         .submit();
             }
         }
@@ -2811,7 +2811,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                         .to(x1, y1)
                         .width(2.6f)
                         .colors(hue(u0 * 2f + t * 0.07f), hue(u1 * 2f + t * 0.07f))
-                        .cap(CgVectorRenderer.CAP_ROUND)
+                        .cap(CgCurveBatch.CAP_ROUND)
                         .submit();
             }
         }

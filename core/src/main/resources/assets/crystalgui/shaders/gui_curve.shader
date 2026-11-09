@@ -1,7 +1,7 @@
 // crystalgui:shaders/gui_curve.shader
 //
 // Shared material for all CrystalGUI Bezier strokes -- the curve counterpart to gui_box.shader.
-// Geometry, colour, width, feather and cap style all come from CgVectorRenderer's per-instance
+// Geometry, colour, width, feather and cap style all come from CgCurveBatch's per-instance
 // SSBO record via the CG_CURVE_* macros in cg_env.glsl; there is nothing per-draw here except
 // _LayerOpacity.
 //

@@ -130,7 +130,7 @@ public record SvgScene(List<Node> nodes, float width, float height) {
     /**
      * @param halfWidth half of {@code stroke-width}, already scaled by the element's transform — a stroke
      *                  is a length, so flattening the transform into the points has to reach it too
-     * @param cap       packed start/end cap, as {@code CgVectorRenderer.packCaps} expects
+     * @param cap       packed start/end cap, as {@code CgCurveBatch.packCaps} expects
      */
     public record Stroke(Paint paint, float halfWidth, int cap) {
     }

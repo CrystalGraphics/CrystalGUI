@@ -18,7 +18,7 @@ import java.util.Map;
  *    .add();
  * }</pre>
  *
- * <h3>Fluent like {@code CgQuadRenderer.Quad}, but emphatically not scratch</h3>
+ * <h3>Fluent like {@code CgQuadBatch.Quad}, but emphatically not scratch</h3>
  * <p>Those builders return a <b>shared mutable instance</b> that must be submitted in the expression
  * that built it and never held — an allocation-avoidance measure for a record submitted hundreds of
  * thousands of times a frame. Nothing like that applies here: a session builds a few hundred nodes, and
