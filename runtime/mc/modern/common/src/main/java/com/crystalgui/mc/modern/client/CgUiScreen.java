@@ -5,7 +5,7 @@ import com.crystalgraphics.mc.modern.platform.HostGlHandoff;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import javax.annotation.Nullable;
 
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.service.CgHostWindow;
@@ -328,7 +328,7 @@ public final class CgUiScreen extends Screen {
     *///?} else {
     public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
     //?}
-        if (CgPlatform.input().translateKeyboardCodes(keyCode) != CgKeyCodes.KEY_ESCAPE) return false;
+        if (CgInput.key(keyCode) != CgKeyCodes.KEY_ESCAPE) return false;
         onClose();
         return true;
     }

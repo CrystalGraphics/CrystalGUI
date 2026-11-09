@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.host;
 
+import com.crystalgraphics.platform.input.CgInput;
 import com.crystalgraphics.platform.input.CgInputListener;
-import com.crystalgraphics.platform.input.CgInputStage;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.ui.input.HostPointer;
@@ -78,7 +78,7 @@ final class HostInputListener implements CgInputListener {
                         HostPointer.of(e.x(), e.y(), e.dx(), e.dy(), button, pressed, wheel, e.millis()));
                 return true;
             case OVERLAY:
-                return HostSession.session().offerMouse(host, CgInputStage.pointerGrabbed(), e.x(), e.y(), button,
+                return HostSession.session().offerMouse(host, CgInput.pointerGrabbed(), e.x(), e.y(), button,
                         pressed, wheel);
             default:
                 return false;

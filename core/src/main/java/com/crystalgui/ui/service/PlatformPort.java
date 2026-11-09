@@ -1,8 +1,8 @@
 package com.crystalgui.ui.service;
 
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.service.CgInputService;
-import com.crystalgraphics.platform.service.CgSoundService;
+import com.crystalgraphics.audio.CgSounds;
+import com.crystalgraphics.platform.input.CgClipboard;
+import com.crystalgraphics.platform.input.CgInput;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.cursor.CursorService;
 import com.crystalgui.ui.dom.UIDocument;
@@ -22,13 +22,15 @@ import javax.annotation.Nullable;
  *
  * <p>Every call reaches the platform directly today. Once a document runs on its own thread (plan
  * engine-threaded-ui, T1), its port answers state from the event and frame it is handling and sends writes
- * to the render thread, which owns the window. Code that calls {@code CgPlatform.input()}, {@code sound()}
+ * to the render thread, which owns the window. Code that calls {@code CgInput}, {@code CgClipboard}
  * or {@link CursorService} itself bypasses that and breaks there.</p>
  *
  * <ul>
  *   <li>{@link #current()} is the port of the document running on this thread: inside a frame, an input
  *       event, or a task of the document. Anywhere else it is {@link #INLINE}.</li>
- *   <li>With no platform registered (a headless test) state reads as nothing held and writes are dropped.</li>
+ *   <li>With no toolkit provided (a headless test) state reads as nothing held, the clipboard as empty, and
+ *       writes are dropped.</li>
+ *   <li>A sound is CrystalGraphics' {@link CgSounds#play2D}: a host sound event or a file, unplaced in the UI class.</li>
  * </ul>
  */
 public interface PlatformPort {
@@ -60,58 +62,37 @@ public interface PlatformPort {
     PlatformPort INLINE = new PlatformPort() {
         @Override
         public int modifiers() {
-            CgInputService input = input();
-            return input == null ? 0 : input.getCurrentModifiers();
+            return CgInput.modifiers();
         }
 
         @Override
         public boolean isKeyDown(int localKeyCode) {
-            CgInputService input = input();
-            return input != null && input.isKeyDown(localKeyCode);
+            return CgInput.isKeyDown(localKeyCode);
         }
 
         @Override
         public boolean isMouseDown(int localMouseCode) {
-            CgInputService input = input();
-            return input != null && input.isMouseDown(localMouseCode);
+            return CgInput.isMouseDown(localMouseCode);
         }
 
         @Override
-        @Nullable
         public String clipboard() {
-            CgInputService input = input();
-            return input == null ? null : input.getClipboard();
+            return CgClipboard.get();
         }
 
         @Override
         public void setClipboard(String text) {
-            CgInputService input = input();
-            if (input != null) input.setClipboard(text);
+            CgClipboard.set(text);
         }
 
         @Override
         public void playSound(String soundId) {
-            CgSoundService sound;
-            try {
-                sound = CgPlatform.sound();
-            } catch (IllegalStateException unregistered) {
-                return;
-            }
-            if (sound != null) sound.play(soundId);
+            CgSounds.play2D(soundId);
         }
 
         @Override
         public void setCursor(Cursor cursor) {
             CursorService.setCursor(cursor);
-        }
-
-        @Nullable
-        private CgInputService input() {
-            try {
-                return CgPlatform.input();
-            } catch (IllegalStateException unregistered) {
-                return null;
-            }
         }
     };
 }

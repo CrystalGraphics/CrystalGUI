@@ -4,8 +4,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.widget.collection.tree.TreeSearch;
 import com.crystalgui.testsupport.TestPlatformService;
-import com.crystalgraphics.platform.service.CgInputService;
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -570,16 +569,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
      */
     private void key(int code, char ch, int mods) {
         heldModifiers = mods;
-        TestPlatformService.get().input(new CgInputService() {
-            @Override public int getCurrentModifiers() { return heldModifiers; }
-            @Override public int translateKeyboardCodes(int c) { return c; }
-            @Override public boolean isKeyDown(int c) { return false; }
-            @Override public int translateMouseCodes(int c) { return c; }
-            @Override public boolean isMouseDown(int c) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-            @Override public String getClipboard() { return ""; }
-            @Override public void setClipboard(String t) { }
-        });
+        TestPlatformService.get().devices(TestPlatformService.holding(() -> heldModifiers, button -> false));
         frame();
         document.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event(ch, code, true, false, 0L));
         settle();
@@ -1002,7 +992,7 @@ public class ProblemsPanelTest extends UiDocumentTestBase {
         assertTrue("nothing to copy", panel.tree().canCopy());
         panel.tree().copy();
 
-        assertEquals("undefined variable", CgPlatform.input().getClipboard());
+        assertEquals("undefined variable", CgClipboard.get());
     }
 
     /**

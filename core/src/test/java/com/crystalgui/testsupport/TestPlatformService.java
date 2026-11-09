@@ -4,132 +4,97 @@ import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.CgPlatformService;
 import com.crystalgraphics.platform.gl.CgGLBackend;
 import com.crystalgraphics.platform.gl.CgGLContext;
+import com.crystalgraphics.platform.input.CgClipboard;
+import com.crystalgraphics.platform.input.CgInput;
 
-import com.crystalgraphics.platform.service.CgInputService;
-import com.crystalgraphics.platform.service.CgLifecycleService;
-import com.crystalgraphics.platform.service.CgReloadService;
-import com.crystalgraphics.platform.service.CgRenderingService;
-import com.crystalgraphics.platform.service.CgResourceService;
-import com.crystalgraphics.platform.service.CgSoundService;
+import java.util.function.IntPredicate;
+import java.util.function.IntSupplier;
 
 /**
- * The {@link CgPlatformService} the unit tests run against — a mutable bundle whose UI-facing services
- * can be swapped per test.
+ * The platform the unit tests run against: an empty GL bundle (nothing in a unit test reaches GL), and a keyboard,
+ * mouse and clipboard a test can swap.
  *
- * <h3>Why a mutable singleton rather than a fresh bundle per test</h3>
- * <p>{@link CgPlatform} reads every service through the one registered bundle and offers no per-service
- * setter, which is correct for production: a loader has all of this to hand at once, and half-registration
- * is the failure mode that shape rules out. A test wanting only a fake clipboard would otherwise have to
- * build a whole bundle, so instead there is one bundle, registered once, whose two UI services are
- * fields — {@link #input(CgInputService)} and {@link #sound(CgSoundService)}.</p>
+ * <pre>{@code
+ * TestPlatformService.install();                                   // UiTestBase's @Before: nothing held, empty clipboard
+ * TestPlatformService.holdModifiers(CgModifiers.CTRL);             // a chord
+ * TestPlatformService.get().devices(TestPlatformService.holding(() -> mods, button -> dragging));
+ * CgClipboard.set("x"); assertEquals("x", CgClipboard.get());      // the clipboard is a real one, in memory
+ * }</pre>
  *
- * <p>The cursor is not among them and needs no reset: {@code CursorService} is a static class over
- * CrystalGraphics' {@code CgCursorService} slot, which no test fills, so there is nothing to leak.</p>
- *
- * <p>The six GL-facing services all answer {@code null}. Nothing in a unit test reaches them —
- * {@code CgPlatform.register} calls neither {@code gl()} nor {@code capabilities()}, and
- * {@code CgIO} explicitly null-checks {@code resources()} before falling through to the classpath, which
- * is the path these tests load stylesheets and fonts by.</p>
- *
- * <h3>Registration is idempotent and state is reset, both on purpose</h3>
- * <p>{@link #install()} runs from {@link UiTestBase}'s {@code @Before}, i.e. once per test method, and
- * resets the two services to their defaults each time. JUnit gives every test class a fresh instance but
- * <em>not</em> a fresh JVM, so without the reset a test that installed a fake clipboard would
- * leave it installed for every test that ran afterwards — the exact cross-test leakage that used to make
- * some of these classes pass only because an earlier one had filled in a static field.</p>
+ * <ul>
+ *   <li>{@link #install()} runs once a test method and resets everything: JUnit gives a fresh instance, not a fresh
+ *       JVM, so a fake left installed would leak into every later test.</li>
+ *   <li>The clipboard keeps what is set, so a copy is observable: a list once shipped copying a record's
+ *       {@code toString}, unseen while writes were dropped.</li>
+ * </ul>
  */
 public final class TestPlatformService implements CgPlatformService {
 
-    /** Silence. Named rather than anonymous so a stack trace in a failing test says what it hit. */
-    public static final CgSoundService SILENT_SOUND = soundId -> {};
-
-    /** A keyboard and mouse that report nothing pressed — what a test needs unless it says otherwise. */
-    public static final CgInputService STUB_INPUT = new CgInputService() {
-        @Override public int getCurrentModifiers() { return modifiers; }
-        @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-        @Override public boolean isKeyDown(int localKeyCode) { return false; }
-        @Override public int translateMouseCodes(int platformCode) { return platformCode; }
-        @Override public boolean isMouseDown(int localMouseCode) { return false; }
-        @Override public int howManyMouseButtons() { return 3; }
-        // A REAL IN-MEMORY CLIPBOARD, not a pair of stubs. Copy was unobservable while setClipboard threw
-        // its argument away, so anything that produced the wrong text produced it silently -- which is how
-        // a list shipped copying a record's generated toString, object graph and all.
-        @Override public String getClipboard() { return clipboard; }
-        @Override public void setClipboard(String text) { clipboard = text == null ? "" : text; }
-    };
-
-    private static String clipboard = "";
+    private static final TestPlatformService INSTANCE = new TestPlatformService();
 
     private static int modifiers;
+    private static String clipboard = "";
+
+    /** Nothing held but {@link #holdModifiers}; three buttons; the engine's own codes. */
+    public static final CgInput.Host STUB_DEVICES = holding(() -> modifiers, button -> false);
+
+    /** An in-memory clipboard. */
+    public static final CgClipboard.Host MEMORY_CLIPBOARD = new CgClipboard.Host() {
+        @Override public String get() { return clipboard; }
+        @Override public void set(String text) { clipboard = text == null ? "" : text; }
+    };
+
+    private TestPlatformService() {
+    }
+
+    /** A keyboard and mouse holding {@code modifiers}' answer and the buttons {@code mouseDown} accepts; no key held. */
+    public static CgInput.Host holding(IntSupplier modifiers, IntPredicate mouseDown) {
+        return new CgInput.Host() {
+            @Override public boolean isKeyDown(int key) { return false; }
+            @Override public boolean isMouseDown(int button) { return mouseDown.test(button); }
+            @Override public int modifiers() { return modifiers.getAsInt(); }
+            @Override public int mouseButtons() { return 3; }
+            @Override public boolean pointerGrabbed() { return false; }
+            @Override public int key(int toolkitKey) { return toolkitKey; }
+            @Override public int mouseButton(int toolkitButton) { return toolkitButton; }
+        };
+    }
 
     /**
-     * Holds a modifier bitmask down, as though the user were holding the keys.
-     *
-     * <p><b>Without this a chord could not be tested at all, and that is not a gap in the tests — it is
-     * why an entire mechanism shipped unwired.</b> {@code Input.modifiers()} reads the platform and
-     * falls back to zero when there is none, so headlessly every keystroke looked unmodified,
-     * {@code isChord} was always false, and the keymap path was unreachable. {@code KeymapTest} says as
-     * much in its own comment — it drives the resolver directly because "the full path through
-     * {@code consumeKeyboardEvent} needs a frame and a platform" — so the resolver was covered, the
-     * bindings were covered, and the one thing nobody could reach was whether anything CALLED it. It
-     * did not: {@code setChords} had no callers, so every shortcut in the application was inert.</p>
-     *
-     * <p>Reset by {@link #install()}, like the two services, so a test that holds Ctrl down cannot
-     * leak it into the next one.</p>
+     * Holds a modifier mask down, as though the user held the keys: without it every keystroke reads unmodified and a
+     * chord is unreachable. Reset by {@link #install()}.
      */
     public static void holdModifiers(int mask) {
         modifiers = mask;
     }
 
-    private static final TestPlatformService INSTANCE = new TestPlatformService();
-
-    private CgInputService input = STUB_INPUT;
-    private CgSoundService sound = SILENT_SOUND;
-
-    private TestPlatformService() {}
-
-    /** Registers the bundle and resets every swappable service. */
+    /** Registers the bundle and resets the keyboard, mouse and clipboard. */
     public static TestPlatformService install() {
-        INSTANCE.input = STUB_INPUT;
-        INSTANCE.sound = SILENT_SOUND;
-
         modifiers = 0;
+        clipboard = "";
         CgPlatform.register(INSTANCE);
+        CgPlatform.provide(CgInput.HOST, STUB_DEVICES);
+        CgPlatform.provide(CgClipboard.HOST, MEMORY_CLIPBOARD);
         return INSTANCE;
     }
 
-    /** The registered bundle, for a test that wants to swap a service mid-method. */
+    /** The registered bundle, for a test that swaps a device mid-method. */
     public static TestPlatformService get() {
         return INSTANCE;
     }
 
-    /** Replaces the input service. {@code null} restores {@link #STUB_INPUT}. */
-    public TestPlatformService input(CgInputService inputService) {
-        this.input = inputService != null ? inputService : STUB_INPUT;
+    /** Replaces the keyboard and mouse; null restores {@link #STUB_DEVICES}. */
+    public TestPlatformService devices(CgInput.Host devices) {
+        CgPlatform.provide(CgInput.HOST, devices != null ? devices : STUB_DEVICES);
         return this;
     }
 
-    /** Replaces the sound service. {@code null} restores {@link #SILENT_SOUND}. */
-    public TestPlatformService sound(CgSoundService soundService) {
-        this.sound = soundService != null ? soundService : SILENT_SOUND;
+    /** Replaces the clipboard; null restores {@link #MEMORY_CLIPBOARD}. */
+    public TestPlatformService clipboard(CgClipboard.Host host) {
+        CgPlatform.provide(CgClipboard.HOST, host != null ? host : MEMORY_CLIPBOARD);
         return this;
     }
 
-    // recordCursors() lived here, handing the cursor slot a list that appended every keyword shown.
-    // The slot is gone -- CursorService is a static class over CrystalGraphics' CgCursorService now --
-    // and nothing had ever called this, so it went with it rather than being ported. What it offered
-    // cannot be rebuilt from the CgCursorService side: CursorBitmaps maps several keywords onto one
-    // picture, so the pictures a test could record no longer say which keyword resolved. Anything
-    // wanting that assertion again should observe where the keyword still exists, in Input.
-
-    @Override public CgInputService input() { return input; }
-    @Override public CgSoundService sound() { return sound; }
-
-    // ── Unused by unit tests; see the class javadoc ────────────────────────────────────────────────
     @Override public CgGLBackend gl() { return null; }
     @Override public CgGLContext capabilities() { return null; }
-    @Override public CgResourceService resources() { return null; }
-    @Override public CgRenderingService rendering() { return null; }
-    @Override public CgLifecycleService lifecycle() { return null; }
-    @Override public CgReloadService reload() { return null; }
 }

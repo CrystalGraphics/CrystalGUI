@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.ScrollBehavior;
@@ -42,16 +42,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
     public void registerStubAdapter() {
         mouseHeld = false;
         shiftHeld = false;
-        TestPlatformService.install().input(new CgInputService() {
-            @Override public int getCurrentModifiers() { return shiftHeld ? com.crystalgraphics.platform.input.CgModifiers.SHIFT : 0; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
-            @Override public boolean isMouseDown(int localMouseCode) { return mouseHeld; }
-            @Override public int howManyMouseButtons() { return 3; }
-            @Override public String getClipboard() { return ""; }
-            @Override public void setClipboard(String text) { }
-        });
+        TestPlatformService.install().devices(TestPlatformService.holding(() -> shiftHeld ? CgModifiers.SHIFT : 0, button -> mouseHeld));
     }
 
     private ScrollerView setUp(float uiScale) {

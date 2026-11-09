@@ -159,7 +159,7 @@ Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke`
 |---|---|---|---|
 | **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `HostServices`, `fs.server.WorkspaceRoles`, `ServerSmoke.Host`, `HostSession.PaintHost` |
 | **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST`, `Providers.Copies.SERVICE` |
-| **`CgPlatformService`** (closed, CrystalGraphics) | the rendering framework cannot work without it | add an abstract method — **five implementations** must answer: `PlatformService1710`, `PlatformServiceLegacy`, `PlatformServiceModern`, the harness's `PlatformServiceHarness`, core's `TestPlatformService` | GL, input, sound, lifecycle |
+| **A static owner over a slot** (CrystalGraphics' shape) | a capability every host answers | a final class with a nested `Host`, its `NONE` and a `HOST` slot, read only through the owner's statics; each era provides it from its install (`platform/CLAUDE.md` § *The wiring standard*) | `CgModLoader`, `CgHostResources`, `CgInput`, `CgClipboard` |
 | **A hook into `LifecycleCrystalGUI`** (modern) / the legacy and 1.7.10 lifecycles | "when X happens in the game, run Y" | add a static method to the lifecycle; every loader's event forwards into it | `serverStarting`, `playerJoined`, `onServerTick` |
 
 Never a second static registry beside `CgPlatform`, never `ServiceLoader` from host code (ModLauncher 5
@@ -325,8 +325,8 @@ with `runClient -Dcrystalgui.autotest=true ...` (or `runServer`/`serverSmoke`), 
 - **A bootstrapper names no Minecraft class** — one copy serves every node of its loader.
 - **No JOML below 1.19.3** at runtime unless the companion jar is installed.
 - **Forge 1.15's ServiceLoader sees nothing** in a mod file — discover through `Providers`.
-- **A `CgService` absent-value is never null**; a contract with no sensible absence belongs in
-  `CgPlatformService`.
+- **A `CgService` absent-value is never null.** CrystalGraphics' bundle (`CgPlatformService`) holds only the GL
+  backend and context, and takes nothing new.
 - **`core` may import no `net.minecraft`, `cpw.mods`, `net.minecraftforge` or `org.lwjgl`** — the import
   guard fails the build.
 - **Two jars, two packages**: a class shared by the host and language jars must live in one of them,

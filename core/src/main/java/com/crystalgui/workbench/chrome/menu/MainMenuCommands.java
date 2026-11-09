@@ -50,10 +50,8 @@ public final class MainMenuCommands {
 
         registry.register(Command.of(DOCUMENTATION, "Documentation")
                 .menu(MenuId.MAIN_HELP, "1_docs", 10)
-                // NO BROWSER. Opening a URL needs a platform service this engine does not have, and
-                // inventing one for a single Help entry would be a registration slot earning its keep on
-                // nothing -- the same argument CgInputService makes about the clipboard. The path is what
-                // is useful in a repository anyway.
+                // No browser: opening a URL needs a platform service this engine does not have, and one Help
+                // entry does not earn a slot. The path is what is useful in a repository anyway.
                 .run(() -> Notifications.show(Notification.info("Documentation")
                         .withDetail("docs/ in the repository — start with CGUI_WIDGETS.md"))));
     }

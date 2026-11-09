@@ -1,7 +1,7 @@
 package com.crystalgui.widget.texteditor.lang;
 
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.text.ChangeSet;
@@ -124,7 +124,7 @@ public class CodeActionApplyTest extends UiDocumentTestBase {
         assertTrue("copy is offered for the hovered problem", copy != null);
 
         assertTrue(editor.applyCodeAction(copy));
-        assertEquals("charlie is doubtful", CgPlatform.input().getClipboard());
+        assertEquals("charlie is doubtful", CgClipboard.get());
     }
 
     /**

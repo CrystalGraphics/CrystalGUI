@@ -131,8 +131,7 @@ public class Dialog extends UIElement {
      *
      * <p>Without it, window-scoped modality's failure mode reads as <em>this window ignores my
      * clicks</em>, which is indistinguishable from a bug. The visible half is a class the sheet
-     * transitions; the audible half is the <b>first real consumer of {@code CgPlatform.sound()}</b>, an
-     * SPI wired on every loader that nothing used.</p>
+     * transitions; the audible half a UI sound, {@code PlatformPort.playSound}.</p>
      *
      * <p>The class is removed on the following frame rather than after a timer: a transition needs the
      * value to go back for the next press to move it again, and a one-frame round trip is enough because

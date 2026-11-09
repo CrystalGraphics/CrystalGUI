@@ -6,7 +6,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.TestPlatformService;
@@ -51,16 +50,7 @@ public class GraphEditingTest extends UiDocumentTestBase {
         // depended on which class ran first: green alone, red in the suite.
         GraphCommands.register();
         modifiers = 0;
-        TestPlatformService.get().input(new CgInputService() {
-            @Override public int getCurrentModifiers() { return modifiers; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-            @Override public String getClipboard() { return ""; }
-            @Override public void setClipboard(String text) { }
-        });
+        TestPlatformService.get().devices(TestPlatformService.holding(() -> modifiers, button -> false));
 
         graph = new GraphView();
         graph.layout(l -> l.width(360).height(300));

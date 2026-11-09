@@ -9,15 +9,15 @@ import org.apache.logging.log4j.Logger;
  *
  * <p>This class used to also be the registry for the engine's platform seams — an input adapter, a
  * clipboard, a sound system, a cursor service — each with its own static field and setter. Those moved to
- * CrystalGraphics' {@code platform} module, where they are reached through
- * {@link com.crystalgraphics.platform.CgPlatform}:</p>
+ * CrystalGraphics' {@code platform} module, each a slot of {@link com.crystalgraphics.platform.CgPlatform} its owner
+ * reads:</p>
  *
  * <table border="1">
  *   <caption>Where the old registry went</caption>
  *   <tr><th>Was</th><th>Is</th></tr>
- *   <tr><td>{@code CrystalGuiCore.getAdapter()}</td><td>{@code CgPlatform.input()}</td></tr>
- *   <tr><td>{@code CrystalGuiCore.getClipboard().get()}</td><td>{@code CgPlatform.input().getClipboard()}</td></tr>
- *   <tr><td>{@code CrystalGuiCore.getSoundSystem()}</td><td>{@code CgPlatform.sound()}</td></tr>
+ *   <tr><td>{@code CrystalGuiCore.getAdapter()}</td><td>{@code CgInput}</td></tr>
+ *   <tr><td>{@code CrystalGuiCore.getClipboard().get()}</td><td>{@code CgClipboard.get()}</td></tr>
+ *   <tr><td>{@code CrystalGuiCore.getSoundSystem()}</td><td>{@code PlatformPort.playSound}, through CrystalGraphics' mixer</td></tr>
  *   <tr><td>{@code CrystalGuiCore.getCursorService()}</td><td>{@code CursorService.setCursor(…)}</td></tr>
  * </table>
  *

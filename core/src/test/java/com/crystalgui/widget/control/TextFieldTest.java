@@ -2,7 +2,7 @@ package com.crystalgui.widget.control;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.testsupport.UiDocumentTestBase;
-import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -40,17 +40,11 @@ public class TextFieldTest extends UiDocumentTestBase {
     public void setUp() {
         modifiers = 0;
         clipboardContents = "";
-        // Clipboard and modifiers live on the same service, so one stub covers both.
-        TestPlatformService.install().input(new CgInputService() {
-            @Override public int getCurrentModifiers() { return modifiers; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-            @Override public String getClipboard() { return clipboardContents; }
-            @Override public void setClipboard(String text) { clipboardContents = text; }
-        });
+        TestPlatformService.install().devices(TestPlatformService.holding(() -> modifiers, button -> false))
+                .clipboard(new CgClipboard.Host() {
+                    @Override public String get() { return clipboardContents; }
+                    @Override public void set(String text) { clipboardContents = text; }
+                });
 
         field = new TextField();
         // Sized so the wheel tests can actually hit-test it. Everything else here is index

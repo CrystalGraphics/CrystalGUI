@@ -147,7 +147,7 @@ dependencies {
 // SPI — interfaces, key-code constants, and the CgPlatform registry — with no GL calls and no
 // context requirement, and it ships inside every loader jar, so a dedicated server genuinely has it.
 // Excluding it would assert something that is not true of production. core/ reaches it for real:
-// UIInputHandler implements CgSystemInput, and CgPlatform.input()/sound()/cursor() replaced what
+// UIInputHandler implements CgSystemInput, and its slots (CgInputDevices, CgClipboard, the cursor) replaced what
 // CrystalGuiCore's static registry used to hold.
 //
 // JOML and Taffy must stay. UIElement and ElementStyle have *fields* of those types (Matrix4f,

@@ -218,10 +218,9 @@ com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platfo
                                declares, a loader fills and anyone reads, each with its own absent-value.
                                CgCursorService.SERVICE and CgNetworkChannel.SERVICE are ours)
   .input                       CgSystemInput (raw Mouse/Keyboard event sink + event types),
+                               CgInput (what is held, a toolkit's codes), CgClipboard,
                                CgKeyCodes (LWJGL2-shaped, no LWJGL import), CgMouseCodes,
                                CgModifiers (bitmask)
-  .service                     CgInputService (codes, modifier/key/button state, AND the clipboard),
-                               CgSoundService — plus CrystalGraphics' own six
 
 com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
                                CrystalGraphics; drives paint-context teardown + cache invalidation
@@ -538,17 +537,17 @@ unlike method-body references, which don't. Someone will eventually try to strip
 
 ---
 
-## The platform seam: a closed bundle and open slots
+## The platform seam: slots, and a GL bundle
 
-A loader registers exactly one `CgPlatformService` bundle (**closed** — nine methods, no defaults) and fills any
-number of `CgService` **slots** (**open** — contracts the rendering framework must not name, each with its own
-absent-value).
+A loader registers one `CgPlatformService`, the GL backend and its context alone, and fills `CgService` **slots**,
+one a capability, each read through its owner and carrying its own absent-value.
 
 | Need | Reached via | Lives in |
 |---|---|---|
 | Modifier, key and button state, the clipboard, UI sounds, the cursor — **from UI code** | `PlatformPort.current()` | `ui/service/PlatformPort`: the running document's port, which a document on its own thread routes to the render thread (plan engine-threaded-ui). Calling the services below directly from a widget bypasses that |
-| Key/mouse codes, modifier state, **and the clipboard** | `CgPlatform.input()` — hosts and `PlatformPort.INLINE` only | `platform/service/CgInputService` |
-| UI sounds | `CgPlatform.sound()` — hosts and `PlatformPort.INLINE` only | `platform/service/CgSoundService` |
+| What is held, a toolkit's codes in the engine's | `CgInput` — hosts and `PlatformPort.INLINE` only | `platform/input/CgInput` |
+| The clipboard | `CgClipboard` — `PlatformPort.INLINE` only | `platform/input/CgClipboard` |
+| UI sounds | `PlatformPort.playSound` → CrystalGraphics' `CgSounds.play2D`: a host sound event or a file, unplaced in the `UI` class | `com.crystalgraphics.audio.CgSounds` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
 | **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
@@ -558,17 +557,8 @@ absent-value).
 SPI as its only reader, host objects handed out as `<V> V` getters beside ids. CrystalGraphics' `platform/CLAUDE.md`
 § *The wiring standard* is the rule; a slot CrystalGUI adds follows it.
 
-> **The clipboard is on `CgInputService`, not a service of its own.** It is not conceptually input, but it
-> is reached the same way and needed by exactly the code that handles keys — two methods do not earn a
-> registration slot. Both are abstract, like everything in the bundle.
-
-**No method in the BUNDLE has a default, and `CgSoundService` ships no `NOOP` constant.** A default is
-an answer chosen for someone who never saw the question: a new platform compiles cleanly while silently
-inheriting "no sound, no clipboard", and inheriting a no-op is indistinguishable from deciding on one.
-Abstract methods make the compiler the reminder — and a platform with nothing to offer still says so, with
-an empty body in its own source.
-
-**A `CgService` slot is the deliberate opposite**, and the cursor is why the distinction exists: an
+**Every one of these is a `CgService` slot with an absent-value**, never a bundle method: CrystalGraphics' bundle
+holds only the GL backend and context. The cursor is the worked example: an
 unpresented cursor is *cosmetic*, and the engine runs where there is nothing to present to — a dedicated
 server, a headless test, a fixture with no window. Those must not register a stub to stay silent, so the
 slot answers `CursorService.NONE` and `CgService` logs the absence once, on first read.
@@ -576,7 +566,7 @@ slot answers `CursorService.NONE` and `CgService` logs the absence once, on firs
 > **Why this stopped being CrystalGUI's own registry.** `CrystalGuiCore` used to hold four static fields
 > with setters. CrystalGraphics is the parent project and is always present, so two registries meant a
 > loader had to find both — and could wire up one, leaving a UI with a working GL backend and no keyboard.
-> One bundle makes a platform either registered or not. `CrystalGuiCore` now holds only `LOGGER`.
+> One registry makes a capability either provided or not. `CrystalGuiCore` now holds only `LOGGER`.
 
 ---
 

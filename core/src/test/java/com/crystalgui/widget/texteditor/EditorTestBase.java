@@ -4,7 +4,7 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgraphics.platform.service.CgInputService;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.widget.text.UIText;
@@ -39,7 +39,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
     /**
      * The live modifier mask.
      *
-     * <p>{@code Input} reads modifiers from {@code CgPlatform.input().getCurrentModifiers()},
+     * <p>{@code Input} reads modifiers from {@code CgInput.modifiers()},
      * <b>not</b> from the key events it is handed — so synthesising a Shift key-down does nothing at all.
      * The mask is platform state, and a test sets it by being the platform.</p>
      */
@@ -75,16 +75,11 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
         modifiers = 0;
         clipboard = "";
         // Clipboard and modifiers live on the same service, so one stub covers both.
-        TestPlatformService.install().input(new CgInputService() {
-            @Override public int getCurrentModifiers() { return modifiers; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-            @Override public String getClipboard() { return clipboard; }
-            @Override public void setClipboard(String text) { clipboard = text; }
-        });
+        TestPlatformService.install().devices(TestPlatformService.holding(() -> modifiers, button -> false))
+                .clipboard(new CgClipboard.Host() {
+                    @Override public String get() { return clipboard; }
+                    @Override public void set(String text) { clipboard = text; }
+                });
     }
 
     protected TextEditor build(String text) {

@@ -8,7 +8,6 @@ import com.crystalgui.ui.service.Drag;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgraphics.platform.service.CgInputService;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
@@ -271,20 +270,11 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      * pressed after the mouse went down, and what makes it untestable without a stub.</p>
      */
     private void withModifier(int mask, Runnable body) {
-        TestPlatformService.get().input(new CgInputService() {
-            @Override public int getCurrentModifiers() { return mask; }
-            @Override public int translateKeyboardCodes(int platformCode) { return platformCode; }
-            @Override public boolean isKeyDown(int localKeyCode) { return false; }
-            @Override public int translateMouseCodes(int platformCode) { return platformCode; }
-            @Override public boolean isMouseDown(int localMouseCode) { return false; }
-            @Override public int howManyMouseButtons() { return 3; }
-            @Override public String getClipboard() { return ""; }
-            @Override public void setClipboard(String text) { }
-        });
+        TestPlatformService.get().devices(TestPlatformService.holding(() -> mask, button -> false));
         try {
             body.run();
         } finally {
-            TestPlatformService.get().input(TestPlatformService.STUB_INPUT);
+            TestPlatformService.get().devices(null);
         }
     }
 

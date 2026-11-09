@@ -292,7 +292,7 @@ b.setEnabled(false);                        // inherited from UINode
 ```
 
 Activates on press-then-release **over the same element** (dragging off cancels), and on Space/Enter
-when focused. Fires `CgPlatform.sound()` with `button_click`; silent unless the registered platform implements it.
+when focused. Plays `button_click` through `PlatformPort.playSound` (CrystalGraphics' `CgSounds.play2D`); silent where the host has no such sound or no audio output.
 
 - Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (Button page)
@@ -506,7 +506,7 @@ filter: a `0..100` integer field silently drops `-`, a `-50..50` one admits it.
 
 Also: caret blink (`setCaretBlinkSeconds`, `isCaretVisible`, via `UIFrameTicker`), selection
 (`selectAll`, `clearSelection`, `getSelectedText`, `getSelectionStart/End`), clipboard through
-`CgPlatform.input().getClipboard()`, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
+`PlatformPort.clipboard()`, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
 
 Six style properties drive its text: `color`, `font-size`, `font-family`, `line-height` (vertical
 centring only), `caret-width`, `selection-color`.
