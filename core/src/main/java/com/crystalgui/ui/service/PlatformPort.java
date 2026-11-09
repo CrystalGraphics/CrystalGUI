@@ -20,14 +20,17 @@ import javax.annotation.Nullable;
  * platform.playSound("button_click");
  * }</pre>
  *
- * <p>Every call reaches the platform directly today. Once a document runs on its own thread (plan
- * engine-threaded-ui, T1), its port answers state from the event and frame it is handling and sends writes
- * to the render thread, which owns the window. Code that calls {@code CgInput}, {@code CgClipboard}
- * or {@link CursorService} itself bypasses that and breaks there.</p>
+ * <p>A document driven asynchronously (the default, {@code DocumentDriver.Mode.ASYNC}) runs on a thread of its
+ * own, and its port answers key and button state as of the event it is handling, not as the window holds them
+ * now; a clipboard, cursor or sound call is posted to the render thread, which owns the window and the frame's
+ * sounds. An inline or lockstep document's port is {@link #INLINE}, the platform itself.</p>
  *
  * <ul>
+ *   <li>Calling {@code CgInput}, {@code CgClipboard}, {@code CgSounds} or {@link CursorService} directly from UI
+ *       code reads the live window from the wrong thread and writes from it, in an async document.</li>
  *   <li>{@link #current()} is the port of the document running on this thread: inside a frame, an input
  *       event, or a task of the document. Anywhere else it is {@link #INLINE}.</li>
+ *   <li>An async document's clipboard read waits for the render thread's next frame, a quarter second at most.</li>
  *   <li>With no toolkit provided (a headless test) state reads as nothing held, the clipboard as empty, and
  *       writes are dropped.</li>
  *   <li>A sound is CrystalGraphics' {@link CgSounds#play2D}: a host sound event or a file, unplaced in the UI class.</li>
@@ -58,7 +61,7 @@ public interface PlatformPort {
         return running == null ? INLINE : running.platform();
     }
 
-    /** The platform itself, on the calling thread: every document's port until documents run elsewhere. */
+    /** The platform itself, on the calling thread: an inline or lockstep document's port, and code outside any. */
     PlatformPort INLINE = new PlatformPort() {
         @Override
         public int modifiers() {
