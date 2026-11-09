@@ -1,22 +1,34 @@
-/* The cue picker (app.cues.CueSelector): a filter box, a panel a namespace with its cues as a compacted tree, a status line. */
-.cue-selector { width: 100%; height: 100%; flex-direction: column; padding: 10px; gap: 10px; }
+/* The cue picker (app.cues.CueSelector): a filter box, a chip per kit, a panel per open kit with its cues as a compacted tree, a status line. */
+.cue-selector { width: 100%; height: 100%; flex-direction: column; padding: 12px; gap: 10px; }
 .cue-selector-search { width: 100%; }
+.cue-selector-hidden { display: none; }
+
+/* Kit switches: a pressed chip is a column. One line that scrolls sideways when the kits outgrow the window. */
+.cue-selector-chip-scroll { width: 100%; height: 30px; flex-shrink: 0; overflow-x: auto; overflow-y: hidden; }
+.cue-selector-chips { flex-direction: row; gap: 6px; height: 24px; }
+.cue-selector-chip { flex-direction: row; align-items: center; gap: 6px; height: 24px; padding: 0 10px; border-radius: 12px;
+    background-color: var(--surface-recessed, #131416); color: var(--fg-secondary, #9DA0A8); font-size: 11; cursor: pointer;
+    border-width: 1px; border-color: var(--border-base, #2B2D31); }
+.cue-selector-chip:hover { background-color: var(--hover-bg, #2E3033); color: var(--fg, #DFE1E5); }
+.cue-selector-chip.cue-selector-chip-on { background-color: var(--accent-soft, #2E436E); border-color: var(--accent, #4C8DFF);
+    color: var(--fg, #DFE1E5); }
+.cue-selector-chip.cue-selector-chip-empty { opacity: 0.4; }
+.cue-selector-chip-count { font-size: 10; color: var(--fg-secondary, #9DA0A8); }
+
 .cue-selector-columns { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; gap: 10px; }
-/* Panels are soft surfaces, not boxed: no rule, rounded, and the header is a label rather than a band. */
-.cue-selector-panel { width: 0px; flex-grow: 1; height: 100%; flex-direction: column; border-radius: 8px;
-    background-color: var(--surface-recessed, #131416); }
-.cue-selector-header { width: 100%; padding: 10px 12px 4px 12px; color: var(--fg-secondary, #9DA0A8); font-size: 11; }
-/* Three rows at the window's smallest (22px each, inside its 4px padding): a picker showing no cue is no picker. */
-.cue-selector-tree { width: 100%; height: 0px; flex-grow: 1; min-height: 74px; background: none; padding: 4px 6px 6px 6px; }
-.cue-selector-row { flex-direction: column; height: 22px; color: var(--fg, #DFE1E5); font-size: 12; cursor: pointer; }
-.cue-selector-line { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; align-items: center; gap: 3px; }
-.cue-selector-row { border-radius: 6px; }
+/* Panels are surfaces with a hairline, so a column reads as a card on the glass. */
+.cue-selector-panel { width: 0px; flex-grow: 1; height: 100%; flex-direction: column; border-radius: 10px;
+    background-color: var(--surface-recessed, #131416); border-width: 1px; border-color: var(--border-base, #2B2D31); }
+.cue-selector-header { width: 100%; padding: 10px 14px 6px 14px; color: var(--accent, #4C8DFF); font-size: 12; }
+/* Three rows at the window's smallest (24px each, inside its 4px padding): a picker showing no cue is no picker. */
+.cue-selector-tree { width: 100%; height: 0px; flex-grow: 1; min-height: 80px; background: none; padding: 4px 6px 6px 6px; }
+.cue-selector-row { flex-direction: column; height: 24px; color: var(--fg, #DFE1E5); font-size: 12; cursor: pointer; border-radius: 6px; }
+.cue-selector-line { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; align-items: center; gap: 4px; padding-left: 4px; }
 .cue-selector-row:hover { background-color: var(--hover-bg, #2E3033); }
-/* Accent is for what plays; the folders over it only warm. */
-/* A folder that is no cue recedes; the cues stand out. */
+/* Accent is for what plays; the folders over it only warm. A folder that is no cue recedes. */
 .cue-selector-row.cue-selector-folder { color: var(--fg-secondary, #9DA0A8); }
 .cue-selector-row.cue-selector-lit { color: var(--warning, #CCA700); }
-.cue-selector-row.cue-selector-current { color: var(--warning-icon, #FFAF0F); background-color: var(--surface-raised, #2B2B2B); }
+.cue-selector-row.cue-selector-current { color: var(--warning-icon, #FFAF0F); background-color: var(--accent-soft, #2E436E); }
 .cue-selector-row.cue-selector-failed { color: var(--error, #F14C4C); }
 .cue-selector-row .__twisty__ { width: 12px; height: 12px; flex-shrink: 0; }
 .cue-selector-row.__collapsed__ .__twisty__ { overlay: shape("chevron-right"); }

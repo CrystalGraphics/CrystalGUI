@@ -13,6 +13,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.composite.SearchField;
+import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.text.UIText;
 
@@ -116,6 +117,12 @@ public final class CueSelector {
         final List<Node> full;
         List<Node> shown = new ArrayList<>();
         TreeView<Node> tree;
+        UIElement panel, chip;
+        UIText chipCount;
+        /** Whether the kit's chip is pressed in; an off kit has no column. */
+        boolean on;
+        /** The cues the filter leaves. */
+        int matches;
 
         Column(List<Node> full) {
             this.full = full;
@@ -123,13 +130,16 @@ public final class CueSelector {
 
         void show(String query) {
             List<Node> next = new ArrayList<>();
+            int total = 0;
             for (Node n : full) {
                 Node k = filter(n, query, query.isEmpty());
                 if (k == null) continue;
                 compact(k);
                 next.add(k);
+                total += k.count;
             }
             shown = next;
+            matches = total;
         }
     }
 
@@ -164,6 +174,8 @@ public final class CueSelector {
         private int seen = -1;
         private int shownTenths = -1;
 
+        /** Kits open at launch; the rest are one chip press away, so columns stay wide however many kits there are. */
+        private static final int MAX_OPEN = 4;
         private static final String HINT = "Click a cue to play it  |  a folder to fold it";
 
         Instance(Desktop desktop) {
@@ -207,17 +219,60 @@ public final class CueSelector {
             search.setPlaceholder("Filter cues");
             search.field().setPlaceholderShownUnfocused(true);
             search.onQueryChanged.connect(this::filter);
+            ScrollerView chipScroll = new ScrollerView();
+            chipScroll.addClass("cue-selector-chip-scroll");
+            UIElement chips = new UIElement();
+            chips.addClass("cue-selector-chips");
+            chipScroll.append(chips);
             UIElement panels = new UIElement();
             panels.addClass("cue-selector-columns");
-            for (Map.Entry<String, Column> ns : columns.entrySet()) panels.append(panel(ns.getKey(), ns.getValue()));
+            int index = 0;
+            for (Map.Entry<String, Column> ns : columns.entrySet()) {
+                Column column = ns.getValue();
+                column.on = index++ < MAX_OPEN;
+                chips.append(chip(ns.getKey(), column));
+                panels.append(panel(ns.getKey(), column));
+            }
             status.addClass("cue-selector-status");
-            screen.append(search, panels, status);
+            screen.append(search, chipScroll, panels, status);
+            applyVisibility();
             return screen;
+        }
+
+        /** A kit's switch: pressed, its column shows. Beside the name, the cues it holds or, filtered, the ones that match. */
+        private UIElement chip(String namespace, Column column) {
+            UIElement chip = new UIElement();
+            chip.addClass("cue-selector-chip");
+            UIText name = new UIText(namespace);
+            UIText count = new UIText("");
+            count.addClass("cue-selector-chip-count");
+            chip.append(name, count);
+            chip.onMouseDown.attachListener((element, event) -> {
+                column.on = !column.on;
+                applyVisibility();
+                event.stopPropagation();
+            }, false, true);
+            column.chip = chip;
+            column.chipCount = count;
+            return chip;
+        }
+
+        /** Shows the columns whose chip is pressed and, under a filter, that still hold a match. */
+        private void applyVisibility() {
+            boolean filtering = !search.getText().trim().isEmpty();
+            for (Column column : columns.values()) {
+                boolean empty = filtering && column.matches == 0;
+                column.chip.toggleClass("cue-selector-chip-on", column.on);
+                column.chip.toggleClass("cue-selector-chip-empty", empty);
+                column.chipCount.setText(String.valueOf(column.matches));
+                column.panel.toggleClass("cue-selector-hidden", !column.on || empty);
+            }
         }
 
         private UIElement panel(String namespace, Column column) {
             UIElement panel = new UIElement();
             panel.addClass("cue-selector-panel");
+            column.panel = panel;
             UIText header = new UIText(namespace);
             header.addClass("cue-selector-header");
             TreeView<Node> tree = new TreeView<>(new TreeDataSource<>() {
@@ -250,6 +305,7 @@ public final class CueSelector {
                 expandAll(column);
                 column.tree.refresh();
             }
+            applyVisibility();
         }
 
         private boolean lit(Node node) {
