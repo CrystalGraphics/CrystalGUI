@@ -4,6 +4,9 @@ import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.api.texture.CgTexture;
+import com.crystalgraphics.compute.ops.CgGpuOps;
+import com.crystalgraphics.render.canvas.CgCanvasMaterials;
+import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.api.PoseStack;
@@ -63,10 +66,8 @@ import java.util.Map;
  *
  * <p>An element's {@code filter} drop shadow ({@link SvgScene.DropShadow}) is the union of what it draws,
  * blurred, offset and flooded, painted under it: SVG's {@code feGaussianBlur} of {@code SourceAlpha}, as resvg
- * renders it. {@link #drawShadow} rasterises the group's coverage into scratch, runs the backdrop's two
- * separable passes over it ({@link CgUiBackdrop#blurPass}) into a texture of its own, and draws that as white
- * coverage under the flood colour, like a plain icon. Each shadow is its own texture rather than an atlas
- * slot, because a filter pass clears its whole target.</p>
+ * renders it. {@link #drawShadow} rasterises the group's coverage into scratch, blurs it ({@link CgGpuOps#blur})
+ * into a texture of its own, and draws that as white coverage under the flood colour, like a plain icon.</p>
  */
 public final class SvgRasterCache {
 
@@ -176,14 +177,11 @@ public final class SvgRasterCache {
     private final Map<Key, Entry> entries = new HashMap<>();
     private final Map<Key, Shadow> shadows = new HashMap<>();
     /** A shadow's coverage, then its first axis; grown to the largest asked for. */
-    private CgGraphTexture shadowCoverage, shadowAxis;
+    private CgGraphTexture shadowCoverage;
     private int shadowsCreated;
     private boolean sigmaClampLogged;
     /** Made when the first frame that rasterises executes, and kept; cleared when it is full. */
     private CgGraphTexture atlas;
-    private CgMaterial coverage;
-    private CgMaterial coverageMax;
-    private CgMaterial accumulate;
     private int shelfX, shelfY, shelfHeight;
     private int generation;
     /** Times the atlas was cleared and its icons placed again. @see #resets() */
@@ -403,17 +401,18 @@ public final class SvgRasterCache {
         }
 
         entry.texture = ctx.requestTexture("cgui_svg_shadow_" + shadowsCreated++, width, height, ATLAS_FORMAT);
-        float fracW = (float) width / shadowCoverage.getWidth(), fracH = (float) height / shadowCoverage.getHeight();
-        CgUiBackdrop blur = ctx.backdrop();
-        blur.blurPass(shadowCoverage, shadowAxis, 1f, 0f, sigmaX, tapsX, width, height, fracW, fracH);
-        blur.blurPass(shadowAxis, entry.texture, 0f, 1f, sigmaY, tapsY, width, height, fracW, fracH);
+        // The coverage sits at the scratch's top-left in the UI's space, its last rows
+        CgComputePass pass = ctx.compute("cgui.svg.shadow");
+        CgGpuOps.blur(pass, shadowCoverage, 0, shadowCoverage.getHeight() - height, width, height, entry.texture, 0, 0,
+                sigmaX, sigmaY, CgGpuOps.Edge.MIRROR);
+        pass.end();
         CgTrace.zoneDone(UiTrace.FRAME, "svg-shadow:build", timed);
         return entry;
     }
 
-    /** Within the blur pass's kernel, which is {@link CgUiBackdrop#MAX_KERNEL_RADIUS} taps either side. */
+    /** Within the blur's kernel, {@link CgGpuOps#MAX_BLUR_SIGMA}. */
     private float clampSigma(float sigma) {
-        float most = CgUiBackdrop.MAX_KERNEL_RADIUS / 3f;
+        float most = CgGpuOps.MAX_BLUR_SIGMA;
         if (sigma <= most) return sigma;
         if (!sigmaClampLogged) {
             sigmaClampLogged = true;
@@ -427,12 +426,8 @@ public final class SvgRasterCache {
         if (shadowCoverage != null && shadowCoverage.getWidth() >= width && shadowCoverage.getHeight() >= height) return;
         int w = Math.max(width, shadowCoverage == null ? 0 : shadowCoverage.getWidth());
         int h = Math.max(height, shadowCoverage == null ? 0 : shadowCoverage.getHeight());
-        if (shadowCoverage != null) {
-            ctx.releaseTexture(shadowCoverage);
-            ctx.releaseTexture(shadowAxis);
-        }
+        if (shadowCoverage != null) ctx.releaseTexture(shadowCoverage);
         shadowCoverage = ctx.requestTexture("cgui_svg_shadow_coverage", w, h, ATLAS_FORMAT);
-        shadowAxis = ctx.requestTexture("cgui_svg_shadow_axis", w, h, ATLAS_FORMAT);
     }
 
     private void clearShadows() {
@@ -538,19 +533,16 @@ public final class SvgRasterCache {
         ctx.endLayerFbo();
     }
 
-    private CgMaterial accumulate() {
-        if (accumulate == null) accumulate = CgMaterial.load("crystalgui:shaders/gui_curve_accumulate.shader");
-        return accumulate;
+    private static CgMaterial accumulate() {
+        return CgCanvasMaterials.SCREEN.colourCoverage();
     }
 
-    private CgMaterial coverage() {
-        if (coverage == null) coverage = CgMaterial.load("crystalgui:shaders/gui_curve_coverage.shader");
-        return coverage;
+    private static CgMaterial coverage() {
+        return CgCanvasMaterials.SCREEN.coverage();
     }
 
-    private CgMaterial coverageMax() {
-        if (coverageMax == null) coverageMax = CgMaterial.load("crystalgui:shaders/gui_curve_coverage_max.shader");
-        return coverageMax;
+    private static CgMaterial coverageMax() {
+        return CgCanvasMaterials.SCREEN.strokeCoverage();
     }
 
     void delete() {
@@ -558,9 +550,8 @@ public final class SvgRasterCache {
         for (Shadow shadow : shadows.values()) deleteNow(shadow.texture);
         shadows.clear();
         deleteNow(shadowCoverage);
-        deleteNow(shadowAxis);
         deleteNow(atlas);
-        shadowCoverage = shadowAxis = atlas = null;
+        shadowCoverage = atlas = null;
         shelfX = shelfY = shelfHeight = 0;
     }
 

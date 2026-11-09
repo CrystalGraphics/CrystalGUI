@@ -8438,6 +8438,7 @@ com/crystalgui/render/texture/CgUiBackdropFilter
   method public getSaturation ()F
   method public getSpecular ()F
   method public getTintArgb ()I
+  method public look (Lcom/crystalgraphics/render/canvas/CgCanvasGlass$Look;)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public setBezel (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public setBlurRadius (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
   method public setChromatic (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;

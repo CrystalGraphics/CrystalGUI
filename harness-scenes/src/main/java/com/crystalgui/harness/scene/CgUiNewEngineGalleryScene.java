@@ -680,7 +680,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
      */
     private UIElement tableView() {
         ObservableList<String> model = new ObservableList<>();
-        for (String name : new String[] {"box.shader", "gui_backdrop_filter.shader", "gui_blur.shader",
+        for (String name : new String[] {"box.shader", "glass.shader", "downsample.shader",
                                          "gradient.shader", "curve.shader"}) {
             model.add(name);
         }
@@ -758,9 +758,9 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
             pick.setSource(QuickPickSource.of(List.of(
                     QuickPickItem.of("box", "box.shader")
                             .withDescription("the default material"),
-                    QuickPickItem.of("glass", "gui_backdrop_filter.shader")
+                    QuickPickItem.of("glass", "glass.shader")
                             .withDescription("liquid glass"),
-                    QuickPickItem.of("blur", "gui_blur.shader")
+                    QuickPickItem.of("blur", "image.compute")
                             .withDescription("one axis of the Gaussian"),
                     QuickPickItem.of("gradient", "gradient.shader")
                             .withDescription("eight stops, one draw"))));

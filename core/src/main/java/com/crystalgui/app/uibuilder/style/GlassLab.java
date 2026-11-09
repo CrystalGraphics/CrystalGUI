@@ -5,12 +5,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
+import com.crystalgraphics.render.canvas.CgCanvasGlass;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
 import com.crystalgui.style.property.visual.color.ColorValue;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.PanelForm;
@@ -61,8 +63,11 @@ public final class GlassLab {
     private record Knob(String label, String name, float min, float max, Scale scale) {
     }
 
-    /** One starting point, written through {@link #written} so it says only what differs. */
+    /** One of CrystalGraphics' glass presets, written as a declaration: only what differs from the default. */
     private record Preset(String label, String css) {
+        Preset(String label, CgCanvasGlass.Look look) {
+            this(label, BackdropFilterValue.write(new CgUiBackdropFilter().look(look)));
+        }
     }
 
     private static final Knob[] FROST = {
@@ -83,26 +88,14 @@ public final class GlassLab {
             new Knob("Edge width", "edge-width", 0f, 12f, Scale.PX),
             new Knob("Rim ambient", "rim-ambient", 0f, 100f, Scale.PERCENT)};
 
-    /**
-     * Each a different material rather than a different amount: a plain pane, a frost, Apple's liquid lens,
-     * Windows' two acrylics and a dispersive prism. An unstated function is the engine's default, so each says
-     * what it switches off as well as what it turns up.
-     */
+    /** Each a different material rather than a different amount; the looks are the engine's (CgCanvasGlass). */
     private static final Preset[] PRESETS = {
-            new Preset("Clear", "blur(0px) saturate(1) tint(#00000000) bezel(10px) ior(1.35) specular(0.6) glow(0.05) "
-                    + "chromatic(0) noise(0)"),
-            new Preset("Frosted", "blur(24px) saturate(1.2) tint(#FFFFFF1F) bezel(0px) specular(0.3) noise(0.05)"),
-            new Preset("Liquid", "blur(4px) saturate(1.8) tint(#FFFFFF14) bezel(20px) ior(1.6) specular(1.2) glow(0.2) "
-                    + "edge(0.4) chromatic(0.25) noise(0.02)"),
-            // LUMINOSITY TAKES THE TINT'S BRIGHTNESS, so a dark tint with much of it is a dark panel whatever is behind.
-            new Preset("Acrylic", "blur(30px) saturate(1.5) tint(#1F1F2340) luminosity(0.1) bezel(0px) specular(0) "
-                    + "glow(0) edge(0.12) noise(0.03)"),
-            new Preset("Mica", "blur(40px) saturate(1.2) tint(#202124BF) luminosity(0.55) bezel(0px) specular(0) glow(0) "
-                    + "edge(0) noise(0)"),
-            // DISPERSION, NOT DISPLACEMENT: at ior 2.5 over a 24px bezel the lens folded the text back on itself, and a
-            // fringe that wide split into hard coloured lines. A pixel of blur keeps the fringe soft.
-            new Preset("Prism", "blur(1px) saturate(1.2) tint(#00000000) bezel(16px) ior(1.9) specular(0.5) glow(0.05) "
-                    + "chromatic(1.6) noise(0)")};
+            new Preset("Clear", CgCanvasGlass.CLEAR),
+            new Preset("Frosted", CgCanvasGlass.FROSTED),
+            new Preset("Liquid", CgCanvasGlass.LIQUID),
+            new Preset("Acrylic", CgCanvasGlass.ACRYLIC),
+            new Preset("Mica", CgCanvasGlass.MICA),
+            new Preset("Prism", CgCanvasGlass.PRISM)};
 
     /** The order a value is written in, the grammar's own; anything else follows as written. */
     private static final String[] ORDER = {"blur", "saturate", "tint", "bezel", "ior", "specular", "glow", "edge",

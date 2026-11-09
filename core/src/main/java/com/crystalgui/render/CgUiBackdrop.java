@@ -1,10 +1,11 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.compute.ops.CgGpuOps;
+import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
@@ -19,30 +20,13 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The BACKDROP PRIMITIVE: what is behind an element, captured and blurred, once per frame.
- *
- * <p>This is the whole of what {@code backdrop-filter} stands on, and it sits beside {@link CgUiPaintContext}
- * rather than inside it for the reason {@code TextEditor}'s view parts do: it is a piece of the paint
- * context rather than a client of it, so it reaches back through package-private members instead of
- * through a public API. Keeping it here also keeps the context's own job legible — the context draws
- * things, and this reads the framebuffer back.</p>
- *
- * <h3>What it does, in order</h3>
+ * What is behind an element, captured and blurred once a frame: the primitive under {@code backdrop-filter}. Part of the
+ * paint context, reaching into it through package-private members.
  * <pre>
- *   capture   scene blit -&gt; composite the frame target and every enclosing layer
- *   blur      scale down until sigma is small, box-prefiltered; separable Gaussian, horizontal then
- *             vertical, with the tap count derived from sigma -- Skia's scale-then-blur, see blurredBackdrop
- *   hand out  the sharp texture, the blurred one, and the element's UVs into both
+ *   capture   the scene, then the frame target and every enclosing layer, over the region asked for
+ *   blur      Skia's scale-then-blur on CrystalGraphics' compute (CgGpuOps.blurScaled)
+ *   hand out  the sharp texture, the blurred one, and the element's place in both
  * </pre>
- *
- * <h3>Two rules carry the whole design</h3>
- *
- * <p><b>The capture is a REGION, not the surface.</b> One capture per frame shared by every consumer is
- * right; taking "shared" to mean "everything" is what made glass a frame killer. See {@link #capX0}.</p>
- *
- * <p><b>The targets never change size.</b> They are screen-sized and only a corner is used, because the
- * capture happens mid-paint and rebuilding a framebuffer there is the incomplete-attachment hazard
- * {@link #prepareFrame} exists to avoid.</p>
  */
 final class CgUiBackdrop {
 
@@ -59,11 +43,9 @@ final class CgUiBackdrop {
 
     void prepareFrame() {
         if (PROBE) probeFrame();
-        // From the radius the PREVIOUS frame asked for, so a pair is built here and never mid-paint.
-        // The first frame a new radius appears therefore runs at the scale the old one chose: a correct
-        // blur at a slightly different quality, for one frame.
+        // From the radius last frame asked for, so a target is built here and never mid-paint.
         blurScale = scaleFor(blurRadiusPx);
-        targetsFor(blurScale);
+        targetFor(blurScale);
     }
 
 
@@ -88,124 +70,56 @@ final class CgUiBackdrop {
     private CgGraphTexture captureTarget;
 
     /**
-     * THE REGION THE CURRENT CAPTURE COVERS, in surface pixels, occupying the target's top-left corner.
-     *
-     * <p>The capture used to be the whole surface, and that is what made glass a frame killer: a taskbar
-     * island is about a fortieth of the screen, and it was paying for a full-surface scene blit and a
-     * full-surface composite per enclosing layer, every frame. Sharing
-     * one capture between consumers is right; taking "shared" to mean "everything" was not.</p>
-     *
-     * <p><b>The targets stay screen-sized and only a SUB-RECTANGLE is used.</b> Resizing them to the
-     * region would be the obvious move and is the one that reintroduces the incomplete-framebuffer
-     * hazard {@link #prepareFrame} exists to avoid — the capture happens mid-paint, which is exactly
-     * where an FBO must not be rebuilt. Using a corner costs nothing: the sub-rect is the same FRACTION
-     * of every target in the chain, so a normalised UV means the same thing in all of them and the blur's
-     * step maths needs no change at all.</p>
+     * The region the current capture covers, in surface pixels, at its target's top-left. A region, since a taskbar is a
+     * fortieth of the screen and capturing it all made glass a frame killer; in screen-sized targets, which mid-paint
+     * must never be rebuilt, the region the same fraction of each.
      */
     private int capX0, capY0, capW, capH;
 
     /**
-     * The union of the regions asked for this frame and last, in surface pixels.
-     *
-     * <p>Seeding a frame's capture with the PREVIOUS frame's union is what keeps this at one capture for
-     * more than one consumer: on a UI that is not moving, last frame's union covers this frame's requests
-     * exactly. A consumer that is not covered forces a recapture of the widened union rather than
-     * accepting a stale answer, so the result is exact and only the COST is speculative — an extra
-     * capture on the frame something moves or appears.</p>
+     * The union of the regions asked for this frame and last, in surface pixels. Seeding a capture with last frame's
+     * keeps a settled UI at one capture; a consumer outside it forces a recapture, so the cost is speculative, not the
+     * answer.
      */
     private int reqX0, reqY0, reqX1, reqY1;
     private int lastX0, lastY0, lastX1, lastY1;
     private long reqFrame = -1L;
 
     /**
-     * The two targets of the separable blur, ping-ponged: the box prefilter, then one axis, then the
-     * other, so which of the two holds the result depends on how many passes ran (see
-     * {@link #blurredBackdrop}, which records it in {@link #blurResult}).
-     *
-     * <p>Both are the surface divided by {@link #blurScale}. Blurring at reduced resolution is not only
-     * cheaper, it is what keeps the kernel well sampled — provided the source was REDUCED rather than
-     * merely read at a stride, which is what the prefilter is for. The reduction is free quality here
-     * rather than a compromise, because the output is by definition an image with no high frequencies
-     * left in it.</p>
+     * The blurred backdrop, one per working scale, each the grid over its scale and built once: a radius change selects
+     * another rather than rebuilding one under a live frame, which flickered. A surface resize rebuilds them.
      */
-    /**
-     * One ping-pong pair per working scale, each built once and never rebuilt for a scale change.
-     *
-     * <p>A pair used to be resized whenever {@link #scaleFor} stepped, which is at a blur radius of
-     * exactly 12 and 24 -- and a target rebuilt under a live frame flickers the whole surface for a few
-     * frames, wherever the rebuild is done from. {@link #prepareFrame} moving it to frame start was not
-     * enough. Keeping a pair per scale means a radius change SELECTS a target instead of rebuilding one,
-     * and only a surface resize rebuilds anything.</p>
-     */
-    private final Map<Integer, CgGraphTexture[]> blurTargets = new HashMap<>();
+    private final Map<Integer, CgGraphTexture> blurTargets = new HashMap<>();
 
-    /**
-     * The pair for {@code scale}, built on first use at the surface's own fraction of that scale.
-     *
-     * <p>{@link #prepareFrame} calls this for the scale the passes will use, so the mid-paint call from
-     * {@link #blurredBackdrop} only ever reads back what is already there -- a pair is never built with
-     * our own bindings in flight.</p>
-     */
-    private CgGraphTexture[] targetsFor(int scale) {
+    /** The target for {@code scale}, built on first use; {@link #prepareFrame} asks first, so paint never builds one. */
+    private CgGraphTexture targetFor(int scale) {
         int w = gridWidth() / scale;
         int h = gridHeight() / scale;
-        CgGraphTexture[] pair = blurTargets.get(scale);
-        if (pair != null && (pair[0].getWidth() != w || pair[0].getHeight() != h)) {
-            // Only a SURFACE resize reaches here; a radius change picks a different pair instead.
-            for (CgGraphTexture target : pair) ctx.releaseTexture(target);
-            pair = null;
+        CgGraphTexture target = blurTargets.get(scale);
+        if (target != null && (target.getWidth() != w || target.getHeight() != h)) {
+            ctx.releaseTexture(target);
+            target = null;
         }
-        if (pair == null) {
-            pair = new CgGraphTexture[] {
-                    ctx.requestTexture("cgui_blur_a" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
-                    ctx.requestTexture("cgui_blur_b" + scale, w, h, CgUiPaintContext.LAYER_FORMAT),
-            };
-            blurTargets.put(scale, pair);
-            for (CgGraphTexture target : pair) ctx.warmUpLayer(target);
+        if (target == null) {
+            target = ctx.requestTexture("cgui_blur_" + scale, w, h, CgUiPaintContext.LAYER_FORMAT);
+            blurTargets.put(scale, target);
+            ctx.warmUpLayer(target);
         }
-        return pair;
+        return target;
     }
 
-    /**
-     * How much smaller than the surface the blur runs at this frame: 1, 2 or 4.
-     *
-     * <p><b>Chosen from sigma, which is Skia's rule and the whole of what makes a large blur affordable
-     * and a small one sharp.</b> A Gaussian is only well sampled while its taps sit about a texel apart,
-     * so a big sigma at full resolution means a big kernel; Skia ({@code GrBlurUtils}) instead scales
-     * the input down by powers of two until sigma is at most {@link #MAX_WORKING_SIGMA}, blurs there,
-     * and scales back up. A small sigma stays at full resolution, where a quarter-res path would have
-     * blurred it more than was asked by the reduction alone.</p>
-     */
+    /** How much smaller than the surface the blur runs: {@link CgGpuOps#blurScale}, from last frame's radius. */
     private int blurScale = 4;
-
-    /** The largest sigma, in working-resolution texels, a pass is asked to blur. Skia's is 4. */
-    private static final float MAX_WORKING_SIGMA = 4f;
-
-    /** Taps either side of the centre, at most — bounds the shader's loop. {@code 3 * MAX_WORKING_SIGMA} rounded up, with headroom. */
-    static final int MAX_KERNEL_RADIUS = 16;
 
     /** The blur's REACH is three sigma: a tap beyond that carries under half a percent of the weight. */
     private static final float REACH_PER_SIGMA = 3f;
 
-    /**
-     * Pins the working scale to 1, 2 or 4 whatever the radius asks for. 0 (the default) picks per
-     * radius. {@code -Dcrystalgui.glass.forceScale=2}.
-     *
-     * <p>DIAGNOSTIC. The scale steps at a radius of exactly 12 and 24, so anything that looks different
-     * either side of one of those is either the scale or a coincidence, and there is no way to tell
-     * them apart while the radius decides. Holding the scale still and sweeping the radius across the
-     * step separates them in one run.</p>
-     */
-    private static final int FORCED_SCALE = Integer.getInteger("crystalgui.glass.forceScale", 0);
-
-    /** The largest working scale: what the 4-tap box prefilter reduces cleanly. */
+    /** The largest working scale, which the grid is rounded to. */
     private static final int MAX_SCALE = 4;
 
     /**
-     * The width of the grid the capture and every blur target share: the surface rounded up to a whole
-     * {@link #MAX_SCALE}, so a blur texel covers exactly {@code scale} capture texels and one normalised rect is the
-     * same place in each. A surface height off that grid otherwise drifts the blurred sample by up to three rows,
-     * growing with distance from the capture's top: a maximised window's glass moved the taskbar's backdrop up.
+     * The grid the capture and every blur target share: the surface rounded up to {@link #MAX_SCALE}, so a blur texel
+     * covers exactly {@code scale} capture texels. Off it, a maximised window's glass moved the taskbar's backdrop.
      */
     private int gridWidth() {
         return roundUp(Math.max(1, ctx.screenWidth));
@@ -220,16 +134,11 @@ final class CgUiBackdrop {
         return (px + MAX_SCALE - 1) / MAX_SCALE * MAX_SCALE;
     }
 
-    /** The scale a radius wants, capped at {@link #MAX_SCALE}. */
     private static int scaleFor(float radiusPx) {
-        if (FORCED_SCALE == 1 || FORCED_SCALE == 2 || FORCED_SCALE == 4) return FORCED_SCALE;
-        float sigma = radiusPx / REACH_PER_SIGMA;
-        int scale = 1;
-        while (sigma / scale > MAX_WORKING_SIGMA && scale < MAX_SCALE) scale *= 2;
-        return scale;
+        return CgGpuOps.blurScale(radiusPx / REACH_PER_SIGMA);
     }
 
-    /** Which of the working pair holds the finished blur for {@link #blurFrame}. */
+    /** The finished blur of {@link #blurFrame}. */
     @Nullable
     private CgGraphTexture blurResult;
 
@@ -237,42 +146,25 @@ final class CgUiBackdrop {
     private float blurRadiusPx = Float.NaN;
 
     /**
-     * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code backdrop-filter}.
+     * Captures what is behind {@code (x, y, w, h)} and blurs it: the primitive under {@code backdrop-filter}. One capture
+     * a frame, shared by every consumer, retaken only when something was painted over what one samples
+     * ({@link CgUiPaintContext#notePainted}).
      *
-     * <h3>One capture per frame, shared</h3>
-     * <p>The full-surface grab happens on the first call of a frame and every later caller crops out of
-     * it, so this is <b>one render-target switch per frame however many consumers there are</b> rather
-     * than one each. That is what makes glass on more than a single element a measurement rather than a
-     * flat no.</p>
-     *
-     * <p><b>Retaken only when something was painted over what a consumer samples</b> since the last grab
-     * ({@link CgUiPaintContext#notePainted}): a consumer then sees everything drawn before it, another glass
-     * surface included, and glass over ground nothing touched still shares the frame's one grab.</p>
-     *
-     * @param blurRadiusPx how far the blur reaches, in surface pixels. Zero hands back the capture
-     *                     itself, so {@code blur 0} costs nothing beyond the grab every consumer shares
-     * @return the two textures, or {@code null} when there is nothing to capture — a caller must fall
-     *         back to a solid colour rather than draw nothing
+     * @param blurRadiusPx how far the blur reaches, in surface pixels; 0 hands back the capture itself
+     * @param reach        how far a lens samples past the rect, in element units
+     * @return the two textures and the rect's place in them, or {@code null} with nothing to capture: draw the fallback
      */
     @Nullable
     CgUiPaintContext.Backdrop forRect(float x, float y, float width, float height, float blurRadiusPx, float reach) {
         if (!ctx.frameActive || width <= 0f || height <= 0f || ctx.isSnapshotting()) return null;
 
-        // SURFACE PIXELS, so from the TRANSFORM chain — the opposite of the rule for placing a popup
-        // ("position from getWindowX/Y, never from localToWorld"), and it inverts for the same reason
-        // that rule exists. A popup's left/top are logical and get scaled again, so surface pixels are
-        // wrong there; a framebuffer region is already surface pixels, so they are the only right
-        // answer here.
+        // Surface pixels, from the transform chain: a framebuffer region is already in them.
         Matrix4f pose = new Matrix4f(ctx.targetPose());
         Vector3f tl = pose.transformPosition(new Vector3f(x, y, 0f));
         Vector3f tr = pose.transformPosition(new Vector3f(x + width, y, 0f));
         Vector3f bl = pose.transformPosition(new Vector3f(x, y + height, 0f));
         Vector3f br = pose.transformPosition(new Vector3f(x + width, y + height, 0f));
-        // ALL FOUR CORNERS. Two opposite ones bound a rotated quad far too tightly -- at 45 degrees the box
-        // they give is half the area -- and what the capture misses is mirror-folded back in at the sample.
-        // AND IN SCREEN PIXELS, which a bounded layer's are not: its pixel (0,0) is its region's corner, so the
-        // pose inside one is relative to that. Glass inside a clipped, zoomed canvas sampled a patch offset by
-        // the layer's position and scaled by the layer's size against the screen's.
+        // All four corners: two bound a rotated quad too tightly. In screen pixels: a bounded layer's (0,0) is its corner.
         int[] origin = targetOrigin();
         int px0 = Math.round(Math.min(Math.min(tl.x, tr.x), Math.min(bl.x, br.x))) + origin[0];
         int py0 = Math.round(Math.min(Math.min(tl.y, tr.y), Math.min(bl.y, br.y))) + origin[1];
@@ -281,17 +173,12 @@ final class CgUiBackdrop {
         int rw = Math.max(1, px1 - px0);
         int rh = Math.max(1, py1 - py0);
 
-        // PAD BY THE BLUR'S REACH. A tap that leaves the captured region is clamped to its edge, which
-        // is what every backdrop-filter implementation does and is invisible a few pixels in - but only
-        // if there ARE a few pixels. Capturing the element's own rect exactly would clamp from the very
-        // first tap and smear the edge inward.
-        // And by a lens's reach, which is in the element's units and so scaled by the pose.
+        // Padded by the blur's and the lens's reach (the lens in element units, so through the pose), or the edge clamps
+        // from the first tap and smears inward.
         float poseScale = (float) Math.hypot(pose.m00(), pose.m01());
         int pad = (int) Math.ceil(blurRadiusPx + reach * poseScale) + 4;
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
-        // NEVER PAST THE CLIP, which is the web's backdrop root: what an ancestor clips away is not behind this
-        // element as far as it can see. A lens in a zoomed canvas reached hundreds of pixels past the stage and
-        // bent the whole editor around it into the glass.
+        // Never past the clip, the web's backdrop root: a lens in a zoomed canvas bent the whole editor in.
         int[] clip = visibleArea(origin);
         int wantX0 = Math.max(Math.max(0, clip[0]), px0 - pad);
         int wantY0 = Math.max(Math.max(0, clip[1]), py0 - pad);
@@ -311,13 +198,9 @@ final class CgUiBackdrop {
         if (PROBE) pConsumers++;
         if (!ensureCaptured(wantX0, wantY0, wantX1, wantY1)) return null;
 
-        // WHERE THE ELEMENT'S OWN UV LANDS IN THE CAPTURE, through the pose: the origin plus a step per axis,
-        // so a rotated element reads a rotated patch and the backdrop stays on the screen behind it. The
-        // bounding rect cannot say that -- handed to the quad's parametric uv it maps the patch onto the
-        // element, and the world visibly turns with the glass.
-        // Y IS FLIPPED. GL framebuffers are bottom-left origin and the UI is top-left, so v runs the other
-        // way; blitLayer carries the same flip spelled uv(0, 1, 1, 0). Relative to the CAPTURE's origin,
-        // since the capture is a region rather than the whole surface. Over the grid, which the textures are.
+        // Where the element's uv lands in the capture, through the pose: an origin and a step per axis, so a rotated
+        // element reads a rotated patch. v is flipped (GL is bottom-left), relative to the capture's region, over the
+        // grid the textures are.
         int gw = gridWidth(), gh = gridHeight();
         float u0 = (tl.x + origin[0] - capX0) / gw;
         float v0 = 1f - (tl.y + origin[1] - capY0) / gh;
@@ -331,8 +214,7 @@ final class CgUiBackdrop {
             loggedRadius = blurRadiusPx;
             logGeometry(blurRadiusPx, px0, py0, px1, py1, gw, gh, v0, v0 + vy, blurred);
         }
-        // WHAT THIS ELEMENT MAY SAMPLE, as the same normalised rect: its padded, clipped rect, inset half a texel
-        // so a tap at the boundary never filters in the texels beyond it.
+        // What it may sample: its padded, clipped rect, half a texel in.
         float halfU = 0.5f / gw, halfV = 0.5f / gh;
         return new CgUiPaintContext.Backdrop(sharp, blurred, u0, v0, ux, vx, uy, vy,
                 (wantX0 - capX0) / (float) gw + halfU, 1f - (wantY1 - capY0) / (float) gh + halfV,
@@ -340,20 +222,15 @@ final class CgUiBackdrop {
     }
 
     /**
-     * Every number the backdrop's placement depends on, one line per radius change.
-     * {@code -Dcrystalgui.glass.geometry=true}.
-     *
-     * <p>DIAGNOSTIC. The sheet samples ONE normalised rect from both the capture and the blurred
-     * result, so the two agree only if the band covers a whole {@code scale} multiple of source rows.
-     * {@code bandRows} is what it covers and {@code capH} what exists; the difference is the deliberate
-     * overshoot, under {@code scale} rows, that {@code _Bounds} clamps. Anything else means the band was
-     * sized from a fraction again. @see #blurredBackdrop</p>
+     * Every number the backdrop's placement depends on, a few lines per radius change:
+     * {@code -Dcrystalgui.glass.geometry=true}. The capture and the blur share one normalised rect, so the band must
+     * cover a whole {@code scale} multiple of rows; its overshoot is under {@code scale}.
      */
     private void logGeometry(float radiusPx, int px0, int py0, int px1, int py1, int w, int h,
                              float vTop, float vBottom, CgTexture blurred) {
-        CgGraphTexture[] pair = blurTargets.get(blurScale);
-        int tw = pair == null ? -1 : pair[0].getWidth();
-        int th = pair == null ? -1 : pair[0].getHeight();
+        CgGraphTexture target = blurTargets.get(blurScale);
+        int tw = target == null ? -1 : target.getWidth();
+        int th = target == null ? -1 : target.getHeight();
         float fracW = capW / (float) w, fracH = capH / (float) h;
         int qw = tw < 0 ? -1 : (capW + blurScale - 1) / blurScale;
         int qh = th < 0 ? -1 : (capH + blurScale - 1) / blurScale;
@@ -377,25 +254,7 @@ final class CgUiBackdrop {
     /** @see #logGeometry */
     private float loggedRadius = Float.NaN;
 
-    /**
-     * Grabs the scene, then everything the UI has painted over it so far.
-     *
-     * <p><b>"So far" includes the LAYER STACK, and missing that is what made the first version draw
-     * nothing.</b> A masked or faded subtree paints into a layer FBO of its own and is not composited
-     * back until it finishes, so at the moment a glass element inside one draws, its siblings are in
-     * that layer — not in {@code ctx.frameTarget}, and certainly not in the scene. Capturing only those two
-     * produced a flat, empty backdrop: on screen, a panel with nothing but its own rim, which reads as
-     * the blur being broken rather than as the capture looking in the wrong place.</p>
-     *
-     * <p>So every live target is composited in paint order — scene, then {@code ctx.frameTarget}, then each
-     * enclosing layer from outermost inward. That is the definition of "behind this element", and the
-     * stack is at most a few deep because it is nesting depth rather than element count.</p>
-     */
-    /**
-     * Where the bound target's pixel (0,0) is on the screen: the sum of every enclosing bounded layer's region
-     * origin, each of which is expressed in the target around it. A caller-owned target with no region adds
-     * nothing, as before.
-     */
+    /** Where the bound target's pixel (0,0) is on the screen: the sum of the enclosing bounded layers' origins. */
     private int[] targetOrigin() {
         int x = 0, y = 0;
         for (Iterator<CgUiPaintContext.LayerFrame> it = ctx.layerStack.descendingIterator(); it.hasNext(); ) {
@@ -409,9 +268,9 @@ final class CgUiBackdrop {
     }
 
     /**
-     * What an element drawn now can see, in screen pixels: the live scissor, and every enclosing bounded layer's
-     * region. A layer is where a mask, an opacity or a rounded {@code overflow} applies, none of which is a
-     * scissor -- bounded by the scissor alone, glass at a rounded stage's edge sampled the dialog around it.
+     * What an element drawn now can see, in screen pixels: the scissor and every enclosing bounded layer's region (a
+     * mask, an opacity or a rounded {@code overflow}, none of them a scissor). Bounded by the scissor alone, glass at
+     * a rounded stage's edge sampled the dialog around it.
      */
     private int[] visibleArea(int[] origin) {
         int[] clip = ctx.clipRect();
@@ -434,10 +293,7 @@ final class CgUiBackdrop {
     private boolean ensureCaptured(int needX0, int needY0, int needX1, int needY1) {
         int depth = ctx.layerStack.size();
         CgGraphTexture innermost = ctx.currentTarget();
-        // AND NOTHING PAINTED OVER IT SINCE. A capture is the picture at the moment it was taken, so a second
-        // consumer reusing it missed whatever was painted between the two -- an artboard's glass drawn after a
-        // row of images showed the artboard as it was before the images. Only paint over THIS consumer's area
-        // counts, so glass over untouched ground still shares one capture a frame.
+        // Retaken when something was painted over this consumer's area since: a capture is the picture as it was.
         boolean sameTarget = captureFrame == ctx.frameId
                 && captureDepth == depth && captureTarget == innermost
                 && !ctx.paintedOver(needX0, needY0, needX1, needY1);
@@ -451,8 +307,7 @@ final class CgUiBackdrop {
         int w = Math.max(1, ctx.screenWidth), h = Math.max(1, ctx.screenHeight);
         CgGraphTexture cap = captureTexture(gridWidth(), gridHeight());
 
-        // Seed from the previous frame's union so a settled UI captures ONCE for every consumer, and
-        // widen to whatever is being asked for now so the answer is never stale.
+        // Seeded from last frame's union, so a settled UI captures once for every consumer; widened to what is asked.
         int x0 = Math.max(0, Math.min(needX0, lastX0 == 0 && lastX1 == 0 ? needX0 : lastX0));
         int y0 = Math.max(0, Math.min(needY0, lastY0 == 0 && lastY1 == 0 ? needY0 : lastY0));
         int x1 = Math.min(w, Math.max(needX1, lastX1));
@@ -465,47 +320,18 @@ final class CgUiBackdrop {
         capW = Math.max(1, Math.min(w - x0, x1 - x0));
         capH = Math.max(1, Math.min(h - y0, y1 - y0));
 
-        // The capture occupies the target's TOP-LEFT corner in UI terms, which is the TOP-left in GL
-        // terms too - hence h - capH as the GL y origin. Everything downstream reads the same sub-rect.
+        // Top-left in the UI's space, which is GL's top-left too: h - capH as the GL y origin.
         int glY0 = h - (capY0 + capH);
 
-        // 1. The scene, region only: the host's target as it stood when the frame began, never the frame's own target,
-        // which holds the UI alone. A copy, in its place among the passes.
+        // 1. The scene, region only: the host's target as it stood when the frame began, copied in its place.
         ctx.recordCopy(CgGraphTexture.current(), capX0, glY0, capW, capH, cap, 0, gridHeight() - capH);
 
-        // 1b. THE SCENE IS OPAQUE, AND SAYING SO IS WHAT MAKES THE REST OF THIS PIPELINE TRUE: alpha written alone,
-        // the first draw into the capture below.
+        // 1b. The scene made opaque, alpha written alone: the host's alpha is whatever its rendering left (Minecraft's
+        // GUI draws blended), and cg_backdrop's un-premultiply divided a bright item by a fractional alpha into a white
+        // halo. Opaque, the divide is a no-op and every stage's premultiplied assumption holds.
         //
-        // Everything downstream is premultiplied: gui_blur carries alpha through its taps ("PREMULTIPLIED
-        // ALPHA IS CARRIED THROUGH, NOT DISCARDED"), and gui_backdrop_filter's cg_backdrop un-premultiplies with
-        // `rgb /= max(a, 1/255)`. That contract is right for the LAYERS composited below, which really
-        // are premultiplied. It is not right for the blit above, which is a raw glBlitFramebuffer of the
-        // HOST's colour buffer -- and a host's alpha channel holds whatever its own rendering left there.
-        // Minecraft's is not 1: its GUI layer draws blended, so an item sprite lands in the framebuffer
-        // carrying a fractional alpha next to slot art carrying another.
-        //
-        // DIVIDE A BRIGHT PIXEL BY A FRACTIONAL ALPHA AND IT SATURATES. A gold nugget in the hotbar at
-        // rgb(0.80, 0.65, 0.15) with a = 0.25 comes back (3.2, 2.6, 0.6), clips to near-white, and the
-        // blur then spreads that over its neighbours -- so the item wears a white halo while the dark
-        // slots beside it do not, because small numbers divided by the same alpha stay small. On screen
-        // it reads as bloom, or as an HDR or a saturation fault, and it is none of them: a Gaussian
-        // cannot brighten anything, so ANY local amplification in this path is arithmetic, and the only
-        // division in the path is the un-premultiply.
-        //
-        // ONE ALPHA-ONLY WRITE fixes it at the source instead of special-casing the consumer. An opaque
-        // image is trivially premultiplied (rgb * 1 == rgb), so cg_backdrop's divide becomes a no-op that
-        // still guards genuinely premultiplied content, and the layers composited below -- premultiplied
-        // `over` onto an opaque destination -- leave alpha at 1 rather than at src_a^2 + (1 - src_a),
-        // which is what straight-alpha blending would have left. Every stage's assumption is then true,
-        // rather than one of them being true by luck about the host.
-        //
-        // IT CANNOT BE SEEN IN THE HARNESS, which is why it shipped. There the "scene" is our own clear
-        // colour, so the capture's alpha is whatever we chose it to be and the divide is near enough to
-        // harmless; gui_blur's own note about a dark fringe is the same channel read the other way. The
-        // capture is the one place in the engine that samples a buffer we did not write.
-        // SNAPSHOT FIRST. beginLayerFbo below pushes onto the very stack being read. Each layer with where it sits
-        // on the screen and how much of its texture is its own: a pooled target is bucketed, and past its region
-        // it holds whatever the slot's last user left.
+        // The layers, snapshotted first, since beginLayerFbo pushes onto the stack being read: each with where it
+        // sits and how much of its pooled texture is its own.
         List<CgGraphTexture> enclosing = new ArrayList<>();
         List<int[]> placed = new ArrayList<>();
         int originX = 0, originY = 0;
@@ -522,15 +348,10 @@ final class CgUiBackdrop {
                     region == null ? frame.target().getHeight() : region.height()});
         }
 
-        // KEEP the scene copied above -- see ctx.beginLayerFbo(target, clear).
         final int fx0 = capX0, fy0 = capY0, fw = capW, fh = capH;
         ctx.beginLayerFbo(cap, false);
         try {
-            // WHAT THE UI-SO-FAR ACTUALLY HOLDS OVER THE CAPTURED REGION, read before it is composited.
-            // The whole pipeline rests on it being TRANSPARENT wherever nothing has drawn: premultiplied
-            // `over` is dst = src + dst*(1 - src.a), so a transparent source leaves the scene alone and
-            // an OPAQUE BLACK one erases it completely. Those two produce an identical-looking flat
-            // panel downstream, and only the alpha channel tells them apart.
+            // Premultiplied `over` leaves the scene where the UI drew nothing, provided it is transparent there.
             withoutScissor(() -> {
                 ctx.fillAlpha(fw, fh);
                 drawOver(ctx.frameTarget, 0, 0, w, h, fx0, fy0, fw, fh);
@@ -559,22 +380,8 @@ final class CgUiBackdrop {
     }
 
     /**
-     * Runs {@code body} with the scissor test OFF, restoring it afterwards.
-     *
-     * <p><b>A SCISSOR RECT IS IN SCREEN PIXELS, AND A BACKDROP TARGET IS NOT IN SCREEN PIXELS.</b>
-     * That is the whole of it. Every ordinary layer FBO is screen-sized, so the ambient clip rect means
-     * the same thing there and {@link CgUiPaintContext#beginLayerFbo} is right not to touch it -- an element inside an
-     * {@code overflow: hidden} subtree must stay clipped when it is promoted to a layer. The backdrop
-     * capture and the blur targets are the first things in this engine to render into a target with its
-     * OWN coordinate space, and for them the inherited rect is not a clip, it is a coordinate error.</p>
-     *
-     * <p>What it looked like: glass drawn inside a clipped subtree produced blur targets whose left
-     * strip was never written -- the stage's clip rect started ~180px into a 1920px screen, and the same
-     * 180 landed 180px into a 480px target, so 37% of it stayed at the clear instead of 9%. Panels over
-     * that strip sampled transparent black and came out dark, with a hard edge exactly where the rect
-     * began. It reads as a sampling or clamping fault and survived six rounds of looking at the sampling,
-     * because the arithmetic downstream was correct throughout: it was being handed a target with a hole
-     * in it. A readback of the target is what finally showed it, and would have on day one.</p>
+     * Runs {@code body} with the scissor off: a scissor is in screen pixels and the capture is not, so an inherited
+     * one left part of it unwritten and the glass over it dark.
      */
     private void withoutScissor(Runnable body) {
         ScissorStack.Saved saved = ctx.suspendScissor();
@@ -607,56 +414,14 @@ final class CgUiBackdrop {
             ctx.poseStack.setIdentity();
             ctx.quad().at(x0 - cx, y0 - cy).size(rw, rh).uv(u0, vTop, u1, vBottom).color(0xFFFFFFFF).submit();
             ctx.flush();
-            // AND AGAIN AFTER THE FLUSH, because submit() only QUEUES. The material's render state is
-            // uploaded by the bind, and the reading that matters is the one in force when the geometry
-            // is actually drawn -- which is here. Measuring at submit time answers a question nobody
-            // asked and answers it reassuringly.
             ctx.poseStack.popPose();
         });
     }
 
     /**
-     * Builds and resizes the blur targets - from {@link #beginFrame}, never from a draw.
-     *
-     * <p><b>Never created mid-paint.</b> An FBO built inside a draw came back INCOMPLETE (0x8CD7,
-     * missing attachment) on the very first frame, while the identical call from
-     * {@code acquireLayerFbo} has always worked - and the difference is only ever <em>when</em>: the
-     * pool builds its slots from {@code beginFrame}, this was building them with our own framebuffer
-     * bindings in flight. That is the shape {@code CgGlStateManager} warns about, where an elided bind
-     * means an attachment lands somewhere other than the framebuffer being built, so the symptom is a
-     * missing call rather than a failing one.</p>
-     */
-    /**
-     * Blurs the captured backdrop, once per frame, and hands back the result.
-     *
-     * <p><b>The blur is SHARED, like the capture.</b> Every consumer samples its own region out of one
-     * blurred surface, so this runs once however many glass elements there are rather than once each.
-     * The trade is that they share a radius - exactly right while the parameters come from a
-     * stylesheet, and it would need a pass per distinct radius if that stops being true.</p>
-     *
-     * <h4>Scale, then blur — Skia's Gaussian, and why the previous version was not one</h4>
-     *
-     * <p>{@code radiusPx} is the REACH the sheet asks for; sigma is a third of it. The working scale
-     * ({@link #blurScale}, decided in {@link #prepareFrame}) is the power of two that brings sigma to at
-     * most {@link #MAX_WORKING_SIGMA} texels, and the kernel's radius in taps is {@code ceil(3 * sigma)}
-     * at that scale with the taps ONE TEXEL APART — the two things that together define a well-sampled
-     * Gaussian. The weights are the Gaussian evaluated at each tap and normalised over the taps
-     * actually used, computed in the shader by the incremental recurrence (GPU Gems 3, ch. 40), so no
-     * table is uploaded and a truncated tail cannot darken the result.</p>
-     *
-     * <p>The version this replaced had nine fixed taps and stretched the STEP to reach the radius —
-     * six pixels apart at the taskbar's radius of 24, over a full-resolution source. Nine taps that skip
-     * five pixels between them are a comb, not a kernel: a glyph stem survives wherever a tap happens to
-     * land on it, so the horizontal pass let text through nearly intact and the vertical pass — which
-     * happened to read the quarter-res intermediate and so WAS well sampled — smeared the survivors into
-     * vertical streaks. Reported as "smudgy, not a proper blur" over the one backdrop with text in it.
-     * The shader's own note said the taps were meant to land a texel apart over a reduced source; the
-     * first pass had simply never been given one. {@code gui_downsample.shader} is the prefilter that
-     * gives it one, and the kernel no longer stretches to compensate for anything.</p>
-     *
-     * <p>Three passes at a reduced scale (box prefilter, horizontal, vertical) and two at full scale,
-     * where a prefilter would be a copy. All of them touch only the captured sub-rect — a 34px bar at
-     * scale 4 is a few thousand texels per pass.</p>
+     * Blurs the capture once a frame, shared by every consumer at one radius: Skia's scale-then-blur
+     * ({@link CgGpuOps#blurScaled}), sigma a third of the reach, the region box-reduced by {@link #blurScale}, its edges
+     * mirrored as Chromium extends a backdrop. One compute pass over the captured region.
      */
     @Nullable
     private CgTexture blurredBackdrop(float radiusPx) {
@@ -667,199 +432,28 @@ final class CgUiBackdrop {
         }
         long probeB0 = PROBE ? System.nanoTime() : CgTrace.stamp(UiTrace.FRAME);
 
-        // The fraction of each target the capture actually occupies. Identical in all of them, because
-        // they are all the same fraction of the screen. @see #capX0
-        float fracW = capW / (float) gridWidth();
-        float fracH = capH / (float) gridHeight();
-
-        CgTexture captured = capture;
+        CgGraphTexture captured = capture;
         if (captured == null) return null;
-
-        ctx.flush();
-        return blurCaptured(captured, radiusPx, fracW, fracH, probeB0);
-    }
-
-    /** {@link #blurredBackdrop}'s passes, apart so its GPU timer closes on every exit. */
-    @Nullable
-    private CgTexture blurCaptured(CgTexture captured, float radiusPx, float fracW, float fracH, long probeB0) {
-        // Sigma at the working scale, and the taps that reach three of it. The radius is CLAMPED rather
-        // than the scale raised past 4 (the box prefilter reduces 4x cleanly and no further), so a blur
-        // asked to reach beyond 3 * MAX_KERNEL_RADIUS * 4 surface pixels comes back slightly narrower
-        // than asked and still correctly normalised -- never broken, merely saturated.
-        int scale = blurScale;
-        float sigma = radiusPx / REACH_PER_SIGMA / scale;
-        int taps = Math.max(1, Math.min(MAX_KERNEL_RADIUS, (int) Math.ceil(REACH_PER_SIGMA * sigma)));
-
-        CgGraphTexture[] pair = targetsFor(scale);
-        CgGraphTexture blurA = pair[0], blurB = pair[1];
-
-        // WHOLE TEXELS FIRST, fraction derived from them -- never the screen fraction rounded into the
-        // target's grid. A band of round(targetH * capH/H) texels spans capH source rows at capH/that
-        // rows each, which is not `scale`: with capH odd, 344 texels covered 687 rows at 1.997 apiece
-        // and the drift reached a full pixel by the bottom of the band, where a taskbar sits. Sized from
-        // ceil(capH/scale) instead, source row r lands at texel r/scale, and the consumer's own
-        // v = 1 - r/gridHeight is exact at every scale because each target is the grid divided by its scale.
-        int redW = (capW + scale - 1) / scale;
-        int redH = (capH + scale - 1) / scale;
-        float redFracW = redW / (float) blurA.getWidth();
-        float redFracH = redH / (float) blurA.getHeight();
-
-        CgGraphTexture result;
-        if (scale > 1) {
-            // The quad's uv span covers redW*scale source texels, which overshoots the capture by up to
-            // scale-1: exactly what makes each output texel a whole scale x scale block. _Bounds still
-            // names the real content, so the overshoot clamps to the edge rather than reading the clear.
-            downsamplePass(captured, blurA, scale, redW, redH,
-                    redW * scale / (float) gridWidth(), redH * scale / (float) gridHeight(), fracW, fracH);
-            blurPass(blurA, blurB, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
-            blurPass(blurB, blurA, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
-            result = blurA;
-        } else {
-            blurPass(captured, blurA, 1f, 0f, sigma, taps, redW, redH, redFracW, redFracH);
-            blurPass(blurA, blurB, 0f, 1f, sigma, taps, redW, redH, redFracW, redFracH);
-            result = blurB;
-        }
-
-        // EACH STAGE, because "the glass is a flat fill" is equally consistent with a capture that is
-        // flat, a downsample that lost it, and a blur that produced nothing -- and they are three
-        // different bugs. The capture is read at the region it actually wrote into; a whole-target read
-        // would sample the untouched remainder and report every stage empty.
+        // The capture holds the region at its top-left in the UI's space, which is its last rows.
+        CgGraphTexture target = targetFor(blurScale);
+        CgComputePass pass = ctx.compute("cgui.backdrop.blur").timed(GPU_BLUR);
+        CgGpuOps.blurScaled(pass, captured, 0, gridHeight() - capH, capW, capH, target,
+                radiusPx / REACH_PER_SIGMA, CgGpuOps.Edge.MIRROR);
+        pass.end();
 
         blurFrame = ctx.frameId;
         blurRadiusPx = radiusPx;
-        blurResult = result;
+        blurResult = target;
         CgTrace.zoneDone(UiTrace.FRAME, "backdrop:blur", probeB0);
         if (PROBE) pBlur += System.nanoTime() - probeB0;
-        return result;
+        return target;
     }
 
-    /**
-     * The box prefilter: the captured sub-rect reduced {@code scale} times into {@code target}.
-     *
-     * <p>Four bilinear taps at {@code +-scale/4} source texels from the output texel's centre. Each
-     * bilinear fetch already averages a 2x2 block, so at scale 4 the four together average the whole
-     * 4x4 block behind the output texel; at scale 2 they land on the four texel centres of its 2x2
-     * block. A source decimated without this aliases, and an aliased source blurred is what a comb looks
-     * like. @see gui_downsample.shader</p>
-     */
-    private void downsamplePass(CgTexture source, CgGraphTexture target, int scale,
-                                int quadW, int quadH, float uvSpanW, float uvSpanH,
-                                float srcFracW, float srcFracH) {
-        float halfU = 0.5f / Math.max(1, source.getWidth());
-        float halfV = 0.5f / Math.max(1, source.getHeight());
-        float offset = scale / 4f;
-        ctx.downsampleMaterial.applyProperties(b -> {
-            b.sampler("_MainTex", 0, source);
-            b.vec2("_TexelSize", offset / Math.max(1, source.getWidth()), offset / Math.max(1, source.getHeight()));
-            b.vec4("_Bounds", halfU, 1f - srcFracH + halfV, srcFracW - halfU, 1f - halfV);
-        });
-        runFilter(ctx.downsampleMaterial, target, quadW, quadH, uvSpanW, uvSpanH);
-    }
+    /** The blur's passes on the GPU, timed apart from the frame's. */
+    private static final int GPU_BLUR = CgGpuTrace.name("backdrop.blur");
 
-    /**
-     * Skia's linear-sampled kernel ({@link LinearBlurKernel}): half the fetches of the per-texel kernel for
-     * the same Gaussian. {@code -Dcrystalgui.glass.linearKernel=false} draws the per-texel kernel instead,
-     * for comparing the two.
-     */
-    static final boolean LINEAR_KERNEL =
-            !"false".equalsIgnoreCase(System.getProperty("crystalgui.glass.linearKernel"));
-
-    private static final String[] KERNEL_NAMES = new String[LinearBlurKernel.MAX_PAIRS];
-
-    static {
-        for (int i = 0; i < KERNEL_NAMES.length; i++) KERNEL_NAMES[i] = "_Kernel" + i;
-    }
-
-    /** The kernel pairs of the current pass, reused so a pass allocates nothing. */
-    private final float[] kernelScratch = new float[4 * LinearBlurKernel.MAX_PAIRS];
-
-    /**
-     * One axis of the separable Gaussian, {@code source} to {@code target}, taps one source texel apart.
-     *
-     * <p>{@code dirU}/{@code dirV} pick the axis (one of them is 1, the other 0); the step is that many
-     * SOURCE texels in UV, which is what "one texel apart" means whatever resolution the pass runs at.
-     * {@code sigma} and {@code taps} are in the same texels. @see gui_blur.shader</p>
-     *
-     * <p>Also an icon's drop shadow's ({@link SvgRasterCache}), over its coverage.</p>
-     */
-    void blurPass(CgTexture source, CgGraphTexture target, float dirU, float dirV,
-                          float sigma, int taps, int quadW, int quadH, float fracW, float fracH) {
-        // PROPERTIES BEFORE THE BIND, and this is not style. withMaterial binds the material, and
-        // binding VALIDATES the samplers it currently holds - which, on the frame after a resize, are
-        // the textures the resize deleted. Maximising the window crashed with "CgTexture2D has been
-        // deleted" from inside useMaterial, before a single line of this pass had run.
-        //
-        // applyProperties is buffered and replayed at bind time, so setting them first is both legal
-        // and the only order that cannot hand a bind a dead texture.
-        float halfU = 0.5f / Math.max(1, source.getWidth());
-        float halfV = 0.5f / Math.max(1, source.getHeight());
-        ctx.blurMaterial.applyProperties(b -> {
-            b.sampler("_MainTex", 0, source);
-            b.vec2("_Step", dirU / Math.max(1, source.getWidth()), dirV / Math.max(1, source.getHeight()));
-            b.set1f("_Sigma", Math.max(0.25f, sigma));
-            b.set1f("_Radius", taps);
-            if (LINEAR_KERNEL) {
-                float[] k = kernelScratch;
-                int pairs = LinearBlurKernel.compute(Math.max(0.25f, sigma), taps, k);
-                b.set1f("_Pairs", pairs);
-                for (int p = 0; p < LinearBlurKernel.MAX_PAIRS; p++) {
-                    b.vec4(KERNEL_NAMES[p], k[4 * p], k[4 * p + 1], k[4 * p + 2], k[4 * p + 3]);
-                }
-            }
-            // The CAPTURED SUB-RECT, half a texel in. A tap landing outside it reads whatever the
-            // sampler's clamp gives back, and outside the sub-rect that is the target's clear -
-            // transparent black. Which is precisely how darkness gets dragged into a panel that had
-            // colour behind it, with a hard boundary where the taps stop reaching, and is why this is
-            // the sub-rect rather than the whole texture now that the capture is a region.
-            b.vec4("_Bounds", halfU, 1f - fracH + halfV, fracW - halfU, 1f - halfV);
-        });
-        runFilter(ctx.blurMaterial, target, quadW, quadH, fracW, fracH);
-    }
-
-    /**
-     * Draws one full-sub-rect filter pass with {@code material} into {@code target}.
-     *
-     * <p>The quad is {@code quadW x quadH} WHOLE TEXELS of {@code target}, carrying {@code uvSpanW x
-     * uvSpanH} of the source. The two are given separately because they are different questions: a
-     * reduced target holds {@code ceil(cap/scale)} texels, and the span that fills them is that many
-     * times {@code scale} source texels, which is not the capture's own fraction. Deriving one from the
-     * other is what stretched the band. @see #blurredBackdrop</p>
-     *
-     * <p>The quad is drawn {@code uv(0, 1, ..., 1 - ...)} - the SAME flip {@link #drawOver} uses, and
-     * the agreement is load-bearing rather than incidental. A layer FBO is bottom-left origin while the
-     * UI is top-left, so every full-surface blit into one carries the flip. The pyramid this replaced
-     * drew its passes unflipped and got away with it only because an equal number of down and up passes
-     * cancelled: correct output from two errors, which is the kind of thing that stays true right up
-     * until somebody changes the level count.</p>
-     */
-    private void runFilter(CgMaterial material, CgGraphTexture target,
-                           int quadW, int quadH, float uvSpanW, float uvSpanH) {
-        int qw = Math.max(1, Math.min(target.getWidth(), quadW));
-        int qh = Math.max(1, Math.min(target.getHeight(), quadH));
-        // beginLayerFbo gives the pass the target's own ortho, so a quad of whole texels fills it at any scale.
-        ctx.beginLayerFbo(target, true);
-        try {
-            withoutScissor(() -> ctx.withMaterial(material, () -> {
-                ctx.poseStack.pushPose();
-                ctx.poseStack.setIdentity();
-                ctx.quad().at(0, 0).size(qw, qh)
-                      .uv(0f, 1f, uvSpanW, 1f - uvSpanH).color(0xFFFFFFFF).submit();
-                ctx.flush();
-                ctx.poseStack.popPose();
-            }));
-        } finally {
-            ctx.endLayerFbo();
-        }
-    }
-
-    // ---- GLASS PROBE -------------------------------------------------------------------------
-    // -Dcrystalgui.glass.probe=true. Off by default and one boolean read per frame when off.
-    //
-    // CPU-side timing only: nothing here waits for the GPU, so GPU work started here
-    // may well be paid for later in the frame. That makes the STAGE figures a lower bound and the FRAME
-    // PERIOD the honest number -- which is the one that matters, since the question is what opening the
-    // desktop costs. Read them together: if the stages barely move and the period doubles, the cost is
-    // GPU-side in the very work they enqueue.
+    // -Dcrystalgui.glass.probe=true: CPU time of the capture and the blur, and the frame period, every 120 frames. The
+    // stages are a lower bound, since their GPU work runs later; the period is the honest figure.
     private static final boolean PROBE = Boolean.getBoolean("crystalgui.glass.probe");
 
     private long probeLastStart;
@@ -904,11 +498,7 @@ final class CgUiBackdrop {
     void delete() {
         if (capture != null) CgExecutor.freeStorage(capture);
         capture = null;
-        for (CgGraphTexture[] pair : blurTargets.values()) {
-            for (CgGraphTexture target : pair) {
-                if (target != null) CgExecutor.freeStorage(target);
-            }
-        }
+        for (CgGraphTexture target : blurTargets.values()) CgExecutor.freeStorage(target);
         blurTargets.clear();
     }
 }

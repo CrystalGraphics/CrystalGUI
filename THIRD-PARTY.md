@@ -284,16 +284,6 @@ which Blink does not parse; a bare number is a pixel length, as it is for every 
 `ShadowData`'s two rules — sigma is half the radius, and the `ceil(3σ)` outset — are Blink's too, but that
 file is LGPL and they are implemented from the spec sentence and from Skia instead.
 
-## Skia — the linear-sampled Gaussian kernel (BSD-3-Clause)
-
-`core/src/main/java/com/crystalgui/render/LinearBlurKernel.java` ports
-`SkShaderBlurAlgorithm::Compute1DBlurLinearKernel` and the one-dimensional case of `Compute2DBlurKernel`
-(`src/core/SkBlurEngine.cpp`), and `gui_blur.shader`'s `LINEAR_KERNEL` loop is its 1D blur effect
-(`src/core/SkKnownRuntimeEffects.cpp`) — Copyright Google LLC, licensed BSD-3-Clause.
-
-**Modified**: the pairs arrive as nine fixed `vec4` properties rather than a uniform array, since the
-material system binds no arrays.
-
 ## Chromium — `TableColumns` (BSD-3-Clause)
 
 `core/src/main/java/com/crystalgui/widget/text/TableColumns.java` is a port of Blink's table column

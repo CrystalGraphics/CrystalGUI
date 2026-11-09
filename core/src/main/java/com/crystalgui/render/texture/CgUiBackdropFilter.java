@@ -1,11 +1,13 @@
 package com.crystalgui.render.texture;
 
+import javax.annotation.Nullable;
+
 import lombok.Getter;
 import lombok.Setter;
 import lombok.experimental.Accessors;
 
-import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.material.CgMaterialValues;
+import com.crystalgraphics.render.canvas.CgCanvasGlass;
+import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -17,156 +19,117 @@ import com.crystalgui.render.CgUiPaintContext;
  * backdrop-filter: blur(24px) tint(#1F202313) bezel(8px) ior(1.5) noise(0.04);
  * }</pre>
  *
- * <p>A property rather than a {@code background} value, and that is not only a name: a filter acts on
- * what shows THROUGH an element, so this is drawn under the element's own background and the two
- * compose. {@code BackdropFilterValue} is the grammar and where a value from CSS is bounded;
- * {@link CgUiBackdrop} is the capture-and-blur primitive underneath.</p>
- *
- * <h3>What it is made of</h3>
- * <pre>
- *   refract -&gt; pick blurred/sharp -&gt; saturate -&gt; luminosity -&gt; tint -&gt; specular -&gt; noise -&gt; SDF mask
- * </pre>
- *
- * <p>Windows' Acrylic recipe with refraction inserted where a real lens puts it. The refraction is what
- * separates this from a decade of frosted panels, and the thing most easily got wrong: the displacement
- * comes from a <b>surface height profile</b> across the bezel, not from the SDF distance, which yields a
- * bevel rather than a lens. Every optional layer is a shader keyword, so an unused one is absent from
- * the compiled program rather than skipped at runtime — see {@code gui_backdrop_filter.shader}.</p>
- *
- * <h3>When it cannot render</h3>
- *
- * <p>No GL context, no frame in progress, a failed capture: it paints {@link #getFallbackColorArgb}
- * instead, which is Acrylic's {@code FallbackColor} and a first-class parameter for the same reason — a
- * theme and a settings toggle both need to reach it, and a material that silently draws nothing is worse
- * than one that admits it is a colour today.</p>
+ * <p>A property, not a {@code background}: it filters what shows through the element, so it draws under the
+ * element's own background. {@code BackdropFilterValue} is the grammar; {@link CgUiBackdrop} captures and blurs; the
+ * draw is CrystalGraphics' {@link CgCanvasGlass} (Acrylic's recipe with a lens). With nothing to capture it paints
+ * {@link #getFallbackColorArgb}, Acrylic's {@code FallbackColor}.</p>
  */
 @Accessors(chain = true)
 public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware {
 
-    /** Shared, like every other drawable's material. {@code gui_backdrop_filter.shader} declares its own buffer. */
-    private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_backdrop_filter.shader");
+    /** Every glass's draw, on the frame thread; made at the first draw, since a server builds filters and draws none. */
+    private static CgCanvasGlass gpu;
 
     /** What {@code backdrop-filter: none} computes to: present so the declaration parses and overrides a lower one, filtering nothing. */
     public static final CgUiBackdropFilter NONE = new CgUiBackdropFilter();
 
     /** Whether {@code filter} filters anything: not null and not {@link #NONE}. */
-    public static boolean isActive(@javax.annotation.Nullable CgUiBackdropFilter filter) {
+    public static boolean isActive(@Nullable CgUiBackdropFilter filter) {
         return filter != null && filter != NONE;
     }
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /**
-     * <b>Per-draw scratch for {@link #quadBody} and {@link #writeProperties}</b>, which are held as
-     * FIELDS so a draw allocates neither.
-     *
-     * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
-     * draw's arguments is a fresh capture every time one runs — on a path that is per element per
-     * frame. A method reference stored once costs nothing after the first draw. These fields are not
-     * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
-     */
+    /** Per-draw scratch for {@link #quadBody}, a field so a draw allocates no capture. Not part of the value. */
     private CgUiPaintContext drawCtx;
-    private CgUiPaintContext.Backdrop drawBackdrop;
     private float drawX, drawY, drawWidth, drawHeight;
     private final Runnable quadBody = this::quadBody;
-    // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
-    // names CgMaterialValues, so resolving it loads a CrystalGraphics CORE class. A dedicated server
-    // builds drawables and never paints, which is what headlessTest asserts by running without core.
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter;
-
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter() {
-        if (propertyWriter == null) propertyWriter = this::writeProperties;
-        return propertyWriter;
-    }
 
     /** Radius of the Gaussian, in logical px. */
     @Getter @Setter
-    private float blurRadius = 12f;
+    private float blurRadius = CgCanvasGlass.DEFAULT.blur();
 
     /** ARGB laid over the blurred backdrop, straight alpha. */
     @Getter @Setter
-    private int tintArgb = 0x662B2D30;
+    private int tintArgb = CgCanvasGlass.DEFAULT.tint();
+
+    /** How much of the backdrop's colour survives the blur; {@code 1} leaves it alone, above 1 undoes the blur's greying. */
+    @Getter @Setter
+    private float saturation = CgCanvasGlass.DEFAULT.saturation();
 
     /**
-     * How much of the backdrop's colour survives the blur. {@code 1} leaves it alone.
-     *
-     * <p>Above 1 because a heavy blur averages a scene toward grey, and the backdrop's colour is the
-     * only reason to have sampled it — so the blur destroys the first thing the effect is for.</p>
+     * The luminosity blend, 0..1: how much of the tint's brightness the backdrop takes, keeping its hue, before the
+     * tint's alpha mixes its colour in. WinUI's acrylic is 0.96, Mica 1.0.
      */
     @Getter @Setter
-    private float saturation = 1.35f;
+    private float luminosity = CgCanvasGlass.DEFAULT.luminosity();
 
-    /**
-     * The luminosity blend, 0..1: the backdrop keeps its hue and saturation and takes the tint's
-     * brightness by this much, before the tint's own alpha mixes its colour in. WinUI's acrylic is
-     * 0.96 and Mica 1.0 — it is most of what makes those materials read as a temperature.
-     */
+    /** Width of the refracting band inward from the edge, in px; flat beyond it. */
     @Getter @Setter
-    private float luminosity = 0f;
-
-    /** Width of the refracting band inward from the edge, in px. Beyond it the surface is flat. */
-    @Getter @Setter
-    private float bezel = 8f;
+    private float bezel = CgCanvasGlass.DEFAULT.bezel();
 
     /** Index of refraction: {@code 1} is no lens at all, {@code 1.5} is glass. */
     @Getter @Setter
-    private float ior = 1.5f;
+    private float ior = CgCanvasGlass.DEFAULT.ior();
+
+    /** A multiplier over {@link #glow} and the rim, not a highlight of its own; {@code 0} compiles both out. */
+    @Getter @Setter
+    private float specular = CgCanvasGlass.DEFAULT.specular();
+
+    /** The broad falloff along the light axis, kept weaker than the rim (0.1 to 0.25) or the panel reads as glow. */
+    @Getter @Setter
+    private float glow = CgCanvasGlass.DEFAULT.glow();
+
+    /** The thin band at the boundary: what reads as an edge. */
+    @Getter @Setter
+    private float edgeHighlight = CgCanvasGlass.DEFAULT.rim();
 
     /**
-     * Master highlight strength, scaling both the glow and the rim. {@code 0} compiles them out.
-     *
-     * <p>1.0 because it is a MULTIPLIER over those two rather than a highlight in its own right, which
-     * is how both production references are parameterised — theirs is {@code specular: 1} over
-     * {@code glow: 0.1} and {@code edgeHighlight: 0.25}. Defaulting it to a fraction, as the first
-     * version did, silently scaled the researched weights down to a third of themselves.</p>
+     * How much of the rim is even rather than lit from the light axis: 0 directional, 1 flat. Fully directional, the
+     * rim vanishes at the two corners perpendicular to the light.
      */
     @Getter @Setter
-    private float specular = 1.0f;
+    private float rimAmbient = CgCanvasGlass.DEFAULT.rimAmbient();
 
-    /**
-     * The BROAD falloff along the light axis — bloom rather than an edge.
-     *
-     * <p>Deliberately the weaker of the two: a highlight made mostly of this reads as glow, not as a
-     * surface. The reference implementations weight it about 0.1 against a 0.25 rim.</p>
-     */
+    /** Width of the rim, in pixels whatever the bezel. */
     @Getter @Setter
-    private float glow = 0.10f;
+    private float edgeWidth = CgCanvasGlass.DEFAULT.rimWidth();
 
-    /** The THIN band at the boundary — what actually reads as "this has an edge". @see #glow */
+    /** How far apart the three colour channels refract: two more lens taps; {@code 0} compiles them out. */
     @Getter @Setter
-    private float edgeHighlight = 0.25f;
+    private float chromatic = CgCanvasGlass.DEFAULT.chromatic();
 
-    /**
-     * How much of the rim is EVEN rather than lit from the light axis. 0 is fully directional, 1 flat.
-     *
-     * <p>Defaults to a half. The old behaviour is exactly {@code 0}, and it was a defect rather than a
-     * default: {@code proj} is zero at the two corners perpendicular to the light, so the hairline
-     * vanished at the top-right and bottom-left of every rounded rect while all four straight edges
-     * stayed lit. @see gui_backdrop_filter.shader</p>
-     */
+    /** Grain; {@code 0} compiles it out. */
     @Getter @Setter
-    private float rimAmbient = 0.5f;
-
-    /** Width of that band, in PIXELS — a rim is a hairline whatever the bezel behind it is doing. */
-    @Getter @Setter
-    private float edgeWidth = 3f;
-
-    /**
-     * How far apart the three colour channels refract. {@code 0} compiles the extra taps out.
-     *
-     * <p>Costs two more lens taps when on, because a prism separates colours by refracting each
-     * wavelength through a DIFFERENT ANGLE — one tap tinted three ways cannot express that.</p>
-     */
-    @Getter @Setter
-    private float chromatic = 0.20f;
-
-    /** Grain. {@code 0} compiles it out. @see #draw */
-    @Getter @Setter
-    private float noise = 0.04f;
+    private float noise = CgCanvasGlass.DEFAULT.noise();
 
     /** Acrylic's {@code FallbackColor}: what this paints when the backdrop cannot be captured. */
     @Getter @Setter
     private int fallbackColorArgb = 0xFF2B2D30;
+
+    /**
+     * Every value of {@code look}, a preset of CrystalGraphics' glass or one of its own; the fallback colour stays.
+     *
+     * <pre>{@code
+     * new CgUiBackdropFilter().look(CgCanvasGlass.LIQUID);
+     * }</pre>
+     */
+    public CgUiBackdropFilter look(CgCanvasGlass.Look look) {
+        blurRadius = look.blur();
+        tintArgb = look.tint();
+        saturation = look.saturation();
+        luminosity = look.luminosity();
+        bezel = look.bezel();
+        ior = look.ior();
+        chromatic = look.chromatic();
+        specular = look.specular();
+        glow = look.glow();
+        edgeHighlight = look.rim();
+        edgeWidth = look.rimWidth();
+        rimAmbient = look.rimAmbient();
+        noise = look.noise();
+        return this;
+    }
 
     @Override
     public void setCornerRadii(float rxTL, float ryTL, float rxTR, float ryTR,
@@ -180,19 +143,12 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        // THE RADIUS IS PASSED THROUGH, IN PIXELS. It used to be translated here into a dual-Kawase
-        // iteration count plus a within-level tap offset, and that translation is worth recording as a
-        // thing NOT to bring back without a test that can see one level in isolation: the mapping was
-        // rederived three times, each version was defensible on paper, and every one of them produced a
-        // panel that darkened as the radius grew. A separable blur has one number and no mapping.
-        // A LENS SAMPLES PAST ITS EDGE: at most about twice the bezel with the steepest slope and ior the grammar
-        // allows, plus chromatic's spread. What is out there has to have been captured to be bent in.
+        // A lens samples past its edge, at most about twice the bezel at the grammar's steepest ior, plus chromatic's
+        // spread; that much more must be captured.
         boolean refracts = ior > 1.001f && bezel > 0f;
         float reach = refracts ? bezel * 2.2f * (1f + 0.2f * chromatic) : 0f;
         CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, reach);
         if (backdrop == null || backdrop.sharp() == null || backdrop.blurred() == null) {
-            // The context's scratch, so a glass panel with nothing behind it does not allocate a rect
-            // per frame to say so. @see #setFallbackColor
             ctx.rect().at(x, y).size(width, height)
                     .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
                     .fillColor(fallbackColorArgb)
@@ -200,54 +156,23 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
             return;
         }
 
-        // Each of these compiles its layer out entirely rather than branching past it, which is what
-        // makes plain frosted glass and the full liquid surface one material instead of three.
-        MATERIAL.toggleKeyword("WITH_REFRACTION", refracts);
-        MATERIAL.toggleKeyword("WITH_CHROMATIC", refracts && chromatic > 0f);
-        MATERIAL.toggleKeyword("WITH_SPECULAR", specular > 0f);
-        MATERIAL.toggleKeyword("WITH_NOISE", noise > 0f);
-
+        if (gpu == null) gpu = new CgCanvasGlass(CgCanvasMaterials.SCREEN);
+        gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
+                .backdrop(backdrop.blurred(), backdrop.sharp())
+                .backdropMap(backdrop.u0(), backdrop.v0(), backdrop.ux(), backdrop.vx(), backdrop.uy(), backdrop.vy())
+                .captureRect(backdrop.cu0(), backdrop.cv0(), backdrop.cu1(), backdrop.cv1())
+                .tint(tintArgb).saturation(saturation).luminosity(luminosity)
+                .lens(bezel, ior).chromatic(chromatic)
+                .specular(specular).highlight(glow, edgeHighlight, edgeWidth, rimAmbient)
+                .noise(noise)
+                // Before withMaterial: binding validates the samplers it holds, deleted by a surface resize.
+                .apply();
         drawCtx = ctx;
-        drawBackdrop = backdrop;
         drawX = x; drawY = y; drawWidth = width; drawHeight = height;
-        // BEFORE withMaterial: binding validates the samplers the material already holds, and after a
-        // surface resize those are textures the rebuild deleted. @see CgUiBackdropFilter#blurPass
-        MATERIAL.applyProperties(propertyWriter());
-        ctx.withMaterial(MATERIAL, quadBody);
+        ctx.withMaterial(gpu.material(), quadBody);
     }
 
     private void quadBody() {
         drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawCtx.getColor()).submit();
-    }
-
-    private void writeProperties(CgMaterialValues b) {
-        b.sampler("_MainTex", 0, drawBackdrop.blurred());
-        b.sampler("_SharpTex", 1, drawBackdrop.sharp());
-        b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-        b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-        b.vec2("_BoxSize", drawWidth, drawHeight);
-        b.vec2("_BackdropOrigin", drawBackdrop.u0(), drawBackdrop.v0());
-        b.vec2("_BackdropAxisX", drawBackdrop.ux(), drawBackdrop.vx());
-        b.vec2("_BackdropAxisY", drawBackdrop.uy(), drawBackdrop.vy());
-        b.vec4("_CaptureRect", drawBackdrop.cu0(), drawBackdrop.cv0(),
-                drawBackdrop.cu1(), drawBackdrop.cv1());
-        b.colorARGB("_Tint", tintArgb);
-        b.set1f("_Saturation", saturation);
-        b.set1f("_Luminosity", luminosity);
-        b.set1f("_Bezel", bezel);
-        b.set1f("_Ior", ior);
-        b.set1f("_Specular", specular);
-        b.set1f("_Glow", glow);
-        b.set1f("_EdgeHighlight", edgeHighlight);
-        b.set1f("_EdgeWidth", edgeWidth);
-        b.set1f("_RimAmbient", rimAmbient);
-        b.set1f("_Chromatic", chromatic);
-        b.set1f("_Noise", noise);
-        // Fixed in ELEMENT space, not screen space, so the highlight does not swim across the surface
-        // when the window it belongs to is dragged. Up and to the left, which is where every UI toolkit
-        // has put its light since bevels were invented. 45 degrees, which is where both references put
-        // it -- and with a symmetric highlight the axis is a diagonal rather than a direction, so a
-        // diagonal is the honest spelling of it.
-        b.vec2("_LightDir", -0.7071f, -0.7071f);
     }
 }

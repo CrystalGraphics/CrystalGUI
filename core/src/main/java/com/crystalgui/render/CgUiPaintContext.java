@@ -35,6 +35,8 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.canvas.CgCanvas;
 import com.crystalgraphics.render.canvas.CgCanvasMaterials;
+import com.crystalgraphics.compute.ops.CgGpuOps;
+import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgRasterPass;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgTargetCompare;
@@ -273,22 +275,23 @@ public final class CgUiPaintContext {
     public static void precache() {
         CgPipelinePrecache.register("crystalgui:ui", pipelines -> {
             for (String quad : QUAD_SHADERS) pipelines.addPass(quad, CgInstanceKind.QUAD);
-            for (String curve : CURVE_SHADERS) pipelines.addPass(curve, CgInstanceKind.CURVE);
+            // The backdrop's blur and a thumbnail's shrink, on the layer format, and an icon shadow's blur, on the atlas's
+            pipelines.kernels(() -> {
+                CgGpuOps.precacheBlur(CgTextureType.RGBA8);
+                CgGpuOps.precacheBlur(CgTextureType.RGBA16F);
+                CgGpuOps.precacheShrink(CgTextureType.RGBA8);
+            });
         });
     }
 
     /** Parses those shaders on a worker, from the graphics start: the precache's first collect then parses none. */
     public static void parseAhead() {
         CgPipelinePrecache.parseAhead(QUAD_SHADERS);
-        CgPipelinePrecache.parseAhead(CURVE_SHADERS);
     }
 
-    /** The UI's own shaders; the box, curve, gradient and grid are CrystalGraphics' canvas materials, precached there. */
-    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_blur.shader",
-            "crystalgui:shaders/gui_downsample.shader", "crystalgui:shaders/gui_backdrop_filter.shader",
-            "crystalgui:shaders/gui_color_field.shader", "crystalgui:shaders/stage_probe.shader"};
-    private static final String[] CURVE_SHADERS = {"crystalgui:shaders/gui_curve_accumulate.shader",
-            "crystalgui:shaders/gui_curve_coverage.shader", "crystalgui:shaders/gui_curve_coverage_max.shader"};
+    /** The UI's own shaders: everything else it draws is CrystalGraphics' canvas, precached there. */
+    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_color_field.shader",
+            "crystalgui:shaders/stage_probe.shader"};
 
     /** Every box the UI draws: fills, textures, shapes, icons, composites. Its own, as it carries {@code _LayerOpacity}. */
     private final CgMaterial boxModelMaterial;
@@ -334,12 +337,6 @@ public final class CgUiPaintContext {
      */
     @Nullable
     private CgMaterial curveMaterialOverride;
-
-    /** One axis of the separable blur per bind. @see #backdropFor */
-    /** Package-private: {@link CgUiBackdrop} owns every use of it. */
-    final CgMaterial blurMaterial;
-    /** The box prefilter that reduces the capture before it is blurred. Package-private, as above. */
-    final CgMaterial downsampleMaterial;
 
     /** 1×1 fully opaque white ({@code RGBA = 255, 255, 255, 255}). */
     @Getter
@@ -476,9 +473,6 @@ public final class CgUiPaintContext {
         this.curveMaterial = CgCanvasMaterials.SCREEN.newCurve();
         this.layerBlitMaterial = CgCanvasMaterials.SCREEN.newBox();
         this.maskMaterial = CgCanvasMaterials.SCREEN.newBox();
-        this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
-        this.blurMaterial.toggleKeyword("LINEAR_KERNEL", CgUiBackdrop.LINEAR_KERNEL);
-        this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
         // AFTER the materials: it holds them, and a field initialiser would run before they exist.
         this.backdrop = new CgUiBackdrop(this);
         this.svgRaster = new SvgRasterCache(this);
@@ -2777,6 +2771,16 @@ public final class CgUiPaintContext {
             bindQuadPath(was != null ? was : boxModelMaterial);
             currentTexture = null;
         }
+    }
+
+    /**
+     * A compute pass in the frame's recording, after everything drawn so far: the open pass ends first, and what is
+     * drawn after the compute pass is ordered after it. Inside a frame.
+     */
+    CgComputePass compute(String name) {
+        flush();
+        recorder.endPass();
+        return recording.compute(name);
     }
 
     /** The target being drawn into: the innermost layer, or the frame's own target when none is open. */

@@ -1,5 +1,7 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.compute.ops.CgGpuOps;
+import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 
 import java.util.Arrays;
@@ -226,7 +228,8 @@ public final class Surface {
      *
      * <ul>
      *   <li>The filtered copy is kept and rebuilt about every 100 ms while the picture changes, not each frame.</li>
-     *   <li>A picture under one and a half times the size asked for is drawn as {@link #drawPicture} does.</li>
+     *   <li>A picture under one and a half times the size asked for, or smaller on either axis, is drawn as
+     *       {@link #drawPicture} does.</li>
      * </ul>
      */
     public void drawThumbnail(CgUiPaintContext ctx, float x, float y, float width, float height, int deviceWidth,
@@ -255,11 +258,13 @@ public final class Surface {
     @Nullable
     private CgGraphTexture filtered(CgUiPaintContext ctx, int deviceWidth, int deviceHeight) {
         float sourceWidth = pictureX1 - pictureX0, sourceHeight = pictureY1 - pictureY0;
-        if (sourceWidth < deviceWidth * 1.5f && sourceHeight < deviceHeight * 1.5f) return null;
+        if (sourceWidth < deviceWidth || sourceHeight < deviceHeight
+                || sourceWidth < deviceWidth * 1.5f && sourceHeight < deviceHeight * 1.5f) {
+            return null;
+        }
         if (thumbnail == null || thumbnailWidth != deviceWidth || thumbnailHeight != deviceHeight) {
             releaseThumbnail(ctx);
             thumbnail = ctx.requestLayer("cgui_thumbnail", deviceWidth, deviceHeight);
-            ctx.warmUpLayer(thumbnail);
             thumbnailWidth = deviceWidth;
             thumbnailHeight = deviceHeight;
         }
@@ -280,57 +285,12 @@ public final class Surface {
         return thumbnailDrawn == -1L ? null : thumbnail;
     }
 
-    /**
-     * The picture halved by a 2x2 box until under twice the target, then once more to the target: each pass is
-     * {@code gui_downsample}'s four taps, which at a half texel from the output's centre average one 2x2 block.
-     */
+    /** The picture shrunk into {@code into}, each texel the average of the picture's area it covers. */
     private void filterInto(CgUiPaintContext ctx, CgGraphTexture into, float sourceWidth, float sourceHeight) {
-        float tw = target.getWidth(), th = target.getHeight();
-        CgGraphTexture from = target;
-        float u0 = pictureX0 / tw, u1 = pictureX1 / tw, vTop = 1f - pictureY0 / th, vBottom = 1f - pictureY1 / th;
-        float w = sourceWidth, h = sourceHeight;
-        int goalWidth = into.getWidth(), goalHeight = into.getHeight();
-        while (w >= 2f * goalWidth && h >= 2f * goalHeight) {
-            int nextWidth = (int) Math.ceil(w / 2f), nextHeight = (int) Math.ceil(h / 2f);
-            CgGraphTexture mid = CgGraphTexture.transientTexture("cgui_thumbnail_mid",
-                    ctx.layerDesc(nextWidth, nextHeight));
-            filterPass(ctx, from, u0, vTop, u1, vBottom, 0.5f, mid, nextWidth, nextHeight);
-            from = mid;
-            u0 = 0f;
-            u1 = nextWidth / (float) mid.getWidth();
-            vTop = 1f;
-            vBottom = 1f - nextHeight / (float) mid.getHeight();
-            w = nextWidth;
-            h = nextHeight;
-        }
-        filterPass(ctx, from, u0, vTop, u1, vBottom, Math.max(0.25f, Math.min(w / goalWidth, h / goalHeight) / 4f),
-                into, goalWidth, goalHeight);
-    }
-
-    /** One filter pass: the source rect {@code (u0, vTop)-(u1, vBottom)} into the corner of {@code to}, {@code quadW x quadH}. */
-    private static void filterPass(CgUiPaintContext ctx, CgGraphTexture from, float u0, float vTop, float u1,
-                                   float vBottom, float offsetTexels, CgGraphTexture to, int quadW, int quadH) {
-        float halfU = 0.5f / Math.max(1, from.getWidth()), halfV = 0.5f / Math.max(1, from.getHeight());
-        ctx.downsampleMaterial.applyProperties(b -> {
-            b.sampler("_MainTex", 0, from);
-            b.vec2("_TexelSize", offsetTexels / Math.max(1, from.getWidth()),
-                    offsetTexels / Math.max(1, from.getHeight()));
-            b.vec4("_Bounds", u0 + halfU, vBottom + halfV, u1 - halfU, vTop - halfV);
-        });
-        ctx.beginLayerFbo(to, true);
-        ScissorStack.Saved saved = ctx.suspendScissor();
-        try {
-            ctx.withMaterial(ctx.downsampleMaterial, () -> {
-                ctx.poseStack.pushPose();
-                ctx.poseStack.setIdentity();
-                ctx.quad().at(0, 0).size(quadW, quadH).uv(u0, vTop, u1, vBottom).color(0xFFFFFFFF).submit();
-                ctx.flush();
-                ctx.poseStack.popPose();
-            });
-        } finally {
-            ctx.resumeScissor(saved);
-            ctx.endLayerFbo();
-        }
+        CgComputePass pass = ctx.compute("cgui.thumbnail");
+        CgGpuOps.shrink(pass, target, pictureX0, target.getHeight() - pictureY1, sourceWidth, sourceHeight, into, 0, 0,
+                into.getWidth(), into.getHeight());
+        pass.end();
     }
 
     /** Starts a walk at {@code frame}, damaged everywhere with {@code full}. */
