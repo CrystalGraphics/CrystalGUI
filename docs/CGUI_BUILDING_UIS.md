@@ -1377,6 +1377,8 @@ badge.close();   // and it stops
   CrystalGUI's own screen the desktop is drawn by the screen, before `SCREEN` fires: everything there is over it.
 - **What you record executes at once**, onto the game's target, after the renderers before you. Nothing is kept:
   record every frame.
+- Everything a stage's canvas draws (images, lines, text, world-following widgets): CrystalGraphics'
+  [`docs/CANVAS.md`](../CrystalGraphics/docs/CANVAS.md).
 - A world-space effect belongs on CrystalGraphics' world stages instead (`CgRenderStage.WORLD_OPAQUE`, or
   `CgWorldRenderer`); CrystalGraphics' [`docs/SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Drawing from your
   mod*.
