@@ -317,7 +317,7 @@ public final class CueSelection {
         for (CgSequencePlayer p : hit) p.kill();
         CgVfx.world().clear();
         before.clear();
-        CgSequencer sequencer = CgWorld.client().subsystem(CgSequencer.class);
+        CgSequencer sequencer = CgSequencer.of(CgWorld.client());
         if (sequencer != null) before.addAll(sequencer.players());
         fires++;
         kind = cue.kind();
@@ -339,7 +339,7 @@ public final class CueSelection {
         collecting = false;
         hit.clear();
         duration = 0;
-        CgSequencer sequencer = CgWorld.client().subsystem(CgSequencer.class);
+        CgSequencer sequencer = CgSequencer.of(CgWorld.client());
         if (sequencer == null) return;
         for (CgSequencePlayer p : sequencer.players()) {
             if (before.contains(p) || p.stopped()) continue;
