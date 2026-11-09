@@ -11,11 +11,12 @@ import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.material.CgMaterialValues;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.state.CgBlendState;
-import com.crystalgraphics.api.state.CgColorMask;
 import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.texture.CgTextureType;
+import com.crystalgraphics.render.canvas.CgCanvasGlass;
+import com.crystalgraphics.render.canvas.CgCanvasBackdrop;
 import com.crystalgraphics.render.canvas.CgClipTable;
 import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.render.canvas.CgQuadBatch;
@@ -312,8 +313,6 @@ public final class CgUiPaintContext {
     private final CgMaterial maskMaterial;
     /** {@link #maskMaterial}'s pass state with the alpha-multiply blend a mask composite draws under, and its base. */
     private CgRenderState maskState, maskStateBase;
-    /** {@link #boxModelMaterial}'s pass state writing alpha alone, for {@link #fillAlpha}, and its base. */
-    private CgRenderState alphaState, alphaStateBase;
 
     /**
      * The box material again, for {@link #blitLayer}: a quad drawn while it is current is stamped
@@ -788,7 +787,6 @@ public final class CgUiPaintContext {
         // AFTER frameActive, with the pool's own warm-up, because warming a target SUBMITS A QUAD and
         // quads are refused outside a frame. Built here rather than on demand: an FBO created mid-draw,
         // with our own bindings in flight, came back incomplete. @see #blurLevel
-        backdrop.prepareFrame();
     }
 
     /** Seals the frame {@link #beginFrame} started and presents it. Once, after the whole tree has painted. */
@@ -2627,21 +2625,12 @@ public final class CgUiPaintContext {
      * across the bezel, and unbounded it bent in whatever the clip was hiding.</p>
      */
     /**
-     * The frame's captured backdrop, and where one element sits in it.
-     *
-     * <p>The placement is an AFFINE MAP, not a rect: {@code (u0,v0)} is where the element's own uv origin
-     * lands, and {@code (ux,vx)} / {@code (uy,vy)} are the steps across its width and down its height. A
-     * rotated or skewed element therefore reads a rotated patch, so what is behind it stays where it is on
-     * screen rather than turning with the glass — an element is a window onto the backdrop, not a surface
-     * carrying a picture of it. A rect can only be the bounding box, which is the same thing as mapping the
-     * capture onto the element's own quad.</p>
-     *
-     * <p>{@code cu0..cv1} is the axis-aligned rect it may sample at all — its bounds padded by the blur's
-     * and the lens's reach, cut to its clip — which stays a rect because the capture is one.</p>
+     * What is behind an element: the frame's captured and blurred backdrop, where the bound target's pixel (0, 0) is in
+     * its texels, and the rect of them the element may sample (its bounds padded by the blur's and the lens's reach,
+     * cut to its clip), bottom-left. {@link CgCanvasGlass#backdrop(CgCanvasBackdrop, float, float, int, int, int, int)}
+     * takes it as it is.
      */
-    public record Backdrop(CgTexture sharp, CgTexture blurred,
-                           float u0, float v0, float ux, float vx, float uy, float vy,
-                           float cu0, float cv0, float cu1, float cv1) {}
+    public record Backdrop(CgCanvasBackdrop source, float offsetX, float offsetY, int x0, int y0, int x1, int y1) {}
 
     /**
      * Captures what is behind {@code (x, y, w, h)} and blurs it — the primitive under {@code backdrop-filter}.
@@ -2737,40 +2726,12 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Copies a region of {@code from} into {@code to}, in their bottom-left pixels, before anything recorded after it
-     * reads {@code to}: the scene behind the UI ({@link CgGraphTexture#current()}) into the backdrop's capture.
+     * The frame's recording after everything drawn so far, the open pass ended: for a copy or a compute pass, which
+     * what is drawn after it follows. Inside a frame.
      */
-    void recordCopy(CgGraphTexture from, int x, int y, int w, int h, CgGraphTexture to, int tx, int ty) {
+    CgRecording breakPass() {
         drain();
-        recording.copy(from, x, y, w, h, to, tx, ty, w, h, false);
-    }
-
-    /**
-     * Writes alpha 1 over {@code (0, 0, width, height)} of the current target, its colour kept: a copy of a target this
-     * engine did not write holds whatever alpha its owner left, and everything downstream reads it premultiplied.
-     */
-    void fillAlpha(int width, int height) {
-        flush();
-        CgMaterial was = currentMaterial;
-        CgRenderState base = boxModelMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
-        if (base != alphaStateBase) {
-            alphaStateBase = base;
-            alphaState = base.withColorMask(CgColorMask.of(false, false, false, true));
-        }
-        renderer.useMaterial(boxModelMaterial, alphaState);
-        activePath = InstancePath.QUAD;
-        currentTexture = null;
-        poseStack.pushPose();
-        poseStack.setIdentity();
-        try {
-            bindTexture(whitePixel);
-            quad().at(0, 0).size(width, height).color(0xFF000000).submit();
-            flush();
-        } finally {
-            poseStack.popPose();
-            bindQuadPath(was != null ? was : boxModelMaterial);
-            currentTexture = null;
-        }
+        return recording;
     }
 
     /**
@@ -2778,9 +2739,7 @@ public final class CgUiPaintContext {
      * drawn after the compute pass is ordered after it. Inside a frame.
      */
     CgComputePass compute(String name) {
-        flush();
-        recorder.endPass();
-        return recording.compute(name);
+        return breakPass().compute(name);
     }
 
     /** The target being drawn into: the innermost layer, or the frame's own target when none is open. */

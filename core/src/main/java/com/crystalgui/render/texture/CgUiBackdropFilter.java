@@ -143,28 +143,22 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        // A lens samples past its edge, at most about twice the bezel at the grammar's steepest ior, plus chromatic's
-        // spread; that much more must be captured.
-        boolean refracts = ior > 1.001f && bezel > 0f;
-        float reach = refracts ? bezel * 2.2f * (1f + 0.2f * chromatic) : 0f;
-        CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, reach);
-        if (backdrop == null || backdrop.sharp() == null || backdrop.blurred() == null) {
+        if (gpu == null) gpu = new CgCanvasGlass(CgCanvasMaterials.SCREEN);
+        gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
+                .tint(tintArgb).saturation(saturation).luminosity(luminosity)
+                .lens(bezel, ior).chromatic(chromatic)
+                .specular(specular).highlight(glow, edgeHighlight, edgeWidth, rimAmbient)
+                .noise(noise);
+        CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, gpu.reach());
+        if (backdrop == null) {
             ctx.rect().at(x, y).size(width, height)
                     .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
                     .fillColor(fallbackColorArgb)
                     .submit();
             return;
         }
-
-        if (gpu == null) gpu = new CgCanvasGlass(CgCanvasMaterials.SCREEN);
-        gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
-                .backdrop(backdrop.blurred(), backdrop.sharp())
-                .backdropMap(backdrop.u0(), backdrop.v0(), backdrop.ux(), backdrop.vx(), backdrop.uy(), backdrop.vy())
-                .captureRect(backdrop.cu0(), backdrop.cv0(), backdrop.cu1(), backdrop.cv1())
-                .tint(tintArgb).saturation(saturation).luminosity(luminosity)
-                .lens(bezel, ior).chromatic(chromatic)
-                .specular(specular).highlight(glow, edgeHighlight, edgeWidth, rimAmbient)
-                .noise(noise)
+        gpu.backdrop(backdrop.source(), backdrop.offsetX(), backdrop.offsetY(), backdrop.x0(), backdrop.y0(),
+                        backdrop.x1(), backdrop.y1())
                 // Before withMaterial: binding validates the samplers it holds, deleted by a surface resize.
                 .apply();
         drawCtx = ctx;

@@ -8241,19 +8241,14 @@ com/crystalgui/render/CgUiPaintContext
 com/crystalgui/render/CgUiPaintContext$Backdrop
   access public,final,record
   extends java/lang/Record
-  method public <init> (Lcom/crystalgraphics/api/texture/CgTexture;Lcom/crystalgraphics/api/texture/CgTexture;FFFFFFFFFF)V
-  method public blurred ()Lcom/crystalgraphics/api/texture/CgTexture;
-  method public cu0 ()F
-  method public cu1 ()F
-  method public cv0 ()F
-  method public cv1 ()F
-  method public sharp ()Lcom/crystalgraphics/api/texture/CgTexture;
-  method public u0 ()F
-  method public ux ()F
-  method public uy ()F
-  method public v0 ()F
-  method public vx ()F
-  method public vy ()F
+  method public <init> (Lcom/crystalgraphics/render/canvas/CgCanvasBackdrop;FFIIII)V
+  method public offsetX ()F
+  method public offsetY ()F
+  method public source ()Lcom/crystalgraphics/render/canvas/CgCanvasBackdrop;
+  method public x0 ()I
+  method public x1 ()I
+  method public y0 ()I
+  method public y1 ()I
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
