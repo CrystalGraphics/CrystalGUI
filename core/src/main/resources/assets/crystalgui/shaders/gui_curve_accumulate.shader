@@ -1,15 +1,6 @@
-// crystalgui:shaders/gui_curve_accumulate.shader
-//
-// gui_curve.shader with ADDITIVE blending and premultiplied output -- the material SvgRasterCache
-// rasterises a fill's cells through. A tessellated fill's cells each cover part of a pixel, and
-// their exact areas SUM to the shape's coverage; composited one at a time they would not (two
-// halves of a pixel blend to three quarters), which is why they are accumulated into a scratch
-// target and composited from there as one texture.
-//
-// Everything that is not the blend and the output is identical to gui_curve.shader and comes
-// from the same lib; see that file for the gl_FragCoord derivation. No _LayerOpacity: the
-// accumulator holds pure coverage and the composite applies opacity. No discard: a sliver's
-// 0.02 is exactly what has to add up.
+// The canvas curve with additive blending and premultiplied output: SvgRasterCache sums a fill's cells into a scratch
+// target, since their exact areas add up to the shape's coverage where compositing them one by one would not. No
+// _LayerOpacity: the composite applies it. No discard: a sliver's 0.02 has to add up.
 
 #type none
 #pragma cg_use curve

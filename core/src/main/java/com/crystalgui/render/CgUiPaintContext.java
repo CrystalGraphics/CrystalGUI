@@ -34,6 +34,7 @@ import com.crystalgraphics.render.graph.CgFrameGraph;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.canvas.CgCanvas;
+import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgraphics.render.graph.CgRasterPass;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgTargetCompare;
@@ -282,24 +283,17 @@ public final class CgUiPaintContext {
         CgPipelinePrecache.parseAhead(CURVE_SHADERS);
     }
 
-    /** Every box the UI draws: fills, textures, shapes, icons, composites. @see CgShapeTable */
-    private static final String BOX_SHADER = "crystalgui:shaders/gui_box.shader";
-    private static final String[] QUAD_SHADERS = {BOX_SHADER, "crystalgui:shaders/gui_blur.shader",
+    /** The UI's own shaders; the box, curve, gradient and grid are CrystalGraphics' canvas materials, precached there. */
+    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_blur.shader",
             "crystalgui:shaders/gui_downsample.shader", "crystalgui:shaders/gui_backdrop_filter.shader",
-            "crystalgui:shaders/gui_color_field.shader", "crystalgui:shaders/gui_gradient.shader",
-            "crystalgui:shaders/gui_grid.shader", "crystalgui:shaders/stage_probe.shader"};
-    private static final String[] CURVE_SHADERS = {"crystalgui:shaders/gui_curve.shader",
-            "crystalgui:shaders/gui_curve_accumulate.shader", "crystalgui:shaders/gui_curve_coverage.shader",
-            "crystalgui:shaders/gui_curve_coverage_max.shader"};
+            "crystalgui:shaders/gui_color_field.shader", "crystalgui:shaders/stage_probe.shader"};
+    private static final String[] CURVE_SHADERS = {"crystalgui:shaders/gui_curve_accumulate.shader",
+            "crystalgui:shaders/gui_curve_coverage.shader", "crystalgui:shaders/gui_curve_coverage_max.shader"};
 
+    /** Every box the UI draws: fills, textures, shapes, icons, composites. Its own, as it carries {@code _LayerOpacity}. */
     private final CgMaterial boxModelMaterial;
 
-    /**
-     * Shared material for every Bézier stroke — {@code gui_curve.shader}, the curve twin of
-     * {@code gui_box.shader}. Distinct from CrystalGraphics' own {@code curve.shader} because the UI
-     * needs {@code DepthTest ALWAYS} and a {@code _LayerOpacity} property, neither of which belongs
-     * in the backend's reference material.
-     */
+    /** Every Bézier stroke and cell: the canvas's screen curve, its own for the same reason. */
     private final CgMaterial curveMaterial;
 
     /**
@@ -334,7 +328,7 @@ public final class CgUiPaintContext {
     private final SvgRasterCache svgRaster;
 
     /**
-     * A material standing in for {@code gui_curve.shader} on the curve path, or null. Set only inside
+     * A material standing in for the curve material on the curve path, or null. Set only inside
      * {@link #withCurveMaterial}, which is how the raster cache accumulates coverage additively through
      * the same renderer and the same pose everything else uses.
      */
@@ -443,7 +437,7 @@ public final class CgUiPaintContext {
 
     /**
      * Current layer-compositing opacity (distinct from {@link #color}'s tint — see
-     * {@code gui_box.shader}'s doc comment). Every UI-facing material declares a
+     * {@code canvas/box.shader}'s doc comment). Every UI-facing material declares a
      * {@code _LayerOpacity} property; {@link #withMaterial} keeps whichever material is
      * currently bound in sync with this value on every switch.
      */
@@ -478,12 +472,10 @@ public final class CgUiPaintContext {
         this.gpu = UiGpu.get();
         this.poseStack = new PoseStack();
         this.renderer = new CgUiRenderer(this, recorder);
-        this.boxModelMaterial = CgMaterial.load(BOX_SHADER);
-        this.curveMaterial = CgMaterial.load("crystalgui:shaders/gui_curve.shader");
-        this.layerBlitMaterial = CgMaterial.newInstance(BOX_SHADER);
-        // newInstance, not load: load() is registry-cached, so it would hand back boxModelMaterial
-        // itself and reintroduce exactly the sharing this material exists to avoid.
-        this.maskMaterial = CgMaterial.newInstance(BOX_SHADER);
+        this.boxModelMaterial = CgCanvasMaterials.SCREEN.newBox();
+        this.curveMaterial = CgCanvasMaterials.SCREEN.newCurve();
+        this.layerBlitMaterial = CgCanvasMaterials.SCREEN.newBox();
+        this.maskMaterial = CgCanvasMaterials.SCREEN.newBox();
         this.blurMaterial = CgMaterial.load("crystalgui:shaders/gui_blur.shader");
         this.blurMaterial.toggleKeyword("LINEAR_KERNEL", CgUiBackdrop.LINEAR_KERNEL);
         this.downsampleMaterial = CgMaterial.load("crystalgui:shaders/gui_downsample.shader");
@@ -990,7 +982,7 @@ public final class CgUiPaintContext {
      * 1.20.1 client: {@code activeUnit=28} with the wanted texture bound to 28.
      *
      * <p><b>What the sampler reads then is not nothing.</b> An unbound unit answers {@code (0,0,0,1)} --
-     * opaque black -- and {@code gui_box} declares {@code _MainTex = "white"}, so a premultiplied
+     * opaque black -- and the box declares {@code _MainTex = "white"}, so a premultiplied
      * `over` composite either erases its destination or floods it. Both were measured in one run: a
      * fully EMPTY layer compositing to pure white, and a populated one compositing to black.
      *
@@ -1094,7 +1086,7 @@ public final class CgUiPaintContext {
      * {@code curve()} call resets and reuses it. Use {@code retainedCurve()} on the renderer for
      * something held across frames.</p>
      *
-     * <p>Calling this switches the bound material to {@code gui_curve.shader}, flushing any queued
+     * <p>Calling this switches the bound material to the curve material, flushing any queued
      * quads first so painter's order is preserved; the next {@link #quad()} switches back. Alternating
      * the two per element therefore costs a draw call each way — batch strokes together where it is
      * convenient, but correctness never depends on doing so.</p>
@@ -1107,7 +1099,7 @@ public final class CgUiPaintContext {
     /**
      * Starts a filled triangle, with this context's pose already applied — the fill-mode twin of
      * {@link #curve()}. Goes through the exact same material path as {@link #curve()} (it shares
-     * one {@code CgCurveBatch} and one {@code gui_curve.shader} binding, not a third one), so
+     * one {@code CgCurveBatch} and one curve material binding, not a third one), so
      * switching between {@code quad()}/{@code curve()}/{@code triangle()} costs a flush only when
      * moving to or from the quad path — alternating {@code curve()} and {@code triangle()} is free.
      *
@@ -1178,7 +1170,7 @@ public final class CgUiPaintContext {
 
     /**
      * Runs {@code body} with the curve path drawing through {@code material} instead of
-     * {@code gui_curve.shader}. Everything the path does otherwise — the pose, the flushes, the switch
+     * the curve material. Everything the path does otherwise — the pose, the flushes, the switch
      * away from quads and text — is unchanged, so a body submits curves, triangles and quads exactly as
      * it would anywhere else.
      */
@@ -2819,7 +2811,7 @@ public final class CgUiPaintContext {
             // enclosing material would rewrite what every later draw through it samples.
             maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, mask));
             // The multiply rides on the draw's own pipeline: a blend applied after binding would be overwritten
-            // when the recorded draw binds gui_box's declared blend.
+            // when the recorded draw binds the box material's blend.
             CgRenderState quadState = maskMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
             if (quadState != maskStateBase) {
                 maskStateBase = quadState;

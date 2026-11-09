@@ -1,7 +1,7 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.material.CgMaterialValues;
+import com.crystalgraphics.render.canvas.CgCanvasGradient;
+import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.ArrayList;
@@ -24,13 +24,11 @@ import java.util.List;
  *
  * <h3>One draw, evaluated per fragment</h3>
  *
- * <p>The whole gradient is one quad through {@code gui_gradient.shader}: the stops travel as material
- * properties and every fragment evaluates the ramp at its own position along CSS's gradient line.
- * That is Skia's shape (an unrolled shader for up to eight stops) and it replaced a quad per pair of
- * stops, which was more material switches for the same pixels and — because {@link CgUiPaintContext}
- * uploads a material's properties on the bind <em>after</em> the draw body — drew every segment with the
- * previous segment's colours. Eight stops per draw; a longer gradient is several draws, each owning a
- * half-open window of {@code t}, so no fragment is written twice and nothing is silently dropped.</p>
+ * <p>The whole gradient is one quad through CrystalGraphics' {@link CgCanvasGradient}: the stops travel as
+ * material properties and every fragment evaluates the ramp at its own position along CSS's gradient line,
+ * eight stops a draw (Skia's unrolled shape); a longer gradient is several draws, each owning a half-open
+ * window of {@code t}. This class resolves the CSS — directions, corners, radial extents, spread stops — and
+ * hands that the box's numbers.</p>
  *
  * <h3>What the shader is faithful to</h3>
  *
@@ -58,13 +56,8 @@ import java.util.List;
  */
 public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
 
-    private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_gradient.shader");
-
-    /** Stops one draw evaluates — Skia's unrolled limit, and the shader's property count. */
-    public static final int STOPS_PER_DRAW = 8;
-
-    private static final String[] STOP_PROPERTIES = {
-            "_Color0", "_Color1", "_Color2", "_Color3", "_Color4", "_Color5", "_Color6", "_Color7"};
+    /** Every gradient's draw, on the frame thread; made at the first draw, since a server builds gradients and draws none. */
+    private static CgCanvasGradient gpu;
 
     /** One colour at a fraction of the gradient's length; {@code NaN} means "spread me evenly". */
     public record Stop(float position, int argb) {}
@@ -109,33 +102,13 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /**
-     * <b>Per-draw scratch for {@link #quadBody} and {@link #writeProperties}</b>, which are held as
-     * FIELDS so a draw allocates neither.
-     *
-     * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
-     * draw's arguments is a fresh capture every time one runs — on a path that is per element per
-     * frame. A method reference stored once costs nothing after the first draw. These fields are not
-     * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
-     */
+    /** Per-draw scratch for {@link #quadBody}, a field so a draw allocates no capture. Not part of the value. */
     private CgUiPaintContext drawCtx;
     private float drawX, drawY, drawWidth, drawHeight;
-    private int drawTint, drawFirst, drawEnd;
-    private float drawWindowFrom, drawWindowTo;
-    private final float[] axis = new float[2];
+    private int drawTint;
     private final float[] centre = new float[2];
     private final float[] radii = new float[2];
-    private final float[] positions = new float[STOPS_PER_DRAW];
     private final Runnable quadBody = this::quadBody;
-    // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
-    // names CgMaterialValues, so resolving it loads a CrystalGraphics CORE class. A dedicated server
-    // builds drawables and never paints, which is what headlessTest asserts by running without core.
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter;
-
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter() {
-        if (propertyWriter == null) propertyWriter = this::writeProperties;
-        return propertyWriter;
-    }
 
     /**
      * @param angleDeg CSS's angle: 0 = to top, 90 = to right, 180 = to bottom, 270 = to left
@@ -301,11 +274,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
 
     /** {@link #axisFor} into a caller's pair, so the paint path allocates no array for it. */
     private void axisInto(float width, float height, float[] out) {
-        double radians = Math.toRadians(angleFor(width, height));
-        float s = (float) Math.sin(radians), c = (float) Math.cos(radians);
-        float length = Math.abs(width * s) + Math.abs(height * c);
-        out[0] = length <= 0f ? 1f : width * s / length;
-        out[1] = length <= 0f ? 0f : -height * c / length;
+        CgCanvasGradient.axis(angleFor(width, height), width, height, out);
     }
 
     /** The gradient's colour at {@code t} in {@code [0, 1]} along its line, before any tint. */
@@ -337,77 +306,26 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
         if (width <= 0f || height <= 0f) return;
         int tint = ctx.getColor();
         if ((tint >>> 24) == 0) return;
+        if (gpu == null) gpu = new CgCanvasGradient(CgCanvasMaterials.SCREEN);
+        gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).clearStops();
         if (radial != null) {
             centreInto(width, height, centre);
             radiiInto(width, height, radii);
+            gpu.radial(centre[0], centre[1], radii[0], radii[1]);
         } else {
-            axisInto(width, height, axis);
+            gpu.angle(angleFor(width, height));
         }
-        boolean rounded = rxTL > 0f || ryTL > 0f || rxTR > 0f || ryTR > 0f
-                || rxBR > 0f || ryBR > 0f || rxBL > 0f || ryBL > 0f;
-        MATERIAL.toggleKeyword("WITH_MASK", rounded);
-        MATERIAL.toggleKeyword("RADIAL", radial != null);
-
-        // Windows of eight, each sharing its first stop with the previous window's last so the ramp is
-        // continuous across the seam, and each owning [first stop, last stop) of t -- the first from
-        // minus infinity, the last to plus infinity, which is where CSS pads with the end colours.
-        int last = stops.size() - 1;
-        int first = 0;
-        while (true) {
-            int end = Math.min(first + STOPS_PER_DRAW - 1, last);
-            drawWindow(ctx, x, y, width, height, tint, first, end,
-                    first == 0 ? -1f : stops.get(first).position(),
-                    end == last ? 2f : stops.get(end).position());
-            if (end >= last) break;
-            first = end;
-        }
-    }
-
-    /**
-     * One draw over the whole box, evaluating stops {@code first..end} and writing only fragments
-     * whose {@code t} is in {@code [windowFrom, windowTo)}.
-     *
-     * <p>Properties are set INSIDE the body and nothing is flushed there: {@code withMaterial} uploads
-     * them on its second bind and flushes after it, which is the ordering {@link CgUiRect}
-     * follows and the one that drew every segment with stale colours when it was broken here.</p>
-     */
-    private void drawWindow(CgUiPaintContext ctx, float x, float y, float width, float height, int tint,
-                            int first, int end, float windowFrom, float windowTo) {
+        for (int i = 0; i < stops.size(); i++) gpu.stop(stops.get(i).position(), stops.get(i).argb());
         drawCtx = ctx;
         drawX = x; drawY = y; drawWidth = width; drawHeight = height;
         drawTint = tint;
-        drawFirst = first; drawEnd = end;
-        drawWindowFrom = windowFrom; drawWindowTo = windowTo;
-        ctx.withMaterial(MATERIAL, quadBody);
+        for (int i = 0, n = gpu.windows(); i < n; i++) {
+            gpu.window(i);
+            ctx.withMaterial(gpu.material(), quadBody);
+        }
     }
 
     private void quadBody() {
-        MATERIAL.applyProperties(propertyWriter());
         drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawTint).submit();
-    }
-
-    private void writeProperties(CgMaterialValues b) {
-        for (int k = 0; k < STOPS_PER_DRAW; k++) {
-            // Slots past the window's last stop repeat it; the shader stops at _Count anyway.
-            Stop stop = stops.get(Math.min(drawFirst + k, drawEnd));
-            int argb = stop.argb();
-            float a = ((argb >>> 24) & 0xFF) / 255f;
-            float r = ((argb >>> 16) & 0xFF) / 255f;
-            float g = ((argb >>> 8) & 0xFF) / 255f;
-            float bl = (argb & 0xFF) / 255f;
-            b.vec4(STOP_PROPERTIES[k], r * a, g * a, bl * a, a);
-            positions[k] = stop.position();
-        }
-        b.vec4("_Positions0", positions[0], positions[1], positions[2], positions[3]);
-        b.vec4("_Positions1", positions[4], positions[5], positions[6], positions[7]);
-        b.set1f("_Count", drawEnd - drawFirst + 1);
-        b.vec2("_Axis", axis[0], axis[1]);
-        b.vec2("_Centre", centre[0], centre[1]);
-        // A zero radius is a point: every fragment is past it and takes the last stop, as CSS draws it.
-        b.vec2("_Radii", Math.max(radii[0], 1e-4f), Math.max(radii[1], 1e-4f));
-        b.vec2("_Window", drawWindowFrom, drawWindowTo);
-        b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-        b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
-        b.vec2("_BoxSize", drawWidth, drawHeight);
     }
 }

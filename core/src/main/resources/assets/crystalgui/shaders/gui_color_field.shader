@@ -1,25 +1,9 @@
-// crystalgui:shaders/gui_color_field.shader
-//
-// The continuously-varying surfaces a colour picker is made of. Every one is a per-pixel function of
-// position, so none can be a texture or a shape of gui_box.shader's, and it is drawn through
-// CgUiPaintContext.withMaterial(...).
-//
-//   HUE_RING (0)   an annulus, hue taken from the angle
+// The per-pixel surfaces a colour picker is made of, drawn through CgUiPaintContext.withMaterial:
+//   HUE_RING (0)   an annulus, hue from the angle
 //   SV_SQUARE (1)  saturation across x, value up y, at a fixed hue
-//   GRADIENT (2)   _ColorA -> _ColorB across x, composited OVER a checkerboard
+//   GRADIENT (2)   _ColorA -> _ColorB across x over a checkerboard: every channel's track, alpha's included
 //   HUE_STRIP (3)  a full hue sweep across x
-//
-// GRADIENT covers R, G, B and A alike, and that is deliberate rather than a saving: an R/G/B track is
-// opaque so its checkerboard is invisible, while the A track's is the whole point. One mode, one code
-// path, and the alpha slider cannot drift from the others.
-//
-// HUE_STRIP exists because H is the one channel GRADIENT cannot express. Hue 0 and hue 1 are both
-// red, so a two-stop ramp between them is a flat red bar -- which is exactly what the H slider drew
-// until this mode was added.
-//
-// Rounded corners come from the same sdf_rounded_box the rest of the UI uses, so a picker's
-// swatches clip identically to every other rounded surface -- including against UIElement's
-// hit-test, which uses the same per-corner radii.
+// Corners clip with the UI's sdf_rounded_box, as its hit test does.
 
 #type none
 #pragma cg_use quad
@@ -32,9 +16,7 @@ Tags { "RenderType" = "Transparent" }
 Queue = "Overlay"
 
 Properties {
-    // 0 = HUE_RING, 1 = SV_SQUARE, 2 = GRADIENT, 3 = HUE_STRIP. A uniform rather than a keyword variant: the
-    // branch is uniform across every pixel of a draw, these surfaces are a few thousand pixels
-    // each, and three compiled programs for one picker is the worse trade.
+    // 0 HUE_RING, 1 SV_SQUARE, 2 GRADIENT, 3 HUE_STRIP. A uniform, not a keyword: a few thousand pixels a draw.
     _Mode          ("Mode",                 float) = 0.0
     _ColorA        ("Gradient From",        color) = (0.0, 0.0, 0.0, 1.0)
     _ColorB        ("Gradient To",          color) = (1.0, 1.0, 1.0, 1.0)
@@ -50,8 +32,7 @@ Properties {
 }
 
 struct v2f {
-    // The quad's parameter, grown by half a pixel when rotated so the edge can be antialiased --
-    // CG_QUAD_EDGE_* in cg_env.glsl. uv is derived from it per fragment.
+    // Grown by half a pixel when rotated, so the edge can antialias: CG_QUAD_EDGE_* in env/buffer/quad.glsl.
     vec2 param;
     vec4 color;
 };
@@ -66,15 +47,8 @@ Pass {
         Cull OFF
     }
 
-    // The transparency checkerboard, in PIXELS rather than uv, so the squares stay the same size
-    // whatever the widget's dimensions -- a checker that stretched with its box would read as a
-    // pattern belonging to the colour rather than to the surface behind it.
-    //
-    // DECLARED BEFORE vertex(), and that is not style. The pass body is split at the stage functions,
-    // so a helper written below vertex() lands outside the fragment scope: it reports as an undefined
-    // variable, and every Property in the block reports the same way right after it, because the
-    // mis-split takes the uniform declarations with it. gui_box.shader puts its own helpers
-    // here for the same reason.
+    // The checkerboard in pixels, so its squares keep their size. Above vertex(): a helper below it misses the
+    // fragment stage.
     vec3 cg_checker(vec2 px) {
         vec2 cell = floor(px / max(_CheckerSize, 1.0));
         float odd = mod(cell.x + cell.y, 2.0);
@@ -88,8 +62,7 @@ Pass {
     }
 
     void fragment(in v2f i, out vec4 fragColor) {
-        // The rounded clip this draw is inside (CgClipTable); read before any discard, since it takes
-        // derivatives.
+        // Before any discard: it takes derivatives.
         float boxClip = CG_CLIP_QUAD_COVERAGE;
         vec2 halfSize = _BoxSize * 0.5;
         vec2 uv = mix(QUAD_DATA(CG_INSTANCE_ID).uv0, QUAD_DATA(CG_INSTANCE_ID).uv1, i.param);
@@ -102,42 +75,30 @@ Pass {
 
         if (_Mode < 0.5) {
             // -- HUE_RING ----------------------------------------------------
-            // Distance from centre normalised so the ring is round even when the box is not, then
-            // banded between the inner radius and the edge. atan gives -pi..pi; the +0.5 turns it
-            // into 0..1 with red at the top, which is the orientation every picker uses.
+            // Round even in a non-square box; atan's +0.5 puts red at the top.
             vec2 centred = (uv - 0.5) * 2.0;
             float radius = length(centred);
             float hue = fract(atan(centred.x, centred.y) / 6.28318530718 + 0.5);
 
-            // Antialiased on BOTH edges from the same fwidth, so the band's two boundaries are
-            // equally soft. A hard edge here is the most visible aliasing in the whole widget,
-            // because it is a large smooth curve against a flat background.
+            // Both edges antialiased from the same fwidth.
             float aa = fwidth(radius) * 1.5;
             float outer = 1.0 - smoothstep(1.0 - aa, 1.0, radius);
             float inner = smoothstep(_InnerRadius - aa, _InnerRadius, radius);
             result = vec4(hsv_to_rgb(vec3(hue, 1.0, 1.0)), outer * inner);
         } else if (_Mode < 1.5) {
             // -- SV_SQUARE ---------------------------------------------------
-            // x is saturation, y is value with 1 at the TOP -- uv runs downward, so the flip is
-            // what puts white in the corner every user expects it in.
+            // Value runs up: uv runs down.
             result = vec4(hsv_to_rgb(vec3(_Hue, uv.x, 1.0 - uv.y)), 1.0);
         } else if (_Mode < 2.5) {
             // -- GRADIENT ----------------------------------------------------
-            // Composited over the checker HERE rather than relying on blending, so the result is
-            // opaque and the surface behind the widget never shows through a low-alpha stop.
+            // Over the checker here, so the track is opaque whatever the stop's alpha.
             vec4 ramp = mix(_ColorA, _ColorB, uv.x);
             vec3 over = mix(cg_checker(uv * _BoxSize), ramp.rgb, ramp.a);
             result = vec4(over, 1.0);
         } else {
             // -- HUE_STRIP ---------------------------------------------------
-            // The H channel's track, and it cannot be a GRADIENT: hue 0 and hue 1 are BOTH red, so a
-            // two-stop ramp between them is a flat red bar -- which is exactly what the H slider drew
-            // before this mode existed. A hue sweep is not expressible as two endpoints.
-            //
-            // ALWAYS fully saturated and bright. Drawing it at the current saturation and value was
-            // tried and is wrong: a pale colour washed the strip out to near-white, so the one control
-            // whose job is choosing a hue became unreadable exactly when hue was hardest to judge. It
-            // is a palette, not a preview of the current colour.
+            // A hue sweep, which a two-stop GRADIENT cannot draw: hue 0 and 1 are both red. Always fully saturated
+            // and bright: at the current colour's, a pale colour washed it out.
             result = vec4(hsv_to_rgb(vec3(uv.x, 1.0, 1.0)), 1.0);
         }
 

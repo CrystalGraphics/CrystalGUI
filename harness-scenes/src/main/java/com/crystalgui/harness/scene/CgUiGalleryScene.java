@@ -2456,7 +2456,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
      *       painter's order has to survive it. A switch that failed to flush the outgoing path would
      *       draw geometry in material order instead of submission order, putting every stroke on top.</li>
      *   <li><b>Layer opacity</b> — {@code _LayerOpacity} is a material property, so it must be applied
-     *       to {@code gui_curve.shader} in its own right; a curve that stayed opaque inside
+     *       to the curve material in its own right; a curve that stayed opaque inside
      *       {@code withLayerOpacity} would mean it was only ever synced onto the quad material.</li>
      * </ul>
      */

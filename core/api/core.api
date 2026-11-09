@@ -8500,7 +8500,6 @@ com/crystalgui/render/texture/CgUiDrawable
 com/crystalgui/render/texture/CgUiGradient
   access public,final
   extends java/lang/Object
-  field public,static,final STOPS_PER_DRAW I
   implements com/crystalgui/render/texture/CgUiDrawable
   implements com/crystalgui/render/texture/CornerRadiusAware
   method public <init> (FLjava/util/List;)V

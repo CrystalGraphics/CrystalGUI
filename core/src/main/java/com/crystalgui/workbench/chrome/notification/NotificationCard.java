@@ -21,7 +21,7 @@ import java.util.Locale;
  * once in a list, and they are deliberately the same object with the same severity glyph, the same title
  * and timestamp line, the same detail and the same action links. Two builders would look identical on the
  * day they were written and drift on the first change to either — which is the failure {@code
- * CanvasOverlayMove} was extracted to end and {@code gui_curve.shader} is a standing monument to.</p>
+ * CanvasOverlayMove} was extracted to end.</p>
  *
  * <p>The only difference is the close button, which a balloon has and a list entry does not: in a list,
  * "Clear all" is the dismissal and a per-row close would be a second way to say it.</p>

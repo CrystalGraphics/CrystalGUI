@@ -1,4 +1,4 @@
-// crystalgui:shaders/gui_curve_coverage.shader
+// SvgRasterCache's coverage pass.
 //
 // gui_curve_accumulate.shader for a fill with no colour of its own: the cells add their exact areas
 // into ALPHA ONLY, and the colour channels are written white. The atlas then holds a straight-alpha

@@ -53,7 +53,7 @@ import java.util.List;
  * <p>The two-pane API is kept exactly as it was, as a facade: {@link #first()} and {@link #second()} are
  * {@code pane(0)} and {@code pane(1)}, {@link #getPercentage()} is pane 0's share of the first two panes,
  * and {@link #setLimits} writes the same bounds it always did. A second n-ary container beside this one
- * would be the duplication {@code gui_curve.shader} is a standing monument to.</p>
+ * would be a duplication of the kind that let a stroke's cap logic be fixed in one copy and not the other.</p>
  *
  * <h3>Sizing: weights, plus real minimums</h3>
  *

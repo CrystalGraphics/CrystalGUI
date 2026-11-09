@@ -1,5 +1,7 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgraphics.render.canvas.CgShapeTable;
+
 /**
  * How a 9-slice sprite's edge and centre regions fill their span — CSS {@code border-image-repeat},
  * with the same four values. Corners never tile under any mode.
@@ -9,7 +11,7 @@ package com.crystalgui.render.texture;
  * sprite-pack JSON.</p>
  *
  * <p>The same {@link #tileCount} drives both renderers — {@link CgUiSprite}'s CPU quad loop and the
- * nine-slice shape of {@code gui_box.shader}, which receives the count in its shape entry rather than recomputing
+ * nine-slice shape of CrystalGraphics' {@code canvas/box.shader}, which receives the count in its shape entry rather than recomputing
  * it. Agreement is by construction: the two paths cannot round
  * differently.</p>
  */
@@ -29,7 +31,7 @@ public enum CgUiRepeat {
      * quad index buffer tops out at 16384 quads and overflows by silently reading past the end of
      * the index buffer rather than throwing, so a pathological 1px slice on a huge box must not be
      * able to get there. */
-    public static final int MAX_TILES_PER_AXIS = 1024;
+    public static final int MAX_TILES_PER_AXIS = CgShapeTable.MAX_TILES;
 
     /**
      * Tiles needed to fill {@code span} with a source region {@code src} pixels long.
@@ -43,19 +45,9 @@ public enum CgUiRepeat {
      * {@code overlay-size} falls back to {@code fill} when a drawable has no intrinsic size).</p>
      */
     public float tileCount(float span, float src) {
-        if (this == STRETCH || src <= 0f || span <= 0f) return 1f;
-        float raw = span / src;
-        float count = switch (this) {
-            case REPEAT -> raw;
-            case ROUND -> Math.max(1f, Math.round(raw));
-            case SPACE -> (float) Math.floor(raw);
-            default -> 1f;
-        };
-        if (count < 1f) return 1f; // SPACE with no room for a whole tile
-        return Math.min(count, MAX_TILES_PER_AXIS);
+        return CgShapeTable.tiles(ordinal(), span, src);
     }
 
-    /** Gap inserted before, between, and after tiles under {@link #SPACE}; 0 for every other mode. */
     public float gap(float span, float src, float tileCount) {
         if (this != SPACE || tileCount < 1f || src <= 0f) return 0f;
         float used = tileCount * src;

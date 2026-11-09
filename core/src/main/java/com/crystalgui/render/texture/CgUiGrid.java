@@ -1,7 +1,7 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.material.CgMaterialValues;
+import com.crystalgraphics.render.canvas.CgCanvasGrid;
+import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -9,8 +9,8 @@ import com.crystalgui.render.CgUiPaintContext;
  *
  * <h3>One draw, evaluated per fragment</h3>
  *
- * <p>The whole grid is one quad through {@code gui_grid.shader}: the cell size and the line width
- * travel as material properties in pixels, and every fragment computes its own coverage from the
+ * <p>The whole grid is one quad through CrystalGraphics' {@link CgCanvasGrid}: the cell size and the line
+ * width travel as material properties in pixels, and every fragment computes its own coverage from the
  * screen-space derivative of its position in cells. No texture, no tiling, no repeat count — a grid
  * over a 4K backdrop costs exactly what a grid over a thumbnail costs.</p>
  *
@@ -44,7 +44,8 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
 
-    private static final CgMaterial MATERIAL = CgMaterial.load("crystalgui:shaders/gui_grid.shader");
+    /** Every grid's draw, on the frame thread; made at the first draw, since a server builds grids and draws none. */
+    private static CgCanvasGrid gpu;
 
     private final float cellWidth;
     private final float cellHeight;
@@ -53,28 +54,11 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /**
-     * <b>Per-draw scratch for {@link #quadBody} and {@link #writeProperties}</b>, which are held as
-     * FIELDS so a draw allocates neither.
-     *
-     * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
-     * draw's arguments is a fresh capture every time one runs — on a path that is per element per
-     * frame. A method reference stored once costs nothing after the first draw. These fields are not
-     * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
-     */
+    /** Per-draw scratch for {@link #quadBody}, a field so a draw allocates no capture. Not part of the value. */
     private CgUiPaintContext drawCtx;
     private float drawX, drawY, drawWidth, drawHeight;
     private int drawTint;
     private final Runnable quadBody = this::quadBody;
-    // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
-    // names CgMaterialValues, so resolving it loads a CrystalGraphics CORE class. A dedicated server
-    // builds drawables and never paints, which is what headlessTest asserts by running without core.
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter;
-
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter() {
-        if (propertyWriter == null) propertyWriter = this::writeProperties;
-        return propertyWriter;
-    }
 
     /**
      * @param cellWidth  horizontal cell pitch, in logical pixels
@@ -142,34 +126,16 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
         // A fully transparent tint or a fully transparent line is a draw call that writes nothing.
         if ((tint >>> 24) == 0 || (argb >>> 24) == 0) return;
 
-        boolean rounded = rxTL > 0f || ryTL > 0f || rxTR > 0f || ryTR > 0f
-                || rxBR > 0f || ryBR > 0f || rxBL > 0f || ryBL > 0f;
-        MATERIAL.toggleKeyword("WITH_MASK", rounded);
-
-        // Properties INSIDE the body and nothing flushed there: withMaterial uploads them on its
-        // second bind and flushes after it. A flush in here would draw against the PREVIOUS bind's
-        // properties, which is the defect gui_gradient's own javadoc records.
+        if (gpu == null) gpu = new CgCanvasGrid(CgCanvasMaterials.SCREEN);
+        gpu.size(width, height).cell(cellWidth, cellHeight).line(lineWidth).color(argb)
+                .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).apply();
         drawCtx = ctx;
         drawX = x; drawY = y; drawWidth = width; drawHeight = height;
         drawTint = tint;
-        ctx.withMaterial(MATERIAL, quadBody);
+        ctx.withMaterial(gpu.material(), quadBody);
     }
 
     private void quadBody() {
-        MATERIAL.applyProperties(propertyWriter());
         drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawTint).submit();
-    }
-
-    private void writeProperties(CgMaterialValues b) {
-        float a = ((argb >>> 24) & 0xFF) / 255f;
-        float r = ((argb >>> 16) & 0xFF) / 255f;
-        float g = ((argb >>> 8) & 0xFF) / 255f;
-        float bl = (argb & 0xFF) / 255f;
-        b.vec4("_Color", r * a, g * a, bl * a, a);
-        b.vec2("_Cell", cellWidth, cellHeight);
-        b.vec2("_LineWidth", lineWidth, lineWidth);
-        b.vec2("_BoxSize", drawWidth, drawHeight);
-        b.vec4("_CornerRadiusX", rxTL, rxTR, rxBR, rxBL);
-        b.vec4("_CornerRadiusY", ryTL, ryTR, ryBR, ryBL);
     }
 }

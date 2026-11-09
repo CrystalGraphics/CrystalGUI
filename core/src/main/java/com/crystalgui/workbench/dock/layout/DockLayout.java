@@ -419,7 +419,7 @@ public final class DockLayout {
      * Replaces the one-child branch at {@code parent.child(index)} with what it was holding.
      *
      * <p>Shared by {@link #collapse} and {@link #normalise} deliberately. Two copies of a splice this
-     * subtle is exactly the shape {@code gui_curve.shader} is a standing monument to — the cap logic was
+     * subtle is exactly the shape of the stroke maths that once had two copies — the cap logic was
      * wrong three times, every version rendered something plausible, and two copies meant the fourth fix
      * landed in one file.</p>
      */

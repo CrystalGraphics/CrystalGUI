@@ -1,42 +1,14 @@
-// crystalgui:shaders/gui_blur.shader
-//
-// ONE AXIS OF A SEPARABLE GAUSSIAN, with the kernel derived from sigma rather than fixed.
-//
-// The taps sit ONE SOURCE TEXEL apart (`_Step` is a texel along the axis), there are `_Radius` of them
-// either side of the centre, and `_Radius` is ceil(3 * sigma) -- the point past which a tap carries less
-// than half a percent of the weight. That pair of facts is what makes a discrete Gaussian correct: the
-// weights are the continuous curve sampled at unit spacing, and every sample that matters is present.
-// The caller keeps sigma small by SCALING THE INPUT DOWN first (CgUiBackdrop.blurredBackdrop, Skia's
-// rule), so the loop stays short whatever reach the sheet asks for.
-//
-// The version this replaced had nine fixed taps with sigma ~2 in TAP units, and stretched the distance
-// between taps to reach the asked-for radius. Over a full-resolution source that put the taps six
-// pixels apart: a comb, not a kernel. Text survived it as the stems the taps happened to land on, and
-// the vertical pass smeared those into streaks. "Not a proper blur" was exactly right.
-//
-// WEIGHTS ARE COMPUTED INCREMENTALLY (GPU Gems 3, ch. 40 "Incremental Computation of the Gaussian"):
-// three multiplies per tap instead of an exp(), and no table to upload. They are normalised over the
-// taps actually used, so a kernel cut short by `_Radius` never darkens the result -- a truncated
-// Gaussian that is not renormalised loses energy, which reads as a tint.
-//
-// PREMULTIPLIED ALPHA IS CARRIED THROUGH, NOT DISCARDED -- see the note on the alpha write below; it
-// is the single thing this pass most easily gets wrong, and the symptom does not look like alpha.
-//
-// THE EDGE IS THE OTHER HALF. Taps that fall outside the captured region must not drag its clear colour
-// inward. `_Bounds` is the sub-rect of the source that holds real content, and a tap past it is MIRRORED
-// back in (the CSS spec's edge mode), never clamped: a clamp re-reads one row for every tap beyond it.
+// One axis of a separable Gaussian, its kernel from sigma: taps one source texel apart, ceil(3 sigma) either side.
+// The caller scales the source down first so sigma stays small (CgUiBackdrop, Skia's rule). Weights are incremental
+// (GPU Gems 3, ch. 40) and renormalised over the taps used, or a truncated kernel tints. Premultiplied throughout.
 
 #type none
 #pragma cg_use quad
-// The loop's bound is a CONSTANT and the radius breaks out of it: a uniform loop bound is legal
-// GLSL 3.30 but some drivers unroll nothing they cannot see the end of, and a constant bound with an
-// early break is the spelling every one of them handles. Material scope, so the compiler hoists it
-// into both stages. Keep in step with CgUiBackdrop.MAX_KERNEL_RADIUS.
+// A constant bound the radius breaks out of: some drivers unroll nothing they cannot see the end of. Keep in step with
+// CgUiBackdrop.MAX_KERNEL_RADIUS.
 #define CG_BLUR_MAX_RADIUS 16
-// SKIA'S LINEAR-SAMPLED KERNEL. Each tap pair is one bilinear fetch between two texels, weighted and
-// offset on the CPU (LinearBlurKernel, a port of SkShaderBlurAlgorithm::Compute1DBlurLinearKernel), so a
-// radius of r costs r + 1 fetches instead of 2r + 1. Read as Skia's 1D blur effect reads them. Without
-// the keyword the pass is the incremental kernel below, kept for comparison.
+// Skia's linear-sampled kernel: each pair of taps is one bilinear fetch, offset and weighted on the CPU
+// (LinearBlurKernel, from SkShaderBlurAlgorithm::Compute1DBlurLinearKernel). Without it, the incremental kernel.
 #pragma cg_feature LINEAR_KERNEL
 #pragma cg_permutation LINEAR_KERNEL
 #define CG_BLUR_MAX_PAIRS 9
@@ -82,20 +54,9 @@ Pass {
         Cull OFF
     }
 
-    // DECLARED BEFORE vertex(), AND THAT IS A REQUIREMENT RATHER THAN A STYLE.
-    //
-    // The material compiler hoists the region of a Pass body ABOVE `void vertex` into both generated
-    // stages; anything written between vertex() and fragment() reaches the vertex source only. Putting a
-    // fragment helper there fails the FRAGMENT compile with `undefined variable "cg_tap"` -- and the
-    // properties it touches go undefined with it, which is what makes the error list read as though the
-    // Properties block itself were broken.
-    //
-    // A failed compile is not a failed draw: the pass still ran, still switched targets and still cleared,
-    // so the blur targets came out part clear-black and part fallback-white. On screen that is a panel
-    // with dark regions and blown-out ones -- indistinguishable from a sampling bug, and it cost six
-    // rounds of looking at the sampling. The compile error was in the harness log from the first run.
-    // MIRRORED past the bounds, as CSS's backdrop-filter and Chromium do: clamping duplicated the edge row
-    // into every tap beyond it, so whatever lay on the screen's last row streaked along the taskbar's lip.
+    // Helpers go above `void vertex`: what sits between vertex() and fragment() reaches the vertex stage alone, and
+    // the fragment compile fails on it. A tap past _Bounds is mirrored back in, as Chromium does: clamping streaked
+    // the edge row along every tap beyond it.
     vec4 cg_tap(vec2 uv) {
         vec2 span = max(_Bounds.zw - _Bounds.xy, vec2(1e-6));
         vec2 folded = abs(mod(uv - _Bounds.xy, 2.0 * span) - span);
@@ -123,8 +84,7 @@ Pass {
         fragColor = linearSum;
 #else
         float sigma = max(_Sigma, 0.25);
-        // Incremental Gaussian: g.x is the weight at the current tap, g.y the ratio to the next, g.z the
-        // ratio's own growth. Starting from the centre, each step multiplies the pair through.
+        // Incremental Gaussian: g.x the weight at this tap, g.y the ratio to the next, g.z the ratio's growth.
         vec3 g;
         g.x = 1.0 / (sqrt(2.0 * 3.14159265) * sigma);
         g.y = exp(-0.5 / (sigma * sigma));
@@ -140,22 +100,9 @@ Pass {
             weight += 2.0 * g.x;
         }
 
-        // ALPHA IS AVERAGED WITH THE COLOUR, and that is the whole correctness of this pass.
-        //
-        // Every UI target in this engine holds PREMULTIPLIED colour -- gui_box.shader writes `rgb * a` under
-        // `ONE ONE_MINUS_SRC_ALPHA`, so drawing into a target cleared to transparent leaves `rgb * a` behind. Premultiplied is exactly the representation that is
-        // LINEAR under filtering, which is why it can be blurred at all.
-        //
-        // The earlier version averaged rgb alone and wrote `a = 1`, on the reasoning that a backdrop
-        // ought to be opaque and the shape's alpha is decided later. Both halves of that are true and the
-        // conclusion was still wrong: in premultiplied space a pixel with a = 0 is BLACK, so every tap
-        // reaching a partly-covered pixel mixed black in and then declared the result opaque. On screen
-        // that is a panel with dark regions that GROW WITH THE RADIUS and end at a hard line where the
-        // transparent area begins -- which reads as a sampling or a clamping bug, not an alpha one,
-        // because a blur is the last thing anyone expects to produce a hard edge. `blur 0` was correct
-        // throughout, since sampling a single pixel never reaches one.
-        //
-        // The consumer un-premultiplies. @see gui_backdrop_filter.shader#cg_backdrop
+        // Alpha is averaged with the colour: UI targets hold premultiplied colour, which is linear under filtering.
+        // Writing a = 1 mixed black in from every partly covered pixel. The consumer un-premultiplies
+        // (gui_backdrop_filter.shader's cg_backdrop).
         fragColor = sum / weight;
 #endif
     }

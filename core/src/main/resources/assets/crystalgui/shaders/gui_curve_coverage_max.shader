@@ -1,4 +1,4 @@
-// crystalgui:shaders/gui_curve_coverage_max.shader
+// SvgRasterCache's stroke coverage pass.
 //
 // gui_curve_coverage.shader for STROKES: the same straight-alpha white coverage, combined by MAX
 // rather than by sum. A fill's cells partition the shape and their areas add; a stroke's segments

@@ -27,7 +27,7 @@ import java.util.Objects;
  *
  * <p><b>A plain rectangle is a plain quad</b> — {@code fillRect} for a colour, one quad for a stretched texture or a
  * whole sprite. A rect with a radius, a border or a 9-slice fill is a quad naming a shape in the frame's
- * {@link CgShapeTable}, drawn by the same box material ({@code gui_box.shader}), so the two batch together; a 9-slice
+ * {@link CgShapeTable}, drawn by the same box material (CrystalGraphics' {@code canvas/box.shader}), so the two batch together; a 9-slice
  * remaps its nine regions per pixel. Equal shapes share an entry.</p>
  *
  * <h3>It is a value, and equality is load-bearing</h3>
@@ -441,19 +441,12 @@ public final class CgUiRect implements CgUiDrawable {
             }
             if (sprite != null) {
                 float scale = sprite.getBorderScale();
-                float bL = sprite.getBorderLeft() * scale, bT = sprite.getBorderTop() * scale;
-                float bR = sprite.getBorderRight() * scale, bB = sprite.getBorderBottom() * scale;
-                // Tile counts are computed HERE, in Java, rather than derived in the shader from source sizes, so the
-                // rounding happens once.
-                float centerSpanX = Math.max(0f, width - bL - bR);
-                float centerSpanY = Math.max(0f, height - bT - bB);
-                float srcW = sprite.centerSourceWidth();
-                float srcH = sprite.centerSourceHeight();
-                shape.slices(bL, bT, bR, bB,
+                shape.slices(sprite.getBorderLeft() * scale, sprite.getBorderTop() * scale,
+                        sprite.getBorderRight() * scale, sprite.getBorderBottom() * scale,
                         sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3(),
                         sprite.getU1(), sprite.getV1(), sprite.getU2(), sprite.getV2(),
-                        sprite.getRepeatX().tileCount(centerSpanX, srcW), sprite.getRepeatY().tileCount(centerSpanY, srcH),
-                        srcW, srcH, sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal(), sprite.isFillCenter());
+                        sprite.centerSourceWidth(), sprite.centerSourceHeight(),
+                        sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal(), sprite.isFillCenter());
                 ctx.bindTexture(sprite.getTexture());
             } else if (texture != null) {
                 ctx.bindTexture(texture);
