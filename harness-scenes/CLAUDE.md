@@ -10,11 +10,11 @@ context, and gives you a real GL surface. What it cannot see is anything that cr
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"                   # start here
 ./gradlew :gl-debug-harness:runHarness --args="--list"                                # all scenes
-./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery --device=vulkan"   # on CrystalGraphics' Vulkan device
+./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery --rhi=vulkan"   # on CrystalGraphics' Vulkan device
 ```
 
-The harness is LWJGL 3 and GLFW; `--device=gl|tracked|vulkan` picks what `CgGL` runs on, `gl` by default —
-`../gl-debug-harness/AGENTS.md` § *`--device`*.
+The harness is LWJGL 3 and GLFW; `--rhi=gl|vulkan` picks the device, `gl` by default —
+`../gl-debug-harness/AGENTS.md` § *`--rhi`*.
 
 | Mode | Scene class | Covers |
 |---|---|---|

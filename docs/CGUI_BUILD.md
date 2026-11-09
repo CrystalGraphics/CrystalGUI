@@ -242,7 +242,7 @@ descriptors) it sees, because the jars are the ones that ship.
 |---|---|---|
 | `checkAllTargets` | every node compiles against its Minecraft | anything at runtime |
 | `headlessTest` | engine logic with no CrystalGraphics core — what a dedicated server has | loaders |
-| `trackedTest` | every shipped shader and keyword variant compiled to SPIR-V and linked, as on Vulkan | a driver: what a pipeline asks of the device is the harness's audit, `--device=vulkan` |
+| `trackedTest` | every shipped shader and keyword variant compiled to SPIR-V and linked, as on Vulkan | a driver: what a pipeline asks of the device is the harness's audit, `--rhi=vulkan` |
 | `serverSmoke` (dev) | a real server boots, the stack comes up, no client-only class loaded | packaging, remapping, relocation |
 | `server_smoke.py` | the same on the SHIPPED jars, legacy Forge | clients |
 | `prodSmoke` | the shipped jars on real clients: load a world, open the editor, capture | behaviour past the first screen |
