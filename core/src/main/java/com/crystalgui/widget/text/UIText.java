@@ -10,7 +10,7 @@ import com.crystalgraphics.api.text.CgStyledText;
 import com.crystalgraphics.api.text.CgTextDecoration;
 import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.text.cache.CgFontRegistry;
-import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.CgUiPaintContext;
@@ -727,7 +727,7 @@ public final class UIText extends UIElement implements Measurable {
 
         int color = general.color();
         ComputedStyle computed = computedStyle();
-        CgTextRenderer.Draw draw = ctx.text().draw().layout(layout).family(family)
+        CgTextDraw draw = ctx.text().layout(layout).family(family)
                 .at(contentX, contentY)
                 .color(color)
                 .pose(ctx.getPoseStack());
@@ -777,7 +777,7 @@ public final class UIText extends UIElement implements Measurable {
      * run at every span boundary, so one run never spans two highlights. Glyphs are counted in the order
      * {@code CgBakedGlyphs} lays them, line by line and run by run.</p>
      */
-    private void appendHighlightShadows(CgTextRenderer.Draw draw, CgTextLayout layout, int inheritedColor) {
+    private void appendHighlightShadows(CgTextDraw draw, CgTextLayout layout, int inheritedColor) {
         HighlightStyle[] perChar = highlightPerChar;
         if (perChar == null) return;
         List<HighlightStyle> scoped = null;

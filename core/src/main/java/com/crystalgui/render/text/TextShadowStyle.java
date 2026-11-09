@@ -1,6 +1,6 @@
 package com.crystalgui.render.text;
 
-import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.style.GeneralGroup;
 import com.crystalgui.style.property.visual.shadow.Shadow;
 import com.crystalgui.style.property.visual.shadow.ShadowList;
@@ -12,7 +12,7 @@ import com.crystalgui.render.InkOverflow;
  * <p>Call it beside {@link TextStrokeStyle}, between building a draw and submitting it:</p>
  *
  * <pre>{@code
- * CgTextRenderer.Draw draw = ctx.text().draw().layout(layout).family(family).at(x, y).color(fill);
+ * CgTextDraw draw = ctx.text().layout(layout).family(family).at(x, y).color(fill);
  * TextStrokeStyle.applyTo(draw, family, general, computedStyle(), color);
  * TextShadowStyle.applyTo(draw, general, color);
  * draw.submit();
@@ -39,7 +39,7 @@ public final class TextShadowStyle {
     private TextShadowStyle() {
     }
 
-    public static void applyTo(CgTextRenderer.Draw draw, GeneralGroup general, int currentColor) {
+    public static void applyTo(CgTextDraw draw, GeneralGroup general, int currentColor) {
         ShadowList shadows = general.textShadow();
         if (shadows == null || shadows.isEmpty()) return;
         // CSS's text-shadow: the stroke's shape too, overflowing the box rather than moving the text
@@ -60,7 +60,7 @@ public final class TextShadowStyle {
      * TextShadowStyle.appendScoped(draw, highlight.textShadow(), 0, highlight.color(color));
      * }</pre>
      */
-    public static void appendScoped(CgTextRenderer.Draw draw, ShadowList shadows, int scope, int currentColor) {
+    public static void appendScoped(CgTextDraw draw, ShadowList shadows, int scope, int currentColor) {
         if (shadows == null || shadows.isEmpty()) return;
         int base = draw.shadowCount();
         draw.shadowCount(base + shadows.size()).shadowsStroked(true).contained(false);

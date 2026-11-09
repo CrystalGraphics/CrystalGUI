@@ -116,7 +116,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      * <pre>{@code
      * DocumentDriver.whole(document);
      * DocumentDriver.whole(document, this::refreshReadout, null);                // after the frame, before paint
-     * DocumentDriver.whole(document, null, ctx -> ctx.text().draw()...submit()); // over the document, in its frame
+     * DocumentDriver.whole(document, null, ctx -> ctx.text()...submit()); // over the document, in its frame
      * }</pre>
      *
      * <p>{@code afterFrame} runs between the document's frame and its paint, and {@code overlay} draws after the

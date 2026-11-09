@@ -335,7 +335,7 @@ public class StylePropertyRegistry {
      * so a rule on a wrapper does reach the label inside it.</p>
      *
      * <p><b>Consumed by {@code UIText} only.</b> {@code TextField} and {@code TextEditor} draw through
-     * {@code CgTextRenderer.Draw.text(String)} with a bare family rather than a styled paragraph, and
+     * {@code CgTextDraw.text(String)} with a bare family rather than a styled paragraph, and
      * synthesis lives on the span path — so this resolves on them and paints nothing. Stated here rather
      * than left to be discovered, since a property that cascades correctly and does not draw is the
      * hardest kind of gap to find.</p>

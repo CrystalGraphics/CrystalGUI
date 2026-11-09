@@ -89,7 +89,7 @@ public class CgUiTextScene extends UiDocumentScene {
 
     @Override
     protected void paintOver(CgUiPaintContext paint) {
-        paint.text().draw().at(0, 0).text(document().boxes().uiScale() + "x").font(paint.getFont().atSize(32)).submit();
+        paint.text().at(0, 0).text(document().boxes().uiScale() + "x").font(paint.getFont().atSize(32)).submit();
     }
 
     @Override

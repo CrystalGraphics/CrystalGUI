@@ -35,7 +35,7 @@ UiGpu.present(frame);                             // render thread
 | Group | Methods |
 |---|---|
 | Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split, with `UiGpu.presentAgain(w,h)` showing the last frame again when no new one was sealed — the whole tree records into the context's frame target, composited onto the host's once |
-| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextRenderer` wired to this context's `PoseStack` |
+| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextDraw` on the context's canvas, its `PoseStack`, clip, nodes and text gamma already set |
 
 > **`curve()` is `quad()`'s twin.** Bézier strokes are `CgCurveBatch` items with their own instance kind and
 > material (`gui_curve.shader`), on the same canvas: a switch between the two ends the outgoing run, so painter's
@@ -166,8 +166,8 @@ did. Under a node the
   `quad()`/`curve()` starts a canvas item with the context's current material (`useMaterial`,
   `useCurveMaterial`), state and hand-bound texture, and the `PoseStack` baked in at `submit()` — three transforms
   per quad, affine-correct under `transform:`. An item captures its material's values as it is submitted, so a
-  drawable's `applyProperties` reaches the quads after it. Text drawn while the context records lands on the same
-  canvas, in order (`CgCanvas.current()`).
+  drawable's `applyProperties` reaches the quads after it. Text is an item of the same canvas (`ctx.text()`), in
+  order with the rest.
 - **`ScissorStack`** — the paint context's allocation-free nested clip stack (16 levels), top-left rects
   flipped per target. It touches no GL: each level becomes a whole-pixel clip entry or a link in the recorder's
   scissor chain (`CgCanvas`), recorded in the node it was pushed under, so a moved node's clips move with it.

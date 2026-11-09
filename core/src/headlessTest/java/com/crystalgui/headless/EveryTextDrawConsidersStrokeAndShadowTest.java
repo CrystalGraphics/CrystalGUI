@@ -23,16 +23,15 @@ import static org.junit.Assert.assertTrue;
  * correctly while drawing nothing — which is indistinguishable from the property not existing, and is
  * how {@code TextField} ignored the stroke for the whole life of that feature.</p>
  *
- * <p>So this pins the rule rather than the call sites that exist today: reach {@code ctx.text().draw()}
+ * <p>So this pins the rule rather than the call sites that exist today: reach {@code ctx.text()}
  * and you must also name {@link com.crystalgui.render.text.TextStrokeStyle} and
  * {@link com.crystalgui.render.text.TextShadowStyle}. Deciding NOT to apply one is fine and needs no
  * exemption; what the test refuses is a file that never considered the question.</p>
  */
 public class EveryTextDrawConsidersStrokeAndShadowTest {
 
-    /** Reaching the text renderer at all, in code rather than in a javadoc example. */
-    private static final String DRAW = ".text().draw()";
-    private static final String RETAINED = ".text().retainedDraw()";
+    /** Starting a text draw at all, in code rather than in a javadoc example. */
+    private static final String DRAW = "ctx.text()";
     private static final List<String> HELPERS = List.of("TextStrokeStyle", "TextShadowStyle");
 
     @Test
@@ -44,7 +43,7 @@ public class EveryTextDrawConsidersStrokeAndShadowTest {
         List<Path> drawing = new ArrayList<>();
         for (Path file : sources(Paths.get(root, "core", "src", "main", "java"))) {
             String code = stripComments(new String(Files.readAllBytes(file), StandardCharsets.UTF_8));
-            if (!code.contains(DRAW) && !code.contains(RETAINED)) continue;
+            if (!code.contains(DRAW)) continue;
             drawing.add(file);
             for (String helper : HELPERS) {
                 if (!code.contains(helper)) offenders.add(file.getFileName() + " (no " + helper + ")");

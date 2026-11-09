@@ -8181,7 +8181,6 @@ com/crystalgui/render/CgUiPaintContext
   method public getRenderer ()Lcom/crystalgui/render/CgUiRenderer;
   method public getScissorDepth ()I
   method public getScissorStack ()Lcom/crystalgui/render/ScissorStack;
-  method public getTextRenderer ()Lcom/crystalgraphics/text/render/CgTextRenderer;
   method public getWhitePixel ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
   method public isFrameActive ()Z
   method public isPoseAxisAligned ()Z
@@ -8225,7 +8224,7 @@ com/crystalgui/render/CgUiPaintContext
   method public targetPose ()Lorg/joml/Matrix4f;
   method public targetToDraw ()Lorg/joml/Matrix4f;
   method public targetWidth ()I
-  method public text ()Lcom/crystalgraphics/text/render/CgTextRenderer;
+  method public text ()Lcom/crystalgraphics/text/render/CgTextDraw;
   method public textDegradedDrawCount ()J
   method public textGamma (Lcom/crystalgraphics/text/render/CgTextGamma;)V
   method public triangle ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Triangle;
@@ -8400,13 +8399,13 @@ com/crystalgui/render/text/FontFamilyCache
 com/crystalgui/render/text/TextShadowStyle
   access public,final
   extends java/lang/Object
-  method public,static appendScoped (Lcom/crystalgraphics/text/render/CgTextRenderer$Draw;Lcom/crystalgui/style/property/visual/shadow/ShadowList;II)V
-  method public,static applyTo (Lcom/crystalgraphics/text/render/CgTextRenderer$Draw;Lcom/crystalgui/style/GeneralGroup;I)V
+  method public,static appendScoped (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgui/style/property/visual/shadow/ShadowList;II)V
+  method public,static applyTo (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgui/style/GeneralGroup;I)V
   method public,static inkOverflow (Lcom/crystalgui/style/property/visual/shadow/ShadowList;F)Lcom/crystalgui/render/InkOverflow;
 com/crystalgui/render/text/TextStrokeStyle
   access public,final
   extends java/lang/Object
-  method public,static applyTo (Lcom/crystalgraphics/text/render/CgTextRenderer$Draw;Lcom/crystalgraphics/api/font/CgFontFamily;Lcom/crystalgui/style/GeneralGroup;Lcom/crystalgui/style/ComputedStyle;I)V
+  method public,static applyTo (Lcom/crystalgraphics/text/render/CgTextDraw;Lcom/crystalgraphics/api/font/CgFontFamily;Lcom/crystalgui/style/GeneralGroup;Lcom/crystalgui/style/ComputedStyle;I)V
   method public,static outwardPx (Lcom/crystalgui/style/GeneralGroup;)F
 com/crystalgui/render/texture/ArgbMath
   access public,final

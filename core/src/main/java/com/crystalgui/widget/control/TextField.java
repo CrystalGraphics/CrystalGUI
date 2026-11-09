@@ -5,7 +5,7 @@ import com.crystalgraphics.api.text.CgTextLayout;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
@@ -1464,7 +1464,7 @@ public class TextField extends UIElement implements Measurable {
             long degradedBefore = ctx.textDegradedDrawCount();
             CgFontFamily family = resolveFamily();
             int shownColor = showingPlaceholder ? dim(styleGen.color()) : styleGen.color();
-            CgTextRenderer.Draw draw = ctx.text().draw()
+            CgTextDraw draw = ctx.text()
                     .at(originX, originY)
                     .text(shown)
                     .color(shownColor)

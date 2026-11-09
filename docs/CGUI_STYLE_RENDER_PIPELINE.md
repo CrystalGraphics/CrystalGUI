@@ -837,7 +837,7 @@ through `TextStrokeShorthand.transitionNameMatches`.
 
 **The route to the backend is one private method.** `UIText.strokeFor` reads the `ComputedStyle`,
 resolves the width against the font size, maps the two keywords, and hands `CgTextStroke` to
-`CgTextRenderer.Draw.stroke(...)`. Everything below that is CrystalGraphics': the stroke rides on the
+`CgTextDraw.stroke(...)`. Everything below that is CrystalGraphics': the stroke rides on the
 GLYPH QUADS — `CG_QUAD_CUSTOM0` the colour, `CG_QUAD_CUSTOM1` the width, alignment and paint order —
 so changing it costs no flush, and outlined text batches with plain text in one draw call.
 

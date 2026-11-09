@@ -175,7 +175,7 @@ public class CgUiTextStressScene extends UiDocumentScene {
                         context.beginFrame(width, height);
                     }
                 }
-                context.text().draw().at(0, 0)
+                context.text().at(0, 0)
                         .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
                                 + String.format(Locale.ROOT, "  [%.1f/%.1fs]", elapsed, TOTAL_SECONDS))
                         .font(context.getFont().atSize(14)).submit();

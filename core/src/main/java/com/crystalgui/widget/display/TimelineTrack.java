@@ -3,7 +3,7 @@ package com.crystalgui.widget.display;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.text.TextShadowStyle;
 import com.crystalgui.render.text.TextStrokeStyle;
@@ -310,7 +310,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
         float ink = metrics.getAscender() + metrics.getDescender();
         float y = top + (height - ink) * 0.5f;
 
-        CgTextRenderer.Draw draw = ctx.text().draw()
+        CgTextDraw draw = ctx.text()
                 .text(shown).family(font).at(x, y).color(argb)
                 .pose(ctx.getPoseStack());
         // BOTH ARE INHERITABLE, so a declaration anywhere above reaches these glyphs exactly as it

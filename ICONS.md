@@ -277,9 +277,9 @@ All of it goes out in **one instanced draw call**. `ctx.curve()` and `ctx.triang
 `flush()` at the end issues one `drawInstanced`. The six icons in the harness scene — 2,173 instances,
 strokes and fills mixed — are one call.
 
-What would break it is interleaving: a `fillRect`, `drawImage` or `text()` between two icons switches to
-the quad path and forces a flush each way. Draw the icons together. (The scene's overlay text is after the
-flush and goes through `CgTextRenderer`'s own quad renderer, so it is separate regardless.)
+What would break it is interleaving: a `fillRect`, `drawImage` or `text()` between two icons starts a new
+draw each way. Draw the icons together. (The scene's overlay text comes after them, so it is separate
+regardless.)
 
 So throughput is not the risk it was billed as, and approach C stays unneeded.
 

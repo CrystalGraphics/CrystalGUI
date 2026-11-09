@@ -42,7 +42,7 @@ import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.render.graph.CgTextureDesc;
 import com.crystalgraphics.text.render.CgTextGamma;
-import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgraphics.api.font.CgFontFamily;
@@ -240,7 +240,6 @@ public final class CgUiPaintContext {
 
     /** Leaves a frame that threw part-way: its batches closed, its GL state back, and no frame open. */
     private void abortFrame() {
-        endTextPath();
         recorder.abandon();   // what the renderers drew into the frame goes with it
         recording.reset();
         present.reset();
@@ -359,10 +358,8 @@ public final class CgUiPaintContext {
     @Getter
     private final CgUiRenderer renderer;
 
-    // ── Text ─────────────────────────────────────────────────────────────────
-    /** Glyphs: drained into {@link #recorder} while it records, as the canvas current on this thread. */
-    @Getter
-    private final CgTextRenderer textRenderer;
+    /** The coverage correction every label is drawn with. @see #textGamma(CgTextGamma) */
+    private CgTextGamma textGamma = CgTextGamma.initial();
 
     /** The GL half: the frame target, the host's state, execution. */
     private final UiGpu gpu;
@@ -439,11 +436,8 @@ public final class CgUiPaintContext {
     @Getter
     private CgMaterial currentMaterial;
 
-    /**
-     * Which path draws next. The canvas keeps painter's order across them; what this tracks is the text batch, which
-     * must end before a quad or curve so its glyphs land under what follows.
-     */
-    private enum InstancePath { QUAD, CURVE, TEXT }
+    /** Which material the next quads or curves draw with: the box model's (or a {@link #withMaterial}'s) or the curve one. */
+    private enum InstancePath { QUAD, CURVE }
 
     private InstancePath activePath = InstancePath.QUAD;
 
@@ -497,11 +491,6 @@ public final class CgUiPaintContext {
         this.backdrop = new CgUiBackdrop(this);
         this.svgRaster = new SvgRasterCache(this);
         this.whitePixel = (CgTexture2D) CgFallbackTextures.WHITE_1x1;
-        this.textRenderer = CgTextRenderer.createManualSized().poseStack(this.poseStack)
-                                          .restoreStateWith(() -> {
-                bindQuadPath(boxModelMaterial);
-                currentTexture = null;
-            });
     }
 
     /**
@@ -789,14 +778,8 @@ public final class CgUiPaintContext {
 
         // EACH STEP OF beginFrame TIMED SEPARATELY: `gl:begin` was measured at 19.9ms on the frame after a tab
         // closes, and the steps below have nothing in common.
-        // Text: projection + atlas LRU frame tick. No beginBatch() here — drawText()
-        // deliberately stays standalone-per-call, see docs/CRYSTALGUI_TEXT_RENDERING_PLAN.md §2.3.
-        long timed = CgTrace.stamp(UiTrace.FRAME);
-        textRenderer.context().updateOrtho(screenWidth, screenHeight);
-        CgTrace.zoneDone(UiTrace.FRAME, "glbegin:textOrtho", timed);
-
         poseStack.pushPose();
-        timed = CgTrace.stamp(UiTrace.FRAME);
+        long timed = CgTrace.stamp(UiTrace.FRAME);
         bindQuadPath(boxModelMaterial);
         CgTrace.zoneDone(UiTrace.FRAME, "glbegin:bindQuadPath", timed);
         currentMaterial = boxModelMaterial;
@@ -836,7 +819,6 @@ public final class CgUiPaintContext {
         if (!frameActive) throw new IllegalStateException("seal() without recordFrame()");
         sweepSurfaces();
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        textRenderer.endBatch();
         renderer.flush();
         recorder.stop();
         recordPresent();
@@ -902,46 +884,14 @@ public final class CgUiPaintContext {
     }
     
     /**
-     * Returns the context's text renderer object.
-     *
-     * <p>Its owned pose stack was wired to this context's own {@link #getPoseStack()} in
-     * the constructor, so {@link CgTextRenderer.Draw#poseStack(PoseStack)}
-     * may be omitted entirely — a draw with no explicit pose falls back to it.</p>
-     *
-     * <pre>{@code
-     * // One-shot: build and submit in the same expression. No .pose(...) call needed —
-     * // falls back to this context's own poseStack automatically.
-     * ctx.text().draw()
-     *         .text("Hello world")
-     *         .font(myFont)
-     *         .at(20.0f, 40.0f)
-     *         .color(0xFFFFFFFF)
-     *         .submit();
-     *
-     * // Retained: held across frames (e.g. a widget's cached label draw), only the
-     * // text changes each tick. Independent of draw()'s shared immediate-mode scratch instance.
-     * CgTextRenderer.Draw labelDraw = ctx.text().retainedDraw()
-     *         .font(myFont).at(20.0f, 40.0f).color(0xFFFFFFFF);
-     * // ... later, once per frame:
-     * labelDraw.text(currentLabel).submit();
-     *
-     * // Manually-batched: several draws sharing one upload+draw. submit() returns the
-     * // owning CgTextRenderer, so the last call in the batch can chain into endBatch().
-     * ctx.text().beginBatch();
-     * ctx.text().draw().text(line1).font(myFont).at(20.0f, 20.0f).color(0xFFFFFFFF).submit();
-     * ctx.text().draw().text(line2).font(myFont).at(20.0f, 40.0f).color(0xFFFFFFFF)
-     *         .submit().endBatch();
-     * }</pre>
-     */
-    /**
-     * How many draws the text renderer has made below the glyph tier they asked for.
+     * How many text draws this context has made below the glyph tier they asked for.
      *
      * <p><b>A widget that draws text brackets its paint with this and repaints when it moves</b>,
      * which is the whole of what keeps an outline from going missing:</p>
      *
      * <pre>{@code
      * long before = ctx.textDegradedDrawCount();
-     * ctx.text().draw()....submit();
+     * ctx.text()....submit();
      * if (ctx.textDegradedDrawCount() != before) repaint();   // provisional, come back for it
      * }</pre>
      *
@@ -953,12 +903,9 @@ public final class CgUiPaintContext {
      * revision on its own box, and a kept segment or surface above it would otherwise keep drawing the stale
      * picture.</p>
      *
-     * <p><b>Deliberately not {@code text().degradedDrawCount()}</b>: {@link #text()} switches the
-     * instance path and flushes the quad one, so asking a question through it would cost a draw call
-     * per ask. This reads a field.</p>
      */
     public long textDegradedDrawCount() {
-        return textRenderer.getDegradedDrawCount();
+        return recorder.textDegradedDraws();
     }
 
     /** Where the bound target's pixel (0,0) is on the screen: every enclosing bounded layer's origin, summed. */
@@ -1009,76 +956,26 @@ public final class CgUiPaintContext {
      * their text chunks keep the correction they were recorded with; setting the same one each frame costs nothing.
      */
     public void textGamma(CgTextGamma gamma) {
-        if (gamma.equals(textRenderer.gamma())) return;
-        textRenderer.gamma(gamma);
+        if (gamma.equals(textGamma)) return;
+        textGamma = gamma;
         CgTrace.add(UiTrace.FRAME, "replay-epoch-gamma", 1);
         replayEpoch++;
     }
 
-    public CgTextRenderer text() {
-        // TEXT OWNS A SECOND RENDERER with its own material, so switching to it flushes the quad path
-        // and switching back flushes text -- meaning every alternation between a box and a label is two
-        // draw calls. An editor row is exactly that alternation, repeated per line.
-        CgTrace.add(UiTrace.FRAME, "textswitches", 1);
-        beginTextPath();
-        return textRenderer;
-    }
-
     /**
-     * Hands the GL program over to {@link CgTextRenderer}, flushing whatever this context had queued.
+     * A text item on this context's canvas, already under its pose, clip, nodes and text gamma: build and submit in one
+     * expression. It lands in order with the boxes and curves around it.
      *
-     * <p><b>Text is a third instance path, not a variant of the quad one.</b> It has its own renderer,
-     * its own material and its own instance buffer; this class simply does not own the bind. What it does
-     * own is {@link #activePath}, whose entire purpose is that it "cannot drift out of step with what GL
-     * actually has bound" — and {@code text()} was the one door out of this class that let it drift.</p>
+     * <pre>{@code
+     * ctx.text().text("Hello world").font(font).at(20f, 40f).color(0xFFFFFFFF).submit();
+     * ctx.text().layout(layout).family(family).at(x, y).stroke(0.08f, 0xFF000000).submit();
+     * }</pre>
      *
-     * <p>The failure was invisible for as long as nothing interleaved. Draw every curve and then all the
-     * text and it never bites; alternate them — an icon and a label, per row, down a file tree — and from
-     * the second row on, {@code beginCurvePath()} early-returns because {@code activePath} still says
-     * {@code CURVE}, so the icons submit against {@code text.shader} and the labels against
-     * {@code gui_curve.shader}. Glyph quads evaluated by a stroke SDF come out as solid boxes, which is
-     * exactly how it was reported.</p>
-     *
-     * <p>Flushing on the way out is the same painter's-order requirement the quad/curve switch already
-     * documents: text submitted after an icon must not be drawn before it.</p>
+     * <p>Never call {@code .pose(...)}, {@code .clip(...)} or {@code .node(...)} on it: they drop the context's.</p>
      */
-    private void beginTextPath() {
-        if (activePath == InstancePath.TEXT) return;
-        // A REAL PATH SWITCH, as opposed to a call to text(). The two are wildly different numbers and
-        // only this one costs anything: a frame with 67 labels reports 67 text() calls whether they were
-        // consecutive (one switch, one upload) or interleaved with boxes (67 switches, 67 uploads). The
-        // batch below is worth exactly as much as the gap between them, so the gap has to be visible.
-        CgTrace.add(UiTrace.FRAME, "textpath-switches", 1);
-        renderer.flush();
-        activePath = InstancePath.TEXT;
-        currentTexture = null;
-        // OPENING THE BATCH IS THE WHOLE POINT OF HAVING A TEXT PATH.
-        //
-        // CgTextRenderer.draw() tolerates being called with no batch open by auto-wrapping itself in a
-        // begin/flush/end -- so every label costs its own upload, buffer map and draw. This used to open
-        // the path and close the batch (endTextPath already called endBatch), which is half a pairing: the
-        // tolerance meant it still rendered correctly, so the cost never surfaced as a bug.
-        //
-        // Measured on the icon grid: 59 flushes per frame for 57 labels, 1.21ms in quadRenderer.upload of
-        // which 0.88ms was streamBuffer.ssbo.map, plus 1.35ms across 58 glFlush calls -- about 2.5ms/frame,
-        // more than every icon's geometry put together.
-        //
-        // ENABLED, and the counters explain why the disabled version looked pointless. A frame drawing 59
-        // labels reported 59 textpath-switches and only 2 quadpath-switches -- which cannot both be true
-        // of a path that alternates, and is not: Draw.submit() auto-wraps each label in its own
-        // begin/flush/END, and endBatch runs the restoreStateWith hook this class registers, which calls
-        // bindQuadPath and puts activePath back to QUAD. So the switches were 1:1 with labels BECAUSE
-        // there was no batch, and "batching wins nothing because every label switches anyway" had the
-        // causation backwards.
-        //
-        // With one batch open for the whole text path, the auto-wrap stops, the restore runs once per
-        // real switch instead of once per label, and consecutive labels coalesce into one upload.
-        // endTextPath() closes it, and endFrame() closes any that survives a frame.
-        //
-        // UIText must NOT open its own batch underneath this one -- beginBatch throws on a batch that is
-        // already open, which is what made enabling this line unusable before. Its shadow pass wanted a
-        // batch so the two draws coalesce; this batch already gives it that, and more.
-        textRenderer.beginBatch();
+    public CgTextDraw text() {
+        CgTrace.add(UiTrace.FRAME, "text-draws", 1);
+        return recorder.text().pose(poseStack).clip(clipEntry).node(spatialNode, effectNode).gamma(textGamma);
     }
 
     /**
@@ -1255,13 +1152,7 @@ public final class CgUiPaintContext {
      */
     private void beginQuadPath() {
         if (activePath == InstancePath.QUAD) return;
-        // ALL THREE SWITCHES COUNTED, because knowing there are 59 text switches for 59 labels says
-        // every label is preceded by something non-text and NOT what. The editor's lines carry no
-        // background (`.__line__` sets none), so consecutive lines ought to batch -- and measurably do
-        // not. Whatever takes the path away between them is the thing to move, and only the counts can
-        // name it: quads (a fill, an image) and curves (every SVG icon) are different problems.
         CgTrace.add(UiTrace.FRAME, "quadpath-switches", 1);
-        endTextPath();
         // bindQuadPath sets activePath itself — the one place it is assigned for this path.
         bindQuadPath(currentMaterial != null ? currentMaterial : boxModelMaterial);
         currentTexture = null;
@@ -1273,7 +1164,6 @@ public final class CgUiPaintContext {
         // @see #beginQuadPath -- every SVG icon draws through here, and an icon beside a label is one
         // alternation per row in any list.
         CgTrace.add(UiTrace.FRAME, "curvepath-switches", 1);
-        endTextPath();
         activePath = InstancePath.CURVE;
         // Layer opacity is a material property, so it has to be re-applied on the material actually
         // being bound — the value living on boxModelMaterial says nothing about this one.
@@ -1339,19 +1229,6 @@ public final class CgUiPaintContext {
     }
 
     /**
-     * Closes any open text batch before another path binds over it.
-     *
-     * <p>{@code endBatch()} is documented as lenient — a no-op when no batch is open — so this costs a
-     * field read in the overwhelmingly common case where a caller let the text renderer auto-wrap each
-     * draw. It matters for the caller that opened one explicitly and then drew a quad: those glyphs would
-     * otherwise flush later, against whatever material had been bound since, and out of order.</p>
-     */
-    /** Symmetric with {@link #beginTextPath()}; both are guarded on {@code activePath} so the pairing holds. */
-    private void endTextPath() {
-        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
-    }
-
-    /**
      * Binds a quad-path material and records that the quad path is now current.
      *
      * <p>Every quad-material bind in this class goes through here so {@link #activePath} cannot drift
@@ -1359,50 +1236,15 @@ public final class CgUiPaintContext {
      * the wrong shader, which renders something rather than failing.</p>
      */
     private void bindQuadPath(CgMaterial material) {
-        // THE TEXT BATCH DIES HERE TOO, not only in endTextPath.
-        //
-        // This method is the one place activePath becomes QUAD, and several callers reach it WITHOUT
-        // going through beginQuadPath: beginFrame, withMaterial, blitLayer, and the restoreStateWith
-        // hook. Each of those left activePath at QUAD while a text batch was still open, so the next
-        // text() saw "not TEXT", opened a second batch, and CgTextRenderer threw
-        // "beginBatch() called without a matching endBatch()". Guarding only the tidy path is guarding
-        // the route nothing takes.
-        //
-        // Re-entrant by construction and safe: endBatch runs the restore hook, which lands back here.
-        // endBatch clears batchActive BEFORE invoking the hook and is documented lenient, so the inner
-        // call returns immediately.
-        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
         renderer.useMaterial(material);
         activePath = InstancePath.QUAD;
     }
 
     /**
-     * Draws everything submitted and not yet drawn — <b>on every path, text included</b>.
-     *
-     * <h3>The text batch is pending work, and this method is what "pending" is measured against</h3>
-     *
-     * <p>Every caller of this uses it to mean "the GPU has what I gave it, I am about to change
-     * something it would otherwise be drawn under". {@link #pushScissor} and {@link #popScissor} change
-     * the clip rectangle; {@link #withMaterial} binds a different shader; {@link #endLayerFbo} closes a
-     * GL scope and puts the previous render TARGET back. All four flushed the quad renderer and left an
-     * open text batch behind, so its glyphs were drawn later, under whatever state was current then.</p>
-     *
-     * <p>That was invisible until this class started holding a batch open across labels. Before it did,
-     * {@code Draw.submit()} auto-wrapped each label in its own begin/flush/end, so text was never pending
-     * across anything and {@code renderer.flush()} really was the whole of it. Opening one batch for the
-     * text path is what made this method a lie.</p>
-     *
-     * <p>The symptom is not a wrong colour, it is a <b>missing label</b>: a tree row's glyphs queued
-     * inside the list's scissor and flushed after {@code popScissor}, clipped to a rectangle they are no
-     * longer inside. Which rows vanish depends on where the batch happened to end, so it reads as
-     * intermittent — the project tree lost its root one run and a child the next.</p>
-     *
-     * <p>Ending the batch runs the restore hook, which lands in {@link #bindQuadPath} and puts
-     * {@code activePath} back to QUAD; the next {@link #text()} reopens one. Consecutive labels with
-     * nothing between them still coalesce, which is the whole of what the batch was for.</p>
+     * Lands everything drawn so far: into the recording while a frame records, else drawn now. A boundary for a caller
+     * about to read what was drawn, or to bracket a segment exactly; painter's order needs none.
      */
     public void flush() {
-        endTextPath();
         renderer.flush();
     }
 
@@ -1427,7 +1269,7 @@ public final class CgUiPaintContext {
      *
      * <h3>A rect test, deliberately NOT a frustum</h3>
      *
-     * <p>{@code CgTextCuller} tests a {@link com.crystalgraphics.render.CgViewFrustum} because a 3D
+     * <p>{@code CgCanvas.visible} tests a {@link com.crystalgraphics.render.CgViewFrustum} because a 3D
      * text layout can sit at any orientation in a perspective view. The UI cannot: {@link #beginFrame}
      * installs {@code ortho(0, w, h, 0)}, so post-pose coordinates <em>are</em> window pixels and the
      * visible region is an axis-aligned rectangle. Against that, six plane dot-products would be a slower
@@ -1907,7 +1749,6 @@ public final class CgUiPaintContext {
     /** Per instance, so a change needs no flush: what is queued keeps the entry it was stamped with. */
     private void setClip(int entry) {
         clipEntry = entry;
-        textRenderer.clip(entry);
     }
 
     // ── Spatial nodes ───────────────────────────────────────────────────────
@@ -1987,7 +1828,6 @@ public final class CgUiPaintContext {
         int previous = spatialNode;
         spatialNode = node;
         drawToTargetValid = false;
-        textRenderer.node(node, effectNode);
         return previous;
     }
 
@@ -2714,10 +2554,6 @@ public final class CgUiPaintContext {
         reapplyScissorFor(height);
 
         targetConstants(width, height);
-        // TEXT HAS ITS OWN PROJECTION, and it has to follow the target too: CgTextRenderer does not read
-        // cg_ProjMatrix. Inside a window's snapshot, sized to the window, a screen ortho drew every string at a
-        // third of its size in the corner. updateOrtho is a no-op when the size is unchanged.
-        textRenderer.context().updateOrtho(width, height);
         if (clear) {
             CgTrace.add(UiTrace.FRAME, "layer-clear-kpx",
                     (region == null ? width * height : region.width() * region.height()) / 1000);
@@ -2746,7 +2582,6 @@ public final class CgUiPaintContext {
         recorder.view(viewOwner, layerOriginX, layerOriginY);
         drawToTargetValid = false;
         targetConstants(frame.enclosingWidth(), frame.enclosingHeight());
-        textRenderer.context().updateOrtho(frame.enclosingWidth(), frame.enclosingHeight());
         // The clip stack as the enclosing target expressed it -- a bounded layer shifted every rect
         // into its own origin on the way in. @see LayerFrame#savedScissor
         scissorStack.resume(frame.savedScissor());
@@ -2930,7 +2765,6 @@ public final class CgUiPaintContext {
      */
     void fillAlpha(int width, int height) {
         flush();
-        if (activePath == InstancePath.TEXT) textRenderer.endBatch();
         CgMaterial was = currentMaterial;
         CgRenderState base = boxModelMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
         if (base != alphaStateBase) {
@@ -2986,7 +2820,6 @@ public final class CgUiPaintContext {
             maskMaterial.applyProperties(b -> b.sampler("_MainTex", 0, mask));
             // The multiply rides on the draw's own pipeline: a blend applied after binding would be overwritten
             // when the recorded draw binds gui_box's declared blend.
-            if (activePath == InstancePath.TEXT) textRenderer.endBatch();
             CgRenderState quadState = maskMaterial.getPassRenderState(CgRenderPassVariant.FORWARD);
             if (quadState != maskStateBase) {
                 maskStateBase = quadState;
@@ -3044,8 +2877,6 @@ public final class CgUiPaintContext {
         // Requested textures: no registry sweeps them.
         backdrop.delete();
         svgRaster.delete();
-
-        textRenderer.delete();
 
         currentTexture = null;
         currentMaterial = null;

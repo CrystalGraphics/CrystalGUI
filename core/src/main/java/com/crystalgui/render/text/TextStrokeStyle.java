@@ -4,7 +4,7 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.text.CgStrokeAlign;
 import com.crystalgraphics.api.text.CgStrokeJoin;
 import com.crystalgraphics.text.cache.CgFontRegistry;
-import com.crystalgraphics.text.render.CgTextRenderer;
+import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.GeneralGroup;
@@ -23,7 +23,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <pre>{@code
  * CgFontFamily family = resolveFamily();
- * CgTextRenderer.Draw draw = ctx.text().draw()
+ * CgTextDraw draw = ctx.text()
  *         .text(shown).family(family).at(x, y).color(color);
  * TextStrokeStyle.applyTo(draw, family, general, computedStyle(), color);
  * draw.submit();
@@ -46,7 +46,7 @@ public final class TextStrokeStyle {
     private TextStrokeStyle() {
     }
 
-    public static void applyTo(CgTextRenderer.Draw draw, CgFontFamily family,
+    public static void applyTo(CgTextDraw draw, CgFontFamily family,
                                GeneralGroup general, ComputedStyle computed, int inheritedColor) {
         LengthPercent width = general.textStrokeWidth();
         if (width == null) return;

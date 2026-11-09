@@ -164,7 +164,7 @@ public final class SvgDocument {
      * a stroke centred on the edge puts half its width beyond it — and a cull box that is too small is a
      * missing icon, which is the one failure mode worth engineering against here.</p>
      *
-     * <p>Because it is measured, it needs <b>no slack</b>. {@code CgTextCuller} pads by a full layout
+     * <p>Because it is measured, it needs <b>no slack</b>. Text's cull pads by a full layout
      * height because a text box is a layout construct that glyphs are not obliged to stay inside; this
      * box is the geometry itself, so there is nothing to overhang it. Strokes are expanded by their own
      * half-width, which is the only thing the raw points understate.</p>
