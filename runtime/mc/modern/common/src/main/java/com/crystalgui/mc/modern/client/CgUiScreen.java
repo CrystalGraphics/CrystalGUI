@@ -128,8 +128,9 @@ public final class CgUiScreen extends Screen {
 
     // 1.21.6 draws the HUD at the end of the frame, after this screen's immediate-mode paint, so the
     // hotbar and crosshair would land ON the desktop, which used to cover them. Hidden while it is up;
-    // the player's own setting is kept once per opening, since init() also runs on every resize.
-    //? if >=1.21.6 {
+    // the player's own setting is kept once per opening, since init() also runs on every resize. From
+    // 26.1 the desktop paints at the frame end, over the HUD, so it stays: and with it the hand and the HUD stage.
+    //? if >=1.21.6 <26.1 {
     /*private Boolean hudHiddenBefore;
     *///?}
 
@@ -141,7 +142,7 @@ public final class CgUiScreen extends Screen {
         //? if >=26.3 {
         /*minecraft.onTextInputFocusChange(this, true);
         *///?}
-        //? if >=1.21.6 {
+        //? if >=1.21.6 <26.1 {
         /*if (hudHiddenBefore == null) hudHiddenBefore = CgMinecraftClient.hudHidden(minecraft);
         CgMinecraftClient.setHudHidden(minecraft, true);
         *///?}
@@ -284,7 +285,7 @@ public final class CgUiScreen extends Screen {
         //? if >=26.3 {
         /*minecraft.onTextInputFocusChange(this, false);
         *///?}
-        //? if >=1.21.6 {
+        //? if >=1.21.6 <26.1 {
         /*if (hudHiddenBefore != null) CgMinecraftClient.setHudHidden(minecraft, hudHiddenBefore);
         hudHiddenBefore = null;
         *///?}
