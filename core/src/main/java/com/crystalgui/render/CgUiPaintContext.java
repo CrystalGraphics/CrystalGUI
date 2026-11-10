@@ -209,7 +209,7 @@ public final class CgUiPaintContext {
             if (built < materials.length) return false;
             // THE DESKTOP'S FONTS LOADED BEFORE IT OPENS, so its first frame loads none
             if (!glyphsLanded()) return false;
-            try {
+            try (CgExecutor.Into ignored = UiGpu.intoWarmTarget(width, height)) {
                 context.beginFrame(Math.max(1, width), Math.max(1, height));
                 context.endFrame();
             } catch (RuntimeException | LinkageError e) {

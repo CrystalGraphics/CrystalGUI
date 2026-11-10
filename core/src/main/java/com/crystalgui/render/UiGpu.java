@@ -1,5 +1,8 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.api.texture.CgTextureType;
+import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
+import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
 import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
@@ -57,6 +60,10 @@ public final class UiGpu {
     }
 
     /** The instance, built on first use. */
+    /** What the warm-ups draw into ({@link #intoWarmTarget}); null before the first. */
+    @Nullable
+    private CgFrameBuffer warmTarget;
+
     static UiGpu get() {
         if (instance == null) instance = new UiGpu();
         return instance;
@@ -94,11 +101,32 @@ public final class UiGpu {
         UiGpu gpu = get();
         gpu.beginFrame();
         gpu.warming = true;
-        try {
+        try (CgExecutor.Into ignored = intoWarmTarget(frame.width(), frame.height())) {
             gpu.endFrame(frame);
         } finally {
             gpu.warming = false;
         }
+    }
+
+    /**
+     * Makes a target of the warm-ups' own the current one until it closes: a warm-up runs behind the loading screen,
+     * where the host has named no target, and what it draws is never shown. Kept, and remade only at another size.
+     *
+     * <pre>{@code
+     * try (CgExecutor.Into ignored = UiGpu.intoWarmTarget(width, height)) {
+     *     context.endFrame();
+     * }
+     * }</pre>
+     */
+    public static CgExecutor.Into intoWarmTarget(int width, int height) {
+        UiGpu gpu = get();
+        int w = Math.max(1, width), h = Math.max(1, height);
+        if (gpu.warmTarget == null || gpu.warmTarget.getWidth() != w || gpu.warmTarget.getHeight() != h) {
+            if (gpu.warmTarget != null) gpu.warmTarget.delete();
+            gpu.warmTarget = CgFrameBuffer.create("cgui_warm", w, h,
+                    CgFrameBufferFormat.builder("cgui_warm").color(0, CgTextureType.RGBA8).build());
+        }
+        return CgExecutor.into(gpu.warmTarget);
     }
 
     /** Executes the frame, composites it, and keeps it; a frame that threw hands its buffers back. */
@@ -231,6 +259,8 @@ public final class UiGpu {
             if (context != null) context.release();
         }
         gpu.contexts.clear();
+        if (gpu.warmTarget != null) gpu.warmTarget.delete();
+        gpu.warmTarget = null;
         gpu.lastFrame = null;
         gpu.lastPresent = null;
         gpu.lastShown = null;
