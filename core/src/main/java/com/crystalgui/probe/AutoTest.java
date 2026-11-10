@@ -202,6 +202,13 @@ public final class AutoTest {
     private static boolean capturedEarly;
     /** The settle the desktop was first ready on (application up, a frame painted), or -1. */
     private static int readySince = -1;
+    /** When it was first ready. */
+    private static long readyNanos;
+    /**
+     * How long after ready the first capture waits at least, whatever the host's unit: the application's window opens on
+     * the desktop's own thread after it launches, and ten of 1.12.2's frames came before it.
+     */
+    private static final long READY_SETTLE_NANOS = 2_000_000_000L;
     /** The settle the first capture was taken on. */
     private static int earlyAt;
     /** When the first capture fell due, so its wait for a painted frame is bounded. */
@@ -285,8 +292,10 @@ public final class AutoTest {
         if (readySince < 0 && HostSession.isInstalled() && HostSession.session().hasPainted()
                 && HostSession.session().application() != null) {
             readySince = sinceOpen;
+            readyNanos = System.nanoTime();
         }
-        boolean settledSinceReady = readySince >= 0 && sinceOpen >= readySince + host.captureAt();
+        boolean settledSinceReady = readySince >= 0 && sinceOpen >= readySince + host.captureAt()
+                && System.nanoTime() - readyNanos >= READY_SETTLE_NANOS;
         boolean waitedEnough = due && System.nanoTime() - captureDueNanos >= PAINT_GRACE_NANOS;
         if (!capturedEarly && due && (settledSinceReady || waitedEnough)) {
             earlyAt = sinceOpen;
