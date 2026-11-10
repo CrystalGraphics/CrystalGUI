@@ -329,7 +329,7 @@ tasks.named<JavaExec>(runTask) {
     // screen. The region is the whole point -- glass was a frame killer while the capture was sized to
     // the surface rather than to what asked for it -- so `rect=WxH (N% of ...)` is the line to read.
     //
-    // CPU-side timing: neither glFinish nor a timer query is on CgGL, so the stage figures are a lower
+    // CPU-side timing: the stage figures are CPU time, a lower
     // bound and the frame period is the honest number. If the stages stay small while the period grows,
     // the cost is GPU-side in the work they enqueue.
     if (providers.gradleProperty("cgGlassProbe").isPresent) {

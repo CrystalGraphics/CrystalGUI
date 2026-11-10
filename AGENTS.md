@@ -150,7 +150,7 @@ resolved to local source. Each row in full: [`docs/CGUI_ARCHITECTURE.md`](docs/C
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
 | `core/src/headlessTest/` | ✅ `core` and `platform`, **no GL context and no fonts** | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
-| `core/src/trackedTest/` | ✅ `core`, `platform` and `vulkan`, with LWJGL 3 | CrystalGUI's shaders on CrystalGraphics' tracked backend over shaderc: every `.shader`, pass and keyword variant, linked as a Vulkan device will link them. Its own task, `:core:trackedTest` — the backend it installs is process-wide |
+| `core/src/deviceTest/` | ✅ `core`, `platform` and `vulkan`, with LWJGL 3 | CrystalGUI's shaders on CrystalGraphics' null device over shaderc: every `.shader`, pass and keyword variant, built into a pipeline as a Vulkan device will build them. Its own task, `:core:deviceTest` — the device it installs is process-wide |
 | `language/src/test/` | ✅ (plus the tree-sitter natives) | Grammars, queries, the tokenizer. Skips cleanly when a native will not load on the running platform |
 | harness scenes | ✅ full GL | Anything visual |
 

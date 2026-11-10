@@ -1,5 +1,6 @@
 package com.crystalgui.probe;
 
+import com.crystalgraphics.platform.rhi.CgRHI;
 import java.io.File;
 import java.lang.reflect.Method;
 import java.net.URI;
@@ -42,7 +43,6 @@ import com.crystalgraphics.net.object.CgNetField;
 import com.crystalgraphics.net.object.CgNetType;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.gl.CgGL;
 import com.crystalgraphics.platform.service.CgNetworkChannel;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
@@ -307,7 +307,7 @@ public final class ServerSmoke {
         checkDescriptionRoundTrip(lines, failures);
         checkModCue(lines, failures);
         checkNothingClientSideLoaded(host, lines, failures);
-        checkNoGlBackend(lines, failures);
+        checkNoDevice(lines, failures);
         checkPersistence(lines, failures);
         checkNbtRoundTrip(lines, failures);
         checkTextFormats(lines, failures);
@@ -689,11 +689,6 @@ public final class ServerSmoke {
     }
 
     /**
-     * No GL backend was installed. {@code CgGL} takes one at the first host section or capability probe,
-     * so one here means server-side code asked for rendering: on a real server that is a
-     * {@code NoClassDefFoundError}, on a dev server's merged classpath it passes silently.
-     */
-    /**
      * A mod jar's cue, named by {@code -Dcrystalgraphics.serverSmoke.cue=<id>}: mounted from its jar on the server and
      * compiled headless, its shake resolved. Before the client-class check, so loading it is checked too.
      */
@@ -720,9 +715,14 @@ public final class ServerSmoke {
         check(lines, failures, "it compiles headless, its shake resolved", ok, detail);
     }
 
-    private static void checkNoGlBackend(List<String> lines, List<String> failures) {
-        check(lines, failures, "no GL backend installed", !CgGL.isInstalled(),
-                "something opened CgGL.fromHost, probed CgCapabilities or called CgGL.init on a server");
+    /**
+     * No device was installed. A host makes its device at the graphics start, so one here means server-side code asked
+     * for rendering: on a real server that is a {@code NoClassDefFoundError}, on a dev server's merged classpath it passes
+     * silently.
+     */
+    private static void checkNoDevice(List<String> lines, List<String> failures) {
+        check(lines, failures, "no device installed", !CgRHI.installed(),
+                "something started a device or probed CgCapabilities on a server");
     }
 
     /** Saved when this server stops, so the first run of a fresh world makes one and every run after finds it. */
