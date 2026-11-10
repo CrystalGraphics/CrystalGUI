@@ -2,8 +2,6 @@ package com.crystalgui.testsupport;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.CgPlatformService;
-import com.crystalgraphics.platform.gl.CgGLBackend;
-import com.crystalgraphics.platform.gl.CgGLContext;
 import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.platform.input.CgInput;
 
@@ -95,6 +93,4 @@ public final class TestPlatformService implements CgPlatformService {
         return this;
     }
 
-    @Override public CgGLBackend gl() { return null; }
-    @Override public CgGLContext capabilities() { return null; }
 }

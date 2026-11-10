@@ -240,11 +240,11 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
 
 tasks.named("check") { dependsOn(headlessTestTask) }
 
-// -- trackedTest ---------------------------------------------------------------
-// CrystalGUI's shaders compiled by shaderc and linked on CrystalGraphics' tracked backend, as a Vulkan device
-// will run them (plan/device-seam.md §6). Its own source set and task: the backend it installs is process-wide,
-// and LWJGL 3's natives belong on no other test's classpath.
-val trackedTest: SourceSet by sourceSets.creating {
+// -- deviceTest ----------------------------------------------------------------
+// CrystalGUI's shaders compiled by shaderc into pipelines on CrystalGraphics' null device, as a Vulkan device will run
+// them (plan/device-seam.md §6). Its own source set and task: the device it installs is process-wide, and LWJGL 3's
+// natives belong on no other test's classpath.
+val deviceTest: SourceSet by sourceSets.creating {
     runtimeClasspath += sourceSets["main"].output
 }
 
@@ -258,29 +258,29 @@ val lwjglNatives = System.getProperty("os.name").lowercase().let { os ->
 }
 
 dependencies {
-    "trackedTestImplementation"("junit:junit:4.13.2")
-    "trackedTestImplementation"("com.crystalgraphics:core:$crystalgraphics")
-    "trackedTestImplementation"("com.crystalgraphics:platform:$crystalgraphics")
-    "trackedTestImplementation"("com.crystalgraphics:vulkan:$crystalgraphics")
-    "trackedTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
-    "trackedTestRuntimeOnly"("org.apache.logging.log4j:log4j-core:2.26.1")
+    "deviceTestImplementation"("junit:junit:4.13.2")
+    "deviceTestImplementation"("com.crystalgraphics:core:$crystalgraphics")
+    "deviceTestImplementation"("com.crystalgraphics:platform:$crystalgraphics")
+    "deviceTestImplementation"("com.crystalgraphics:vulkan:$crystalgraphics")
+    "deviceTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
+    "deviceTestRuntimeOnly"("org.apache.logging.log4j:log4j-core:2.26.1")
     for (module in listOf("lwjgl", "lwjgl-shaderc", "lwjgl-spvc")) {
-        "trackedTestImplementation"("org.lwjgl:$module:$lwjglVulkan")
-        "trackedTestRuntimeOnly"("org.lwjgl:$module:$lwjglVulkan:$lwjglNatives")
+        "deviceTestImplementation"("org.lwjgl:$module:$lwjglVulkan")
+        "deviceTestRuntimeOnly"("org.lwjgl:$module:$lwjglVulkan:$lwjglNatives")
     }
 }
 
-val trackedTestTask = tasks.register<Test>("trackedTest") {
-    description = "CrystalGUI's shaders compiled and linked on CrystalGraphics' tracked backend, as on Vulkan."
+val deviceTestTask = tasks.register<Test>("deviceTest") {
+    description = "CrystalGUI's shaders compiled into pipelines on CrystalGraphics' null device, as on Vulkan."
     group = "verification"
-    testClassesDirs = trackedTest.output.classesDirs
-    classpath = trackedTest.runtimeClasspath
+    testClassesDirs = deviceTest.output.classesDirs
+    classpath = deviceTest.runtimeClasspath
     useJUnit()
     // shaderc's natives load through System.load, which JDK 25 warns about unless native access is granted.
     jvmArgs("--enable-native-access=ALL-UNNAMED")
 }
 
-tasks.named("check") { dependsOn(trackedTestTask) }
+tasks.named("check") { dependsOn(deviceTestTask) }
 
 
 // -- M5 acceptance ------------------------------------------------------------
@@ -325,27 +325,6 @@ tasks.register("m5Acceptance") {
     dependsOn(m5Headless, m5Fonted)
 }
 
-
-// ── CgGL ratchet (rhi.md §2.12) ──────────────────────────────────────────────
-//
-// The files allowed to name CgGL or org.lwjgl.opengl, a list that only shrinks: a file off it naming one fails the
-// build, and so does a listed file that no longer does. Regenerate with
-// `python plan/crystalgraphics/rhi/steps/cggl_ledger.py <worktree> --write` after a port, never by hand.
-tasks.named<JavaCompile>("compileJava") {
-    val srcRoot = layout.projectDirectory.dir("src/main/java").asFile
-    val listFile = layout.projectDirectory.file("cggl-uses.txt").asFile
-    inputs.file(listFile)
-    doLast {
-        val allowed = listFile.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.toSet()
-        val use = Regex("""\bCgGL\.|^import org\.lwjgl\.opengl""", RegexOption.MULTILINE)
-        val using = srcRoot.walkTopDown().filter { it.isFile && it.extension == "java" && use.containsMatchIn(it.readText()) }
-            .map { it.relativeTo(srcRoot).invariantSeparatorsPath }.toSet()
-        val added = using - allowed
-        val gone = allowed - using
-        if (added.isNotEmpty()) error("CgGL named in files off cggl-uses.txt; port them to CgRHI: ${added.sorted()}")
-        if (gone.isNotEmpty()) error("cggl-uses.txt lists files that no longer name CgGL; regenerate it: ${gone.sorted()}")
-    }
-}
 
 // -- Import guard -------------------------------------------------------------
 // Fails the build if any core/ source imports MC, Forge, or LWJGL classes.

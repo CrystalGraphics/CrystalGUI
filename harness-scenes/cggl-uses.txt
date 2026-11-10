@@ -1,3 +1,0 @@
-# Files allowed to name CgGL or org.lwjgl.opengl: shrinks only (rhi.md §2.12). Regenerate:
-#   python plan/crystalgraphics/rhi/steps/cggl_ledger.py . --write
-

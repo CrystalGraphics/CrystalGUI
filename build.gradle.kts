@@ -85,7 +85,7 @@ if (findProject(":gl-debug-harness") != null) allprojects {
 // else in its build asks for them: Gradle compiles against a project's CLASSES variant, so no jar task
 // ever enters the graph, and ModDevGradle's additionalRuntimeClasspath yields jar PATHS without
 // registering the tasks that produce them. The consumer therefore runs whatever is on disk -- which
-// meant a months-old crystalgui-mc1201-common, and a platform.jar predating a fix to CgGL that crashed
+// meant a months-old crystalgui-mc1201-common, and a platform.jar predating a fix that crashed
 // on a source line that no longer existed.
 //
 // One task rather than a list the consumer maintains, and it lives here because only this build can

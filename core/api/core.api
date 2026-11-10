@@ -8377,6 +8377,7 @@ com/crystalgui/render/UiGpu
   extends java/lang/Object
   method public,static destroy ()V
   method public,static hasInstance ()Z
+  method public,static intoWarmTarget (II)Lcom/crystalgraphics/render/graph/CgExecutor$Into;
   method public,static present (Lcom/crystalgui/render/UiFrame;)V
   method public,static presentAgain (II)V
   method public,static presented ()Lcom/crystalgui/render/UiFrame;

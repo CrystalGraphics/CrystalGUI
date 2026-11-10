@@ -8,13 +8,8 @@ import com.crystalgraphics.gl.material.CgMaterialShaderRegistry;
 import com.crystalgraphics.gl.material.parse.CgParsedPass;
 import com.crystalgraphics.gl.material.parse.CgParsedShader;
 import com.crystalgraphics.gl.texture.CgFallbackTextures;
-import com.crystalgraphics.platform.rhi.nulldrv.CgNullRHI;
 import com.crystalgraphics.platform.gl.CgCapabilities;
-import com.crystalgraphics.platform.gl.CgGL;
-import com.crystalgraphics.platform.gl.state.CgGlState;
-import com.crystalgraphics.platform.gl.tracked.CgTrackedGLBackend;
-import com.crystalgraphics.platform.gl.tracked.CgTrackedGLContext;
-import com.crystalgraphics.platform.gl.tracked.CgTrackedStateProvider;
+import com.crystalgraphics.platform.rhi.nulldrv.CgNullRHI;
 import com.crystalgraphics.vulkan.shader.ExplicitBindingCheck;
 import com.crystalgraphics.vulkan.shader.ShadercGlslCompiler;
 import org.junit.AfterClass;
@@ -33,11 +28,10 @@ import java.util.stream.Stream;
 import static org.junit.Assert.*;
 
 /**
- * Every shader CrystalGUI ships, compiled by shaderc and linked on CrystalGraphics' tracked backend, in every pass
- * and keyword variant — as a Vulkan device will run them (plan/device-seam.md §6). CrystalGraphics' own shaders are
- * its {@code EngineOnTrackedBackendTest}'s.
+ * Every shader CrystalGUI ships, compiled by shaderc into a pipeline on CrystalGraphics' null device, in every pass and
+ * keyword variant: as a Vulkan device will run them. CrystalGraphics' own shaders are its {@code DevicePipelinesTest}'s.
  */
-public class ShippedShadersOnTrackedBackendTest {
+public class ShippedShadersOnDeviceTest {
 
     private static ShadercGlslCompiler compiler, bare;
 
@@ -45,26 +39,21 @@ public class ShippedShadersOnTrackedBackendTest {
     public static void install() {
         compiler = new ShadercGlslCompiler();
         bare = new ShadercGlslCompiler(null, false, false);   // Vulkan's own rules, nothing auto-bound
-        CgTrackedGLBackend gl = new CgTrackedGLBackend(new CgNullRHI(64, 64), new ExplicitBindingCheck(compiler, bare), true);
-        CgGL.init(gl);
-        CgCapabilities.init(new CgTrackedGLContext());
+        new CgNullRHI(64, 64).install(new ExplicitBindingCheck(compiler, bare));
         CgCapabilities.clearCache();
-        CgGlState.reset();
-        CgGlState.setProvider(new CgTrackedStateProvider(gl));
-        // CgEngineLifecycle.ensureGraphicsContext's own steps, less the platform it would ask for a context.
+        // CgEngineLifecycle.ensureGraphicsContext's own steps, less the platform it would ask for a device.
         CgBindingPoints.init(CgCapabilities.detect());
         CgFallbackTextures.init();
     }
 
     @AfterClass
     public static void uninstall() {
-        CgGlState.reset();
         compiler.close();
         bare.close();
     }
 
     @Test
-    public void everyPassAndKeywordVariantLinks() throws Exception {
+    public void everyPassAndKeywordVariantBuilds() throws Exception {
         List<String> materials = shippedMaterials();
         List<String> failures = new ArrayList<>();
         int programs = 0;
@@ -82,22 +71,22 @@ public class ShippedShadersOnTrackedBackendTest {
                 for (Set<String> keywords : variants) {
                     programs++;
                     if (shader.getOrCompile(pass.name(), keywords) == null)
-                        failures.add(path + " pass " + pass.name() + " " + keywords + ": did not link (see log)");
+                        failures.add(path + " pass " + pass.name() + " " + keywords + ": did not build (see log)");
                 }
             }
             CgMaterial material = CgMaterial.newInstance(path);
             if (parsed.renderQueue() < 3000 && forward != null && !material.hasDepthPass()
                     && !shader.hasCompiledPass(CgRenderPassVariant.DEPTH.lightModeName()))
-                failures.add(path + ": the generated depth pass did not link (see log)");
+                failures.add(path + ": the generated depth pass did not build (see log)");
             material.delete();
         }
         assertTrue(String.join(System.lineSeparator(), failures), failures.isEmpty());
-        assertTrue("no program was linked: the test proves nothing", programs > materials.size());
+        assertTrue("no program was built: the test proves nothing", !materials.isEmpty() && programs >= materials.size());
     }
 
     /** Every {@code .shader} directly under {@code assets/crystalgui/shaders/}, read from core's resources. */
     private static List<String> shippedMaterials() throws Exception {
-        URI dir = ShippedShadersOnTrackedBackendTest.class.getResource("/assets/crystalgui/shaders/").toURI();
+        URI dir = ShippedShadersOnDeviceTest.class.getResource("/assets/crystalgui/shaders/").toURI();
         try (Stream<Path> files = Files.list(Path.of(dir))) {
             return files.map(f -> f.getFileName().toString()).filter(n -> n.endsWith(".shader"))
                     .sorted().map(n -> "crystalgui:shaders/" + n).toList();

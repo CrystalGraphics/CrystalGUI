@@ -62,23 +62,17 @@ harness.tasks.named<JavaExec>("runHarness") {
         .forEach { systemProperty(it, System.getProperty(it)) }
 }
 
-// ── CgGL ratchet (rhi.md §2.12) ──────────────────────────────────────────────
+// ── Raw GL guard ─────────────────────────────────────────────────────────────
 //
-// The files allowed to name CgGL or org.lwjgl.opengl: the host layer alone. A list that only shrinks: a file off it
-// naming one fails the build, and so does a listed file that no longer does. Regenerate with
-// `python plan/crystalgraphics/rhi/steps/cggl_ledger.py <worktree> --write` after a port, never by hand.
+// A scene draws through the device: no file but none imports org.lwjgl.opengl.
 tasks.named<JavaCompile>("compileJava") {
     val srcRoot = layout.projectDirectory.dir("src/main/java").asFile
-    val listFile = layout.projectDirectory.file("cggl-uses.txt").asFile
-    inputs.file(listFile)
     doLast {
-        val allowed = listFile.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.toSet()
-        val use = Regex("""\bCgGL\.|^import org\.lwjgl\.opengl""", RegexOption.MULTILINE)
+        val allowed = emptySet<String>()
+        val use = Regex("""^import (static )?org\.lwjgl\.opengl""", RegexOption.MULTILINE)
         val using = srcRoot.walkTopDown().filter { it.isFile && it.extension == "java" && use.containsMatchIn(it.readText()) }
             .map { it.relativeTo(srcRoot).invariantSeparatorsPath }.toSet()
         val added = using - allowed
-        val gone = allowed - using
-        if (added.isNotEmpty()) error("CgGL named in files off cggl-uses.txt; port them to CgRHI: ${added.sorted()}")
-        if (gone.isNotEmpty()) error("cggl-uses.txt lists files that no longer name CgGL; regenerate it: ${gone.sorted()}")
+        if (added.isNotEmpty()) error("raw GL imported; draw through the device: ${added.sorted()}")
     }
 }
