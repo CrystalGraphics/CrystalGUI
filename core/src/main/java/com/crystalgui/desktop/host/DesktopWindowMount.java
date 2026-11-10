@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import javax.annotation.Nullable;
+import java.util.concurrent.Executor;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgStateMap;
@@ -54,6 +55,9 @@ import com.crystalgui.ui.dom.UIElement;
  */
 public final class DesktopWindowMount implements WindowMount {
 
+    /** CrystalGUI's method families whose client handlers touch the desktop's tree: windows, commands, files. */
+    private static final String[] TREE_METHODS = {"ui/", "command/", "fs/"};
+
     private final UIDocument document;
 
     /** The connection currently carrying it, so rebinding to the same one is free. */
@@ -105,13 +109,14 @@ public final class DesktopWindowMount implements WindowMount {
     public void bind(@Nullable CgProtocolConnection<Object> connection, @Nullable WindowMount preferred) {
         if (connection == null || connection == boundTo) return;
         boundTo = connection;
-        // THE DESKTOP'S TREE BELONGS TO ITS SEQUENCE, and a game ticks this connection on its own thread: what the
-        // server sends touches the tree, so it is delivered there. Inline where the document has no other sequence.
-        connection.dispatchThrough(work -> {
+        // The desktop's tree belongs to its sequence, so CrystalGUI's own methods are delivered there. Only those:
+        // the connection is shared, and every other mod's handlers are promised the game thread.
+        Executor onSequence = work -> {
             UiSequence sequence = document.sequence();
             if (sequence == null || sequence.isCurrent()) work.run();
             else sequence.execute(work);
-        });
+        };
+        for (String family : TREE_METHODS) connection.dispatchThrough(family, onSequence);
         WindowMount mount = preferred == null ? this : preferred;
         ClientWindows.of(connection)
                 .setSheetSupply(sheetSupply())
