@@ -170,6 +170,8 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
                 stepWarm();
                 if (warm != null) task.progress(warm.progress());
             }
+            // Unfinished, it waits on its font, its programs or its glyphs: once a frame
+            if (warm != null) task.nextFrame();
             return warm == null;
         }).start();
         // THE DESKTOP BUILT BEHIND THE SCREEN, after the fonts and shaders its first frame needs, so opening it is
@@ -179,8 +181,9 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
             return true;
         }).start();
         // THE DESKTOP DRAWN ONCE BEHIND THE SCREEN, into targets of its own: its first paint is hundreds of ms of
-        // pipelines, blur targets and rasters that would otherwise land inside the open animation.
-        plan.task("crystalgui:desktop-warm").after("crystalgui:desktop").render(task -> {
+        // pipelines, blur targets and rasters that would otherwise land inside the open animation. After the engine's
+        // programs, which build its canvas's glass and text: drawn before them, it built them at its draw.
+        plan.task("crystalgui:desktop-warm").after("crystalgui:desktop", "crystalgraphics:programs").render(task -> {
             return !HostSession.isInstalled() || HostSession.session().warmStep();
         }).start();
     }
