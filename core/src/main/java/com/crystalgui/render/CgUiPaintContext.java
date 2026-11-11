@@ -1,6 +1,6 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.gl.texture.CgTextureAbstract;
+import com.crystalgraphics.gpu.resource.CgTextureAbstract;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;

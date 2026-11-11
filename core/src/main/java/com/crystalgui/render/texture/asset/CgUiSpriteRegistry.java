@@ -1,8 +1,8 @@
 package com.crystalgui.render.texture.asset;
 
 import com.crystalgraphics.api.texture.CgTextureSpec;
-import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.gpu.resource.CgTexture2D;
+import com.crystalgraphics.gpu.resource.CgTextureManager;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.format.CgFiles;

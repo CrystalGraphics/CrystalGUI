@@ -2,7 +2,7 @@ package com.crystalgui.render.texture;
 
 import com.crystalgraphics.render.canvas.CgQuadBatch;
 import com.crystalgraphics.render.canvas.CgShapeTable;
-import com.crystalgraphics.gl.texture.CgTexture2D;
+import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.Objects;

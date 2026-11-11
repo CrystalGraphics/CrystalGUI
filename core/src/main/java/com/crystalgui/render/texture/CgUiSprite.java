@@ -1,8 +1,8 @@
 package com.crystalgui.render.texture;
 
 import com.crystalgraphics.api.texture.CgTextureSpec;
-import com.crystalgraphics.gl.texture.CgTexture2D;
-import com.crystalgraphics.gl.texture.CgTextureManager;
+import com.crystalgraphics.gpu.resource.CgTexture2D;
+import com.crystalgraphics.gpu.resource.CgTextureManager;
 import com.crystalgui.render.texture.geometry.Position;
 import com.crystalgui.render.texture.geometry.Size;
 import com.crystalgui.render.CgUiPaintContext;
