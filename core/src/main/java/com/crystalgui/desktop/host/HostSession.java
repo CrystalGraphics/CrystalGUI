@@ -17,6 +17,7 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
+import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
@@ -43,8 +44,7 @@ import java.util.function.Predicate;
  * takes input at its {@code SCREEN} input stage, and puts its desktop up as the engine's screen ({@code CgScreens}):</p>
  *
  * <pre>{@code
- * HostSession.install(CrystalEditor.KIND);                 // what CgUiLifecycle does on every Minecraft client
- * HostSession.install(null);                               // a host opening every application by its own keys
+ * HostSession.install();                                   // what CgUiClientLifecycle does on every Minecraft client
  *
  * HostSession.session().openDesktop();                     // a key: the desktop, nothing on it touched
  * HostSession.session().openApplication();                 // a key: the desktop, the primary application forward
@@ -96,8 +96,6 @@ public final class HostSession {
     private final List<Predicate<CgSystemInput.Keyboard.Event>> hotKeys = new CopyOnWriteArrayList<>();
     /** Who is offered a key the desktop left, before the game is. */
     private final List<Predicate<CgSystemInput.Keyboard.Event>> keysLeft = new CopyOnWriteArrayList<>();
-    @Nullable
-    private final ApplicationKind primaryKind;
     private final HostInput input = new HostInput(this::document, this::offerHotKey);
 
     @Nullable
@@ -176,22 +174,17 @@ public final class HostSession {
     private long traceNanos;
     private boolean painted;
 
-    private HostSession(@Nullable ApplicationKind primaryKind) {
-        this.primaryKind = primaryKind;
+    private HostSession() {
     }
 
     /**
-     * Declares this process's desktop and the application it opens with. Once, at client start; everything the desktop
-     * asks of its host is read from CrystalGraphics' services.
-     *
-     * @param primaryKind what a host's "open the application" key launches — and what fills an empty
-     *                    desktop, since a desktop with nothing on it is a blank screen rather than a
-     *                    desktop; null for a host that opens every application itself, by its own keys,
-     *                    whose empty desktop stays empty
+     * Declares this process's desktop. Once, at client start; everything the desktop asks of its host is read from
+     * CrystalGraphics' services, and the application it opens with is the registry's
+     * ({@link ApplicationRegistry#installPrimary}).
      */
-    public static synchronized HostSession install(@Nullable ApplicationKind primaryKind) {
+    public static synchronized HostSession install() {
         if (current != null) return current;
-        current = new HostSession(primaryKind);
+        current = new HostSession();
         HostStages.attach();
         return current;
     }
@@ -201,7 +194,7 @@ public final class HostSession {
         HostSession session = current;
         if (session == null) {
             throw new IllegalStateException(
-                    "No HostSession: call HostSession.install(kind) when the client starts.");
+                    "No HostSession: call HostSession.install() when the client starts.");
         }
         return session;
     }
@@ -793,9 +786,10 @@ public final class HostSession {
      */
     private boolean ensurePrimaryWindow() {
         if (primaryWindow != null) return true;
-        if (primaryKind == null) return false;
         DesktopHost built = host;
         if (built == null) return false;
+        ApplicationKind primaryKind = built.desktop().applications().primary();
+        if (primaryKind == null) return false;
 
         // THE HOST'S FRAME FIRST, because it is what BINDS the workspace and the launch below reads one.
         // Painting used to be the only caller, so the first open asked for the application before any
@@ -839,8 +833,8 @@ public final class HostSession {
         if (desktop == null) return;
 
         if (!raiseOnShow) return;
-        // No primary: the host opens every application itself, and an empty desktop stays empty
-        if (primaryKind == null) {
+        // No primary: an empty desktop stays empty
+        if (desktop.applications().primary() == null) {
             raiseOnShow = false;
             launchPending = false;
             return;

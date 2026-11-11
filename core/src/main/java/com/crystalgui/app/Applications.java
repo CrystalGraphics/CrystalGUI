@@ -29,7 +29,7 @@ public final class Applications implements ApplicationKinds {
 
     @Override
     public void register(ApplicationRegistry applications) {
-        applications.install(CrystalEditor.KIND);
+        applications.installPrimary(CrystalEditor.KIND);
         applications.install(VfxLab.KIND);
         applications.install(CueSelector.KIND);
         applications.install(MachineExample.KIND);

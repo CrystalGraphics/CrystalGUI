@@ -3,7 +3,6 @@ package com.crystalgui.desktop.host;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.UiSequence;
-import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.ui.dom.UIElement;
 import org.junit.After;
 import org.junit.Test;
@@ -58,7 +57,7 @@ public class HostSessionLockstepTest {
     }
 
     private static HostSession install(Path root) {
-        return HostSession.install(ApplicationKind.of("test.lockstep", "Lockstep"));
+        return HostSession.install();
     }
 
     @Test

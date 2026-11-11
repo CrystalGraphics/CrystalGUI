@@ -9,14 +9,15 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 `CgLifecycleListener` (CrystalGraphics, `lifecycle/`) — `onContextInit(w,h)` / `onFrame(frame)` /
 `onContextDestroy()`, all default no-ops, registered via `CgEngineLifecycle.addListener(...)`.
 
-**CrystalGUI registers exactly one**: `CgUiLifecycle`.
+**CrystalGUI declares two, one a side**: `CgUiClientLifecycle` (below) and `CgUiCommonLifecycle` (the protocols, the
+server workspace, the server smoke), which runs on a dedicated server too. Client-only work never goes in the common one.
 
 | Moment | What CrystalGUI does |
 |---|---|
-| `onPreInit` | `HostSession.install(CrystalEditor.KIND)`, the desktop on every Minecraft client, then its keys (`DesktopKeys`); no loader names either. Then `CgUiStart.ahead()`: style properties, widget kinds, the user-agent sheet, the built-in themes, the desktop record's codecs and the frame profiler's settings on a worker, the load task `crystalgui:start` — half a second to two the first UI paid on the render thread. The harness also starts it through `HarnessExtension.start()` and holds a scene's `init` behind it |
-| `onContextInit` | The disposal GL gate |
+| `onPreInit` | `HostSession.install()`, the desktop on every client, then its keys (`DesktopKeys`); no loader names either. Then `CgUiStart.ahead()`: style properties, widget kinds, the user-agent sheet, the built-in themes, the desktop record's codecs and the frame profiler's settings on a worker, the load task `crystalgui:start` — half a second to two the first UI paid on the render thread. The harness fires pre-init as a game's loader does, and holds a scene's `init` behind the start |
+| `onContextInit` | `CgUiPaintContext.parseAhead()` |
 | `onLoad` | Three load tasks, tracked and named on the loading screen. `crystalgui:paint` (`UiPaintWarmup`), held until `CgUiStart.done()`: the default font, then the shipped icons and the sheets' font families at every size they use, each on a worker (their glyphs generate behind the first frames). `crystalgui:desktop`: `HostSession.preload()` builds the desktop and runs its first cascade and layout, so the first open is a resume. `crystalgui:desktop-warm`, after the engine's programs: `HostSession.rehearseStep()` rehearses the desktop on CrystalGraphics' `SCREEN` stage (`CgRehearsal`, `DesktopRehearsal`) until the JIT settles, a few passes a frame within `CgWarmBudget`. The UI's pipelines are the precache's (`CgUiPaintContext.precache`) |
-| `onFrame` | Drains queued GL disposals. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), painted at CrystalGraphics' GUI stages, never here |
+| `onFrame` | Nothing. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), painted at CrystalGraphics' GUI stages. A `Disposable.Gl` disposed off the render thread waits in CrystalGraphics' `CgDeferral`, landed before the next frame executes |
 | `onContextDestroy` | `CgUiPaintContext.releaseAll()`, and nothing else |
 
 > **`onContextInit` reaches late registrants.** A process the discovery missed registers at its first paint, after
@@ -38,9 +39,8 @@ release its own textures/renderers while the context is whole. Listeners dispatc
 registration order.
 
 > **Registration is CrystalGraphics' discovery**: `core/src/main/resources/META-INF/crystalgraphics/listeners`
-> declares `CgUiLifecycle` a `client` listener, so the engine registers it on every client before its graphics start
-> and no host names it; a dedicated server never loads it. `CgUiPaintContext`'s static initializer still calls the
-> idempotent `register()`, for a process the discovery did not reach.
+> declares `CgUiClientLifecycle` a `client` listener, so the engine registers it on every client before its graphics start
+> and no host names it, for asset reloads too; a dedicated server never loads it.
 
 ---
 

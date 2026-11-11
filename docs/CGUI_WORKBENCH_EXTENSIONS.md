@@ -667,6 +667,9 @@ public final class MyApplications implements ApplicationKinds {
 src/main/resources/META-INF/services/com.crystalgui.desktop.app.ApplicationKinds
 ```
 
+`applications.installPrimary(KIND)` also makes it what the desktop's "open the application" key launches. CrystalGUI
+claims that for Crystal Editor; the first claim wins and a second is logged.
+
 The manifest is **data**: `opens` is read by "open with" and by a launcher without anything being
 launched, so it cannot be derived by building an application and asking what it registered.
 

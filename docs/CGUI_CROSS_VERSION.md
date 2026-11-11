@@ -8,7 +8,7 @@ containers, events, a new platform service — so that it builds and runs on all
 ## The rule
 
 **`core` decides; CrystalGraphics answers the game.** CrystalGUI holds no code per loader or version: it starts from
-its CrystalGraphics lifecycle listeners (`CgUiLifecycle`, `CgUiCommonLifecycle`) and reads every fact of the game
+its CrystalGraphics lifecycle listeners (`CgUiClientLifecycle`, `CgUiCommonLifecycle`) and reads every fact of the game
 through CrystalGraphics' services, whose hosts say how each Minecraft spells it. A fact CrystalGraphics does not answer
 yet is a service added there, in every era at once. A decision made in one loader is one the others got wrong, and
 nothing detects it (`runtime/mc/CLAUDE.md`).
@@ -160,7 +160,7 @@ Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke`
 | **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `fs.server.WorkspaceRoles`, `ServerSmoke.Host` |
 | **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST` |
 | **A static owner over a slot** (CrystalGraphics' shape) | a capability every host answers | a final class with a nested `Host`, its `NONE` and a `HOST` slot, read only through the owner's statics; each era provides it from its install (`platform/CLAUDE.md` § *The wiring standard*) | `CgModLoader`, `CgHostResources`, `CgInput`, `CgClipboard` |
-| **A lifecycle moment** | "when X happens in the game, run Y" | a `CgLifecycleListener` method, or `CgEngineLifecycle.onServerTick`/`onClientTick`, on `core`'s declared listeners; a moment CrystalGraphics does not fire yet is added there, fired by every era's host | `CgUiCommonLifecycle.onServerStarting`, `CgUiLifecycle.onPreInit` |
+| **A lifecycle moment** | "when X happens in the game, run Y" | a `CgLifecycleListener` method, or `CgEngineLifecycle.onServerTick`/`onClientTick`, on `core`'s declared listeners; a moment CrystalGraphics does not fire yet is added there, fired by every era's host | `CgUiCommonLifecycle.onServerStarting`, `CgUiClientLifecycle.onPreInit` |
 
 Never a second static registry beside `CgPlatform`, never `ServiceLoader` from host code (ModLauncher 5
 lists nothing inside a mod file — use `core.provider.Providers`).

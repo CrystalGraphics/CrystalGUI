@@ -222,8 +222,9 @@ com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platfo
                                CgKeyCodes (LWJGL2-shaped, no LWJGL import), CgMouseCodes,
                                CgModifiers (bitmask)
 
-com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener CrystalGUI registers with
-                               CrystalGraphics; drives paint-context teardown + cache invalidation
+com.crystalgui.lifecycle       CrystalGUI's two CgLifecycleListeners, one a side: CgUiClientLifecycle (the
+                               desktop, loading tasks, reloads, paint teardown), CgUiCommonLifecycle (protocols,
+                               the server workspace, the server smoke)
 
 com.crystalgui.render          CgUiPaintContext (one per document: records), UiPresenter (one per document: shows at a GUI stage), UiFrame
                                (a sealed frame), Surface (a moved box's kept texture), PaintSegments, PaintSurfaces, CgUiBackdrop,

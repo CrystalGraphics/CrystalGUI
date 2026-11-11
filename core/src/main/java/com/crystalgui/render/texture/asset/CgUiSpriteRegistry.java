@@ -53,7 +53,7 @@ public final class CgUiSpriteRegistry {
 
     /**
      * Drops every parsed pack, so the next {@link #get} re-reads its JSON — the sprite half of a
-     * resource reload. @see com.crystalgui.lifecycle.CgUiLifecycle
+     * resource reload. @see com.crystalgui.lifecycle.CgUiClientLifecycle
      *
      * <p><b>Only the JSON.</b> The textures a pack names are reloaded by {@code CgTextureManager},
      * which mutates the same {@code CgTexture2D} objects in place, so edited artwork already reaches

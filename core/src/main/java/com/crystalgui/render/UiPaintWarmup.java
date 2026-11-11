@@ -31,7 +31,7 @@ import java.util.Set;
  * the stylesheets' glyphs. A load task's step, waiting a frame at a time; the GPU half is the desktop's rehearsal.
  *
  * <pre>{@code
- * plan.task("crystalgui:paint").render(UiPaintWarmup.preload()).start();   // CgUiLifecycle.onLoad
+ * plan.task("crystalgui:paint").render(UiPaintWarmup.preload()).start();   // CgUiClientLifecycle.onLoad
  * }</pre>
  *
  * <ul>

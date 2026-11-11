@@ -1,5 +1,8 @@
 package com.crystalgui.core.dispose;
 
+import com.crystalgraphics.gpu.CgDeferral;
+import com.crystalgraphics.platform.rhi.CgRHI;
+import com.crystalgraphics.platform.rhi.nulldrv.CgNullRHI;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -7,7 +10,6 @@ import org.junit.Test;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -17,10 +19,8 @@ import static org.junit.Assert.assertTrue;
 /**
  * The ownership tree's contract.
  *
- * <p>In {@code headlessTest} deliberately. The whole point of the GL gate is that its default runs
- * everything immediately, so this class must be reachable where there is no context and no GL thread —
- * and if someone later reaches for a CrystalGraphics type in here, the absence is the assertion that
- * catches it.</p>
+ * <p>In {@code headlessTest} deliberately: with no device installed a GPU disposal runs at once, so the tree works
+ * where there is no context.</p>
  */
 public class DisposerTest {
 
@@ -171,39 +171,46 @@ public class DisposerTest {
         assertEquals(List.of("first", "child", "second"), released);
     }
 
-    /**
-     * <b>A GL disposable released off the GL thread is queued, not run.</b>
-     *
-     * <p>Freeing a GL object off-thread is silent corruption rather than an exception, so this is the
-     * one place the tree deliberately does not do what it was asked at the moment it was asked.</p>
-     */
+    /** A GPU disposal off the device's thread waits for the executor's landing, before the next frame. */
     @Test
     public void aGlDisposableIsDeferredWhenOffThread() {
-        AtomicBoolean onGl = new AtomicBoolean(false);
-        List<Runnable> deferred = new ArrayList<>();
-        Disposer.setGlGate(onGl::get, deferred::add);
-
-        Disposable target = glNamed("gl");
-        Disposer.dispose(target);
-        assertTrue("a GL disposable was freed off the GL thread", released.isEmpty());
-        assertEquals("nothing was handed to the GL thread", 1, deferred.size());
-
-        onGl.set(true);
-        deferred.get(0).run();
-        assertEquals(List.of("gl"), released);
+        withDevice(() -> {
+            Thread off = new Thread(() -> Disposer.dispose(glNamed("gl")));
+            off.start();
+            try {
+                off.join();
+            } catch (InterruptedException e) {
+                throw new AssertionError(e);
+            }
+            assertTrue("a GL disposable was freed off the device's thread", released.isEmpty());
+            CgDeferral.applyAll();
+            assertEquals(List.of("gl"), released);
+        });
     }
 
-    /** On the GL thread there is nothing to defer, and the queue stays out of the way. */
+    /** On the device's thread there is nothing to defer. */
     @Test
-    public void aGlDisposableRunsImmediatelyOnTheGlThread() {
-        Disposer.setGlGate(() -> true, Runnable::run);
-        Disposer.dispose(glNamed("gl"));
-        assertEquals(List.of("gl"), released);
+    public void aGlDisposableRunsImmediatelyOnTheDeviceThread() {
+        withDevice(() -> {
+            Disposer.dispose(glNamed("gl"));
+            assertEquals(List.of("gl"), released);
+        });
     }
 
-    /** The default gate is what lets every headless test use this without a context. */
+    /** A device owned by this thread for {@code body}, then whatever was installed before. */
+    private static void withDevice(Runnable body) {
+        CgRHI before = CgRHI.installed() ? CgRHI.get() : null;
+        CgRHI.install(new CgNullRHI(1, 1).withoutLog());
+        try {
+            body.run();
+        } finally {
+            CgRHI.install(before);
+        }
+    }
+
+    /** With no device there is no thread to be off, which lets every headless test use this. */
     @Test
-    public void theDefaultGateRunsImmediately() {
+    public void withNoDeviceAGlDisposableRunsImmediately() {
         Disposer.dispose(glNamed("gl"));
         assertEquals(List.of("gl"), released);
     }

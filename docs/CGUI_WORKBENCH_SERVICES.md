@@ -152,16 +152,15 @@ It exists for the two things a registry structurally cannot do:
 - **Do not throw for an ordinary reason.** A throw is caught and logged so siblings still release, but
   it leaves your own state undefined.
 - **Own GPU memory? implement `Disposable.Gl`.** Freeing a GL object off the GL thread is silent
-  corruption, not an exception. `Disposer` defers those to the GL thread; see below.
+  corruption, not an exception. `Disposer` defers those to the device's thread; see below.
 
-### The GL gate
+### GPU disposals wait for the device's thread
 
-`Disposable.Gl` disposals are routed to the GL thread rather than run wherever the request came from.
+A `Disposable.Gl` disposal goes through CrystalGraphics' `CgDeferral`: at once on the device's thread outside a
+recording, otherwise queued and landed by the executor before the next frame executes.
 
-- `CgUiLifecycle.onContextInit` installs the gate — the thread receiving `onContextInit` *is* the GL thread.
-- `CgUiLifecycle.onFrame` drains the queue; it is the one moment we are certainly on it.
-- **The default gate runs everything immediately**, which is what keeps `Disposer` usable from
-  `headlessTest` where there is no context. Do not "fix" that by requiring a gate.
+- **With no device installed it runs at once**, which is what keeps `Disposer` usable from `headlessTest`, where
+  there is no context to be off the thread of.
 
 ### The disposal protocol for GL resources
 
@@ -222,7 +221,6 @@ behaves.
 | `CrystalEditor` | every `ShaderGraphEditor` it builds | replaced a `graphs` list that was never pruned, so every graph ever opened stayed reachable for the session |
 | `ShaderGraphView` | its `MainPreviewPanel` | that panel's `delete()` had **no caller anywhere** — its `createOwned` target and meshes leaked for the life of the process |
 | `DocumentReference` | one holder's claim on a document | the model is disposed by the **last** reference released, so a tab, the Problems panel and a background compile can each hold one |
-| `CgUiLifecycle` | the GL gate and its queue | not an owner — the seam |
 
 ### What disposes, and what deliberately does not
 

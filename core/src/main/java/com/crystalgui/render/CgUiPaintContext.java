@@ -112,7 +112,7 @@ public final class CgUiPaintContext {
 
     /**
      * Frees what every paint context made: frame targets, surfaces, backdrop and icon-raster textures, requested from
-     * the graph, which no registry sweeps. At GL context destruction ({@code CgUiLifecycle.onContextDestroy}), before
+     * the graph, which no registry sweeps. At GL context destruction ({@code CgUiClientLifecycle.onContextDestroy}), before
      * CrystalGraphics frees its own. Render thread; idempotent.
      */
     public static void releaseAll() {
@@ -128,7 +128,7 @@ public final class CgUiPaintContext {
      * nothing. Once, at client init; any thread. The canvas materials are CrystalGraphics', precached there.
      *
      * <pre>{@code
-     * CgUiPaintContext.precache();   // CgUiLifecycle.onPreInit does it
+     * CgUiPaintContext.precache();   // CgUiClientLifecycle.onPreInit does it
      * }</pre>
      */
     public static void precache() {

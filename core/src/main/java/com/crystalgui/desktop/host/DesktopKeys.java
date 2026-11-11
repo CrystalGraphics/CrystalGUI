@@ -8,7 +8,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
  * registers with its game: Show Desktop, Left Alt by default.
  *
  * <pre>{@code
- * DesktopKeys.declare();   // CgUiLifecycle.onPreInit: before any loader's key registration
+ * DesktopKeys.declare();   // CgUiClientLifecycle.onPreInit: before any loader's key registration
  * }</pre>
  */
 public final class DesktopKeys {

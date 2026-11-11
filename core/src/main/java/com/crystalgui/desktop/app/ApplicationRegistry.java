@@ -149,6 +149,44 @@ public final class ApplicationRegistry {
         };
     }
 
+    @Nullable
+    private ApplicationKind primary;
+
+    /**
+     * Installs {@code kind} as the desktop's primary application: what a host's "open the application" key launches,
+     * and what fills an empty desktop.
+     *
+     * <pre>{@code
+     * public void register(ApplicationRegistry applications) {
+     *     applications.installPrimary(MyEditor.KIND);
+     *     applications.install(MyViewer.KIND);
+     * }
+     * }</pre>
+     *
+     * - The first claim wins; a second is logged and installed as an ordinary application.
+     * - With none, the open-application key opens the bare desktop.
+     */
+    public Disposable installPrimary(ApplicationKind kind) {
+        Disposable handle = install(kind);
+        if (primary != null) {
+            CrystalGuiCore.LOGGER.warn("[cgui] '{}' asked to be the primary application, which '{}' already is",
+                    kind.id(), primary.id());
+            return handle;
+        }
+        primary = kind;
+        return () -> {
+            if (primary == kind) primary = null;
+            handle.dispose();
+        };
+    }
+
+    /** What {@link #installPrimary} declared, or null. */
+    @Nullable
+    public ApplicationKind primary() {
+        bootstrap();
+        return primary;
+    }
+
     /** Whether {@link #autostart()} has run. */
     private boolean autostarted;
 

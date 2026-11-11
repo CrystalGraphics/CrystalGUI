@@ -16,7 +16,7 @@ import com.crystalgui.probe.ServerSmoke;
  * CrystalGUI's start on both sides, which no host names: the window protocol, the workspace a server serves, the
  * worked example and the server smoke. A host answers only {@code CgServers} and the smoke's footprint.
  *
- * <p>Declared {@code common} in {@code META-INF/crystalgraphics/listeners}; {@link CgUiLifecycle} is the client's.</p>
+ * <p>Declared {@code common} in {@code META-INF/crystalgraphics/listeners}; {@link CgUiClientLifecycle} is the client's.</p>
  */
 public final class CgUiCommonLifecycle implements CgLifecycleListener {
 

@@ -53,9 +53,9 @@ public interface Disposable {
      * neither IDE owns framebuffers. We do: a preview target per node, a layer FBO pool, a batch
      * renderer per text renderer.</p>
      *
-     * <p>So disposal of these is <b>deferred to the GL thread</b> rather than run wherever the request
-     * came from. See {@link Disposer#setGlGate} — and note that the default gate runs immediately, which
-     * is what keeps every headless test working without a context.</p>
+     * <p>So disposal of these is <b>deferred to the device's thread</b> through CrystalGraphics' {@code CgDeferral}
+     * rather than run wherever the request came from. With no device installed it runs at once, which is what keeps
+     * every headless test working without a context.</p>
      */
     interface Gl extends Disposable {
     }

@@ -69,7 +69,7 @@ the firing inline) and shows through its `presenter()`, and `HostSession` paints
 | Pixels | `update(texture, x, y, w, h, rgba)` into a requested texture, recorded |
 | Lifecycle | `CgUiPaintContext.releaseAll()`, `UiPresenter.release()` |
 
-> **`CgUiPaintContext.releaseAll()` must be called on GL-context destruction** (`CgUiLifecycle.onContextDestroy` does).
+> **`CgUiPaintContext.releaseAll()` must be called on GL-context destruction** (`CgUiClientLifecycle.onContextDestroy` does).
 > It frees what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
 > requested from the graph, which no registry holds (`CgExecutor.freeStorage`) — and the contexts' renderers. Not
 > what is borrowed from CrystalGraphics' registries (materials, the fallback white pixel, font atlases):

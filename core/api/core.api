@@ -3730,13 +3730,11 @@ com/crystalgui/core/dispose/Disposer
   access public,final
   extends java/lang/Object
   method public,static dispose (Lcom/crystalgui/core/dispose/Disposable;)V
-  method public,static drainGlQueue ()V
   method public,static isDisposed (Lcom/crystalgui/core/dispose/Disposable;)Z
   method public,static liveCount ()I
   method public,static newDisposable (Ljava/lang/String;)Lcom/crystalgui/core/dispose/Disposable;
   method public,static register (Lcom/crystalgui/core/dispose/Disposable;Lcom/crystalgui/core/dispose/Disposable;)V
   method public,static resetForTesting ()V
-  method public,static setGlGate (Ljava/util/function/BooleanSupplier;Ljava/util/function/Consumer;)V
   method public,static tryRegister (Lcom/crystalgui/core/dispose/Disposable;Lcom/crystalgui/core/dispose/Disposable;)Z
 com/crystalgui/core/nav/NavigationHistory
   access public,final
@@ -4729,6 +4727,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public forget (Lcom/crystalgui/desktop/app/Application;)V
   method public handlerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;
+  method public installPrimary (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;
   method public installed ()Ljava/util/List;
   method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/LaunchContext;)Lcom/crystalgui/desktop/app/Application;
   method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
@@ -4737,6 +4736,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public launchInStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)V
   method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
   method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
+  method public primary ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public running ()Ljava/util/List;
   method public running (Lcom/crystalgui/desktop/app/ApplicationKind;)Ljava/util/List;
 com/crystalgui/desktop/app/LaunchContext
@@ -4849,7 +4849,7 @@ com/crystalgui/desktop/host/HostSession
   method public replaceNextPaint (Ljava/util/function/BiConsumer;)V
   method public textInputArea ()[F
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
-  method public,static install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/host/HostSession;
+  method public,static install ()Lcom/crystalgui/desktop/host/HostSession;
   method public,static isInstalled ()Z
   method public,static session ()Lcom/crystalgui/desktop/host/HostSession;
 com/crystalgui/desktop/host/ScreenOverlay
@@ -7285,6 +7285,17 @@ com/crystalgui/graph/port/PortTypeRegistry
   method public,static ids ()Ljava/util/Set;
   method public,static register (Lcom/crystalgui/graph/port/PortType;)V
   method public,static require (Ljava/lang/String;)Lcom/crystalgui/graph/port/PortType;
+com/crystalgui/lifecycle/CgUiClientLifecycle
+  access public,final
+  extends java/lang/Object
+  field public,static,final INSTANCE Lcom/crystalgui/lifecycle/CgUiClientLifecycle;
+  implements com/crystalgraphics/lifecycle/CgLifecycleListener
+  implements com/crystalgraphics/mc/CgReloadListener
+  method public onContextDestroy ()V
+  method public onContextInit (II)V
+  method public onLoad (Lcom/crystalgraphics/loading/task/CgLoadPlan;)V
+  method public onPreInit ()V
+  method public onReload ()V
 com/crystalgui/lifecycle/CgUiCommonLifecycle
   access public,final
   extends java/lang/Object
@@ -7293,21 +7304,6 @@ com/crystalgui/lifecycle/CgUiCommonLifecycle
   method public onInit ()V
   method public onServerStarting (Ljava/lang/Object;)V
   method public onServerStopping ()V
-com/crystalgui/lifecycle/CgUiLifecycle
-  access public,final
-  extends java/lang/Object
-  field public,static,final INSTANCE Lcom/crystalgui/lifecycle/CgUiLifecycle;
-  implements com/crystalgraphics/lifecycle/CgLifecycleListener
-  implements com/crystalgraphics/mc/CgReloadListener
-  method public onContextDestroy ()V
-  method public onContextInit (II)V
-  method public onFrame (J)V
-  method public onLoad (Lcom/crystalgraphics/loading/task/CgLoadPlan;)V
-  method public onPreInit ()V
-  method public onReload ()V
-  method public,static register ()V
-  method public,static reload ()V
-  method public,static unregister ()V
 com/crystalgui/lifecycle/CgUiStart
   access public,final
   extends java/lang/Object

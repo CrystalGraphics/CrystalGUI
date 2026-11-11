@@ -1,5 +1,7 @@
 package com.crystalgui.core.dispose;
 
+import com.crystalgraphics.gpu.CgDeferral;
+import com.crystalgraphics.platform.rhi.CgRHI;
 import com.crystalgui.core.CrystalGuiCore;
 
 import java.util.ArrayDeque;
@@ -12,8 +14,6 @@ import java.util.HashMap;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.function.BooleanSupplier;
-import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
@@ -84,26 +84,11 @@ public final class Disposer {
     /** Where a {@link Gone} key lands once its subject has been collected. @see #purgeCollected() */
     private static final ReferenceQueue<Disposable> COLLECTED = new ReferenceQueue<>();
 
-    /** {@link Disposable.Gl} instances waiting for the GL thread; see {@link #setGlGate}. */
-    private static final Deque<Disposable> GL_QUEUE = new ArrayDeque<>();
-
-    private static BooleanSupplier onGlThread = () -> true;
-    private static Consumer<Runnable> deferToGlThread = Runnable::run;
-
     /**
-     * How a {@link Disposable.Gl} reaches the GL thread.
-     *
-     * <p><b>The default runs everything immediately</b>, which is what makes this whole class usable
-     * from {@code headlessTest} where there is no context and no GL thread to be off. A host with a
-     * real context installs a gate during initialisation; nothing else changes.</p>
-     *
-     * @param onGl    whether the calling thread may issue GL commands
-     * @param deferGl hands work to the GL thread. Called only when {@code onGl} is false
+     * {@link Disposable.Gl} releases off the device's thread, landed by the executor before the next frame. With no
+     * device installed (headless) there is nothing to be off the thread of, so they run at once.
      */
-    public static synchronized void setGlGate(BooleanSupplier onGl, Consumer<Runnable> deferGl) {
-        onGlThread = onGl == null ? () -> true : onGl;
-        deferToGlThread = deferGl == null ? Runnable::run : deferGl;
-    }
+    private static final CgDeferral GPU = new CgDeferral();
 
     /**
      * Makes {@code child}'s lifetime a part of {@code parent}'s.
@@ -197,22 +182,6 @@ public final class Disposer {
         };
     }
 
-    /**
-     * Releases {@link Disposable.Gl} instances that were disposed off the GL thread.
-     *
-     * <p>Called once a frame from {@code CgUiLifecycle.onFrame}. Drains a snapshot rather than looping
-     * until empty, so a disposal that queues more work cannot spin the frame.</p>
-     */
-    public static void drainGlQueue() {
-        List<Disposable> due;
-        synchronized (Disposer.class) {
-            if (GL_QUEUE.isEmpty()) return;
-            due = new ArrayList<>(GL_QUEUE);
-            GL_QUEUE.clear();
-        }
-        for (Disposable each : due) invoke(each);
-    }
-
     /** How many disposables are currently registered. The leak assertion in tests reads this. */
     public static synchronized int liveCount() {
         return PARENTS.size() + (int) CHILDREN.keySet().stream().filter(k -> !PARENTS.containsKey(k)).count();
@@ -223,9 +192,7 @@ public final class Disposer {
         CHILDREN.clear();
         PARENTS.clear();
         DISPOSED.clear();
-        GL_QUEUE.clear();
-        onGlThread = () -> true;
-        deferToGlThread = Runnable::run;
+        GPU.clear();
     }
 
     // ── Internals ───────────────────────────────────────────────────────────────────────────────
@@ -316,22 +283,9 @@ public final class Disposer {
         if (siblings.isEmpty()) CHILDREN.remove(parent);
     }
 
-    /** Routes to the GL thread when needed, then invokes. */
     private static void release(Disposable target) {
-        boolean needsGl;
-        boolean here;
-        synchronized (Disposer.class) {
-            needsGl = target instanceof Disposable.Gl;
-            here = onGlThread.getAsBoolean();
-            if (needsGl && !here) {
-                GL_QUEUE.add(target);
-            }
-        }
-        if (needsGl && !here) {
-            deferToGlThread.accept(Disposer::drainGlQueue);
-            return;
-        }
-        invoke(target);
+        if (target instanceof Disposable.Gl && CgRHI.installed()) GPU.run(() -> invoke(target));
+        else invoke(target);
     }
 
     private static void invoke(Disposable target) {

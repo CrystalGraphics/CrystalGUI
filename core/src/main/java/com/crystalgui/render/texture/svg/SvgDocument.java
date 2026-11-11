@@ -322,7 +322,7 @@ public final class SvgDocument {
      * <p>Cached, so drawing the same icon on fifty file-tree rows parses once. Safe to share because a
      * document is immutable and carries no tint: {@code currentColor} is resolved at draw time, which is
      * exactly what lets one cached instance back a selected row and an unselected one in the same frame.
-     * Revalidated on a resource reload by {@code CgUiLifecycle.onReload}: only a file that now reads
+     * Revalidated on a resource reload by {@code CgUiClientLifecycle.onReload}: only a file that now reads
      * differently is parsed again. @see #revalidate</p>
      */
     @Nullable
