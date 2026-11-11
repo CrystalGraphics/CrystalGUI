@@ -640,7 +640,9 @@ fun prepareServerDir(runDir: File, port: String, acceptEula: Boolean, extra: Map
 val serverSmokeRequested = gradle.startParameter.taskNames.any {
     it == "serverSmoke" || it.endsWith(":serverSmoke")
 }
-val serverSmokeReport = layout.buildDirectory.file("serverSmoke/result.txt")
+// The gauntlet's run folder: its report.txt is the verdict.
+val serverSmokeDir = layout.buildDirectory.dir("serverSmoke")
+val serverSmokeReport = layout.buildDirectory.file("serverSmoke/report.txt")
 val classLoadLog = layout.buildDirectory.file("serverSmoke/classload.log")
 val acceptEula = providers.gradleProperty("cgAcceptEula").isPresent
 val smokePort = providers.gradleProperty("cgSmokePort").orNull ?: "25599"
@@ -654,8 +656,9 @@ tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
     val exec = this
     usesService(smokePortLock)
 
-    systemProperty("crystalgui.server.smoke", "true")
-    systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)
+    // CrystalGraphics' server test (the stack, no client class loaded), then CrystalGUI's half.
+    systemProperty("crystalgraphics.gauntlet", "crystalgraphics:server,crystalgui:server")
+    systemProperty("crystalgraphics.gauntlet.out", serverSmokeDir.get().asFile.absolutePath)
 
     // The dedicated server otherwise opens a Swing console; a check that needs a window closed is not a
     // check a pipeline can run. A PROVIDER, not args(): ModDevGradle passes the real program arguments
@@ -666,7 +669,7 @@ tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
     // ASKING THE JVM, because reflection cannot ask here. findLoadedClass is protected, and the mod runs
     // in FML's named module `crystalgui` -- so --add-opens ...=ALL-UNNAMED cannot reach it, and the module
     // does not exist at JVM start for a static one to name. Left reflective, the "no client-only class
-    // loaded" assertion cannot run and passes VACUOUSLY, which is the failure its own javadoc warns about.
+    // loaded" assertion cannot run, which CgServerSmoke states rather than counts.
     // -Xlog needs no access to anything and is the JVM's own record of every class it defined.
     //
     // Java 9 and up only: a Java 8 JVM refuses to start on it, and there, with no module system, the
@@ -676,14 +679,9 @@ tasks.withType<JavaExec>().matching { it.name == "runServer" }.configureEach {
             ?: JavaVersion.current().majorVersion.toInt()
         if (java >= 9) {
             exec.jvmArgs("-Xlog:class+load=info:file=" + classLoadLog.get().asFile.absolutePath)
-            exec.systemProperty("crystalgui.server.smoke.classlog", classLoadLog.get().asFile.absolutePath)
+            exec.systemProperty("crystalgraphics.gauntlet.classlog", classLoadLog.get().asFile.absolutePath)
         }
     }
-
-    // The code source is a union: URL under FML, so the client package cannot be enumerated from it.
-    // The build knows where those classes are, so it says so.
-    systemProperty("crystalgui.server.smoke.classdir",
-            common.extensions.getByType<SourceSetContainer>()["main"].output.classesDirs.asPath)
 
     doFirst {
         // Deleted BEFORE the run, so a stale report from a previous run cannot pass for this one.
@@ -741,15 +739,14 @@ tasks.register("serverSmoke") {
     dependsOn("runServer")
     outputs.upToDateWhen { false }
 
-    // THE HALF THAT MAKES IT SOUND. The mod halts(1) when a check fails, which covers "ran and failed";
-    // nothing covers "never ran", and on 1.7.10 that is the case that actually happened first. An absent
-    // report is a failure with a message, never a pass.
+    // THE HALF THAT MAKES IT SOUND. The run's report covers "ran and failed"; nothing covers "never ran", and on
+    // 1.7.10 that is the case that actually happened first. An absent report is a failure with a message, never a pass.
     doLast {
         val file = serverSmokeReport.get().asFile
         if (!file.isFile) {
             throw GradleException(
                 "The dedicated server produced no smoke report at " + file.absolutePath + ".\n" +
-                    "The server never reached its started event, so NO check ran -- this is not a pass.\n" +
+                    "The server's run never ended, so NO check ran -- this is not a pass.\n" +
                     "Look above for the reason: a failed port bind, a mod refusing to load, or a crash\n" +
                     "during startup. Use -PcgSmokePort=<n> if " + smokePort + " is taken.")
         }
@@ -764,8 +761,8 @@ tasks.register("serverSmoke") {
 // the daemon and the run never sees it, which reads as a flag that does nothing -- so the ones worth
 // turning on from a command line are forwarded: every crystalgui.* and crystalgraphics.* one.
 //
-//   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true
-//   ./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true -Dcrystalgui.autotest.script=Probe.java
+//   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgraphics.gauntlet=crystalgui:desktop-script
+//   ./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgraphics.gauntlet=crystalgui:desktop -Dcrystalgui.desktop.script=Probe.java
 tasks.withType<JavaExec>().matching { it.name.startsWith("run") }.configureEach {
     for (prefix in listOf("crystalgui.", "crystalgraphics.")) {
         providers.systemPropertiesPrefixedBy(prefix).get().forEach { (key, value) -> systemProperty(key, value) }
@@ -810,22 +807,8 @@ tasks.matching { it.name == "runClient" }.configureEach {
     }
 }
 
-// The scripted client run joins a world by itself:
-//
-//   ./gradlew :runtime:mc:modern:forge:1.20.1:runClient -Dcrystalgui.clientProbe=true [-PcgWorld="Some World"]
-//
-// ClientProbe can only start once there is a world, and nothing in a dev run reaches the title
-// screen on its own. A missing world is not reported usefully -- the client just sits on the menu --
-// so the name is a property and the run logs which one it asked for.
+// The save a run's tests enter: -PcgWorld=<name>, else the first on disk.
 val cgProbeWorld = (project.findProperty("cgWorld") as String?) ?: "New World"
-tasks.matching { it.name == "runClient" }.configureEach {
-    if (providers.systemProperty("crystalgui.clientProbe").orNull != null) {
-        (this as JavaExec).argumentProviders.add(CommandLineArgumentProvider {
-            logger.lifecycle("[cgui] client probe: auto-joining '{}'", cgProbeWorld)
-            listOf("--quickPlaySingleplayer", cgProbeWorld)
-        })
-    }
-}
 
 // ── The thin-jar check, registered once for every 1.20.x loader ──────────────────────────────────
 //
@@ -866,25 +849,25 @@ tasks.named("check") { dependsOn("checkThinJar") }
 val connectionProbeRequested = gradle.startParameter.taskNames.any {
     it == "connectionProbe" || it.endsWith(":connectionProbe")
 }
-val connectionProbeReport = layout.buildDirectory.file("connectionProbe/result.txt")
+val connectionProbeDir = layout.buildDirectory.dir("connectionProbe")
+val connectionProbeReport = layout.buildDirectory.file("connectionProbe/report.txt")
 val connectionProbeRole = providers.gradleProperty("cgProbeRole").orNull
 
 tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
     if (!connectionProbeRequested && !providers.gradleProperty("cgProbe").isPresent) return@configureEach
 
-    systemProperty("crystalgui.probe.connection", "true")
-    systemProperty("crystalgui.probe.report", connectionProbeReport.get().asFile.absolutePath)
-    connectionProbeRole?.let { systemProperty("crystalgui.probe.role", it) }
+    systemProperty("crystalgraphics.gauntlet", "crystalgui:connection")
+    systemProperty("crystalgraphics.gauntlet.out", connectionProbeDir.get().asFile.absolutePath)
+    connectionProbeRole?.let { systemProperty("crystalgui.connection.role", it) }
 
     if (connectionProbeRole == null) {
         argumentProviders.add(CommandLineArgumentProvider {
             logger.lifecycle("[cgui] connection probe: loading '{}'", cgProbeWorld)
             listOf("--quickPlaySingleplayer", cgProbeWorld)
         })
-        // AND THE SAME NAME TO THE FALLBACK. quickPlay is what normally gets there, but the probe asks
-        // its host to enter a world too -- and that path reads this property. Without it the host says
-        // "no save" on a run that has one, which is a misleading line in a passing log.
-        systemProperty("crystalgui.autotest.world", cgProbeWorld)
+        // AND THE SAME NAME TO THE FALLBACK. quickPlay is what normally gets there, but the test asks the game
+        // to enter a world too -- and that path reads this property.
+        systemProperty("crystalgraphics.gauntlet.world", cgProbeWorld)
     }
 
 

@@ -55,6 +55,8 @@ public final class TestPlatformService implements CgPlatformService {
             @Override public boolean pointerGrabbed() { return false; }
             @Override public int key(int toolkitKey) { return toolkitKey; }
             @Override public int mouseButton(int toolkitButton) { return toolkitButton; }
+            @Override public void grabPointer() { }
+            @Override public void movePointer(int x, int y) { }
         };
     }
 

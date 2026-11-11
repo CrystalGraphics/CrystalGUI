@@ -157,7 +157,7 @@ Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke`
 
 | Kind | Use when | How | Examples |
 |---|---|---|---|
-| **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `fs.server.WorkspaceRoles`, `ServerSmoke.Host` |
+| **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `fs.server.WorkspaceRoles` |
 | **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST` |
 | **A static owner over a slot** (CrystalGraphics' shape) | a capability every host answers | a final class with a nested `Host`, its `NONE` and a `HOST` slot, read only through the owner's statics; each era provides it from its install (`platform/CLAUDE.md` § *The wiring standard*) | `CgModLoader`, `CgHostResources`, `CgInput`, `CgClipboard` |
 | **A lifecycle moment** | "when X happens in the game, run Y" | a `CgLifecycleListener` method, or `CgEngineLifecycle.onServerTick`/`onClientTick`, on `core`'s declared listeners; a moment CrystalGraphics does not fire yet is added there, fired by every era's host | `CgUiCommonLifecycle.onServerStarting`, `CgUiClientLifecycle.onPreInit` |
@@ -234,8 +234,8 @@ return server.getPlayerList().isOp(player.getGameProfile());
 
 ## 7. Prove it — a probe that is right the first time
 
-A runtime check of every node is a probe (`AutoTest` drives it in `prodSmoke` and in dev runs; the world
-seams have `CgWorldProbe`, `-Dcrystalgraphics.worldprobe=true`). Its design decides whether verification
+A runtime check of every node is a gauntlet test (`CrystalGraphics/docs/GAUNTLET.md`), which `prodSmoke`
+and dev runs play; the world seams have `crystalgraphics:world`. Its design decides whether verification
 converges or goes round in circles: the world seams took eight sweeps, and most of their failures were the
 probe's, not the hosts'. Before the first run:
 
@@ -301,7 +301,7 @@ probe's, not the hosts'. Before the first run:
   launching. With IntelliJ open, `-PcgBatch=3`: four clients and the build ran the machine out of memory.
 
 **A failure prodSmoke or a player finds is fixed in that node's dev run, not in Prism.** Reproduce it
-with `runClient -Dcrystalgui.autotest=true ...` (or `runServer`/`serverSmoke`), iterate there, and run
+with `runClient -Dcrystalgraphics.gauntlet=...` (or `runServer`/`serverSmoke`), iterate there, and run
 `prodSmoke` once more at the end. A cycle through the shipped jar is ten minutes; a dev client is two.
 `CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run* has the command.
 

@@ -22,7 +22,7 @@ import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
-import com.crystalgui.probe.ConnectionProbe;
+import com.crystalgui.gauntlet.ConnectionTest;
 import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -251,7 +251,7 @@ public final class HostSession {
     public void openDesktop() {
         if (!mayOpen()) return;
         // THE PROBE OWNS THE DESKTOP WHILE IT RUNS: opening claims ui/openWindow, which the probe's own session holds.
-        if (ConnectionProbe.enabled() && !ConnectionProbe.isDrivingDesktop()) {
+        if (ConnectionTest.enabled() && !ConnectionTest.isDrivingDesktop()) {
             CrystalGuiCore.LOGGER.info("[cgui] not opening the desktop: the connection probe is driving");
             return;
         }

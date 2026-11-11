@@ -257,7 +257,8 @@ val deploySingleJars = tasks.register("deploySingleJars") {
 //   ./gradlew prodSmoke -PcgTargets=1710,1201forge        # just these
 //   ./gradlew prodSmoke -PcgTargets=all                   # every instance in local.properties: rarely
 //   ./gradlew prodSmoke -PcgBatch=2
-//   ./gradlew prodSmoke -PcgTargets=1165forge -PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java
+//   ./gradlew prodSmoke -PcgTargets=1165forge -PcgSmokeProps=crystalgui.desktop.complete=true,crystalgui.desktop.script=Probe.java
+//   ./gradlew prodSmoke -PcgTargets=1201forge -PcgSmokeTests=crystalgraphics:world,crystalgraphics:collision
 
 /**
  * One instance per Minecraft major, and the first and last of a major with many minors -- on every loader
@@ -292,8 +293,11 @@ val prodSmoke = tasks.register<cgbuildlogic.ProdSmoke>("prodSmoke") {
     })
     // -PcgBatch=<n> clients at a time; the task defaults to 4. Eight at once crashed a workstation.
     providers.gradleProperty("cgBatch").orNull?.let { batchSize.set(it.toInt()) }
-    // -PcgSmokeProps=crystalgui.autotest.complete=true,... switches a probe on for every client.
+    // -PcgSmokeProps=crystalgui.desktop.complete=true,... a system property for every client.
     extraProperties.set((providers.gradleProperty("cgSmokeProps").orNull ?: "")
+        .split(',').map { it.trim() }.filter { it.isNotEmpty() })
+    // -PcgSmokeTests=crystalgraphics:world,... more gauntlet tests, after the boot and desktop tests.
+    tests.set(listOf("crystalgraphics:boot", "crystalgui:desktop") + (providers.gradleProperty("cgSmokeTests").orNull ?: "")
         .split(',').map { it.trim() }.filter { it.isNotEmpty() })
 }
 

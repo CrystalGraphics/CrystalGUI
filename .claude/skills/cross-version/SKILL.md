@@ -74,7 +74,7 @@ version add an enum constant, or make an attribute positional? One `javap` now s
 
 | Need | Seam |
 |---|---|
-| core constructs the consumer | an interface passed in (`WorkspaceRoles`, `ServerSmoke.Host`) |
+| core constructs the consumer | an interface passed in (`WorkspaceRoles`) |
 | optional, read from many places | `CgService.of("crystalgui:x", X.NONE)`; `CgPlatform.provide` / `get` |
 | every host answers it | a static owner over a slot, `CgModLoader`'s shape: nested `Host` + `NONE` + `HOST`, provided from each era's install (`PlatformService1710`, `PlatformServiceLegacy`, `PlatformServiceModern`'s `install`/`installClient`), the harness's `PlatformServiceHarness` and the tests' `TestPlatformService` where they need it. The GL bundle `CgPlatformService` takes nothing new |
 | "when the game does X" | a `CgLifecycleListener` moment on `core`'s declared listeners; a moment CrystalGraphics does not fire yet is added there, fired by every era's host. CrystalGUI's runtimes hold no code |
@@ -128,7 +128,7 @@ stop a cancelled run's Gradle client by PID, and use `-PcgBatch=3` with IntelliJ
 
 **Something crashes or misbehaves on a Prism client?** Do not iterate through `prodSmoke` (~10 min a
 cycle). Reproduce it in that node's dev run — `:runtime:mc:modern:<loader>:<version>:runClient
--Dcrystalgui.autotest=true "-Dcrystalgui.autotest.world=*" ...` (every `-Dcrystalgui.*` is forwarded;
+-Dcrystalgraphics.gauntlet=crystalgraphics:boot,crystalgui:desktop ...` (every `-Dcrystalgui.*` is forwarded;
 copy a save into `runs/client/saves/`), or `runServer`/`serverSmoke` — fix it there, then confirm with
 one `prodSmoke`. `docs/CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run*.
 

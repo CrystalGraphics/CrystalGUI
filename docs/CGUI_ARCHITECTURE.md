@@ -496,19 +496,16 @@ com.crystalgui.net             ServerUiSession, ClientUiSession, ClientUiSession
                                surface, WindowFrame is the CHROME on a desktop, ServerWindow is the
                                NETWORKED UNIT. The protocol has meant the third since windowId existed.
 
-com.crystalgui.probe           WHAT A RUNNING GAME IS ASKED TO PROVE ABOUT ITSELF, and the only code in
-                               core/ whose consumer is a build task. ServerSmoke (a dedicated server
-                               came up and loaded no client-only class), ConnectionProbe (the whole
-                               stack over a REAL connection -- topology is a parameter, and a check
-                               that means nothing here is SKIPPED with its reason rather than silently
-                               passed), DesktopProbe (a scripted run through the compositor), AutoTest
-                               (open, photograph, quit -- the only one that also runs on a SHIPPED jar,
-                               which is what prodSmoke drives; StageProbe is its renderer on CgRenderStage.HUD and SCREEN),
-                               ProbeReport (verdict on line 1; an
-                               ABSENT FILE IS A FAILURE). Each takes a `Host` a loader implements and
-                               decides everything else itself; they SHIP deliberately, one
-                               Boolean.getBoolean each when off. See the package note for why a test
-                               source set cannot hold them
+com.crystalgui.gauntlet        CRYSTALGUI'S TESTS FOR CRYSTALGRAPHICS' GAUNTLET, the unattended run a
+                               build task launches (CrystalGraphics/docs/GAUNTLET.md). DesktopTest
+                               (crystalgui:desktop: open the desktop and photograph it, what prodSmoke
+                               plays on a SHIPPED jar; DesktopTest.onFrame is a mod's step in it),
+                               DesktopScriptTest (a scripted run through the compositor), OpenCloseTest,
+                               ConnectionTest (the whole stack over a REAL connection -- topology is a
+                               parameter, and a check that means nothing here is SKIPPED with its
+                               reason rather than silently passed), ServerTest (the workspace on a
+                               dedicated server). They SHIP: a run plays in the game, never in a test
+                               source set
 ```
 
 **Naming corrections vs. older notes:** `render/` is top-level (`com.crystalgui.render`), *not* nested

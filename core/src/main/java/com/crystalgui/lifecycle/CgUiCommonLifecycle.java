@@ -2,19 +2,22 @@ package com.crystalgui.lifecycle;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.app.machine.MachineExample;
 import com.crystalgraphics.platform.service.CgServers;
+import com.crystalgraphics.probe.CgServerSmoke;
 import com.crystalgui.fs.server.ServerWorkspaceHost;
 import com.crystalgui.fs.server.WorkspaceHost;
+import com.crystalgui.gauntlet.ConnectionTest;
+import com.crystalgui.gauntlet.ServerTest;
 import com.crystalgui.net.window.WindowProtocol;
-import com.crystalgui.probe.ServerSmoke;
 
 /**
  * CrystalGUI's start on both sides, which no host names: the window protocol, the workspace a server serves, the
- * worked example and the server smoke. A host answers only {@code CgServers} and the smoke's footprint.
+ * worked example, and its tests for a dedicated server's run.
  *
  * <p>Declared {@code common} in {@code META-INF/crystalgraphics/listeners}; {@link CgUiClientLifecycle} is the client's.</p>
  */
@@ -28,9 +31,17 @@ public final class CgUiCommonLifecycle implements CgLifecycleListener {
 
     @Nullable
     private WorkspaceHost workspace;
-    private boolean smokeDue = true;
 
     private CgUiCommonLifecycle() {
+    }
+
+    /** Its tests for an unattended run, and the class a dedicated server must never load. */
+    @Override
+    public void onPreInit() {
+        CgGauntlet.register("crystalgui:server", ServerTest::new);
+        CgGauntlet.register(ConnectionTest.ID, ConnectionTest::new);
+        // The entry to every GPU resource CrystalGUI owns: loading it means something asked a server to paint.
+        CgServerSmoke.clientOnly("com.crystalgui.render.CgUiPaintContext");
     }
 
     /** After the network installs: contributors bind onto every connection opened from here. */
@@ -58,11 +69,7 @@ public final class CgUiCommonLifecycle implements CgLifecycleListener {
         if (workspace != null) workspace.forget(peer);
     }
 
-    /** The workspace's tick, and the smoke on the first tick: the server is up by then. */
     private synchronized void serverTick() {
         if (workspace != null) workspace.tick(SERVER_TICK_SECONDS);
-        if (!smokeDue) return;
-        smokeDue = false;
-        if (ServerSmoke.enabled() && CgServers.running()) ServerSmoke.run(ServerSmoke.engineHost());
     }
 }

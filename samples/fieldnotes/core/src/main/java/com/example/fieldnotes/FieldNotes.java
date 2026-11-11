@@ -6,7 +6,7 @@ import org.apache.logging.log4j.Logger;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.probe.AutoTest;
+import com.crystalgui.gauntlet.DesktopTest;
 
 /**
  * Where the loader side hands over: each loader's variant calls {@link #start} once, with what only the
@@ -48,7 +48,7 @@ public final class FieldNotes {
         where = loader + " on Minecraft " + minecraft;
         FieldNotes.noteId = noteId;
         LOGGER.info("[fieldnotes] started: {} ({})", where, noteId);
-        if (AutoTest.ENABLED) AutoTest.onFrame(PROBE_FRAME, FieldNotes::launchForProbe);
+        if (DesktopTest.plays()) DesktopTest.onFrame(PROBE_FRAME, FieldNotes::launchForProbe);
     }
 
     /** "Forge on Minecraft 1.20.1", or "not started" before a variant has run. */

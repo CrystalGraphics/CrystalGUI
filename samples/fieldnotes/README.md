@@ -31,8 +31,8 @@ settings plugin finds beside the build logic. `-PcgStubs=false` builds every nod
 
 The node becomes real for the run (its toolchain is set up the first time). Its mod is the node, its
 common node and `core`, with CrystalGUI and CrystalGraphics beside it from Maven local. `-Dcrystalgui.*` on
-the command line reaches the game: `-Dcrystalgui.autotest=true` opens the desktop, runs the Field Notes
-step, photographs and quits.
+the command line reaches the game: `-Dcrystalgraphics.gauntlet=crystalgui:desktop` opens the desktop, runs
+the Field Notes step, photographs and quits.
 
 ## Run it on real clients
 
@@ -44,8 +44,8 @@ From CrystalGUI, with its Prism instances in `local.properties`:
 ```
 
 The jar goes only into the targeted instances, and the next deploy takes it out again. Each client loads
-a world, opens the desktop, and — through `AutoTest.onFrame` — launches Field Notes before its late
-capture, so `build/prodSmoke/<target>-late.png` shows the window and the log says
+a world, opens the desktop, and — through `DesktopTest.onFrame` — launches Field Notes before its late
+capture, so `build/prodSmoke/<target>/crystalgui-desktop-late.png` shows the window and the log says
 `[fieldnotes] probe: window launched true`.
 
 ## The layout

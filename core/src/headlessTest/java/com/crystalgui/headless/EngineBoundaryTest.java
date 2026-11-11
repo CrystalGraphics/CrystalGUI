@@ -89,11 +89,14 @@ public class EngineBoundaryTest {
             // UIElementMirror and UIElement in every method. Neutral-looking (it is headless and
             // below `widget`) and not neutral at all, which is what this list is for.
             "com/crystalgui/template/",
-            // THE SELF-CHECKS a host runs (plan_host H2, H6). ServerSmoke builds a tree and round-trips
-            // it through UIElementMirror, which is the assertion rather than an incidental reference:
-            // what it proves is that THIS engine's description encodes deterministically with no GL
-            // anywhere. Headless and below `widget`, so it reads neutral and is not.
-            "com/crystalgui/probe/",
+            // THE UNATTENDED RUN'S TESTS. ServerTest builds a tree and round-trips it through UIElementMirror,
+            // which is the assertion rather than an incidental reference: what it proves is that THIS engine's
+            // description encodes deterministically with no GL anywhere. Headless and below `widget`, so it
+            // reads neutral and is not.
+            "com/crystalgui/gauntlet/",
+            // CRYSTALGUI'S LIFECYCLE LISTENERS: where it starts, so they install the desktop and register the run's
+            // tests. Classified old, every line of that start reads as the old engine reaching into the new one.
+            "com/crystalgui/lifecycle/",
             // THE WORKED EXAMPLES, for the same reason as the applications below: a `DocumentEditor`
             // is made of widgets, so an example classified as old-engine reads as the old engine
             // reaching into the new one -- which is the opposite of what it is.

@@ -1,4 +1,4 @@
-package com.crystalgui.probe;
+package com.crystalgui.gauntlet;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -13,6 +13,15 @@ import java.util.concurrent.ConcurrentHashMap;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.CgAudience;
+import com.crystalgraphics.platform.world.CgPlayers;
+import com.crystalgraphics.platform.service.CgServers;
+import com.crystalgraphics.platform.service.CgGameSession;
+import com.crystalgraphics.platform.service.CgScreens;
+import com.crystalgraphics.net.CgNetwork;
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
+import com.crystalgraphics.gauntlet.CgGauntletState;
+import com.crystalgraphics.gauntlet.CgGauntletController;
+import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.net.CgInMemoryTransport;
 import com.crystalgraphics.net.CgMessage;
 import com.crystalgraphics.net.CgPeer;
@@ -22,8 +31,10 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.world.CgEntityQueries;
 import com.crystalgraphics.world.CgWorldQueries;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -54,15 +65,15 @@ import com.crystalgui.widget.text.UIText;
  *
  * <pre>{@code
  * // single player -- the integrated server is a real server with a very short wire
- * runClient -Dcrystalgui.probe.connection=true
+ * runClient -Dcrystalgraphics.gauntlet=crystalgui:connection
  *
  * // a genuinely separate process: every byte crosses a socket and the server's disk is another directory
  * runServer
- * runClient -PcgJoin=localhost:25565 -Dcrystalgui.probe.connection=true
+ * runClient -PcgJoin=localhost:25565 -Dcrystalgraphics.gauntlet=crystalgui:connection
  *
  * // two clients on one server, run on BOTH -- start the watcher first
- * runClient -PcgJoin=... -Dcrystalgui.probe.connection=true -Dcrystalgui.probe.role=watcher
- * runClient -PcgJoin=... -Dcrystalgui.probe.connection=true -Dcrystalgui.probe.role=writer
+ * runClient -PcgJoin=... -Dcrystalgraphics.gauntlet=crystalgui:connection -Dcrystalgui.connection.role=watcher
+ * runClient -PcgJoin=... -Dcrystalgraphics.gauntlet=crystalgui:connection -Dcrystalgui.connection.role=writer
  * }</pre>
  *
  * <h3>Topology is a parameter, not a class</h3>
@@ -91,16 +102,15 @@ import com.crystalgui.widget.text.UIText;
  *       anybody subscribed is not one anybody missed.</li>
  * </ul>
  */
-public final class ConnectionProbe {
+public final class ConnectionTest extends CgGauntletController {
 
-    /** {@code -Dcrystalgui.probe.connection=true}. */
-    public static final String PROPERTY = "crystalgui.probe.connection";
+    /** Its id in a run. */
+    public static final String ID = "crystalgui:connection";
 
-    /** {@code -Dcrystalgui.probe.role=writer|watcher}. @see Role */
-    public static final String ROLE_PROPERTY = "crystalgui.probe.role";
-
-    /** Where the verdict goes, so the build can tell "failed" from "never ran". @see ProbeReport */
-    public static final String REPORT_PROPERTY = "crystalgui.probe.report";
+    /** {@code -Dcrystalgui.connection.role=writer|watcher}. @see Role */
+    public static final String ROLE_PROPERTY = "crystalgui.connection.role";
+    private static final CgVar.Text ROLE_VAR = CgVar.text(ROLE_PROPERTY, "", CgVar.DEV | CgVar.RESTART,
+            "Which half of crystalgui:connection's two-client check this client is: writer or watcher; empty for neither.");
 
     /** Where the run is happening, which is what decides whether a check means anything. */
     public enum Topology {
@@ -115,7 +125,7 @@ public final class ConnectionProbe {
         NONE, WRITER, WATCHER;
 
         static Role fromProperty() {
-            String value = System.getProperty(ROLE_PROPERTY, "");
+            String value = ROLE_VAR.get();
             for (Role role : values()) {
                 if (role.name().equalsIgnoreCase(value)) return role;
             }
@@ -129,68 +139,6 @@ public final class ConnectionProbe {
      * <p>Fixed for the life of the run by construction: a role is how this process was launched.</p>
      */
     private static final Role ROLE = Role.fromProperty();
-
-    /**
-     * What only the running game can answer.
-     *
-     * <p>Six questions and two verbs. Everything else this class does is the game's business nowhere.</p>
-     */
-    public interface Host {
-
-        /** @see Topology */
-        Topology topology();
-
-        /** Whether the client is in a world yet. Nothing is driven before it is. */
-        boolean inWorld();
-
-        /**
-         * Gets into a world, so an unattended run needs nobody at the keyboard.
-         *
-         * <p>Asked every tick until it answers true, then never again — so a host that is not ready yet
-         * (a splash still up, no main menu, a join still handshaking) returns false and is asked again.
-         * <b>Answer false, do not block:</b> this is called from the client tick.</p>
-         *
-         * <pre>{@code
-         * public boolean enterWorld() {
-         *     if (!(minecraft.currentScreen instanceof GuiMainMenu)) return false;  // not yet
-         *     minecraft.launchIntegratedServer(name, name, settingsIfItMustBeCreated);
-         *     return true;
-         * }
-         * }</pre>
-         *
-         * <p>A host joining a server with {@code -PcgJoin} has nothing to do here and answers true: the
-         * game is already on its way into a world and {@link #inWorld()} is what waits for it.</p>
-         *
-         * @return whether the request has been made and this method should stop being called
-         */
-        boolean enterWorld();
-
-        /** Whether any screen is up. */
-        boolean screenIsUp();
-
-        /** Closes whatever screen is up. */
-        void closeScreen();
-
-        /** Opens this host's desktop, for the check that the game loop survives it. */
-        void openDesktop();
-
-        /** The server-side connection to the first joined player, or null before anybody has. */
-        @Nullable
-        CgProtocolConnection<Object> connectionToFirstPlayer();
-
-        /** This client's connection to whatever server it is on, or null before there is one. */
-        @Nullable
-        CgProtocolConnection<Object> clientConnection();
-
-        /**
-         * Ends the run.
-         *
-         * <p>A client left running holds file handles on the game's jars and the next build fails
-         * naming a task rather than a live process. <b>Expect one exception after the verdict</b> on an
-         * integrated server: quitting from inside a tick leaves it mid-tick.</p>
-         */
-        void quit();
-    }
 
     // ── The checklist ───────────────────────────────────────────────────────────────────────────
 
@@ -209,8 +157,8 @@ public final class ConnectionProbe {
 
         /** Why this check is not being run here, or null when it is. */
         @Nullable
-        String skippedBecause(Host host) {
-            if (only != null && host.topology() != only) {
+        String skippedBecause() {
+            if (only != null && topology() != only) {
                 return "needs a " + only.name().toLowerCase(Locale.ROOT) + " server";
             }
             if (role != Role.NONE && ROLE != role) {
@@ -270,7 +218,7 @@ public final class ConnectionProbe {
             // watcher exists for: a change you made yourself needs no notification to be on screen.
             new Check(WATCH, Topology.DEDICATED, Role.WATCHER));
 
-    /** Written from both ticks. @see ConnectionProbe */
+    /** Written from both ticks. @see ConnectionTest */
     private static final Map<String, Boolean> PASSED = new ConcurrentHashMap<>();
 
     static {
@@ -280,7 +228,7 @@ public final class ConnectionProbe {
     private static void pass(String check) {
         if (Boolean.TRUE.equals(PASSED.get(check))) return;
         PASSED.put(check, true);
-        CrystalGuiCore.LOGGER.info("[probe] OK {}", check);
+        CrystalGuiCore.LOGGER.info("[connection] OK {}", check);
     }
 
     private static boolean done(String check) {
@@ -356,65 +304,49 @@ public final class ConnectionProbe {
 
     private static int ticks;
 
-    private ConnectionProbe() {
-    }
+    /** The test playing; null outside a run's turn. */
+    private static volatile ConnectionTest active;
 
+    /** Whether a run is playing it, which owns {@code ui/openWindow} meanwhile. */
     public static boolean enabled() {
-        return Boolean.getBoolean(PROPERTY);
+        return active != null;
     }
 
-    /** Longer than the in-tick deadline and shorter than the build's, so the probe reports first. */
-    private static final long WATCHDOG_MILLIS = 150_000L;
+    private static boolean ticking;
 
-    private static volatile boolean armed;
-
-    /**
-     * <b>Guarantees the run ends.</b> Called once by a host when it registers the probe.
-     *
-     * <p>The in-tick deadline covers a check that stalls. It cannot cover a tick that is never
-     * delivered — a hook registered behind one that threw, a client that never reaches the phase that
-     * drives it — and that case is the one that actually happened: a client sat with a world loaded and
-     * no verdict until somebody closed the window by hand. A thread owes nothing to the game loop.</p>
-     *
-     * <p>{@code halt} rather than an orderly exit: this fires only when the orderly path has already
-     * failed to happen, and a shutdown hook on a half-driven client is exactly where it would hang
-     * again. The report is written first, so the build reads a FAIL with the checklist on it rather
-     * than "no report", which would be true but far less useful.</p>
-     */
-    public static synchronized void arm() {
-        if (!enabled() || armed) return;
-        armed = true;
-        Thread watchdog = new Thread(() -> {
-            try {
-                Thread.sleep(WATCHDOG_MILLIS);
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                return;
-            }
-            if (reported) return;
-            String text = "=========== CrystalGUI connection probe: NO VERDICT ==========="
-                    + System.lineSeparator()
-                    + "The probe was armed and never reached a verdict in "
-                    + (WATCHDOG_MILLIS / 1000) + "s." + System.lineSeparator()
-                    + "Nothing below is a pass; the run is being halted so it cannot hold the build open."
-                    + System.lineSeparator() + checklist();
-            CrystalGuiCore.LOGGER.error("[probe] {}{}", System.lineSeparator(), text);
-            ProbeReport.write(REPORT_PROPERTY, false, text);
-            System.out.flush();
-            System.err.flush();
-            Runtime.getRuntime().halt(1);
-        }, "cgui-probe-watchdog");
-        watchdog.setDaemon(true);
-        watchdog.start();
-        CrystalGuiCore.LOGGER.info("[probe] armed; it will quit within {}s whatever happens",
-                WATCHDOG_MILLIS / 1000);
+    @Override
+    protected void onInit() {
+        active = this;
+        if (ticking) return;
+        ticking = true;
+        CgEngineLifecycle.onServerTick(() -> serverTick());
+        CgEngineLifecycle.onClientTick(() -> clientTick());
     }
 
-    /** The checklist with no host to ask, for the watchdog. @see #render */
-    private static String checklist() {
-        List<String> lines = new ArrayList<>();
-        for (Check check : CHECKS) lines.add((done(check.name) ? "OK   " : "--   ") + check.name);
-        return String.join(System.lineSeparator(), lines);
+    @Override
+    protected void onStateChange(CgGauntletState from, CgGauntletState to) {
+        if (to.equals(CgGauntletState.SERVER)) {
+            skip("connection", "a client's test: its server half runs in the clients' integrated servers");
+            endTest();
+        }
+    }
+
+    @Override
+    protected void onEnd() {
+        active = null;
+    }
+
+    /** Where the run is: one process, or a client of a dedicated server. */
+    private static Topology topology() {
+        return CgServers.running() && !CgServers.dedicated() ? Topology.INTEGRATED : Topology.DEDICATED;
+    }
+
+    /** The integrated server's connection to this client's player, or null before it has joined. */
+    @Nullable
+    private static CgProtocolConnection<Object> connectionToFirstPlayer() {
+        if (!CgServers.running() || CgServers.dedicated()) return null;
+        Object local = CgPlayers.local();
+        return local == null ? null : CgNetwork.forPlayer(CgPlayers.idOf(local));
     }
 
     /**
@@ -434,13 +366,13 @@ public final class ConnectionProbe {
     // ── The server half ─────────────────────────────────────────────────────────────────────────
 
     /** Once per server tick. */
-    public static void serverTick(Host host) {
+    private static void serverTick() {
         if (!enabled() || reported) return;
         if (!askAnswering) {
             askAnswering = true;
             ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
         }
-        if (!audienceSent && clientReady) sendAudiences(host);
+        if (!audienceSent && clientReady) sendAudiences();
 
         if (server == null) {
             // THE CLIENT HAS TO BE LISTENING FIRST. `ui/openWindow` is a notification, so a client with
@@ -452,7 +384,7 @@ public final class ConnectionProbe {
             // Waiting, not re-announcing: ServerUiSession.open() throws on a second call, by design --
             // a session is opened once and a reshape is a delta.
             if (!clientReady) return;
-            CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
+            CgProtocolConnection<Object> connection = connectionToFirstPlayer();
             if (connection == null) return;
             openServer(connection);
             return;
@@ -479,7 +411,7 @@ public final class ConnectionProbe {
                     result -> {
                         if ("server".equals(result.getString("pong", ""))) pass(CALL);
                     },
-                    error -> CrystalGuiCore.LOGGER.error("[probe] call failed: {}", error));
+                    error -> CrystalGuiCore.LOGGER.error("[connection] call failed: {}", error));
             return;
         }
         if (!done(CALL)) return;
@@ -489,7 +421,7 @@ public final class ConnectionProbe {
         if (!reshapeSent) {
             reshapeSent = true;
             server.root().insertAt(0, new UIText("added after open"));
-            CrystalGuiCore.LOGGER.info("[probe] inserted a child at index 0 — every id after it shifts");
+            CrystalGuiCore.LOGGER.info("[connection] inserted a child at index 0 — every id after it shifts");
             return;
         }
 
@@ -506,7 +438,7 @@ public final class ConnectionProbe {
                 if (root != null) pass(FANOUT);
             });
             server.addViewer(extraServer);
-            CrystalGuiCore.LOGGER.info("[probe] added a second viewer; count={}", server.viewerCount());
+            CrystalGuiCore.LOGGER.info("[connection] added a second viewer; count={}", server.viewerCount());
         }
     }
 
@@ -515,8 +447,8 @@ public final class ConnectionProbe {
      * arriving with nothing before it is the proof. Waits until the host can place the player: a host that never fills
      * its levels ({@link CgWorldQueries#dimension}) never sends, and the check stays unrun.
      */
-    private static void sendAudiences(Host host) {
-        CgProtocolConnection<Object> connection = host.connectionToFirstPlayer();
+    private static void sendAudiences() {
+        CgProtocolConnection<Object> connection = connectionToFirstPlayer();
         Object player = connection != null && connection.peer() instanceof CgPeer
                 ? ((CgPeer) connection.peer()).player() : null;
         double[] at = new double[3];
@@ -526,7 +458,7 @@ public final class ConnectionProbe {
         String elsewhere = "minecraft:the_nether".equals(here) ? "minecraft:overworld" : "minecraft:the_nether";
         AUDIENCE.send(CgAudience.dimension(elsewhere), "elsewhere");
         AUDIENCE.send(CgAudience.near(player, at[0], at[1], at[2], 16), "near");
-        CrystalGuiCore.LOGGER.info("[probe] sent near ({}) and to {}", here, elsewhere);
+        CrystalGuiCore.LOGGER.info("[connection] sent near ({}) and to {}", here, elsewhere);
     }
 
     /** Both ends of the synthetic viewer's link, on the thread that owns the tree. */
@@ -575,28 +507,28 @@ public final class ConnectionProbe {
         session.on(button, Button.ACTIVATE, ctx -> pass(EVENT));
         session.open();
         server = session;
-        CrystalGuiCore.LOGGER.info("[probe] server session opened on the real connection, {} children",
+        CrystalGuiCore.LOGGER.info("[connection] server session opened on the real connection, {} children",
                 root.children().size());
     }
 
     // ── The client half ─────────────────────────────────────────────────────────────────────────
 
     /** Once per client tick. */
-    public static void clientTick(Host host) {
+    private static void clientTick() {
         if (!enabled() || reported) return;
-        if (!asked && host.clientConnection() != null) {
+        if (!asked && CgNetwork.client() != null) {
             asked = true;
             ASK.ask("ping").then(answer -> {
                 if (answer.startsWith("ping from ")) pass(REQUEST);
-                else CrystalGuiCore.LOGGER.error("[probe] a request came back as {}", answer);
-            }).onError(error -> CrystalGuiCore.LOGGER.error("[probe] a request failed: {}", error));
+                else CrystalGuiCore.LOGGER.error("[connection] a request came back as {}", answer);
+            }).onError(error -> CrystalGuiCore.LOGGER.error("[connection] a request failed: {}", error));
         }
         if (!audienceListening) {
             audienceListening = true;
             AUDIENCE.onReceive(which -> {
                 if ("elsewhere".equals(which)) {
                     elsewhereArrived = true;
-                    CrystalGuiCore.LOGGER.error("[probe] a message to another dimension arrived");
+                    CrystalGuiCore.LOGGER.error("[connection] a message to another dimension arrived");
                 } else if (!elsewhereArrived) {
                     pass(AUDIENCES);
                 }
@@ -606,18 +538,18 @@ public final class ConnectionProbe {
         // COUNTED BEFORE THE WORLD, so a run that never gets into one SAYS SO. Returning early on
         // "not in a world yet" without a clock is how the probes this replaces sat at a main menu
         // indefinitely: nothing failed, nothing passed, and the Gradle task simply never came back.
-        if (!host.inWorld()) {
+        if (!CgGameSession.inWorld()) {
             // AND IT GETS ITSELF THERE. Six probes ago this needed somebody to load a world by hand,
-            // which is why none of them could be a build task. @see Host#enterWorld
-            if (!worldRequested) worldRequested = host.enterWorld();
+            // which is why none of them could be a build task.
+            if (!worldRequested) worldRequested = CgGauntlet.enterWorld();
             // SAID OUT LOUD, because the alternative is what this cost once: a run sat in this branch
             // producing not one line, and "is the probe even being ticked" was unanswerable from a log.
             if (++ticks % 100 == 0) {
-                CrystalGuiCore.LOGGER.info("[probe] waiting for a world ({} ticks; asked={})",
+                CrystalGuiCore.LOGGER.info("[connection] waiting for a world ({} ticks; asked={})",
                         ticks, worldRequested);
             }
             if (ticks > DEADLINE_TICKS) {
-                finish(host, false, worldRequested
+                finish(false, worldRequested
                         ? "asked for a world and never got into one"
                         : "never got as far as asking for a world");
             }
@@ -626,7 +558,7 @@ public final class ConnectionProbe {
 
         // The two-client roles never open a session: they are about the workspace and nothing else.
         if (ROLE != Role.NONE) {
-            driveRole(host, ROLE);
+            driveRole(ROLE);
             return;
         }
 
@@ -639,26 +571,26 @@ public final class ConnectionProbe {
         // its pause menu constantly. And closing it EVERY tick for ever makes the window unusable by a
         // person: Escape opens the menu and the next tick shuts it, so a run that has stalled cannot
         // even be closed by hand. A diagnostic may not trap the person watching it.
-        if (host.screenIsUp() && !done(WRITE)) {
+        if (CgScreens.anyOpen() && !done(WRITE)) {
             if (screenCloses < MAX_SCREEN_CLOSES) {
                 screenCloses++;
-                host.closeScreen();
+                CgScreens.closeFront();
             } else if (screenCloses == MAX_SCREEN_CLOSES) {
                 screenCloses++;
-                CrystalGuiCore.LOGGER.warn("[probe] a screen keeps re-opening after {} attempts; "
+                CrystalGuiCore.LOGGER.warn("[connection] a screen keeps re-opening after {} attempts; "
                         + "leaving it alone. The window is yours again -- this run will time out and "
                         + "quit on its own.", MAX_SCREEN_CLOSES);
             }
         }
 
         if (client == null) {
-            CgProtocolConnection<Object> connection = host.clientConnection();
+            CgProtocolConnection<Object> connection = CgNetwork.client();
             if (connection == null) {
                 if (++ticks % 100 == 0) {
-                    CrystalGuiCore.LOGGER.info("[probe] in a world, waiting for a connection ({} ticks)",
+                    CrystalGuiCore.LOGGER.info("[connection] in a world, waiting for a connection ({} ticks)",
                             ticks);
                 }
-                if (ticks > DEADLINE_TICKS) finish(host, false, "no client connection");
+                if (ticks > DEADLINE_TICKS) finish(false, "no client connection");
                 return;
             }
             openClient(connection);
@@ -675,25 +607,25 @@ public final class ConnectionProbe {
         if (done(WRITE) && !detached) {
             detached = true;
             client.detach();
-            CrystalGuiCore.LOGGER.info("[probe] session checks done; handing ui/openWindow back so the "
+            CrystalGuiCore.LOGGER.info("[connection] session checks done; handing ui/openWindow back so the "
                     + "desktop can open");
             return;
         }
         // THE REPORT COMES FIRST, because the early return below used to skip it: a client whose tree
         // never arrived sat silent for ever, and "where did it stop" was unanswerable from the log.
-        if (ticks % 60 == 0) report(host, "waiting");
+        if (ticks % 60 == 0) report("waiting");
 
         if (detached) {
-            driveLoopAlive(host);
+            driveLoopAlive();
         } else if (client.root() != null) {
             checkDescribedState();
             checkDelta();
             pressWhenReady();
             checkReshape();
-            driveFiles(host);
+            driveFiles();
         }
-        if (everythingRunnableIsDone(host)) finish(host, true, "");
-        else if (ticks > DEADLINE_TICKS) finish(host, false, "timed out");
+        if (everythingRunnableIsDone()) finish(true, "");
+        else if (ticks > DEADLINE_TICKS) finish(false, "timed out");
     }
 
     private static void openClient(CgProtocolConnection<Object> connection) {
@@ -702,7 +634,7 @@ public final class ConnectionProbe {
                 new ClientUiSession<>(new UIElementMirror<>(connection.ops()), connection);
         session.onWindowOpened(root -> {
             if (root != null) pass(TREE);
-            CrystalGuiCore.LOGGER.info("[probe] tree rebuilt: {} children",
+            CrystalGuiCore.LOGGER.info("[connection] tree rebuilt: {} children",
                     root == null ? -1 : root.children().size());
         });
         session.onCall("probe/ping", (args, respond) -> {
@@ -713,7 +645,7 @@ public final class ConnectionProbe {
         client = session;
         // LAST, and it is what releases the server half. @see #serverTick
         clientReady = true;
-        CrystalGuiCore.LOGGER.info("[probe] client session listening; the server may open its window");
+        CrystalGuiCore.LOGGER.info("[connection] client session listening; the server may open its window");
     }
 
     /** C3 and C4, read off the rebuilt tree. */
@@ -792,9 +724,9 @@ public final class ConnectionProbe {
      * {@code fs.changed} as well as a weaker claim.</p>
      */
     @Nullable
-    private static Workspace workspace(Host host) {
+    private static Workspace workspace() {
         if (files != null) return files;
-        CgProtocolConnection<Object> connection = host.clientConnection();
+        CgProtocolConnection<Object> connection = CgNetwork.client();
         if (connection == null) return null;
         files = Workspace.of(connection);
         return files;
@@ -810,22 +742,22 @@ public final class ConnectionProbe {
      * <p>A write is refused with {@code NO_PERMISSIONS} unless the player is an operator, and that is
      * the permission check <em>working</em> rather than a fault. Op the dev player to exercise it.</p>
      */
-    private static void driveFiles(Host host) {
+    private static void driveFiles() {
         if (!done(RESHAPE)) return;
-        Workspace live = workspace(host);
+        Workspace live = workspace();
         if (live == null) return;
 
         if (!listingAsked) {
             listingAsked = true;
             live.files().list(project())
                     .then(listing -> {
-                        CrystalGuiCore.LOGGER.info("[probe] listed {} entries from the {} server",
+                        CrystalGuiCore.LOGGER.info("[connection] listed {} entries from the {} server",
                                 listing.entries().size(),
-                                host.topology().name().toLowerCase(Locale.ROOT));
+                                topology().name().toLowerCase(Locale.ROOT));
                         if (!listing.entries().isEmpty()) pass(LISTING);
                     })
                     .onError(failure ->
-                            CrystalGuiCore.LOGGER.error("[probe] listing failed: {}", failure.code()));
+                            CrystalGuiCore.LOGGER.error("[connection] listing failed: {}", failure.code()));
             return;
         }
         if (!done(LISTING) || writeStarted) return;
@@ -836,18 +768,18 @@ public final class ConnectionProbe {
         writeStarted = true;
         Resource readme = Resource.of(CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, "README.md"));
         live.files().readWhole(readme)
-                .onError(f -> CrystalGuiCore.LOGGER.error("[probe] README read failed: {}", f.code()))
+                .onError(f -> CrystalGuiCore.LOGGER.error("[connection] README read failed: {}", f.code()))
                 .then(first -> {
                     String before = new String(first.bytes(), StandardCharsets.UTF_8);
                     String edited = "#!" + before.substring(Math.min(1, before.length()));
                     live.files().write(readme, edited.getBytes(StandardCharsets.UTF_8), first.etag())
                             .onError(f -> CrystalGuiCore.LOGGER.error(
-                                    "[probe] conditional write failed: {} — NO_PERMISSIONS here means "
+                                    "[connection] conditional write failed: {} — NO_PERMISSIONS here means "
                                             + "the op check is working and the player is not an op",
                                     f.code()))
                             .then(etag -> live.files().readWhole(readme)
                                     .onError(f -> CrystalGuiCore.LOGGER.error(
-                                            "[probe] re-read failed: {}", f.code()))
+                                            "[connection] re-read failed: {}", f.code()))
                                     .then(second -> {
                                         String after = new String(second.bytes(), StandardCharsets.UTF_8);
                                         if (!after.startsWith("#!")) return;
@@ -857,7 +789,7 @@ public final class ConnectionProbe {
                                                         second.etag())
                                                 .then(e -> pass(WRITE))
                                                 .onError(f -> CrystalGuiCore.LOGGER.error(
-                                                        "[probe] restore failed: {}", f.code()));
+                                                        "[connection] restore failed: {}", f.code()));
                                     }));
                 });
     }
@@ -871,29 +803,29 @@ public final class ConnectionProbe {
      * own request dies at its timeout — the editor asking the integrated server for a project list, and
      * the integrated server not listening <em>because the editor being open is what stopped it</em>.</p>
      */
-    private static void driveLoopAlive(Host host) {
+    private static void driveLoopAlive() {
         if (done(LOOP_ALIVE)) return;
-        if (host.topology() != Topology.INTEGRATED) return;
+        if (topology() != Topology.INTEGRATED) return;
 
         if (!desktopOpened) {
             desktopOpened = true;
             drivingDesktop = true;
-            host.openDesktop();
+            HostSession.session().openApplication();
             return;
         }
-        if (!host.screenIsUp() || loopAskStarted) return;
+        if (!CgScreens.anyOpen() || loopAskStarted) return;
 
         loopAskStarted = true;
-        Workspace live = workspace(host);
+        Workspace live = workspace();
         if (live == null) return;
         live.files().list(project())
                 .then(listing -> {
-                    CrystalGuiCore.LOGGER.info("[probe] a round trip completed with the desktop UP "
+                    CrystalGuiCore.LOGGER.info("[connection] a round trip completed with the desktop UP "
                             + "({} entries) — the game loop is still turning", listing.entries().size());
                     pass(LOOP_ALIVE);
                 })
                 .onError(f -> CrystalGuiCore.LOGGER.error(
-                        "[probe] the listing with the desktop up failed: {} — if it TIMED OUT, the "
+                        "[connection] the listing with the desktop up failed: {} — if it TIMED OUT, the "
                                 + "screen is pausing the game and stopping the server that answers it",
                         f.code()));
     }
@@ -905,20 +837,20 @@ public final class ConnectionProbe {
      *
      * <p>Neither talks to the other: the server is the only thing between them, which is the point.</p>
      */
-    private static void driveRole(Host host, Role role) {
+    private static void driveRole(Role role) {
         ticks++;
-        Workspace live = workspace(host);
+        Workspace live = workspace();
         if (live == null) {
-            if (ticks > DEADLINE_TICKS) finish(host, false, "joined, but no connection");
+            if (ticks > DEADLINE_TICKS) finish(false, "joined, but no connection");
             return;
         }
-        if (role == Role.WRITER) writerStep(host, live);
-        else watcherStep(host, live);
+        if (role == Role.WRITER) writerStep(live);
+        else watcherStep(live);
 
-        if (ticks > DEADLINE_TICKS) finish(host, false, "timed out");
+        if (ticks > DEADLINE_TICKS) finish(false, "timed out");
     }
 
-    private static void writerStep(Host host, Workspace live) {
+    private static void writerStep(Workspace live) {
         Resource shared = Resource.of(CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SHARED_FILE));
 
         if (!writerCreated) {
@@ -926,13 +858,13 @@ public final class ConnectionProbe {
             writerCreating = true;
             live.files().write(shared, "first\n".getBytes(StandardCharsets.UTF_8), null)
                     .then(etag -> {
-                        CrystalGuiCore.LOGGER.info("[probe] wrote {} — the watcher should hear about it",
+                        CrystalGuiCore.LOGGER.info("[connection] wrote {} — the watcher should hear about it",
                                 SHARED_FILE);
                         writerCreated = true;
                         writerCreatedAt = ticks;
                     })
                     .onError(f -> {
-                        CrystalGuiCore.LOGGER.error("[probe] create failed: {} — NO_PERMISSIONS means "
+                        CrystalGuiCore.LOGGER.error("[connection] create failed: {} — NO_PERMISSIONS means "
                                 + "the player is not an op", f.code());
                         writerCreating = false;
                     });
@@ -948,21 +880,21 @@ public final class ConnectionProbe {
             writerEditing = true;
             live.files().write(shared, "second\n".getBytes(StandardCharsets.UTF_8), null)
                     .then(etag -> {
-                        CrystalGuiCore.LOGGER.info("[probe] edited {}", SHARED_FILE);
+                        CrystalGuiCore.LOGGER.info("[connection] edited {}", SHARED_FILE);
                         writerEdited = true;
                     })
                     .onError(f -> {
-                        CrystalGuiCore.LOGGER.error("[probe] edit failed: {}", f.code());
+                        CrystalGuiCore.LOGGER.error("[connection] edit failed: {}", f.code());
                         writerEditing = false;
                     });
             return;
         }
         // The writer asserts nothing itself -- WATCH is the watcher's check. It reports and stops.
-        CrystalGuiCore.LOGGER.info("[probe] writer done; the watcher's log is the verdict");
-        finish(host, true, "");
+        CrystalGuiCore.LOGGER.info("[connection] writer done; the watcher's log is the verdict");
+        finish(true, "");
     }
 
-    private static void watcherStep(Host host, Workspace live) {
+    private static void watcherStep(Workspace live) {
         if (!watching) {
             watching = true;
             // RECURSIVE, because the writer's file is at the project root and a watch that did not
@@ -971,11 +903,11 @@ public final class ConnectionProbe {
                 for (FsMessages.FileChange change : changes) {
                     if (!change.path().endsWith(SHARED_FILE)) continue;
                     HEARD.add(change.kind().name() + "@" + ticks);
-                    CrystalGuiCore.LOGGER.info("[probe] heard {} on {} at tick {}",
+                    CrystalGuiCore.LOGGER.info("[connection] heard {} on {} at tick {}",
                             change.kind(), change.path(), ticks);
                 }
             });
-            CrystalGuiCore.LOGGER.info("[probe] watching the project — start the writer now if you have "
+            CrystalGuiCore.LOGGER.info("[connection] watching the project — start the writer now if you have "
                     + "not; a change before this line is one nobody was subscribed to");
             return;
         }
@@ -983,49 +915,49 @@ public final class ConnectionProbe {
         // change and then stopped, which is what a coalescing bug produces.
         if (HEARD.size() >= 2) {
             pass(WATCH);
-            finish(host, true, "");
+            finish(true, "");
         }
     }
 
     // ── Reporting ───────────────────────────────────────────────────────────────────────────────
 
     /** Whether every check that means anything HERE has passed. A skip is not a pass and not a block. */
-    private static boolean everythingRunnableIsDone(Host host) {
+    private static boolean everythingRunnableIsDone() {
         for (Check check : CHECKS) {
-            if (check.skippedBecause(host) != null) continue;
+            if (check.skippedBecause() != null) continue;
             if (!done(check.name)) return false;
         }
         return true;
     }
 
     /** The checklist as it stands, one line per check, with a skip printed as a skip and its reason. */
-    private static String render(Host host, String prefix) {
+    private static String render(String prefix) {
         List<String> lines = new ArrayList<>();
         lines.add("=========== CrystalGUI connection probe: " + prefix + " on the "
-                + host.topology().name().toLowerCase(Locale.ROOT) + " server ===========");
+                + topology().name().toLowerCase(Locale.ROOT) + " server ===========");
         for (Check check : CHECKS) {
-            String skipped = check.skippedBecause(host);
+            String skipped = check.skippedBecause();
             if (skipped != null) lines.add("SKIP " + check.name + " (" + skipped + ")");
             else lines.add((done(check.name) ? "OK   " : "--   ") + check.name);
         }
         return String.join(System.lineSeparator(), lines);
     }
 
-    private static void report(Host host, String prefix) {
-        CrystalGuiCore.LOGGER.info("[probe] {}{}", System.lineSeparator(), render(host, prefix));
+    private static void report(String prefix) {
+        CrystalGuiCore.LOGGER.info("[connection] {}{}", System.lineSeparator(), render(prefix));
     }
 
-    private static void finish(Host host, boolean passed, String why) {
+    /** The checklist into the run's report, a line a check, then the test ends. */
+    private static void finish(boolean passed, String why) {
         reported = true;
-        String text = render(host, passed ? "PASS" : "FAIL (" + why + ")");
-        if (passed) {
-            CrystalGuiCore.LOGGER.info("[probe] PASS — every check that means anything on a {} server "
-                    + "crossed a real connection{}{}", host.topology(), System.lineSeparator(), text);
-        } else {
-            CrystalGuiCore.LOGGER.error("[probe] FAIL ({}) — the first '--' below is the check that "
-                    + "stalled{}{}", why, System.lineSeparator(), text);
+        ConnectionTest test = active;
+        if (test == null) return;
+        if (!passed) test.info("connection.stalled", why);
+        for (Check check : CHECKS) {
+            String skipped = check.skippedBecause();
+            if (skipped != null) test.skip(check.name, skipped);
+            else test.check(check.name, done(check.name), done(check.name) ? "crossed a real connection" : "never got there");
         }
-        ProbeReport.write(REPORT_PROPERTY, passed, text);
-        host.quit();
+        test.endTest();
     }
 }

@@ -62,7 +62,7 @@ Show the path list and what you added (file, zone, channel) before running.
 - Ring: `-Dcrystalgraphics.trace.frames=<n>`, `.firstFrames=<n>` for startup/first-open questions;
   `.zones=<n>` if the last report warned of dropped zones; `CgTrace.stopAfterHitch` for a rare spike.
 - A repeatable workload that ends by itself: a harness scene with
-  `-Dcrystalgraphics.harness.profile=300` (it sizes the ring for you), or the game's autotest (size
+  `-Dcrystalgraphics.harness.profile=300` (it sizes the ring for you), or a game's gauntlet run, `crystalgraphics:play` (size
   `-Dcrystalgraphics.trace.zones` yourself). Headroom questions: `-Dcrystalgraphics.harness.fps=0`.
 - **Noise** (`PROFILING.md` § *Noise*): a warm-up long enough for the scene
   (`-Dcrystalgraphics.harness.profile.warmup=<n>` — the desktop needs hundreds); nothing heavy beside the

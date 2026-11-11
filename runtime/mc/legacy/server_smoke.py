@@ -1,4 +1,4 @@
-"""The shipped jars on real Forge dedicated servers, with ServerSmoke armed -- one per version named.
+"""The shipped jars on real Forge dedicated servers, playing the gauntlet's server tests -- one per version named.
 
     python runtime/mc/legacy/server_smoke.py [--java <java 8>] 1.12.2 1.10.2 1.8.9
 
@@ -67,12 +67,13 @@ def smoke(java, mc):
     open(os.path.join(d, "eula.txt"), "w").write("eula=true\n")
     open(os.path.join(d, "server.properties"), "w").write(
         "server-port=25591\nlevel-type=FLAT\nonline-mode=false\n")
-    report = os.path.join(d, "smoke.txt")
+    out = os.path.join(d, "gauntlet")
+    report = os.path.join(out, "report.txt")
     if os.path.exists(report):
         os.remove(report)
     try:
-        subprocess.run([java, "-Xmx2G", "-Dcrystalgui.server.smoke=true",
-                        "-Dcrystalgui.server.smoke.report=" + report, "-jar", server, "nogui"],
+        subprocess.run([java, "-Xmx2G", "-Dcrystalgraphics.gauntlet=crystalgraphics:server,crystalgui:server",
+                        "-Dcrystalgraphics.gauntlet.out=" + out, "-jar", server, "nogui"],
                        cwd=d, capture_output=True, timeout=400)
     except subprocess.TimeoutExpired:
         pass

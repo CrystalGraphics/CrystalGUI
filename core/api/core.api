@@ -6864,6 +6864,59 @@ com/crystalgui/fs/server/WorkspaceTrash$Item
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/gauntlet/ConnectionTest
+  access public,final
+  extends com/crystalgraphics/gauntlet/CgGauntletController
+  field public,static,final ID Ljava/lang/String;
+  field public,static,final ROLE_PROPERTY Ljava/lang/String;
+  method public <init> ()V
+  method public,static enabled ()Z
+  method public,static isDrivingDesktop ()Z
+com/crystalgui/gauntlet/ConnectionTest$Role
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final NONE Lcom/crystalgui/gauntlet/ConnectionTest$Role;
+  field public,static,final WATCHER Lcom/crystalgui/gauntlet/ConnectionTest$Role;
+  field public,static,final WRITER Lcom/crystalgui/gauntlet/ConnectionTest$Role;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/gauntlet/ConnectionTest$Role;
+  method public,static values ()[Lcom/crystalgui/gauntlet/ConnectionTest$Role;
+com/crystalgui/gauntlet/ConnectionTest$Topology
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final DEDICATED Lcom/crystalgui/gauntlet/ConnectionTest$Topology;
+  field public,static,final INTEGRATED Lcom/crystalgui/gauntlet/ConnectionTest$Topology;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/gauntlet/ConnectionTest$Topology;
+  method public,static values ()[Lcom/crystalgui/gauntlet/ConnectionTest$Topology;
+com/crystalgui/gauntlet/DesktopRun
+  access public,abstract
+  extends com/crystalgraphics/gauntlet/CgGauntletController
+  method protected <init> (Z)V
+  method protected onOpened ()V
+  method protected onStateChange (Lcom/crystalgraphics/gauntlet/CgGauntletState;Lcom/crystalgraphics/gauntlet/CgGauntletState;)V
+  method protected,abstract onDesktopFrame (I)V
+  method protected,final onTick (F)V
+com/crystalgui/gauntlet/DesktopScriptTest
+  access public,final
+  extends com/crystalgraphics/gauntlet/CgGauntletController
+  field public,static,final ID Ljava/lang/String;
+  method public <init> ()V
+com/crystalgui/gauntlet/DesktopTest
+  access public,final
+  extends com/crystalgui/gauntlet/DesktopRun
+  field public,static,final ID Ljava/lang/String;
+  method public <init> ()V
+  method public,static onFrame (ILjava/lang/Runnable;)V
+  method public,static plays ()Z
+  method public,static report (Ljava/lang/String;ZLjava/lang/String;)V
+com/crystalgui/gauntlet/OpenCloseTest
+  access public,final
+  extends com/crystalgui/gauntlet/DesktopRun
+  field public,static,final ID Ljava/lang/String;
+  method public <init> ()V
+com/crystalgui/gauntlet/ServerTest
+  access public,final
+  extends com/crystalgraphics/gauntlet/CgGauntletController
+  method public <init> ()V
 com/crystalgui/graph/EdgeData
   access public,final,record
   extends java/lang/Record
@@ -7302,6 +7355,7 @@ com/crystalgui/lifecycle/CgUiCommonLifecycle
   field public,static,final INSTANCE Lcom/crystalgui/lifecycle/CgUiCommonLifecycle;
   implements com/crystalgraphics/lifecycle/CgLifecycleListener
   method public onInit ()V
+  method public onPreInit ()V
   method public onServerStarting (Ljava/lang/Object;)V
   method public onServerStopping ()V
 com/crystalgui/lifecycle/CgUiStart
@@ -7964,120 +8018,6 @@ com/crystalgui/net/window/WindowProtocol
   method public,static isRegistered ()Z
   method public,static register ()V
   method public,static resetForTesting ()V
-com/crystalgui/probe/AutoTest
-  access public,final
-  extends java/lang/Object
-  field public,static,final CAPTURE_AT Ljava/lang/String;
-  field public,static,final ENABLED Z
-  field public,static,final LATE_CAPTURE_AT Ljava/lang/String;
-  field public,static,final OPEN_AFTER Ljava/lang/String;
-  method public,static earlyCapture ()Ljava/lang/String;
-  method public,static lateCapture ()Ljava/lang/String;
-  method public,static onFrame (ILjava/lang/Runnable;)V
-  method public,static opensBareDesktop ()Z
-  method public,static resolveWorld (Ljava/io/File;)Ljava/lang/String;
-  method public,static runFrameSteps (I)V
-  method public,static settled (Lcom/crystalgui/probe/AutoTest$Host;I)V
-  method public,static tick (Lcom/crystalgui/probe/AutoTest$Host;)V
-  method public,static wantsWorld ()Z
-com/crystalgui/probe/AutoTest$Host
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract capture (Ljava/lang/String;)V
-  method public,abstract captureAt ()I
-  method public,abstract enterWorld ()Z
-  method public,abstract inWorld ()Z
-  method public,abstract lateCaptureAt ()I
-  method public,abstract openAfter ()I
-  method public,abstract openDesktop ()V
-  method public,abstract quit ()V
-  method public,abstract readyToDrive ()Z
-com/crystalgui/probe/ConnectionProbe
-  access public,final
-  extends java/lang/Object
-  field public,static,final PROPERTY Ljava/lang/String;
-  field public,static,final REPORT_PROPERTY Ljava/lang/String;
-  field public,static,final ROLE_PROPERTY Ljava/lang/String;
-  method public,static arm ()V
-  method public,static clientTick (Lcom/crystalgui/probe/ConnectionProbe$Host;)V
-  method public,static enabled ()Z
-  method public,static isDrivingDesktop ()Z
-  method public,static serverTick (Lcom/crystalgui/probe/ConnectionProbe$Host;)V
-com/crystalgui/probe/ConnectionProbe$Host
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract clientConnection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
-  method public,abstract closeScreen ()V
-  method public,abstract connectionToFirstPlayer ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
-  method public,abstract enterWorld ()Z
-  method public,abstract inWorld ()Z
-  method public,abstract openDesktop ()V
-  method public,abstract quit ()V
-  method public,abstract screenIsUp ()Z
-  method public,abstract topology ()Lcom/crystalgui/probe/ConnectionProbe$Topology;
-com/crystalgui/probe/ConnectionProbe$Role
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final NONE Lcom/crystalgui/probe/ConnectionProbe$Role;
-  field public,static,final WATCHER Lcom/crystalgui/probe/ConnectionProbe$Role;
-  field public,static,final WRITER Lcom/crystalgui/probe/ConnectionProbe$Role;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/probe/ConnectionProbe$Role;
-  method public,static values ()[Lcom/crystalgui/probe/ConnectionProbe$Role;
-com/crystalgui/probe/ConnectionProbe$Topology
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final DEDICATED Lcom/crystalgui/probe/ConnectionProbe$Topology;
-  field public,static,final INTEGRATED Lcom/crystalgui/probe/ConnectionProbe$Topology;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/probe/ConnectionProbe$Topology;
-  method public,static values ()[Lcom/crystalgui/probe/ConnectionProbe$Topology;
-com/crystalgui/probe/DesktopProbe
-  access public,final
-  extends java/lang/Object
-  field public,static,final ENABLED Z
-  method public,static tick (Lcom/crystalgui/probe/DesktopProbe$Host;)V
-com/crystalgui/probe/DesktopProbe$Host
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract closeScreen ()V
-  method public,abstract fps ()I
-  method public,abstract grabMouse ()V
-  method public,abstract inWorld ()Z
-  method public,abstract keyZ ()I
-  method public,abstract mouseGrabbed ()Z
-  method public,abstract movePointerTo (II)V
-  method public,abstract offerKey (ICZ)V
-  method public,abstract offerMouse (IZ)Z
-  method public,abstract openDesktop ()V
-  method public,abstract openForeignScreen ()V
-  method public,abstract presentation ()Lcom/crystalgui/core/window/DesktopPresentation;
-  method public,abstract quit ()V
-  method public,abstract shoot (Ljava/lang/String;)V
-com/crystalgui/probe/OpenCloseProbe
-  access public,final
-  extends java/lang/Object
-  field public,static,final KIND Ljava/lang/String;
-  method public,static enabled ()Z
-com/crystalgui/probe/ServerSmoke
-  access public,final
-  extends java/lang/Object
-  field public,static,final CLASSDIR_PROPERTY Ljava/lang/String;
-  field public,static,final CLASSLOG_PROPERTY Ljava/lang/String;
-  field public,static,final PROPERTY Ljava/lang/String;
-  field public,static,final REPORT_PROPERTY Ljava/lang/String;
-  method public,static enabled ()Z
-  method public,static engineHost ()Lcom/crystalgui/probe/ServerSmoke$Host;
-  method public,static run (Lcom/crystalgui/probe/ServerSmoke$Host;)V
-com/crystalgui/probe/ServerSmoke$Host
-  access public,abstract,interface
-  extends java/lang/Object
-  method public alsoNeverLoaded ()Ljava/util/List;
-  method public anchor ()Ljava/lang/Class;
-  method public gameClientClasses ()Ljava/util/List;
-  method public,abstract clientPackages ()Ljava/util/List;
-  method public,abstract connectionsRegistered ()Z
-  method public,abstract halt ()V
-  method public,abstract isDedicatedServer ()Z
-  method public,abstract label ()Ljava/lang/String;
 com/crystalgui/render/CgUiPaintContext
   access public,final
   extends java/lang/Object

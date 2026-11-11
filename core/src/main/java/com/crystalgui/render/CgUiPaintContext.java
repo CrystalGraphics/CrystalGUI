@@ -148,8 +148,7 @@ public final class CgUiPaintContext {
         CgPipelinePrecache.parseAhead(QUAD_SHADERS);
     }
 
-    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_color_field.shader",
-            "crystalgui:shaders/stage_probe.shader"};
+    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_color_field.shader"};
 
     // ── What it draws with ───────────────────────────────────────────────────
 

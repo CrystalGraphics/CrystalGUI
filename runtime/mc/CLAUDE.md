@@ -20,7 +20,7 @@ What used to be per loader, and where it is now:
 | Job | Owner |
 |---|---|
 | The desktop: `HostSession.install()`, its keys, paint stages, input and screen | `CgUiClientLifecycle.onPreInit` (a `client` listener). `HostSession` owns the rest: what opens, the frame clock, input through CrystalGraphics' `SCREEN` stage (`HostInputListener`), its screen (`CgScreens`), and every host answer from `CgGameDirectory`, `CgHostWindow`, `CgI18n`, `CgNetwork` and `CgGameThreads` |
-| The protocols, the workspace, the server smoke | `CgUiCommonLifecycle` (a `common` listener) |
+| The protocols, the workspace, the gauntlet's server and connection tests | `CgUiCommonLifecycle` (a `common` listener) |
 | Service providers across mod files (ModLauncher 5 lists no resource of another mod) | `Providers`, over `CgModLoader.roots()` |
 | Which variant ran | `VariantBootstrap`'s log line, and CrystalGraphics' crash-report section |
 

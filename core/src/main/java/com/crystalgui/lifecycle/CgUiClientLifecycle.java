@@ -1,11 +1,15 @@
 package com.crystalgui.lifecycle;
 
+import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgraphics.mc.CgReloadListener;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.DesktopKeys;
 import com.crystalgui.desktop.host.HostSession;
+import com.crystalgui.gauntlet.DesktopScriptTest;
+import com.crystalgui.gauntlet.DesktopTest;
+import com.crystalgui.gauntlet.OpenCloseTest;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiPaintWarmup;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
@@ -28,7 +32,7 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
     private CgUiClientLifecycle() {
     }
 
-    /** The desktop, its keys, and CrystalGUI's start on a worker. */
+    /** The desktop, its keys, its tests for an unattended run, and CrystalGUI's start on a worker. */
     @Override
     public void onPreInit() {
         // Before the keys: a key pressed before the session exists would open nothing.
@@ -36,8 +40,16 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
         DesktopKeys.declare();
         CgUiStart.ahead();
         CgUiPaintContext.precache();
+        gauntlet();
     }
 
+    /** The autotests we register. **/
+    private void gauntlet() {
+        CgGauntlet.register(DesktopTest.ID, DesktopTest::new);
+        CgGauntlet.register(OpenCloseTest.ID, OpenCloseTest::new);
+        CgGauntlet.register(DesktopScriptTest.ID, DesktopScriptTest::new);
+    }
+    
     @Override
     public void onContextInit(int width, int height) {
         CgUiPaintContext.parseAhead();

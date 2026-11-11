@@ -135,8 +135,9 @@ Every scene gets a run directory from the engine (`CgTraceRun`): `gl-debug-harne
 - **A rare hitch in a hand-driven session**: `-Dcrystalgraphics.trace.hitchDumpMs=<ms>` writes the 240 frames before
   each frame slower than that to `latest/hitch-<frame>/` (`report.txt`, `report-full.txt`, `slow.txt`) as it
   happens — `CrystalGraphics/docs/PROFILING.md` § *Minecraft*.
-- A repeatable in-game workload is the autotest: `-Dcrystalgui.autotest=true` loads a world, opens the
-  editor, photographs it and quits (`docs/CGUI_BUILD.md`). Profile that rather than a hand-driven session.
+- A repeatable in-game workload is a gauntlet run: `-Dcrystalgraphics.gauntlet=crystalgraphics:boot,crystalgui:desktop`
+  loads a world, opens the desktop, photographs it and quits; `crystalgraphics:play` plays the world alone
+  (`CrystalGraphics/docs/GAUNTLET.md`). Profile that rather than a hand-driven session.
 - **Two phases of one run**: `-Dcrystalgraphics.trace.splitAt=<marker>` also writes `report-before.txt`,
   `report-after.txt` and `report-compare.txt` (per zone): the frames either side of the first such marker after 60
   frames without one, `-Dcrystalgraphics.trace.splitFrames` (300) each at most. The VFX showcase's beams against

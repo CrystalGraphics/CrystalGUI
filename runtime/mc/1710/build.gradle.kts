@@ -246,7 +246,8 @@ val connectionProbeRequested = gradle.startParameter.taskNames.any {
     it == "connectionProbe" || it.endsWith(":connectionProbe")
 }
 
-val connectionProbeReport = layout.buildDirectory.file("connectionProbe/result.txt")
+val connectionProbeDir = layout.buildDirectory.dir("connectionProbe")
+val connectionProbeReport = layout.buildDirectory.file("connectionProbe/report.txt")
 
 listOf("runClient", "runObfClient").forEach { runTask ->
 tasks.named<JavaExec>(runTask) {
@@ -346,8 +347,8 @@ tasks.named<JavaExec>(runTask) {
     //   runClient -PcgProbe -PcgJoin=host:port  a real socket, and the server's own disk
     //   ...plus -PcgProbeRole=watcher|writer on two clients, watcher started first
     if (providers.gradleProperty("cgProbe").isPresent || connectionProbeRequested) {
-        systemProperty("crystalgui.probe.connection", "true")
-        systemProperty("crystalgui.probe.report", connectionProbeReport.get().asFile.absolutePath)
+        systemProperty("crystalgraphics.gauntlet", "crystalgui:connection")
+        systemProperty("crystalgraphics.gauntlet.out", connectionProbeDir.get().asFile.absolutePath)
 
     // AND A HARD STOP, so a client that never reaches a verdict is killed rather than left running.
     // Gradle interrupts the task at this and the run below then finds no report, which is a failure
@@ -362,7 +363,7 @@ tasks.named<JavaExec>(runTask) {
     // The two-client check, which one client is exactly the fixture that passes against: a change you
     // made yourself needs no notification to be on screen. Run on BOTH clients.
     providers.gradleProperty("cgProbeRole").orNull?.let { role ->
-        systemProperty("crystalgui.probe.role", role)
+        systemProperty("crystalgui.connection.role", role)
     }
 
     // -PcgJoin=host[:port] makes the client connect straight to a server instead of the main menu.
@@ -383,39 +384,36 @@ tasks.named<JavaExec>(runTask) {
     providers.gradleProperty("cgClientDir").orNull?.let { workingDir = layout.projectDirectory.dir(it).asFile }
 
     if (providers.gradleProperty("cgAutoTest").isPresent) {
-        systemProperty("crystalgui.autotest", "true")
-        systemProperty("crystalgui.autotest.out",
-            layout.buildDirectory.file("crystalgui-autotest.png").get().asFile.absolutePath)
-        // -PcgAutoTest=<saveFolder> loads that world first; a bare -PcgAutoTest stays on the main menu.
+        // The gauntlet's boot and desktop tests; the report and photographs under build/gauntlet.
+        systemProperty("crystalgraphics.gauntlet", "crystalgraphics:boot,crystalgui:desktop")
+        systemProperty("crystalgraphics.gauntlet.out", layout.buildDirectory.dir("gauntlet").get().asFile.absolutePath)
+        // -PcgAutoTest=<saveFolder> enters that world; a bare -PcgAutoTest the first save, or a new flat one.
         providers.gradleProperty("cgLateFrame").orNull?.let {
-            systemProperty("crystalgui.autotest.lateFrame", it)
+            systemProperty("crystalgui.desktop.lateFrame", it)
         }
         val world = providers.gradleProperty("cgAutoTest").get()
-        if (world.isNotEmpty() && world != "true") systemProperty("crystalgui.autotest.world", world)
+        if (world.isNotEmpty() && world != "true") systemProperty("crystalgraphics.gauntlet.world", world)
 
         // -PcgScript=Probe.java compiles and runs one snippet once the editor is up, logging each step.
         // The EXTENSION picks the language, which is the comparison that matters when one runs and the
-        // other kills the client. -PcgScriptSource overrides the snippet. @see CgUiAutoTest#runScriptOnce
+        // other kills the client. -PcgScriptSource overrides the snippet. @see LanguageProbe#runScriptOnce
         providers.gradleProperty("cgScript").orNull?.let {
-            systemProperty("crystalgui.autotest.script", it)
+            systemProperty("crystalgui.desktop.script", it)
         }
         providers.gradleProperty("cgScriptSource").orNull?.let {
-            systemProperty("crystalgui.autotest.scriptSource", it)
-        }
-        providers.gradleProperty("cgFrame").orNull?.let {
-            systemProperty("crystalgui.autotest.frame", it)
+            systemProperty("crystalgui.desktop.scriptSource", it)
         }
         // -PcgBytes=net/minecraft/client/Minecraft reports every member the LIVE class declares and no
         // file does -- the §15.5 A claim, shown rather than asserted.
         providers.gradleProperty("cgBytes").orNull?.let {
-            systemProperty("crystalgui.autotest.bytes", it)
+            systemProperty("crystalgui.desktop.bytes", it)
         }
         // -PcgComplete=true logs the member list the live editor produces for four receiver shapes,
         // with the classpath it resolved them against. Every layer answers correctly in every JVM this
         // can be driven from -- including the harness, through the same call -- so the remaining
         // difference is the client itself, and it cannot be reached any other way.
         providers.gradleProperty("cgComplete").orNull?.let {
-            systemProperty("crystalgui.autotest.complete", it)
+            systemProperty("crystalgui.desktop.complete", it)
         }
         // -PcgNoLive turns §15.5 A's live name environment off while leaving the platform registered,
         // so the same client can be run both ways and a difference attributed to that one input.
@@ -438,7 +436,7 @@ tasks.named<JavaExec>(runTask) {
 // client-only guard sitting one level too high. Every one is a RUNTIME property ("a client-only class is
 // constructed on a server"), so 1090 headless tests could not see them, the GL harness could not see them
 // (it is a client by design), and an import scan cannot answer a question about class loading. Starting
-// the server found all three in one run. @see CgUiServerSmoke, which carries the full reasoning.
+// the server found all three in one run. @see CgServerSmoke, which carries the full reasoning.
 //
 // Wired to `runServer` rather than being its own JavaExec: reproducing that task's classpath, JVM args
 // and working directory is a copy that goes stale, and the run has to be the real one or it proves
@@ -448,7 +446,8 @@ val serverSmokeRequested = gradle.startParameter.taskNames.any {
     it == "serverSmoke" || it.endsWith(":serverSmoke")
 }
 
-val serverSmokeReport = layout.buildDirectory.file("serverSmoke/result.txt")
+val serverSmokeDir = layout.buildDirectory.dir("serverSmoke")
+val serverSmokeReport = layout.buildDirectory.file("serverSmoke/report.txt")
 
 tasks.named<JavaExec>("runServer") {
     for (prefix in listOf("crystalgui.", "crystalgraphics.")) {
@@ -466,19 +465,13 @@ tasks.named<JavaExec>("runServer") {
     }
 
     if (serverSmokeRequested || providers.gradleProperty("cgServerSmoke").isPresent) {
-        systemProperty("crystalgui.server.smoke", "true")
-        systemProperty("crystalgui.server.smoke.report", serverSmokeReport.get().asFile.absolutePath)
+        // CrystalGraphics' server test (the stack, no client class loaded), then CrystalGUI's half.
+        systemProperty("crystalgraphics.gauntlet", "crystalgraphics:server,crystalgui:server")
+        systemProperty("crystalgraphics.gauntlet.out", serverSmokeDir.get().asFile.absolutePath)
 
-        // WHERE THE CLIENT PACKAGE IS, so the never-loaded set is enumerated rather than hand-written.
-        // The list this replaces had rotted in both directions: it named a class W3 deleted -- a name
-        // nothing can load is a guard that passes for ever -- while CgUiOverlayInput and CgUiAutoTest
-        // arrived after it was written and were never checked at all.
-        //
         // No -Xlog:class+load here, unlike the 1.20.x task: that is a Java 9+ flag and this run is on
         // the GTNH toolchain. It needs none -- LaunchWrapper puts no module in the way, so the
-        // reflective findLoadedClass route the probe falls back to actually works here.
-        systemProperty("crystalgui.server.smoke.classdir",
-                sourceSets["main"].output.classesDirs.asPath)
+        // reflective findLoadedClass route the test falls back to works here.
 
         // --nogui because the dedicated server otherwise opens a Swing console and blocks on it; a check
         // that needs a window closed is not a check a pipeline can run.
@@ -505,15 +498,14 @@ tasks.register("serverSmoke") {
     dependsOn(tasks.named("runServer"))
     outputs.upToDateWhen { false }
 
-    // THE HALF THAT MAKES IT SOUND. The mod halts(1) when a check fails, which covers "ran and failed";
-    // nothing covered "never ran", and that is the case that actually happened on the first run. An
-    // absent report is therefore a failure with a message, never a pass.
+    // THE HALF THAT MAKES IT SOUND. The run's report covers "ran and failed"; nothing covered "never ran", and that
+    // is the case that actually happened on the first run. An absent report is a failure with a message, never a pass.
     doLast {
         val file = serverSmokeReport.get().asFile
         if (!file.isFile) {
             throw GradleException(
                 "The dedicated server produced no smoke report at " + file.absolutePath + ".\n" +
-                    "The server did not reach FMLServerStartedEvent, so NO check ran -- this is not a " +
+                    "The server's run never ended, so NO check ran -- this is not a " +
                     "pass. Look above for the reason: a failed port bind, a mod refusing to load, or a " +
                     "crash during startup. Use -PcgSmokePort=<n> if 25599 is taken.")
         }
@@ -857,7 +849,7 @@ tasks.register("connectionProbe") {
 
     // THE HALF THAT MAKES IT SOUND. The probe quits with a verdict when it runs, which covers "ran and
     // failed"; nothing covers "never ran" -- a world that never loaded, a mod that refused, a crash
-    // during startup. An absent report is a failure with a message, never a pass. @see ConnectionProbe
+    // during startup. An absent report is a failure with a message, never a pass. @see ConnectionTest
     doLast {
         val file = connectionProbeReport.get().asFile
         if (!file.isFile) {

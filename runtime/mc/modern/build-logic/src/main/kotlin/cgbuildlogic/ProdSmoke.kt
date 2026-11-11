@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit
 private val BOM = 0xFEFF.toChar()
 
 /** The flag whose presence in a config IS the proof that arming took. */
-private const val ARMED_MARKER = "JvmArgs=-Dcrystalgui.autotest=true"
+private const val ARMED_MARKER = "JvmArgs=-Dcrystalgraphics.gauntlet="
 private const val GPU_MARKER = "[crystalgraphics] gpu "
 private const val SELF_TEST_MARKER = "[crystalgraphics] compute self-test "
 private const val OPS_CHECK_MARKER = "[crystalgraphics] gpu ops check "
@@ -43,7 +43,11 @@ private const val POWERSHELL_TIMEOUT_SECONDS = 60L
  * ./gradlew prodSmoke -PcgTargets=1710      # one of them
  * ./gradlew prodSmoke -PcgBatch=3           # every instance, three clients at a time
  * ./gradlew prodSmoke -PcgSmokeProps=crystalgraphics.compute.selfTest=true   # and the compute self-test and ops check on each
+ * ./gradlew prodSmoke -PcgSmokeTests=crystalgraphics:world,crystalgraphics:collision   # and those tests after the desktop's
  * </pre>
+ *
+ * <p>Each client plays CrystalGraphics' gauntlet: the boot test, CrystalGUI's desktop test, then any asked for. Its
+ * verdict is the run's report, {@code <out>/<name>/report.txt}, beside its photographs.</p>
  *
  * <p>EVERY INSTANCE IS ARMED FIRST, with the launcher closed. Prism serves a {@code --launch} from the
  * settings it holds in MEMORY, so a config edit made while it is up is simply not seen and the client
@@ -58,7 +62,7 @@ private const val POWERSHELL_TIMEOUT_SECONDS = 60L
  * still. Sharing the GPU four ways does not cost a target its capture, 1.7.10 and its world included.</p>
  *
  * <p>Four ways to fail, and a missing capture is one of them: a client that never reached the
- * autotest wrote nothing, and silence must not read as success.</p>
+ * run wrote nothing, and silence must not read as success.</p>
  */
 abstract class ProdSmoke : DefaultTask() {
 
@@ -66,7 +70,11 @@ abstract class ProdSmoke : DefaultTask() {
     @get:Input
     abstract val instances: ListProperty<String>
 
-    /** Where captures land. Space-free: Prism splits a `JvmArgs` value on spaces. */
+    /** The gauntlet's tests each client plays, in order. */
+    @get:Input
+    abstract val tests: ListProperty<String>
+
+    /** Where each client's report and photographs land, a folder each. Space-free: Prism splits a `JvmArgs` value on spaces. */
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
@@ -99,8 +107,8 @@ abstract class ProdSmoke : DefaultTask() {
     abstract val batchSize: Property<Int>
 
     /**
-     * More `key=value` system properties for every client, e.g. a probe:
-     * `-PcgSmokeProps=crystalgui.autotest.complete=true,crystalgui.autotest.script=Probe.java`.
+     * More `key=value` system properties for every client, e.g. the language checks:
+     * `-PcgSmokeProps=crystalgui.desktop.complete=true,crystalgui.desktop.script=Probe.java`.
      * No spaces: Prism splits a `JvmArgs` value on them.
      */
     @get:Input
@@ -109,15 +117,14 @@ abstract class ProdSmoke : DefaultTask() {
     init {
         group = "verification"
         description = "Launches every installed client on the single jar and fails if one did not draw."
-        // A client boots, loads its world, opens the desktop, takes two captures and quits in well
-        // under a minute; a world load is about ten seconds. So this is a ceiling on a STUCK client,
-        // not a budget for a slow one -- generous enough to survive four clients sharing a GPU, and
-        // short enough that a hang is a two-minute failure.
+        // A ceiling on a STUCK client, not a budget for a slow one: four clients sharing a GPU took 85-125 s from
+        // launch to quitting (2026-11-11), most of it behind the loading screen, which the run waits out.
         startTimeoutSeconds.convention(180)
-        runTimeoutSeconds.convention(120)
+        runTimeoutSeconds.convention(240)
         onlyTargets.convention(emptyList())
         batchSize.convention(4)
         extraProperties.convention(emptyList())
+        tests.convention(listOf("crystalgraphics:boot", "crystalgui:desktop"))
         outputs.upToDateWhen { false }
     }
 
@@ -165,7 +172,7 @@ abstract class ProdSmoke : DefaultTask() {
             val uuid = cfg.readLines().firstOrNull { it.startsWith("uuid=") }?.removePrefix("uuid=")
                 ?: throw GradleException("$name: instance.cfg names no uuid")
             // A copied instance keeps its original's uuid, and `--launch` then starts the ORIGINAL,
-            // unarmed: it sits on the title screen and reads as a hung autotest.
+            // unarmed: it sits on the title screen and reads as a hung run.
             val twins = instanceDir.parentFile.listFiles().orEmpty().filter { other ->
                 other != instanceDir && File(other, "instance.cfg").let { it.isFile && "uuid=$uuid" in it.readLines() }
             }
@@ -219,8 +226,8 @@ abstract class ProdSmoke : DefaultTask() {
                         batch.joinToString(", ") { it.name })
                 }
                 batch.forEach { target ->
-                    captureOf(out, target, "early").delete()
-                    captureOf(out, target, "late").delete()
+                    // A report left from an earlier run would read as this one's.
+                    runOf(out, target).deleteRecursively()
                     logger.lifecycle("[prodSmoke] {}: launching {}", target.name, target.uuid)
                     powershell("Start-Process -FilePath '$exe' -ArgumentList '--launch','${target.uuid}'")
                     Thread.sleep(LAUNCHER_SETTLE_MS)
@@ -262,44 +269,30 @@ abstract class ProdSmoke : DefaultTask() {
         logger.lifecycle("[prodSmoke] {} instances drew the desktop on one jar", targets.size)
     }
 
-    private fun captureOf(out: File, target: Target, which: String) = File(out, "${target.name}-$which.png")
+    /** The client's run folder: its report and photographs. */
+    private fun runOf(out: File, target: Target) = File(out, target.name)
 
-    /** @return null when it drew, else why it did not. */
+    /** @return null when it drew and every test passed, else why not. */
     private fun verdictFor(target: Target, allExited: Boolean, out: File): String? {
-        if (!allExited && !captureOf(out, target, "late").isFile) {
-            return "TIMED-OUT after ${runTimeout()}s; the autotest never quit" + logTail(target)
+        // AN ABSENT REPORT IS A FAILURE, never a pass: a client that died before its run ended wrote none, and that
+        // is indistinguishable from success to anything that only checks an exit code.
+        val report = File(runOf(out, target), "report.txt")
+        if (!report.isFile) {
+            return (if (allExited) "NO REPORT: the run never ended" else "TIMED-OUT after ${runTimeout()}s; the run never ended") +
+                logTail(target)
         }
-        // A MISSING CAPTURE IS A FAILURE, never a pass: the client that never reached the autotest
-        // wrote nothing, and that is indistinguishable from success to anything that only checks an
-        // exit code.
-        val capture = captureOf(out, target, "early")
-        if (!capture.isFile) return "NO CAPTURE: the client ran and never reached the autotest" + logTail(target)
-        if (capture.length() < 4096) return "EMPTY CAPTURE: ${capture.length()} bytes" + logTail(target)
-        // A CAPTURE IS NOT A PAINT. It proves a frame was read back, not that this engine drew it: with
-        // no live GL context the screen's render returns at once, and outside a level Minecraft never
-        // clears the colour buffer -- so the frame still holds the previous screen and a photograph of
-        // the main menu passed every check above. The autotest states which it was; a stated `false` is
-        // a failure however convincing the PNG looks. ABSENCE IS NOT A FAILURE -- an older client, or a
-        // capture written before the desktop was reached, says nothing either way.
-        if (logSays(target, "desktop painted: false")) {
-            return "DID NOT PAINT: the capture is a stale frame, not this engine's" + logTail(target)
+        val lines = report.readLines()
+        if (lines.firstOrNull() != "PASS") {
+            val failed = lines.filter { it.contains(": false") || it.startsWith("gauntlet: ") || it.endsWith(": FAIL") }
+                .map { it.trim() }
+            return "FAILED: " + failed.joinToString("; ").ifEmpty { lines.firstOrNull() ?: "(empty report)" } +
+                "\n      $report"
         }
-        // A MOD'S RENDERER ON crystalgui:screen never drew: the autotest registers one (StageProbe) and states it.
-        if (logSays(target, "screen stage drew: false")) {
-            return "STAGE DID NOT DRAW: no renderer on crystalgui:screen ran" + logTail(target)
-        }
-        // CRYSTALGRAPHICS' PROBES: the world probe (-Dcrystalgraphics.worldprobe=true), every world seam checked
-        // against the others, the net probe (-Dcrystalgraphics.netprobe=true), networked objects through a death, and
-        // the collision probe (-Dcrystalgraphics.collisionprobe=true), queries and hitboxes on summoned entities.
-        // Armed and never finished is a failure: the run quit under it, or it never saw a world.
-        for (probe in listOf("world", "net", "collision")) {
-            val upper = probe.uppercase()
-            if (logSays(target, "$probe probe: false")) {
-                return "$upper PROBE FAILED: " + probeFailures(target, probe) + logTail(target)
-            }
-            if (logSays(target, "$probe probe: armed") && !logSays(target, "$probe probe: true")) {
-                return "$upper PROBE NEVER FINISHED" + logTail(target)
-            }
+        // A photograph too small to hold a frame is a readback that returned nothing; the desktop test states whether
+        // it painted, so a stale frame already failed above.
+        if ("crystalgui:desktop" in tests.get()) {
+            val capture = File(runOf(out, target), "crystalgui-desktop-desktop.png")
+            if (!capture.isFile || capture.length() < 4096) return "EMPTY CAPTURE: ${capture.length()} bytes at $capture"
         }
         // The compute self-test, when -PcgSmokeProps asked for it: a stated FAIL fails the client.
         val selfTest = lastLine(target, SELF_TEST_MARKER)
@@ -309,20 +302,11 @@ abstract class ProdSmoke : DefaultTask() {
         return null
     }
 
-    /** A probe's failed checks, by name. */
-    private fun probeFailures(target: Target, probe: String): String {
-        val log = logFile(target) ?: return "(no log)"
-        val failed = runCatching { log.readLines() }.getOrDefault(emptyList())
-            .filter { it.contains("$probe probe ") && it.contains(": false") }
-            .map { it.substringAfter("$probe probe ").substringBefore(":") }
-        return failed.joinToString(", ").ifEmpty { "(none named)" }
-    }
-
     /**
      * What the client itself said, appended to a failure.
      *
-     * <p>Without it every failure reads the same -- "no capture" -- whether the jar never loaded, the
-     * autotest was never armed, or the desktop threw on its first frame.</p>
+     * <p>Without it every failure reads the same -- "no report" -- whether the jar never loaded, the
+     * run was never armed, or the desktop threw on its first frame.</p>
      */
     private fun logFile(target: Target): File? {
         val logs = File(target.dir, ".minecraft/logs")
@@ -352,29 +336,30 @@ abstract class ProdSmoke : DefaultTask() {
         val log = logFile(target)
             ?: return "\n      (no log found in ${File(target.dir, ".minecraft/logs")})"
         val lines = runCatching { log.readLines() }.getOrElse { return "\n      (${log.name} unreadable)" }
-        val autotest = lines.filter { it.contains("AUTOTEST") }.takeLast(3)
-        val tail = if (autotest.isNotEmpty()) autotest else lines.takeLast(5)
-        val what = if (autotest.isNotEmpty()) "autotest" else "tail"
+        val run = lines.filter { it.contains("gauntlet", ignoreCase = true) }.takeLast(3)
+        val tail = if (run.isNotEmpty()) run else lines.takeLast(5)
+        val what = if (run.isNotEmpty()) "gauntlet" else "tail"
         return "\n      ${log.name} ($what):\n" + tail.joinToString("\n") { "        $it" }
     }
 
     private fun arm(cfg: File, out: File, name: String) {
-        // ONE SET OF ARGUMENTS for every loader, and each reads what it understands: `world=*` loads
-        // the first save, so every client captures over a world and runs its world passes.
+        // ONE SET OF ARGUMENTS for every loader: the tests enter the first save themselves, so every client
+        // photographs over a world and runs its world passes.
         //
         // NO SPACE IN ANY VALUE. Prism strips the quotes from a JvmArgs value and splits on spaces
         // anyway, gluing the tail onto the next argument -- and the failure is launcher-side, so no
         // log is written at all and it looks exactly like the game never starting.
-        val jvm = "-Dcrystalgui.autotest=true " +
-            "-Dcrystalgui.autotest.out=${out.absolutePath.replace('\\', '/')}/$name.png " +
-            "-Dcrystalgui.autotest.world=* " +
+        // NO COMMA EITHER: Prism's config reads one as a list separator and splits the value there, so the
+        // tests are joined with +, which the gauntlet takes too.
+        val jvm = "-Dcrystalgraphics.gauntlet=${tests.get().joinToString("+")} " +
+            "-Dcrystalgraphics.gauntlet.out=${out.absolutePath.replace('\\', '/')}/$name " +
             // A production client names no render-thread hold while loading; a smoke run should
             "-Dcrystalgraphics.loading.logHolds=true " +
-            "-Dcrystalgui.autotest.lateFrame=${lateFrame()}" +
+            "-Dcrystalgui.desktop.lateFrame=${lateFrame()}" +
             sharedToolchain(cfg) +
             extraProperties.get().joinToString("") { " -D$it" }
-        if (' ' in extraProperties.get().joinToString("")) {
-            throw GradleException("-PcgSmokeProps may hold no space: Prism splits a JvmArgs value on them")
+        if (' ' in extraProperties.get().joinToString("") || ',' in jvm) {
+            throw GradleException("prodSmoke's JvmArgs may hold no space or comma: Prism splits a value on them -- $jvm")
         }
         cfg.writeText(withGeneralKeys(cfg.readText(), listOf("OverrideJavaArgs=true", "JvmArgs=$jvm")))
         // READ IT BACK. The log line announcing "armed" used to be unconditional, so a write that
@@ -400,11 +385,11 @@ abstract class ProdSmoke : DefaultTask() {
     }
 
     /**
-     * Whether a slow probe was asked for: the language probes answer after the late capture would otherwise
-     * quit, and the host verifier reads the driver back after every pass.
+     * Whether a slow check was asked for: the language checks answer after the late capture would otherwise
+     * end the desktop test, and the host verifier reads the driver back after every pass.
      */
     private fun languageProbe() = extraProperties.get().any {
-        it.startsWith("crystalgui.autotest.script=") || it == "crystalgui.autotest.complete=true"
+        it.startsWith("crystalgui.desktop.script=") || it == "crystalgui.desktop.complete=true"
             || it == "crystalgraphics.host.verify=true"
     }
 
@@ -414,10 +399,9 @@ abstract class ProdSmoke : DefaultTask() {
     /** And the extra seconds those frames take. */
     private fun runTimeout() = runTimeoutSeconds.get() + (if (languageProbe()) 90 else 0) + (if (crystalProbe()) 30 else 0)
 
-    /** One of CrystalGraphics' probes: up to twenty seconds past the late capture, which the autotest waits for. */
-    private fun crystalProbe() = extraProperties.get().any {
-        it == "crystalgraphics.worldprobe=true" || it == "crystalgraphics.netprobe=true"
-            || it == "crystalgraphics.collisionprobe=true"
+    /** One of CrystalGraphics' world tests, each up to twenty seconds after the desktop's. */
+    private fun crystalProbe() = tests.get().any {
+        it == "crystalgraphics:world" || it == "crystalgraphics:net" || it == "crystalgraphics:collision"
     }
 
     /**

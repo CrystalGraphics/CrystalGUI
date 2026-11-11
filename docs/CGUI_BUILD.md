@@ -47,7 +47,7 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 
 **Two source sets per loader module**: `main` → the host jar, `lang` → the language jar. `:language` is
 on `langCompileOnly` only, so a host class naming it is a compile error. Where the host needs the other
-jar, it publishes a seam it cannot name (`AutoTest.onFrame`).
+jar, it publishes a seam it cannot name (`DesktopTest.onFrame`).
 
 **Both jars' mod descriptors are generated, never checked in.** `mods.toml`, `neoforge.mods.toml`,
 `fabric.mod.json` and `mcmod.info` come from `cgDescriptor` and `cgLangDescriptor` in
@@ -212,7 +212,7 @@ below.
 
 **Legacy nodes have no `serverSmoke` task**: `./gradlew :runtime:mc:legacy:forge:1.12.2:serverSmoke` fails with
 *task 'serverSmoke' not found*, which reads as "legacy servers cannot run". They can. The legacy check is a script
-that installs real Forge servers and runs the **shipped** jars on them, with the same `ServerSmoke` armed:
+that installs real Forge servers and runs the **shipped** jars on them, playing `serverSmoke`'s gauntlet tests:
 
 ```bash
 ./gradlew singleJar languageJar :CrystalGraphics:singleJar      # 1. the four jars it copies into mods/ -- every time
@@ -226,7 +226,7 @@ python runtime/mc/legacy/server_smoke.py \
   CrystalGraphics' two jars, and never builds them. A stale jar tests yesterday's code.
 - Each version gets a server under `build/legacy-server/<version>/`, installed once (Forge's recommended build,
   downloaded, with MixinBooter 11.17 and the EULA accepted). Later runs reuse it.
-- **The verdict is `build/legacy-server/<version>/smoke.txt`**, printed per version, and the exit code is 0 only if
+- **The verdict is `build/legacy-server/<version>/gauntlet/report.txt`**, printed per version, and the exit code is 0 only if
   every version passed. `NO REPORT: the smoke never ran` means the server never reached its started event: read
   `build/legacy-server/<version>/logs/latest.log` (and `fml-server-latest.log` on 1.8.9).
 - It needs the network on a first run (Forge, MixinBooter) and takes a few minutes a version. Run it in the
@@ -253,8 +253,8 @@ server, a service built eagerly.
 **A probe that never ran is not a pass.** The driven tasks delete their verdict file first and require it
 after; its first line is the verdict.
 
-**Read every new target's capture.** "drew" has passed over garbled text. `desktop painted: false` in the
-log fails the run; a capture alone proves nothing (a frame can be the previous screen's).
+**Read every new target's capture.** "drew" has passed over garbled text. `desktop.painted: false` in the
+report fails the run; a capture alone proves nothing (a frame can be the previous screen's).
 
 ### A failure on an installed client is fixed in a dev run
 
@@ -264,12 +264,12 @@ dev client costs two. `prodSmoke` then confirms the fix in the shipped jar once,
 only witness for what a dev run cannot see: relocation, remapping, downgrading and the merged descriptors.
 
 ```bash
-# the same unattended run prodSmoke arms, on the dev client; every -Dcrystalgui.* / -Dcrystalgraphics.* is forwarded
-# (any other -D never reaches the game, and the run names it)
-./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgui.autotest=true "-Dcrystalgui.autotest.world=*"
-# ...plus a probe: -Dcrystalgui.autotest.script=Probe.java, -Dcrystalgui.autotest.complete=true
-# ...and where the captures go: -Dcrystalgui.autotest.out=build/devSmoke/1171forge.png
-# ...or only the world, for a profile (no desktop, no capture, no quit): -Dcrystalgui.autotest.desktop=false
+# the same gauntlet run prodSmoke arms, on the dev client; every -Dcrystalgui.* / -Dcrystalgraphics.* is forwarded
+# (any other -D never reaches the game, and the run names it). Tests and flags: CrystalGraphics/docs/GAUNTLET.md
+./gradlew :runtime:mc:modern:forge:1.17.1:runClient -Dcrystalgraphics.gauntlet=crystalgraphics:boot,crystalgui:desktop
+# ...plus the language checks: -Dcrystalgui.desktop.script=Probe.java, -Dcrystalgui.desktop.complete=true
+# ...and where the report and captures go: -Dcrystalgraphics.gauntlet.out=build/devSmoke/1171forge
+# ...or only the world, for a profile: -Dcrystalgraphics.gauntlet=crystalgraphics:play -Dcrystalgraphics.gauntlet.play.seconds=0
 # 26.2+: which API Minecraft renders through, and its Vulkan validation layer over ours too:
 #   -PcgGraphics=vulkan -PcgVulkanValidation    (NeoForge: earlyWindowControl = false in the run's config/fml.toml)
 ```
@@ -339,7 +339,7 @@ in the pin catalog).
    companions — **Fabric API** of that version (Fabric), **MixinBooter** (Forge 1.8–1.12.2), **UniMixins**
    (1.7.10), a **Java 8** runtime for Forge ≤1.16, legacy and 1.7.10. Add `prismInstance.<label>` to
    `local.properties`, and the label to `prismInstanceJoml` if below 1.19.3.
-6. **`prodSmoke -PcgTargets=<new label> -PcgSmokeProps=crystalgui.autotest.complete=true`** — the new
+6. **`prodSmoke -PcgTargets=<new label> -PcgSmokeProps=crystalgui.desktop.complete=true`** — the new
    target only, one run — and open its captures. Its log's `a game receiver — N rows` is the scripting
    check: 0 rows means the version's names never resolved. A running Forge or Fabric fetches its
    mappings by its own version — Mojang's `client.txt` from 1.14.4, MCPConfig's `joined.tsrg`, Fabric's

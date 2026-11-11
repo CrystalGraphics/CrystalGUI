@@ -266,5 +266,5 @@ From a CrystalGUI clone with Prism instances in `local.properties` (see [`CGUI_B
 ```
 
 Each client loads a world, opens the desktop and photographs it into `build/prodSmoke/`. Your jar goes
-into the targeted instances only, and the next deploy removes it. Register an `AutoTest.onFrame` step to
+into the targeted instances only, and the next deploy removes it. Register a `DesktopTest.onFrame` step to
 put your own window in the late capture, as the sample does.

@@ -29,7 +29,8 @@ import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.platform.ScriptService;
 import com.crystalgraphics.platform.service.CgGameClasses;
 import com.crystalgui.language.run.ScriptCommands;
-import com.crystalgui.probe.AutoTest;
+import com.crystalgui.gauntlet.DesktopTest;
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgui.text.TextBuffer;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CompletionItem;
@@ -46,11 +47,11 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  * }</pre>
  *
  * <p>It lives in {@code language/} because every probe here names it: a script through the Run command,
- * live bytes out of the game, the member list a completion provider answers. The host's
- * own autotest opens the editor and photographs it, which needs none of them — so an install without
+ * live bytes out of the game, the member list a completion provider answers. The desktop
+ * test ({@code crystalgui:desktop}) opens the editor and photographs it, which needs none of them — so an install without
  * this jar still runs the whole capture.</p>
  *
- * <p>Each probe is registered on a painted frame through {@link AutoTest#onFrame}, which is the seam
+ * <p>Each probe is registered on a painted frame through {@link DesktopTest#onFrame}, which is the seam
  * that exists precisely because this ships in a <em>second jar</em> and cannot be called by name from
  * the host. The pre-transform view is {@code CgGameClasses.fileBytes} (LaunchWrapper only), and the
  * member a CrystalGraphics mixin adds to {@code Minecraft} is spelled from the running version.</p>
@@ -63,7 +64,14 @@ public final class LanguageProbe {
      * <p>The EXTENSION picks the language, which is the point: the same probe run as {@code .java} and
      * as {@code .js} is the only honest comparison when one works and the other does not.</p>
      */
-    private static final String SCRIPT = emptyToNull(System.getProperty("crystalgui.autotest.script"));
+    private static final CgVar.Text SOURCE_FILE = CgVar.text("crystalgui.desktop.scriptSourceFile", "", CgVar.DEV | CgVar.RESTART,
+            "A file holding crystalgui:desktop's script source, for one too long for a launcher's arguments.");
+    private static final CgVar.Text SOURCE = CgVar.text("crystalgui.desktop.scriptSource", "", CgVar.DEV | CgVar.RESTART,
+            "crystalgui:desktop's script source; empty for the default, which says it ran.");
+
+    private static final String SCRIPT = emptyToNull(CgVar.text("crystalgui.desktop.script", "", CgVar.DEV | CgVar.RESTART,
+            "A script crystalgui:desktop runs through the Run command once the editor is up; its extension picks the"
+                    + " language. Empty for none.").get());
 
     /**
      * What {@link #SCRIPT} holds. The default sets {@link #SCRIPT_RAN}; JavaScript reaches System through
@@ -72,24 +80,24 @@ public final class LanguageProbe {
      */
     private static final String SCRIPT_SOURCE = scriptSource();
 
-    // A file's contents, from -Dcrystalgui.autotest.scriptSourceFile, win: a graph is too long and too full of
+    // A file's contents, from -Dcrystalgui.desktop.scriptSourceFile, win: a graph is too long and too full of
     // quotes for a launcher's argument list.
     private static String scriptSource() {
-        String file = emptyToNull(System.getProperty("crystalgui.autotest.scriptSourceFile"));
+        String file = emptyToNull(SOURCE_FILE.get());
         if (file != null) {
             try {
                 return new String(Files.readAllBytes(Paths.get(file)), StandardCharsets.UTF_8);
             } catch (IOException unreadable) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: cannot read {}: {}", file, unreadable.toString());
+                CrystalGuiCore.LOGGER.error("crystalgui:desktop script: cannot read {}: {}", file, unreadable.toString());
             }
         }
-        return System.getProperty("crystalgui.autotest.scriptSource",
-                (SCRIPT != null && SCRIPT.endsWith(".js") ? "java.lang." : "")
-                        + "System.setProperty(\"crystalgui.autotest.scriptRan\", \"yes\");");
+        String own = SOURCE.get();
+        return !own.isEmpty() ? own : (SCRIPT != null && SCRIPT.endsWith(".js") ? "java.lang." : "")
+                + "System.setProperty(\"crystalgui.desktop.scriptRan\", \"yes\");";
     }
 
     /** What the default script leaves behind, since its own output goes to the Run console, not the log. */
-    private static final String SCRIPT_RAN = "crystalgui.autotest.scriptRan";
+    private static final String SCRIPT_RAN = "crystalgui.desktop.scriptRan";
 
     /**
      * A class to compare LIVE bytes against pre-transform bytes, or null.
@@ -97,7 +105,9 @@ public final class LanguageProbe {
      * <p>e.g. {@code net/minecraft/client/Minecraft}. The difference between the two sources IS the
      * capability being claimed, so this makes it visible rather than asserted.</p>
      */
-    private static final String BYTES_PROBE = emptyToNull(System.getProperty("crystalgui.autotest.bytes"));
+    private static final String BYTES_PROBE = emptyToNull(CgVar.text("crystalgui.desktop.bytes", "", CgVar.DEV | CgVar.RESTART,
+            "A class (net/minecraft/client/Minecraft) whose live bytes crystalgui:desktop compares with its file's; empty"
+                    + " for none.").get());
 
     /**
      * Whether to ask the live editor what its member list actually holds.
@@ -108,17 +118,20 @@ public final class LanguageProbe {
      * CLIENT, and a classpath assembled by the game's own launcher is the candidate no test JVM has.</p>
      */
     private static final boolean COMPLETE_PROBE =
-            Boolean.parseBoolean(System.getProperty("crystalgui.autotest.complete", "false"));
+            CgVar.bool("crystalgui.desktop.complete", false, CgVar.DEV | CgVar.RESTART,
+                    "crystalgui:desktop logs the member list the live editor offers, and the classpath it read.").get();
 
     /** Which painted frame runs the script — before the capture, so one still happens. */
     private static final int RUN_SCRIPT_ON_FRAME =
-            SCRIPT == null ? -1 : Integer.getInteger("crystalgui.autotest.scriptFrame", 5);
+            SCRIPT == null ? -1 : CgVar.integer("crystalgui.desktop.scriptFrame", 5, 1, 100_000, CgVar.DEV | CgVar.RESTART,
+                    "The frame after the open crystalgui:desktop runs its script on.").get();
 
     /**
      * Which painted frame reads the completion answers. A cold engine's first analysis can outlast the
      * default, and an analysis that has not landed answers an empty, complete list.
      */
-    private static final int REPORT_COMPLETION_ON_FRAME = Integer.getInteger("crystalgui.autotest.completeFrame", 60);
+    private static final int REPORT_COMPLETION_ON_FRAME = CgVar.integer("crystalgui.desktop.completeFrame", 60, 1, 100_000,
+            CgVar.DEV | CgVar.RESTART, "The frame after the open crystalgui:desktop reads the completion answers on.").get();
 
     /** A newline, spelled once — a probe source is written inline and every one of them needs one. */
     private static final String NL = String.valueOf((char) 10);
@@ -135,25 +148,25 @@ public final class LanguageProbe {
      * costs the host nothing on an ordinary launch.
      */
     public static void register() {
-        if (!AutoTest.ENABLED) return;
+        if (!DesktopTest.plays()) return;
         // BEFORE the capture frame, so a probe still leaves a photograph behind.
         if (RUN_SCRIPT_ON_FRAME > 0) {
-            AutoTest.onFrame(RUN_SCRIPT_ON_FRAME, LanguageProbe::runScriptOnce);
+            DesktopTest.onFrame(RUN_SCRIPT_ON_FRAME, LanguageProbe::runScriptOnce);
             for (int at : RUN_ATTEMPTS) {
                 boolean last = at == RUN_ATTEMPTS[RUN_ATTEMPTS.length - 1];
-                AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + at, () -> runOpenedScript(last));
+                DesktopTest.onFrame(RUN_SCRIPT_ON_FRAME + at, () -> runOpenedScript(last));
             }
             for (int at : RESULT_CHECKS) {
                 boolean last = at == RESULT_CHECKS[RESULT_CHECKS.length - 1];
-                AutoTest.onFrame(RUN_SCRIPT_ON_FRAME + at, () -> reportScriptRan(last));
+                DesktopTest.onFrame(RUN_SCRIPT_ON_FRAME + at, () -> reportScriptRan(last));
             }
         }
-        AutoTest.onFrame(5, LanguageProbe::probeLiveBytesOnce);
-        AutoTest.onFrame(6, LanguageProbe::probeCompletionOnce);
+        DesktopTest.onFrame(5, LanguageProbe::probeLiveBytesOnce);
+        DesktopTest.onFrame(6, LanguageProbe::probeCompletionOnce);
         // ...and asked much later, because the analysis behind each one is debounced onto a worker that
         // drains on THIS thread.
-        AutoTest.onFrame(REPORT_COMPLETION_ON_FRAME, LanguageProbe::reportCompletionProbes);
-        AutoTest.onFrame(REPORT_COMPLETION_ON_FRAME + UNANSWERED_AFTER_FRAMES, LanguageProbe::reportUnanswered);
+        DesktopTest.onFrame(REPORT_COMPLETION_ON_FRAME, LanguageProbe::reportCompletionProbes);
+        DesktopTest.onFrame(REPORT_COMPLETION_ON_FRAME + UNANSWERED_AFTER_FRAMES, LanguageProbe::reportUnanswered);
     }
 
     /**
@@ -171,14 +184,14 @@ public final class LanguageProbe {
 
     /** Whether the default script executed. Silent for a {@code scriptSource} of the caller's own. */
     static void reportScriptRan(boolean last) {
-        if (!AutoTest.ENABLED || SCRIPT == null || scriptReported
-                || System.getProperty("crystalgui.autotest.scriptSource") != null) return;
+        if (!DesktopTest.plays() || SCRIPT == null || scriptReported
+                || !SOURCE.get().isEmpty()) return;
         if ("yes".equals(System.getProperty(SCRIPT_RAN))) {
             scriptReported = true;
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: {} RAN", SCRIPT);
+            DesktopTest.report("language.script", true, SCRIPT + " ran through the Run command");
         } else if (last) {
             scriptReported = true;
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} did NOT run", SCRIPT);
+            DesktopTest.report("language.script", false, SCRIPT + " did not run");
         }
     }
 
@@ -197,11 +210,11 @@ public final class LanguageProbe {
      * its own error silently and exits 0, with no crash report and nothing in the log to search for.</p>
      */
     static void runScriptOnce() {
-        if (!AutoTest.ENABLED || SCRIPT == null || scriptRun) return;
+        if (!DesktopTest.plays() || SCRIPT == null || scriptRun) return;
         scriptRun = true;
         Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
         if (!(app instanceof WorkbenchApplication)) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: no workbench is open to run {} in", SCRIPT);
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop script: no workbench is open to run {} in", SCRIPT);
             return;
         }
         WorkbenchContext workbench = ((WorkbenchApplication) app).workbench();
@@ -215,7 +228,7 @@ public final class LanguageProbe {
         // OVERWRITE what an earlier run left, or CREATE it: asked first, because a create that finds the
         // file posts a "File operation failed" balloon into the very capture being taken.
         Consumer<Object> failed = why ->
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: could not write {}: {}", path, why);
+                CrystalGuiCore.LOGGER.error("crystalgui:desktop script: could not write {}: {}", path, why);
         files.stat(file)
                 .then(exists -> files.write(file, source, null).then(ignored -> open.run()).onError(failed::accept))
                 .onError(missing -> files.create(file, source).then(ignored -> open.run()).onError(failed::accept));
@@ -223,24 +236,24 @@ public final class LanguageProbe {
 
     /** Presses Run on the script {@link #runScriptOnce} opened, once it is open. @see #RUN_ATTEMPTS */
     static void runOpenedScript(boolean last) {
-        if (!AutoTest.ENABLED || SCRIPT == null || scriptPressed) return;
+        if (!DesktopTest.plays() || SCRIPT == null || scriptPressed) return;
         Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
         if (!(app instanceof WorkbenchApplication)) return;
         WorkbenchContext workbench = ((WorkbenchApplication) app).workbench();
         CgPath path = CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SCRIPT);
         if (!workbench.openPaths().contains(path)) {
             if (last) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: {} never opened (open: {})",
+                CrystalGuiCore.LOGGER.error("crystalgui:desktop script: {} never opened (open: {})",
                         SCRIPT, workbench.openPaths());
             }
             return;
         }
         scriptPressed = true;
-        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST script: running {} through the Run command", SCRIPT);
+        CrystalGuiCore.LOGGER.info("crystalgui:desktop script: running {} through the Run command", SCRIPT);
         // THE FILE AS THE COMMAND'S SUBJECT, as Rerun passes it, so the run is of THIS file whatever the
         // session left in front.
         if (!CommandRegistry.global().run(ScriptCommands.RUN, new CommandContext(null, Resource.of(path)))) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST script: '{}' did not run -- no engine band",
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop script: '{}' did not run -- no engine band",
                     ScriptCommands.RUN);
         }
     }
@@ -256,41 +269,41 @@ public final class LanguageProbe {
      * differently.</p>
      */
     static void probeLiveBytesOnce() {
-        if (!AutoTest.ENABLED || BYTES_PROBE == null || bytesProbed) return;
+        if (!DesktopTest.plays() || BYTES_PROBE == null || bytesProbed) return;
         bytesProbed = true;
         try {
             if (!ScriptService.live()) {
-                CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: no game");
+                CrystalGuiCore.LOGGER.error("crystalgui:desktop bytes: no game");
                 return;
             }
             byte[] live = ScriptService.liveBytes().bytesOf(BYTES_PROBE);
             byte[] raw = CgGameClasses.fileBytes(BYTES_PROBE);
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes: {} live={} raw={}",
+            CrystalGuiCore.LOGGER.info("crystalgui:desktop bytes: {} live={} raw={}",
                     BYTES_PROBE, live == null ? -1 : live.length, raw == null ? -1 : raw.length);
             if (raw == null) {
                 // SAID, not skipped: this platform has no pre-transform view, so the comparison cannot
                 // be made here at all -- which is a fact about the loader, not a passing check.
-                CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST bytes: this host offers no pre-transform view, "
+                CrystalGuiCore.LOGGER.warn("crystalgui:desktop bytes: this host offers no pre-transform view, "
                         + "so live-versus-raw proves nothing here");
                 return;
             }
             if (live == null) return;
 
             if (live.length == raw.length) {
-                CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST bytes: live and raw are the same size — "
+                CrystalGuiCore.LOGGER.warn("crystalgui:desktop bytes: live and raw are the same size — "
                         + "no transformer changed this class, so it proves nothing");
             }
             Set<String> onlyLive = new LinkedHashSet<>(stringsIn(live));
             onlyLive.removeAll(stringsIn(raw));
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes: {} constants exist in the LIVE class "
+            CrystalGuiCore.LOGGER.info("crystalgui:desktop bytes: {} constants exist in the LIVE class "
                     + "and in NO file on disk", onlyLive.size());
             int shown = 0;
             for (String constant : onlyLive) {
                 if (shown++ >= 40) break;
-                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST bytes:     {}", constant);
+                CrystalGuiCore.LOGGER.info("crystalgui:desktop bytes:     {}", constant);
             }
         } catch (Throwable failed) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST bytes: FAILED" + NL + "{}", describe(failed));
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop bytes: FAILED" + NL + "{}", describe(failed));
         }
     }
 
@@ -308,23 +321,23 @@ public final class LanguageProbe {
      * through the JRT filesystem instead, which needs no classpath entry and hides the gap completely.</p>
      */
     static void probeCompletionOnce() {
-        if (!AutoTest.ENABLED || !COMPLETE_PROBE || completionProbed) return;
+        if (!DesktopTest.plays() || !COMPLETE_PROBE || completionProbed) return;
         completionProbed = true;
         try {
             List<String> classpath = HostClasspath.detect();
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: java {} home {}",
+            CrystalGuiCore.LOGGER.info("crystalgui:desktop complete: java {} home {}",
                     System.getProperty("java.version"), System.getProperty("java.home"));
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: classpath has {} entries", classpath.size());
+            CrystalGuiCore.LOGGER.info("crystalgui:desktop complete: classpath has {} entries", classpath.size());
             boolean library = false;
             for (String entry : classpath) {
                 String lower = entry.toLowerCase(Locale.ROOT);
                 if (lower.endsWith("rt.jar") || lower.endsWith("jce.jar") || lower.endsWith("jrt-fs.jar")) {
                     library = true;
-                    CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:   class library {}", entry);
+                    CrystalGuiCore.LOGGER.info("crystalgui:desktop complete:   class library {}", entry);
                 }
             }
             if (!library) {
-                CrystalGuiCore.LOGGER.warn("CGUI AUTOTEST complete: NO class library on the classpath — "
+                CrystalGuiCore.LOGGER.warn("crystalgui:desktop complete: NO class library on the classpath — "
                         + "if this host has no JRT filesystem then java.lang resolves to nothing");
             }
 
@@ -346,7 +359,7 @@ public final class LanguageProbe {
             openProbe("a unit, string receiver",
                     "class P { void m() { String s = \"x\"; s." + NL + " } }", "s.");
         } catch (Throwable failed) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: FAILED" + NL + "{}", describe(failed));
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop complete: FAILED" + NL + "{}", describe(failed));
         }
     }
 
@@ -384,13 +397,13 @@ public final class LanguageProbe {
     private static void openProbe(String what, String source, String upTo, String expect) {
         LanguageRegistry.Entry entry = LanguageRegistry.forFileName("Probe.java");
         if (entry == null) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no Java entry registered");
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop complete: no Java entry registered");
             return;
         }
         TextBuffer buffer = new TextBuffer(source);
         LanguageServices services = entry.newServices(buffer, null);
         if (services == null) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: no services for {}", what);
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop complete: no services for {}", what);
             return;
         }
         PENDING.add(new Probe(what, source.indexOf(upTo) + upTo.length(), services, expect));
@@ -398,7 +411,7 @@ public final class LanguageProbe {
 
     /** Starts asking the pending probes, once the frames in between have let their analyses land. */
     static void reportCompletionProbes() {
-        if (!AutoTest.ENABLED || !COMPLETE_PROBE) return;
+        if (!DesktopTest.plays() || !COMPLETE_PROBE) return;
         askNext();
     }
 
@@ -432,7 +445,7 @@ public final class LanguageProbe {
                         askNext();
                     });
         } catch (Throwable failed) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} FAILED" + NL + "{}",
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop complete: {} FAILED" + NL + "{}",
                     probe.what, describe(failed));
             asking = null;
             probe.services.close();
@@ -446,7 +459,7 @@ public final class LanguageProbe {
         for (int i = 0; i < Math.min(8, items.size()); i++) {
             first.append(i == 0 ? "" : ", ").append(items.get(i).label());
         }
-        CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete: {} — {} rows, incomplete={}, {} problems [{}]",
+        CrystalGuiCore.LOGGER.info("crystalgui:desktop complete: {} — {} rows, incomplete={}, {} problems [{}]",
                 probe.what, items.size(), got.incomplete(),
                 problems == null ? "no" : String.valueOf(problems.size()), first);
         if (probe.expect != null) {
@@ -454,28 +467,28 @@ public final class LanguageProbe {
             for (CompletionItem item : items) {
                 if (probe.expect.equals(item.filterKey())) offered = true;
             }
-            CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {} offered by the editor: {}",
+            CrystalGuiCore.LOGGER.info("crystalgui:desktop complete:     {} offered by the editor: {}",
                     probe.expect, offered ? "YES" : "NO");
         }
         if (problems != null) {
             int shown = 0;
             for (Diagnostic problem : problems) {
                 if (shown++ >= 4) break;
-                CrystalGuiCore.LOGGER.info("CGUI AUTOTEST complete:     {}", problem.message());
+                CrystalGuiCore.LOGGER.info("crystalgui:desktop complete:     {}", problem.message());
             }
         }
     }
 
     /** No answer is not zero rows, and says so. */
     static void reportUnanswered() {
-        if (!AutoTest.ENABLED || !COMPLETE_PROBE) return;
+        if (!DesktopTest.plays() || !COMPLETE_PROBE) return;
         if (asking != null) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} was never answered", asking.what);
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop complete: {} was never answered", asking.what);
             asking.services.close();
             asking = null;
         }
         for (Probe probe : PENDING) {
-            CrystalGuiCore.LOGGER.error("CGUI AUTOTEST complete: {} was never asked", probe.what);
+            CrystalGuiCore.LOGGER.error("crystalgui:desktop complete: {} was never asked", probe.what);
             probe.services.close();
         }
         PENDING.clear();

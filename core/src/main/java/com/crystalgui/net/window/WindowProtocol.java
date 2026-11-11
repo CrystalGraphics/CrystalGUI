@@ -3,7 +3,8 @@ package com.crystalgui.net.window;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.probe.ConnectionProbe;
+import com.crystalgraphics.gauntlet.CgGauntlet;
+import com.crystalgui.gauntlet.ConnectionTest;
 
 /**
  * Wires the window lifecycle onto every connection — <b>the one call that turns this on</b>.
@@ -50,9 +51,9 @@ public final class WindowProtocol {
         //
         // The SERVER half stays: nothing on that side collides, and a probe that stopped the server
         // lifecycle would be testing a configuration production never has.
-        if (ConnectionProbe.enabled()) {
-            CrystalGuiCore.LOGGER.warn("[cgui] the client window host is NOT installed -- the connection"
-                    + " probe owns ui/openWindow while -D" + ConnectionProbe.PROPERTY + " is set");
+        if (CgGauntlet.plays(ConnectionTest.ID)) {
+            CrystalGuiCore.LOGGER.warn("[cgui] the client window host is NOT installed -- the run's "
+                    + ConnectionTest.ID + " owns ui/openWindow");
             return;
         }
         CgProtocols.client("ui", ClientWindows::install);

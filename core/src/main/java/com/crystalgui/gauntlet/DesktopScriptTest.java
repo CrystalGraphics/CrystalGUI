@@ -1,12 +1,20 @@
-package com.crystalgui.probe;
+package com.crystalgui.gauntlet;
 
 import java.util.List;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.gauntlet.CgGauntletController;
+import com.crystalgraphics.gauntlet.CgGauntletState;
 import com.crystalgraphics.job.CgHostThread;
-import com.crystalgui.core.window.DesktopPresentation;
+import com.crystalgraphics.lifecycle.CgEngineLifecycle;
+import com.crystalgraphics.platform.input.CgInput;
+import com.crystalgraphics.platform.input.CgInputStage;
+import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.service.CgGameSession;
+import com.crystalgraphics.platform.service.CgScreens;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
@@ -22,79 +30,28 @@ import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.app.WorkbenchApplication;
 
 /**
- * <b>A scripted client run</b>: join a world, drive a fixed routine, photograph each step, quit.
+ * {@code crystalgui:desktop-script}: a scripted client run. It enters a world, drives a fixed routine through the
+ * desktop (minimise, restore mid-animation, the jump list, a Java file, pin, a click through an overlay, a click while
+ * the mouse is grabbed), photographs each step and ends.
  *
  * <pre>{@code
- * // once per client tick
- * DesktopProbe.tick(myHost);
+ * -Dcrystalgraphics.gauntlet=crystalgui:desktop-script
  * }</pre>
  *
- * <p>What {@code ServerSmoke} is to the dedicated server, this is to the desktop — for faults that have
- * to be <em>looked at</em>, and that neither a headless test nor the GL harness can reach because
- * neither has a world behind the UI. Captures land beside the game as {@code cgui-NN-step.png}.</p>
+ * <p>For faults that have to be looked at, which neither a headless test nor the harness reaches because neither has
+ * a world behind the UI. Photographs land in the run's folder as {@code crystalgui-desktop-script-NN-step.png}.</p>
  *
- * <h3>Why the routine is here and not in a loader</h3>
- *
- * <p>Minimise, restore mid-animation, the jump list, pin, click through an overlay, click while the
- * mouse is grabbed — not one of those is a fact about a Minecraft version. They were 1.20.x's alone and
- * 1.7.10 had no equivalent at all, which is the same asymmetry the wire probes had: the era with the
- * routine was the only era it ever ran on.</p>
- *
- * <p>It quits on {@link #BUDGET_TICKS} even when a step never becomes ready, so a stalled run ends
- * rather than stranding a build task.</p>
- *
- * <p>Add a step by giving {@link Step} a constant and {@code advance} a case; each sets the next step
- * and optionally a wait.</p>
+ * <ul>
+ *   <li>Clicks and keys go into CrystalGraphics' {@code SCREEN} input stage, where a host's own events arrive; the
+ *       game's screens are {@code CgScreens}', the pointer {@code CgInput}'s.</li>
+ *   <li>Steps wait in client ticks (20 a second), so a slow host still settles.</li>
+ *   <li>It ends after {@link #BUDGET_TICKS} even when a step never becomes ready, failing its budget check.</li>
+ *   <li>A step is a {@link Step} constant and a case in {@code advance}, which sets the next step and a wait.</li>
+ * </ul>
  */
-public final class DesktopProbe {
+public final class DesktopScriptTest extends CgGauntletController {
 
-    /** {@code -Dcrystalgui.clientProbe=true}. */
-    public static final boolean ENABLED = Boolean.getBoolean("crystalgui.clientProbe");
-
-    /** What only the running game can answer. Thirteen one-liners, and every one is per-game. */
-    public interface Host {
-
-        /** Whether the client is in a world yet. */
-        boolean inWorld();
-
-        /** Opens this host's desktop with its primary application brought forward. */
-        void openDesktop();
-
-        /** Frames per second, for the line that says what the desktop costs. */
-        int fps();
-
-        /** Opens a screen the desktop does NOT own — what turns the presentation into OVERLAY. */
-        void openForeignScreen();
-
-        /** Closes whatever screen is up, so the player is back in the world. */
-        void closeScreen();
-
-        /** Takes the mouse, as playing does. */
-        void grabMouse();
-
-        boolean mouseGrabbed();
-
-        /** Puts the OS cursor at a point in <b>surface</b> pixels. */
-        void movePointerTo(int surfaceX, int surfaceY);
-
-        /** Photographs what is on screen, into {@code fileName} beside the game. */
-        void shoot(String fileName);
-
-        /** Ends the run. */
-        void quit();
-
-        /** Offers a button through the loader's own entry point. @return whether it was consumed */
-        boolean offerMouse(int button, boolean pressed);
-
-        /** Offers a key through the loader's own entry point. */
-        void offerKey(int platformKey, char typed, boolean pressed);
-
-        /** This platform's code for {@code Z} — LWJGL2 and GLFW do not agree. */
-        int keyZ();
-
-        /** What the compositor says it is showing. */
-        DesktopPresentation presentation();
-    }
+    public static final String ID = "crystalgui:desktop-script";
 
     /** Ticks, at 20/s. Steps wait in these rather than in frames, so a slow host still settles. */
     private static final int SETTLE = 40;
@@ -118,28 +75,56 @@ public final class DesktopProbe {
         OPEN_JAVA, SHOOT_JAVA,
         PIN, OPEN_FOREIGN_SCREEN, OVERLAY_CLICK, SHOOT_OVERLAY,
         HUD_GRABBED_CLICK,
-        QUIT, DONE
+        FINISH, DONE
     }
 
-    private static Step step = Step.WAIT_WORLD;
-    private static int waitTicks;
-    private static int totalTicks;
-    private static int shot;
-    private static int windowWaited;
-    private static int threadsWaited;
-    private static volatile String clientAnswer;
-    private static volatile String serverAnswer;
+    /** The test playing; the client tick reaches it here, since a tick subscription lasts the process. */
+    private static volatile DesktopScriptTest active;
+    private static boolean subscribed;
 
-    private DesktopProbe() {
+    private Step step = Step.WAIT_WORLD;
+    private int waitTicks, totalTicks, shot, windowWaited, threadsWaited;
+    private volatile String clientAnswer, serverAnswer;
+    /** Where the pointer was last put, which a click is offered at. */
+    private int pointerX, pointerY;
+    /** Frames since the last frame-rate reading, and when it was. */
+    private int framesSince;
+    private long framesSinceNanos = System.nanoTime();
+
+    @Override
+    protected void onInit() {
+        active = this;
+        synchronized (DesktopScriptTest.class) {
+            if (subscribed) return;
+            subscribed = true;
+        }
+        CgEngineLifecycle.onClientTick(() -> {
+            DesktopScriptTest test = active;
+            if (test != null) test.tick();
+        });
     }
 
-    /** Called once per client tick. Cheap when off: one static boolean read. */
-    public static void tick(Host host) {
-        if (!ENABLED || step == Step.DONE) return;
+    @Override
+    protected void onStateChange(CgGauntletState from, CgGauntletState to) {
+        if (to.equals(CgGauntletState.TITLE)) enterWorld();
+    }
+
+    @Override
+    protected void onTick(float seconds) {
+        framesSince++;
+    }
+
+    @Override
+    protected void onEnd() {
+        active = null;
+    }
+
+    /** Once per client tick. */
+    private void tick() {
+        if (step == Step.DONE) return;
         if (++totalTicks > BUDGET_TICKS) {
-            CrystalGuiCore.LOGGER.warn("[cgui-probe] budget of {} ticks spent at step {}; quitting",
-                    BUDGET_TICKS, step);
-            quit(host);
+            check("desktop-script.budget", false, "budget of " + BUDGET_TICKS + " ticks spent at step " + step);
+            finish();
             return;
         }
         if (waitTicks > 0) {
@@ -148,20 +133,19 @@ public final class DesktopProbe {
         }
         try {
             // ON THE DOCUMENT'S SEQUENCE when it has one: a step reads and writes the tree.
-            if (HostSession.isInstalled()) HostSession.session().inDocument(() -> advance(host));
-            else advance(host);
+            if (HostSession.isInstalled()) HostSession.session().inDocument(this::advance);
+            else advance();
         } catch (RuntimeException | LinkageError failed) {
-            // A probe that dies mid-routine must still end the run, or the task hangs on a client
-            // nobody is driving.
-            CrystalGuiCore.LOGGER.error("[cgui-probe] step {} failed; quitting", step, failed);
-            quit(host);
+            CrystalGuiCore.LOGGER.error("[{}] step {} failed; ending", ID, step, failed);
+            check("desktop-script.step", false, "step " + step + " threw " + failed);
+            finish();
         }
     }
 
-    private static void advance(Host host) {
+    private void advance() {
         switch (step) {
             case WAIT_WORLD:
-                if (!host.inWorld()) return;
+                if (!CgGameSession.inWorld()) return;
                 say("in a world");
                 step = Step.GAME_THREADS;
                 waitTicks = SETTLE;
@@ -181,13 +165,13 @@ public final class DesktopProbe {
                 if ((clientAnswer == null || serverAnswer == null) && ++threadsWaited < WINDOW_DEADLINE) return;
                 say("game threads: client work ran on '" + clientAnswer + "', server work on '" + serverAnswer + "'");
                 if (clientAnswer == null || serverAnswer == null) {
-                    CrystalGuiCore.LOGGER.error("[cgui-probe] a game thread never answered: client {}, server {}",
+                    CrystalGuiCore.LOGGER.error("[" + ID + "] a game thread never answered: client {}, server {}",
                             clientAnswer, serverAnswer);
                 }
                 step = Step.OPEN_DESKTOP;
                 break;
             case OPEN_DESKTOP:
-                host.openDesktop();
+                HostSession.session().openApplication();
                 step = Step.WAIT_WINDOW;
                 windowWaited = 0;
                 break;
@@ -207,8 +191,8 @@ public final class DesktopProbe {
                 }
                 break;
             case SHOOT_DESKTOP:
-                say("fps on the desktop = " + host.fps());
-                shoot(host, "desktop-open");
+                say("fps on the desktop = " + fps());
+                shoot("desktop-open");
                 step = Step.MINIMISE;
                 break;
             case MINIMISE: {
@@ -226,12 +210,12 @@ public final class DesktopProbe {
                 break;
             }
             case SHOOT_MINIMISE_MID:
-                shoot(host, "minimise-mid");
+                shoot("minimise-mid");
                 step = Step.SHOOT_MINIMISED;
                 waitTicks = SETTLE;
                 break;
             case SHOOT_MINIMISED:
-                shoot(host, "minimised");
+                shoot("minimised");
                 step = Step.RESTORE;
                 break;
             case RESTORE: {
@@ -248,19 +232,19 @@ public final class DesktopProbe {
                 break;
             }
             case SHOOT_RESTORE_MID:
-                shoot(host, "restore-mid");
+                shoot("restore-mid");
                 step = Step.SHOOT_RESTORED;
                 waitTicks = SETTLE;
                 break;
             case SHOOT_RESTORED:
-                shoot(host, "restored");
+                shoot("restored");
                 step = Step.JUMP_LIST;
                 break;
             case JUMP_LIST: {
                 WindowFrame frame = mainWindow();
                 Desktop desktop = desktop();
                 if (frame == null || desktop == null) {
-                    step = Step.QUIT;
+                    step = Step.FINISH;
                     return;
                 }
                 // Anchored on the taskbar entry: the anchor decides placement, and anchored to the
@@ -273,7 +257,7 @@ public final class DesktopProbe {
                 break;
             }
             case SHOOT_JUMP_LIST:
-                shoot(host, "jump-list");
+                shoot("jump-list");
                 step = Step.OPEN_JAVA;
                 waitTicks = SETTLE;
                 break;
@@ -295,7 +279,7 @@ public final class DesktopProbe {
                 break;
             }
             case SHOOT_JAVA:
-                shoot(host, "java-open");
+                shoot("java-open");
                 reportJavaDiagnostics();
                 step = Step.PIN;
                 waitTicks = SETTLE;
@@ -304,7 +288,7 @@ public final class DesktopProbe {
                 WindowFrame frame = mainWindow();
                 if (frame == null) {
                     say("no window to pin");
-                    step = Step.QUIT;
+                    step = Step.FINISH;
                     return;
                 }
                 frame.setPinned(true);
@@ -314,7 +298,7 @@ public final class DesktopProbe {
                 if (doc != null) doc.dismiss().lightDismiss(null);
                 // The pointer, parked over the window's middle: the overlay hit test reads the REAL
                 // cursor, so a synthesised press with the cursor elsewhere asks about somewhere else.
-                parkPointerOver(host, frame);
+                parkPointerOver(frame);
                 say("pinned, pointer parked");
                 step = Step.OPEN_FOREIGN_SCREEN;
                 waitTicks = SETTLE;
@@ -322,45 +306,45 @@ public final class DesktopProbe {
             }
             case OPEN_FOREIGN_SCREEN:
                 // A screen this desktop does not own, which is what turns the presentation into OVERLAY.
-                host.openForeignScreen();
+                CgScreens.openChat();
                 step = Step.OVERLAY_CLICK;
                 waitTicks = SETTLE;
                 break;
             case OVERLAY_CLICK:
-                // The loader's own entry points, so this exercises the chain a real click takes from the
-                // screen event inward -- the hit test, the keyboard handover, the dispatch.
+                // The SCREEN stage a host's own events arrive at, so this exercises the chain a real click
+                // takes from there inward -- the hit test, the keyboard handover, the dispatch.
                 say("offering a press, a release and a key");
-                host.offerMouse(0, true);
-                host.offerMouse(0, false);
-                host.offerKey(host.keyZ(), (char) 0, true);
+                offerMouse(0, true);
+                offerMouse(0, false);
+                offerKey(CgKeyCodes.KEY_Z, true);
                 // A visible character: whether it lands in the buffer is the whole question, and the
                 // screenshot is the only place the answer shows.
-                host.offerKey(0, 'Z', true);
-                host.offerKey(host.keyZ(), (char) 0, false);
+                offerCharacter('Z');
+                offerKey(CgKeyCodes.KEY_Z, false);
                 step = Step.SHOOT_OVERLAY;
                 waitTicks = SETTLE;
                 break;
             case SHOOT_OVERLAY:
-                say("fps in " + host.presentation() + " = " + host.fps());
-                shoot(host, "overlay");
+                say("fps in " + HostSession.session().presentation() + " = " + fps());
+                shoot("overlay");
                 step = Step.HUD_GRABBED_CLICK;
                 waitTicks = SETTLE;
                 break;
             case HUD_GRABBED_CLICK: {
                 // Back to playing: no screen, mouse grabbed. A press here is an attack, and the
                 // compositor must not see it however the camera happens to be pointing.
-                host.closeScreen();
-                host.grabMouse();
-                boolean consumed = host.offerMouse(0, true);
-                say("grabbed=" + host.mouseGrabbed()
-                        + " presentation=" + host.presentation()
-                        + " press consumed=" + consumed + " (expected false)");
-                step = Step.QUIT;
+                CgScreens.closeFront();
+                CgInput.grabPointer();
+                boolean consumed = offerMouse(0, true);
+                say("grabbed=" + CgInput.pointerGrabbed() + " presentation=" + HostSession.session().presentation());
+                check("desktop-script.grabbed-press", !consumed, "a press while playing is the game's, not the desktop's");
+                step = Step.FINISH;
                 waitTicks = SETTLE;
                 break;
             }
-            case QUIT:
-                quit(host);
+            case FINISH:
+                check("desktop-script.routine", true, "every step ran");
+                finish();
                 break;
             default:
                 break;
@@ -368,13 +352,36 @@ public final class DesktopProbe {
     }
 
     /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
-    private static void parkPointerOver(Host host, WindowFrame frame) {
+    private void parkPointerOver(WindowFrame frame) {
         if (frame.box() == null || !HostSession.isInstalled()) return;
         float scale = DesktopHost.UI_SCALE;
-        int x = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
-        int y = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
-        host.movePointerTo(x, y);
-        say("pointer at " + x + "," + y);
+        pointerX = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
+        pointerY = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
+        CgInput.movePointer(pointerX, pointerY);
+        say("pointer at " + pointerX + "," + pointerY);
+    }
+
+    /** A button at the parked pointer, into the SCREEN stage; whether something consumed it. */
+    private boolean offerMouse(int button, boolean pressed) {
+        return CgInputStage.SCREEN.mouseButton(new CgSystemInput.Mouse.Event(pointerX, pointerY, 0, 0, button, pressed,
+                0f, System.currentTimeMillis()));
+    }
+
+    private static void offerKey(int key, boolean pressed) {
+        CgInputStage.SCREEN.key(new CgSystemInput.Keyboard.Event((char) 0, key, pressed, false, System.currentTimeMillis()));
+    }
+
+    private static void offerCharacter(char typed) {
+        CgInputStage.SCREEN.character(new CgSystemInput.Keyboard.Event(typed, 0, true, false, System.currentTimeMillis()));
+    }
+
+    /** Frames a second since the last reading, for the lines that say what the desktop costs. */
+    private int fps() {
+        long now = System.nanoTime();
+        int fps = (int) Math.round(framesSince / ((now - framesSinceNanos) / 1e9));
+        framesSince = 0;
+        framesSinceNanos = now;
+        return fps;
     }
 
     /** The first window with a taskbar entry -- the primary application, on every routine this drives. */
@@ -402,31 +409,22 @@ public final class DesktopProbe {
         return app instanceof WorkbenchApplication ? ((WorkbenchApplication) app).workbench() : null;
     }
 
-    /**
-     * Photographs what is on screen.
-     *
-     * <p>Deliberately not a readback of one of our own render targets: the question these answer is what
-     * ended up ON SCREEN, and the whole class of fault being chased is one where an intermediate target
-     * is correct and the picture is not.</p>
-     */
-    private static void shoot(Host host, String name) {
-        String file = String.format("cgui-%02d-%s.png", ++shot, name);
-        host.shoot(file);
+    /** Photographs what is on screen as the next numbered step. */
+    private void shoot(String name) {
+        String file = String.format("%02d-%s", ++shot, name);
+        capture(file);
         say("shot " + file);
     }
 
-    private static void quit(Host host) {
+    private void finish() {
         step = Step.DONE;
-        say("routine complete; stopping the client");
-        host.quit();
+        say("routine complete");
+        endTest();
     }
 
     /**
-     * The analysed file's diagnostics, as text.
-     *
-     * <p>A count is legible in a screenshot and the messages are not, and the difference decides what to
-     * look at: sixteen errors from a broken classpath and sixteen from a typo photograph the same. This
-     * layer degrades silently by design, so the run has to say what it concluded.</p>
+     * The analysed file's diagnostics, as text: a count is legible in a photograph and the messages are not, and
+     * sixteen errors from a broken classpath photograph the same as sixteen from a typo.
      */
     private static void reportJavaDiagnostics() {
         Workbench workbench = workbench();
@@ -440,6 +438,6 @@ public final class DesktopProbe {
     }
 
     private static void say(String what) {
-        CrystalGuiCore.LOGGER.info("[cgui-probe] {}", what);
+        CrystalGuiCore.LOGGER.info("[{}] {}", ID, what);
     }
 }

@@ -148,8 +148,8 @@ did. Under a node the
 > `HUD`; on `SCREEN` whichever arm is current -- our own screen's desktop (which draws nothing itself), the overlay
 > over somebody else's, or the HUD arm on the frame a screen closed itself while it drew. One arm a frame. While the
 > loading screen is up, `SCREEN` rehearses a throwaway desktop (`DesktopRehearsal`, `docs/CGUI_BUILDING_UIS.md` § 11b).
-> In an unattended run
-> `StageProbe` draws a mark on both the way a mod does, and `prodSmoke` fails a client whose screen stage never drew.
+> In a gauntlet run
+> `DesktopTest` draws a mark on both the way a mod does, and its `desktop.stage-screen` check fails a client whose screen stage never drew.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,
 > so the background never masks the children; nested up to four deep and under any pose. Only a `mask`

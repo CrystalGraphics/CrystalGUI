@@ -243,7 +243,7 @@
  *   <li>{@code docs/CGUI_SERVER_AND_SERIALIZATION.md} — the reference this example is the tutorial
  *       for: codecs, content addressing, the four-kind envelope, the wire.</li>
  *   <li>{@code docs/CGUI_WIDGETS.md} — every widget, and which ones can carry state over a wire.</li>
- *   <li>{@code com.crystalgui.probe.ConnectionProbe} — the same shape against a real Minecraft
+ *   <li>{@code com.crystalgui.gauntlet.ConnectionTest} — the same shape against a real Minecraft
  *       connection, with a ten-point checklist instead of a narrative.</li>
  * </ul>
  */
