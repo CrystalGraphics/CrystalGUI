@@ -210,7 +210,7 @@ opens that frame in the profiler.
 - **input dispatch** (`ui/service/Input`) inside `frame:input` — hit testing, the three-phase walk, the
   keymap — and key events, which dispatch as the host delivers them rather than in the frame;
 - **the desktop compositor** (`desktop/**`): window motion, the taskbar, snapshots, the switcher;
-- **the commit path** (`DocumentDriver`, `SurfaceCompositor`): nothing zoned; `DesktopBaselineProbe` measures it from outside (`presentedCommit()`), and other work the sequence runs between frames shows only as its own zones;
+- **the commit path** (`CgUiViewport`, `CommitQueue`): nothing zoned; `DesktopBaselineProbe` measures it from outside (`presentedCommit()`), and other work the sequence runs between frames shows only as its own zones;
 - **individual widgets' paint** outside the editor and SVG;
 - **Taffy's compute** inside `frame:layout`, and `UIText` measurement;
 - **the wire and the workspace** (`net/**`, `fs/**`) — spans where an action waits on them;

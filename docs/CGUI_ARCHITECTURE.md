@@ -296,6 +296,10 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
                                within its own widget's contract, so a third party mints one without
                                editing anything of ours. plan/engine-rewrite.md M1
 
+com.crystalgui.viewport        ONE DOCUMENT ON SCREEN: CgUiViewport (owns the document's thread, input, frames,
+                               readouts) over a DocumentThread per threading (inline, lockstep, sequenced),
+                               CommitQueue and CompositorMotion. Names `ui.dom`; nothing in `ui` names it.
+
 com.crystalgui.ui              A NAMESPACE, with nothing at its root -- a root with no shared subject
                                is where things land when nobody decides.
   .dom                         The node tree. -> Stack 1

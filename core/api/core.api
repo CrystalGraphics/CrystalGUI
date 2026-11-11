@@ -4574,14 +4574,15 @@ com/crystalgui/desktop/Desktop
   method public moveModifier ()I
   method public openStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public overlayLayer ()Lcom/crystalgui/ui/dom/UIElement;
+  method public paintInto (Lcom/crystalgui/core/window/DesktopPresentation;Lcom/crystalgui/render/CgUiPaintContext;)V
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public persistTo (Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public pins ()Lcom/crystalgui/desktop/taskbar/TaskbarPins;
   method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public prepare (Lcom/crystalgui/core/window/DesktopPresentation;FII)Z
   method public presentation (ZZ)Lcom/crystalgui/core/window/DesktopPresentation;
   method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public reattach (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public record (Lcom/crystalgui/render/CgUiRenderer$View;Lcom/crystalgui/core/window/DesktopPresentation;FII)Lcom/crystalgui/render/UiFrame;
   method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
   method public rememberPlacement (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public renormaliseStack ()V
@@ -4848,6 +4849,7 @@ com/crystalgui/desktop/host/HostSession
   method public rehearseStep ()Z
   method public replaceNextPaint (Ljava/util/function/BiConsumer;)V
   method public textInputArea ()[F
+  method public viewport ()Lcom/crystalgui/viewport/CgUiViewport;
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public,static install ()Lcom/crystalgui/desktop/host/HostSession;
   method public,static isInstalled ()Z
@@ -4863,6 +4865,7 @@ com/crystalgui/desktop/host/ScreenOverlay
   method public overlayHitTest (FF)Lcom/crystalgui/ui/dom/UIElement;
   method public ownsKeyboard ()Z
   method public regions ()Lcom/crystalgui/desktop/host/HitRegions;
+  method public shownThrough (Lcom/crystalgui/viewport/CgUiViewport;)V
 com/crystalgui/desktop/launcher/Launcher
   access public
   extends com/crystalgui/widget/overlay/Popover
@@ -13049,58 +13052,6 @@ com/crystalgui/ui/dom/ClassNames
   method public,static authored (Ljava/util/Collection;)Ljava/util/List;
   method public,static engine (Ljava/util/Collection;)Ljava/util/List;
   method public,static isEngine (Ljava/lang/String;)Z
-com/crystalgui/ui/dom/DocumentDriver
-  access public,final
-  extends java/lang/Object
-  field public,static,final ASYNC Ljava/lang/String;
-  field public,static,final MAX_FRAME_SECONDS F
-  field public,static,final SEQUENCED Ljava/lang/String;
-  implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
-  implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
-  method public advance ()F
-  method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
-  method public close ()V
-  method public committedFrames ()J
-  method public compositesMotion ()Z
-  method public consumeComposition (Ljava/lang/String;I)Z
-  method public consumeKeyboardEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
-  method public consumeMouseEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;)Z
-  method public document ()Lcom/crystalgui/ui/dom/UIDocument;
-  method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;FLcom/crystalgui/ui/dom/DocumentDriver$Painter;)Z
-  method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/ui/dom/DocumentDriver$Painter;)Z
-  method public hasCommitted ()Z
-  method public isAsync ()Z
-  method public mode ()Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-  method public offer (Ljava/util/function/BooleanSupplier;)Z
-  method public offerKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;Ljava/util/function/BooleanSupplier;)Z
-  method public offerMouse (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;Ljava/util/function/BooleanSupplier;)Z
-  method public pollUnhandledKey ()Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;
-  method public post (Ljava/lang/Runnable;)V
-  method public presentedCommit ()J
-  method public presentedFrames ()J
-  method public presenter ()Lcom/crystalgui/render/UiPresenter;
-  method public run (Ljava/lang/Runnable;)V
-  method public sequence ()Lcom/crystalgui/core/async/UiSequence;
-  method public shownFacts ()Ljava/lang/Object;
-  method public view ()Lcom/crystalgui/render/CgUiRenderer$View;
-  method public,static attach (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/ui/dom/DocumentDriver;
-  method public,static attach (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/ui/dom/DocumentDriver$Mode;Ljava/lang/String;)Lcom/crystalgui/ui/dom/DocumentDriver;
-  method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/ui/dom/DocumentDriver$Painter;
-  method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Consumer;Ljava/util/function/Consumer;)Lcom/crystalgui/ui/dom/DocumentDriver$Painter;
-com/crystalgui/ui/dom/DocumentDriver$Mode
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final ASYNC Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-  field public,static,final INLINE Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-  field public,static,final LOCKSTEP Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-  method public,static fromFlags ()Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-  method public,static values ()[Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
-com/crystalgui/ui/dom/DocumentDriver$Painter
-  access public,abstract,interface
-  extends java/lang/Object
-  method public facts ()Ljava/lang/Object;
-  method public,abstract record (Lcom/crystalgui/render/CgUiRenderer$View;FII)Lcom/crystalgui/render/UiFrame;
 com/crystalgui/ui/dom/GlyphRole
   access public,final,enum
   extends java/lang/Enum
@@ -13312,7 +13263,6 @@ com/crystalgui/ui/dom/UIDocument
   method public calculateStyle (F)V
   method public demote (Lcom/crystalgui/ui/dom/UIElement;)V
   method public dismiss ()Lcom/crystalgui/ui/service/Dismiss;
-  method public driver ()Lcom/crystalgui/ui/dom/DocumentDriver;
   method public execute (Ljava/lang/Runnable;)V
   method public focus ()Lcom/crystalgui/ui/service/Focus;
   method public frame (FFF)V
@@ -13352,6 +13302,7 @@ com/crystalgui/ui/dom/UIDocument
 com/crystalgui/ui/dom/UIDocument$Owner
   access public,abstract,interface
   extends java/lang/Object
+  method public compositesMotion ()Z
   method public,abstract execute (Ljava/lang/Runnable;)V
   method public,abstract isCurrent ()Z
   method public,abstract name ()Ljava/lang/String;
@@ -14311,6 +14262,70 @@ com/crystalgui/ui/text/HighlightRegistry
   method public remove (Ljava/lang/String;)Lcom/crystalgui/ui/text/HighlightRegistry;
   method public set (Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/ui/text/HighlightRegistry;
   method public set (Ljava/lang/String;[Lcom/crystalgui/text/TextRange;)Lcom/crystalgui/ui/text/HighlightRegistry;
+com/crystalgui/viewport/CgUiViewport
+  access public,final
+  extends java/lang/Object
+  field public,static,final LOCKSTEP_FLAG Ljava/lang/String;
+  field public,static,final MAX_FRAME_SECONDS F
+  field public,static,final POINTER_CAPTURED Lcom/crystalgui/viewport/Readout;
+  field public,static,final SEQUENCED_FLAG Ljava/lang/String;
+  field public,static,final TEXT_INPUT_AREA Lcom/crystalgui/viewport/Readout;
+  implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
+  implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
+  method public advance ()F
+  method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
+  method public close ()V
+  method public committedFrames ()J
+  method public compositesMotion ()Z
+  method public consumeComposition (Ljava/lang/String;I)Z
+  method public consumeKeyboardEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
+  method public consumeMouseEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;)Z
+  method public document ()Lcom/crystalgui/ui/dom/UIDocument;
+  method public execute (Ljava/lang/Runnable;)V
+  method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;FLcom/crystalgui/viewport/CgUiViewport$Content;)Z
+  method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/viewport/CgUiViewport$Content;)Z
+  method public hasCommitted ()Z
+  method public isSequenced ()Z
+  method public offer (Ljava/util/function/BooleanSupplier;)Z
+  method public offerKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;Ljava/util/function/BooleanSupplier;)Z
+  method public offerMouse (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;Ljava/util/function/BooleanSupplier;)Z
+  method public pollUnhandledKey ()Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;
+  method public presentedCommit ()J
+  method public presentedFrames ()J
+  method public presenter ()Lcom/crystalgui/render/UiPresenter;
+  method public readout (Lcom/crystalgui/viewport/Readout;)Ljava/lang/Object;
+  method public run (Ljava/lang/Runnable;)V
+  method public threading ()Lcom/crystalgui/viewport/CgUiViewport$Threading;
+  method public view ()Lcom/crystalgui/render/CgUiRenderer$View;
+  method public,static open (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/viewport/CgUiViewport$Threading;Ljava/lang/String;)Lcom/crystalgui/viewport/CgUiViewport;
+com/crystalgui/viewport/CgUiViewport$Content
+  access public,abstract,interface
+  extends java/lang/Object
+  method public failed (Ljava/lang/Throwable;)V
+  method public readouts (Lcom/crystalgui/viewport/Readouts;)V
+  method public,abstract frame (FII)Z
+  method public,abstract paint (Lcom/crystalgui/render/CgUiPaintContext;)V
+  method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/viewport/CgUiViewport$Content;
+  method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Consumer;Ljava/util/function/Consumer;)Lcom/crystalgui/viewport/CgUiViewport$Content;
+com/crystalgui/viewport/CgUiViewport$Threading
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final INLINE Lcom/crystalgui/viewport/CgUiViewport$Threading;
+  field public,static,final LOCKSTEP Lcom/crystalgui/viewport/CgUiViewport$Threading;
+  field public,static,final SEQUENCED Lcom/crystalgui/viewport/CgUiViewport$Threading;
+  method public,static fromFlags ()Lcom/crystalgui/viewport/CgUiViewport$Threading;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/viewport/CgUiViewport$Threading;
+  method public,static values ()[Lcom/crystalgui/viewport/CgUiViewport$Threading;
+com/crystalgui/viewport/Readout
+  access public,final
+  extends java/lang/Object
+  method public toString ()Ljava/lang/String;
+  method public,static named (Ljava/lang/String;)Lcom/crystalgui/viewport/Readout;
+com/crystalgui/viewport/Readouts
+  access public,final
+  extends java/lang/Object
+  method public get (Lcom/crystalgui/viewport/Readout;)Ljava/lang/Object;
+  method public put (Lcom/crystalgui/viewport/Readout;Ljava/lang/Object;)V
 com/crystalgui/widget/WidgetSamples
   access public,final
   extends java/lang/Object

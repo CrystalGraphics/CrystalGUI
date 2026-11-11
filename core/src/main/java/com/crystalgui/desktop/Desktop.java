@@ -11,8 +11,6 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.UiFrame;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -2064,13 +2062,14 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Records one frame in {@code presentation} into {@code view} — <b>the one paint entry a host calls</b>, through its
-     * {@code DocumentDriver}, which shows it at a GUI stage. Null when the presentation paints nothing, and then the
-     * view's paint context is not asked for. On the document's thread.
+     * The desktop's frame in {@code presentation}, at a surface of {@code surfaceWidth} by {@code surfaceHeight} pixels:
+     * presence, then the document's frame and the overlay's regions. False when the presentation paints nothing, and then
+     * nothing is painted. <b>The one frame entry a host calls</b>, through its viewport's content; then
+     * {@link #paintInto}. On the document's thread.
      *
      * <pre>{@code
-     * UiFrame frame = desktop.record(view, presentation, delta, width, height);   // the document's thread
-     * if (frame != null) view.presenter().present(stage, frame);                  // the render thread, at the stage
+     * public boolean frame(float delta, int w, int h) { return desktop.prepare(presentation, delta, w, h); }
+     * public void paint(CgUiPaintContext ctx) { desktop.paintInto(presentation, ctx); }
      * }</pre>
      *
      * <p>Folding the arms together is not tidiness: it is what stops two callers each deciding
@@ -2082,37 +2081,18 @@ public class Desktop extends UIElement implements DataProvider {
      * a new path. The root transform is the box tree's in every arm, which is what makes a pinned
      * window pixel-identical on the desktop, over a foreign GUI and on the HUD.</p>
      */
-    @Nullable
-    public UiFrame record(CgUiRenderer.View view, DesktopPresentation presentation, float deltaSeconds, int surfaceWidth,
-                          int surfaceHeight) {
-        UIDocument document = prepare(presentation, deltaSeconds, surfaceWidth, surfaceHeight);
-        if (document == null) return null;
-        CgUiPaintContext ctx = view.paintContext();
-        ctx.recordFrame(surfaceWidth, surfaceHeight);
-        try {
-            paintInto(presentation, document, ctx);
-        } catch (RuntimeException | Error failed) {
-            ctx.abortFrame();
-            throw failed;
-        }
-        return ctx.seal();
-    }
-
-    /** Presence, then the document's frame and the overlay's regions; null when there is nothing to paint. */
-    @Nullable
-    private UIDocument prepare(@Nullable DesktopPresentation presentation, float deltaSeconds,
-                               int surfaceWidth, int surfaceHeight) {
+    public boolean prepare(DesktopPresentation presentation, float deltaSeconds, int surfaceWidth, int surfaceHeight) {
         // Whether the compositor owns the surface, which is a different question from whether it holds a
         // window. Asked before the returns below so the answer is never a stale one.
-        boolean whole = presentation != null && presentation.paintsWholeDesktop();
+        boolean whole = presentation.paintsWholeDesktop();
         if (whole != wholeSurface) {
             wholeSurface = whole;
             syncPresence();
         }
-        if (presentation == null || !presentation.paintsAnything()) return null;
+        if (!presentation.paintsAnything()) return false;
         UIDocument document = document();
-        if (document == null) return null;
-        if (!presentation.paintsWholeDesktop() && parent() == null) return null;
+        if (document == null) return false;
+        if (!presentation.paintsWholeDesktop() && parent() == null) return false;
 
         // SURFACE pixels in, LOGICAL units to lay out in: the scale lives on the box tree's root
         // transform and nowhere else, so this is the only division and painting picks it up by
@@ -2121,10 +2101,13 @@ public class Desktop extends UIElement implements DataProvider {
         document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
         // What the router answers a host from until the next frame. Only over another UI's screen is it asked.
         if (screenOverlay != null && !presentation.paintsWholeDesktop()) screenOverlay.commit();
-        return document;
+        return true;
     }
 
-    private void paintInto(DesktopPresentation presentation, UIDocument document, CgUiPaintContext ctx) {
+    /** Paints what {@link #prepare} framed in {@code presentation}, into a frame its viewport opened on {@code ctx}. */
+    public void paintInto(DesktopPresentation presentation, CgUiPaintContext ctx) {
+        UIDocument document = document();
+        if (document == null) return;
         if (presentation.paintsWholeDesktop()) {
             document.paint(ctx);
             return;

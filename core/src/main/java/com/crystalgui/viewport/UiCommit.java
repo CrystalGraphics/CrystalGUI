@@ -1,4 +1,4 @@
-package com.crystalgui.ui.dom;
+package com.crystalgui.viewport;
 
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.ui.service.CompositorAnimation;
@@ -8,22 +8,17 @@ import javax.annotation.Nullable;
 import java.util.List;
 
 /**
- * One frame a document on a sequence hands the render thread: what to draw, and the facts its host reads back without
- * touching the tree. Immutable; built at the end of the document's frame.
+ * One frame a document hands the render thread: what to draw, and what its host reads back without touching the tree.
+ * Immutable; built at the end of the document's frame.
  *
  * <ul>
  *   <li>{@code frame} is null when the frame painted nothing.</li>
- *   <li>{@code facts} is whatever the {@link DocumentDriver.Painter} answered for this frame.</li>
+ *   <li>{@code follow} and {@code motions} are filled only where the compositor moves things between frames.</li>
  * </ul>
  */
-record UiCommit<F>(@Nullable UiFrame frame, @Nullable F facts, long index, @Nullable Follow follow,
-                   List<Motion> motions) {
+record UiCommit(@Nullable UiFrame frame, Readouts readouts, long index, @Nullable Follow follow,
+                List<Motion> motions) {
 
-    /**
-     * An element the frame recorded mid-gesture, moving one for one with the pointer: its spatial node in this frame and
-     * where the pointer was, in surface pixels, when the document recorded it, and how far it may move from there before
-     * an edge stops it. What Input.followPointer declared.
-     */
     /**
      * An animation the compositor plays on one box of this frame. {@code moved} is 0 when the box drew under no node
      * here: the animation's clock still starts when this frame is presented, and nothing is moved.
@@ -38,6 +33,11 @@ record UiCommit<F>(@Nullable UiFrame frame, @Nullable F facts, long index, @Null
                   float cornerX, float cornerY) {
     }
 
+    /**
+     * An element the frame recorded mid-gesture, moving one for one with the pointer: its spatial node in this frame and
+     * where the pointer was, in surface pixels, when the document recorded it, and how far it may move from there before
+     * an edge stops it. What {@code Input.followPointer} declared.
+     */
     record Follow(int node, float pointerX, float pointerY, float minX, float maxX, float minY, float maxY) {
 
         /** No edge. */

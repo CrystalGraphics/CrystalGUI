@@ -10,8 +10,6 @@ import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.job.CgJob;
-import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.canvas.CgCanvas;
 import com.crystalgraphics.render.canvas.CgCanvasBackdrop;
@@ -37,7 +35,6 @@ import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.trace.CgTrace;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -54,7 +51,7 @@ import java.util.List;
 /**
  * A document's paint context: it records a frame of the document onto a {@link CgCanvas}, touching no GPU, and hands
  * back a sealed {@link UiFrame} that a {@link UiPresenter} shows at a GUI stage. One per {@link CgUiRenderer.View}, which a
- * {@code DocumentDriver} owns for its document and hands its painter.
+ * {@code CgUiViewport} owns for its document and opens for its content.
  *
  * <pre>{@code
  * CgUiPaintContext ctx = view.paintContext();

@@ -32,7 +32,7 @@ server workspace, the server smoke), which runs on a dedicated server too. Clien
 
 What `onContextDestroy` legitimately does is release what views left open still hold: the textures each
 `CgUiPaintContext` requested from the graph (its frame target, surfaces, backdrop, icon rasters), which no registry
-holds. A view closed with its document (`CgUiRenderer.View.close`, which `DocumentDriver.close` calls) has freed its own.
+holds. A view closed with its document (`CgUiRenderer.View.close`, which `CgUiViewport.close` calls) has freed its own.
 
 **`onContextDestroy` fires before CrystalGraphics frees anything** — the only window in which a listener can
 release its own textures/renderers while the context is whole. Listeners dispatch in *reverse*

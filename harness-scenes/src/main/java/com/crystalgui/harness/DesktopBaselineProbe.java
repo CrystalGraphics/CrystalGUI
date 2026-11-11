@@ -6,7 +6,7 @@ import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceReport;
 import com.crystalgraphics.trace.CgTraceSnapshot;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +47,7 @@ public final class DesktopBaselineProbe {
 
     /** What the probe drives on the desktop. Each action runs on the desktop document's thread. */
     public interface Target {
-        DocumentDriver<?> driver();
+        CgUiViewport viewport();
 
         /** Launches the editor, as a player opens it. */
         void openEditor();
@@ -147,14 +147,14 @@ public final class DesktopBaselineProbe {
     public boolean frame() {
         if (done) return true;
         long now = System.nanoTime();
-        DocumentDriver<?> driver = target.driver();
+        CgUiViewport viewport = target.viewport();
         if (frame++ < startFrame) {
             lastFrameNanos = now;
             return false;
         }
         if (phase < 0 || inPhase >= Phase.values()[phase].frames) {
             if (phase >= 0) samples[phase].traceTo = CgTrace.currentFrameIndex() - 1;
-            if (phase == Phase.FILE.ordinal()) driver.post(target::closeLargeFile);
+            if (phase == Phase.FILE.ordinal()) viewport.execute(target::closeLargeFile);
             if (++phase == Phase.values().length) {
                 report();
                 done = true;
@@ -162,13 +162,13 @@ public final class DesktopBaselineProbe {
             }
             inPhase = 0;
             samples[phase].traceFrom = CgTrace.currentFrameIndex() + 1;
-            begin(Phase.values()[phase], driver, now);
+            begin(Phase.values()[phase], viewport, now);
         }
         Samples s = samples[phase];
         s.hostFrame.add(now - lastFrameNanos);
         lastFrameNanos = now;
 
-        long shown = driver.presentedCommit();
+        long shown = viewport.presentedCommit();
         if (shown != lastPicture) {
             if (lastPicture >= 0L && inPhase > 0) {
                 s.newPicture.add(now - lastPictureNanos);
@@ -188,35 +188,35 @@ public final class DesktopBaselineProbe {
         watchOpens(shown, now);
 
         Phase current = Phase.values()[phase];
-        if (current == Phase.THEME && inPhase % THEME_EVERY == 0) driver.post(() -> {
+        if (current == Phase.THEME && inPhase % THEME_EVERY == 0) viewport.execute(() -> {
             long at = System.nanoTime();
             target.switchTheme();
             themeSwitches.add(System.nanoTime() - at);
         });
-        if (current != Phase.OPEN && inPhase % POINTER_EVERY == 0) movePointer(driver, inPhase / POINTER_EVERY % 2);
+        if (current != Phase.OPEN && inPhase % POINTER_EVERY == 0) movePointer(viewport, inPhase / POINTER_EVERY % 2);
         inPhase++;
         return false;
     }
 
-    private void begin(Phase phase, DocumentDriver<?> driver, long now) {
+    private void begin(Phase phase, CgUiViewport viewport, long now) {
         switch (phase) {
             case OPEN -> {
                 editorPosted = now;
-                driver.post(() -> {
+                viewport.execute(() -> {
                     target.openEditor();
                     editorLaunched = System.nanoTime();
-                    editorLaunchedAfter = driver.committedFrames();
+                    editorLaunchedAfter = viewport.committedFrames();
                 });
             }
-            case SETTLE -> driver.post(() -> {
+            case SETTLE -> viewport.execute(() -> {
                 target.openOthers();
                 taskbar = new float[][] {target.taskbarPoint(0), target.taskbarPoint(1)};
             });
             case FILE -> {
                 filePosted = now;
-                driver.post(() -> target.openLargeFile(() -> {
+                viewport.execute(() -> target.openLargeFile(() -> {
                     fileOpened = System.nanoTime();
-                    fileOpenedAfter = driver.committedFrames();
+                    fileOpenedAfter = viewport.committedFrames();
                 }));
             }
             default -> {
@@ -241,7 +241,7 @@ public final class DesktopBaselineProbe {
     /** Read once on the document's thread, so a move never asks a busy document where to go. */
     private volatile float[][] taskbar;
 
-    private void movePointer(DocumentDriver<?> driver, int which) {
+    private void movePointer(CgUiViewport viewport, int which) {
         float[][] points = taskbar;
         float[] at = points == null ? null : points[which];
         if (at == null || at[0] < 0f) return;
@@ -249,8 +249,8 @@ public final class DesktopBaselineProbe {
                 CgMouseCodes.NONE, false, 0f, -1L);
         Pending move = new Pending(System.nanoTime());
         pending.addLast(move);
-        driver.offerMouse(event, () -> {
-            move.dispatchedAfter = driver.committedFrames();
+        viewport.offerMouse(event, () -> {
+            move.dispatchedAfter = viewport.committedFrames();
             target.dispatch(event);
             return true;
         });

@@ -7,8 +7,6 @@ import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.graph.CgRehearsal;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
-import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.UiFrame;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.motion.WindowAnimator;
@@ -23,7 +21,7 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.gauntlet.ConnectionTest;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
@@ -96,18 +94,14 @@ public final class HostSession {
     private final List<Predicate<CgSystemInput.Keyboard.Event>> hotKeys = new CopyOnWriteArrayList<>();
     /** Who is offered a key the desktop left, before the game is. */
     private final List<Predicate<CgSystemInput.Keyboard.Event>> keysLeft = new CopyOnWriteArrayList<>();
-    private final HostInput input = new HostInput(this::document, this::offerHotKey);
+    private final HostInput input = new HostInput(this::viewport, this::offerHotKey);
 
     @Nullable
     private DesktopHost host;
 
-    /** Runs the desktop's document: inline, in lockstep or recording on its own. Null until built. */
+    /** Puts the desktop's document on screen: inline, in lockstep or recording on its own. Null until built. */
     @Nullable
-    private DocumentDriver<DesktopFacts> driver;
-
-    /** What a host asks about a frame of a document that records on its own, read from the frame on screen. */
-    private record DesktopFacts(boolean attached, boolean pinned, @Nullable float[] textInputArea) {
-    }
+    private volatile CgUiViewport viewport;
 
     /** What the document is told about the host: the render thread's answers, copied at each entry. */
     @Nullable
@@ -115,9 +109,9 @@ public final class HostSession {
 
     /** Runs {@code work} on the document, without waiting when it records on its own. */
     private void post(Runnable work) {
-        DocumentDriver<DesktopFacts> owner = driver;
-        if (owner == null) work.run();
-        else owner.post(work);
+        CgUiViewport shown = viewport;
+        if (shown == null) work.run();
+        else shown.execute(work);
     }
 
     /**
@@ -153,9 +147,9 @@ public final class HostSession {
 
     /** Runs {@code work} on the document and waits for it. */
     private void onDocument(Runnable work) {
-        DocumentDriver<DesktopFacts> owner = driver;
-        if (owner == null) work.run();
-        else owner.run(work);
+        CgUiViewport shown = viewport;
+        if (shown == null) work.run();
+        else shown.run(work);
     }
     @Nullable
     private volatile Application primary;
@@ -407,8 +401,8 @@ public final class HostSession {
             }
             if (host != null) host.dispose();
         });
-        if (driver != null) driver.close();
-        driver = null;
+        if (viewport != null) viewport.close();
+        viewport = null;
         primary = null;
         primaryWindow = null;
         host = null;
@@ -424,6 +418,12 @@ public final class HostSession {
     @Nullable
     public UIDocument document() {
         return host == null ? null : host.document();
+    }
+
+    /** What puts the desktop's document on screen; null until the surface has been shown once. */
+    @Nullable
+    public CgUiViewport viewport() {
+        return viewport;
     }
 
     /** Where a host delivers every input event while its own screen is up. */
@@ -472,14 +472,8 @@ public final class HostSession {
      */
     @Nullable
     public float[] textInputArea() {
-        UIDocument document = document();
-        DocumentDriver<DesktopFacts> owner = driver;
-        if (document == null || owner == null) return null;
-        if (owner.isAsync()) {
-            DesktopFacts shown = owner.shownFacts();
-            return shown == null ? null : shown.textInputArea();
-        }
-        return owner.ask(() -> document.input().textInputArea());
+        CgUiViewport shown = viewport;
+        return shown == null ? null : shown.readout(CgUiViewport.TEXT_INPUT_AREA);
     }
 
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
@@ -494,22 +488,23 @@ public final class HostSession {
      * fires no such event, so the close is never seen and ownership survives into the next screen.</p>
      */
     public DesktopPresentation presentation() {
-        DocumentDriver<DesktopFacts> owner = driver;
-        if (owner == null) return DesktopPresentation.NONE;
-        if (owner.isAsync()) return presentationFromCommit();
-        return owner.ask(this::presentationOnDocument);
+        CgUiViewport shown = viewport;
+        if (shown == null) return DesktopPresentation.NONE;
+        if (shown.isSequenced()) return presentationFromCommit(shown);
+        return shown.ask(this::presentationOnDocument);
     }
 
     /** {@link #presentationOnDocument}, from what the document last committed rather than from its tree. */
-    private DesktopPresentation presentationFromCommit() {
+    private DesktopPresentation presentationFromCommit(CgUiViewport shown) {
         Desktop desktop = desktop();
         if (desktop == null) return DesktopPresentation.NONE;
         boolean ours = CgScreens.isOpen(screen);
         boolean any = CgScreens.anyOpen();
         noteForeignScreen(desktop, any && !ours);
-        DesktopFacts shown = driver.shownFacts();
+        Boolean attached = shown.readout(DesktopContent.ATTACHED);
         // Before the first commit the desktop is attached and holds nothing pinned, as it was built.
-        return Desktop.presentation(ours, any, shown == null || shown.attached(), shown != null && shown.pinned());
+        return Desktop.presentation(ours, any, attached == null || attached,
+                Boolean.TRUE.equals(shown.readout(DesktopContent.PINNED)));
     }
 
     private void noteForeignScreen(Desktop desktop, boolean foreignUp) {
@@ -559,10 +554,10 @@ public final class HostSession {
         if (grabbed || !CgScreens.anyOpen()) return false;
         ScreenOverlay overlay = screenOverlay();
         if (overlay == null) return false;
-        // Asynchronously the overlay answers from its committed regions and posts what it delivers.
-        DocumentDriver<DesktopFacts> owner = driver;
-        if (owner == null || owner.isAsync()) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
-        return owner.ask(() -> overlay.offerMouse(xPx, yPx, button, pressed, wheel));
+        // Sequenced, the overlay answers from its committed regions and posts what it delivers.
+        CgUiViewport shown = viewport;
+        if (shown == null || shown.isSequenced()) return overlay.offerMouse(xPx, yPx, button, pressed, wheel);
+        return shown.ask(() -> overlay.offerMouse(xPx, yPx, button, pressed, wheel));
     }
 
     /**
@@ -583,7 +578,9 @@ public final class HostSession {
     @Nullable
     private ScreenOverlay screenOverlay() {
         Desktop desktop = desktop();
-        return desktop == null || document() == null ? null : desktop.screenOverlay();
+        ScreenOverlay overlay = desktop == null || document() == null ? null : desktop.screenOverlay();
+        if (overlay != null) overlay.shownThrough(viewport);
+        return overlay;
     }
 
     /**
@@ -612,7 +609,7 @@ public final class HostSession {
             return;
         }
         Desktop desktop = desktop();
-        DocumentDriver<DesktopFacts> owner = driver;
+        CgUiViewport owner = viewport;
         if (desktop == null || document() == null || owner == null) return;
         DesktopPresentation now;
         try {
@@ -643,7 +640,7 @@ public final class HostSession {
             // nearly zero, stalling every animation, a smooth scroll's included.
             float delta = owner.advance();
             if (now == DesktopPresentation.DESKTOP) frame(delta);
-            if (owner.frame(stage, delta, painters[now.ordinal()])) painted = true;
+            if (owner.frame(stage, delta, contents[now.ordinal()])) painted = true;
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
             post(desktop::exitHudMode);
@@ -670,30 +667,7 @@ public final class HostSession {
     private long paintedFrame = -1L;
 
     /** The desktop in each presentation, by ordinal: made once it is built, so a frame allocates none. */
-    private DesktopPainter[] painters = new DesktopPainter[0];
-
-    /** The desktop in one presentation, and what the host reads back about each recorded frame. */
-    private record DesktopPainter(Desktop desktop, UIDocument document, DesktopPresentation presentation)
-            implements DocumentDriver.Painter<DesktopFacts> {
-
-        @Override
-        @Nullable
-        public UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height) {
-            try {
-                return desktop.record(view, presentation, deltaSeconds, width, height);
-            } catch (RuntimeException | LinkageError failed) {
-                CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode", failed);
-                desktop.exitHudMode();
-                return null;
-            }
-        }
-
-        @Override
-        public DesktopFacts facts() {
-            return new DesktopFacts(desktop.parent() != null, desktop.hasPinnedWindows(),
-                    document.input().textInputArea());
-        }
-    }
+    private DesktopContent[] contents = new DesktopContent[0];
 
     /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
     private void returnUnhandledKeys() {
@@ -763,11 +737,11 @@ public final class HostSession {
         });
         built.document().addClass(ROOT_CLASS);
         host = built;
-        driver = DocumentDriver.attach(built.document(), DocumentDriver.Mode.fromFlags(), "desktop");
+        viewport = CgUiViewport.open(built.document(), CgUiViewport.Threading.fromFlags(), "desktop");
         DesktopPresentation[] presentations = DesktopPresentation.values();
-        painters = new DesktopPainter[presentations.length];
+        contents = new DesktopContent[presentations.length];
         for (DesktopPresentation presentation : presentations) {
-            painters[presentation.ordinal()] = new DesktopPainter(built.desktop(), built.document(), presentation);
+            contents[presentation.ordinal()] = new DesktopContent(built.desktop(), presentation);
         }
         trace("DesktopHost");
     }

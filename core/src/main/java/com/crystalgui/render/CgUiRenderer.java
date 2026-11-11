@@ -20,14 +20,14 @@ import java.util.Set;
  * <pre>{@code
  * CgUiRenderer.precache();                         // client init: CgUiClientLifecycle.onPreInit
  * CgUiRenderer.parseAhead();                       // graphics start: onContextInit
- * CgUiRenderer.View view = CgUiRenderer.openView(); // one per document; a DocumentDriver opens its own
+ * CgUiRenderer.View view = CgUiRenderer.openView(); // one per document; a CgUiViewport opens its own
  * ...
  * view.close();                                    // render thread, when the document goes
  * CgUiRenderer.contextDestroyed();                 // CgUiClientLifecycle.onContextDestroy
  * }</pre>
  *
  * <ul>
- *   <li>A host never calls these: {@code CgUiClientLifecycle} does, and a {@code DocumentDriver} opens and closes its
+ *   <li>A host never calls these: {@code CgUiClientLifecycle} does, and a {@code CgUiViewport} opens and closes its
  *       document's view.</li>
  *   <li>A view not closed keeps its textures until the context goes. Close it with its document.</li>
  * </ul>
@@ -84,7 +84,7 @@ public final class CgUiRenderer {
     /**
      * One place a document is drawn: the {@link CgUiPaintContext} its frames are recorded with, and the
      * {@link UiPresenter} that shows them at a GUI stage. The two live and die together, since a presented frame shows
-     * the context's target. A {@code DocumentDriver} owns its document's; anything drawing a document without one opens
+     * the context's target. A {@code CgUiViewport} owns its document's; anything drawing a document without one opens
      * its own.
      *
      * <pre>{@code

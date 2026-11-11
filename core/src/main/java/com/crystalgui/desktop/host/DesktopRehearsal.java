@@ -7,10 +7,9 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.UiFrame;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.viewport.CgUiViewport;
 
 import javax.annotation.Nullable;
 
@@ -46,18 +45,20 @@ final class DesktopRehearsal {
 
     private final CgRehearsal rehearsal = CgRehearsal.of(pass -> CgRenderStage.SCREEN.rehearse())
             .minPasses(MIN_PASSES).maxPasses(MAX_PASSES).window(QUIET_WINDOW);
-    /** Its own: closed when it settles, so the throwaway desktop's targets and rasters go with it. */
-    private final CgUiRenderer.View view = CgUiRenderer.openView();
+    /** Its own, inline: closed when it settles, so the throwaway desktop's targets and rasters go with it. */
     @Nullable
-    private Desktop desktop;
+    private CgUiViewport viewport;
+    @Nullable
+    private DesktopContent content;
     private final long begun = System.nanoTime();
     private int passes;
 
     /** Runs passes within this frame's warm budget; true once it has settled or failed. Render thread. */
     boolean step() {
         if (!rehearsal.step()) return false;
-        view.close();
-        desktop = null;
+        if (viewport != null) viewport.close();
+        viewport = null;
+        content = null;
         RuntimeException failure = rehearsal.failure();
         if (failure != null) {
             CrystalGuiCore.LOGGER.error("[cgui] the desktop rehearsal failed; the first open pays for it", failure);
@@ -70,10 +71,12 @@ final class DesktopRehearsal {
 
     /** One frame of the throwaway desktop in a rehearsal's firing of {@code SCREEN}. Render thread. */
     void paint(CgStageFrame stage) {
-        if (desktop == null) desktop = build();
-        UiFrame frame = desktop.record(view, DesktopPresentation.DESKTOP, DELTA, stage.host().width(),
-                stage.host().height());
-        if (frame != null) view.presenter().present(stage, frame);
+        if (viewport == null) {
+            Desktop desktop = build();
+            viewport = CgUiViewport.open(desktop.document(), CgUiViewport.Threading.INLINE, "rehearsal");
+            content = new DesktopContent(desktop, DesktopPresentation.DESKTOP);
+        }
+        viewport.frame(stage, DELTA, content);
         passes++;
     }
 

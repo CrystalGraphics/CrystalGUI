@@ -904,13 +904,13 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
         // looked like from the other side.
         elapsed += frame.getDeltaTime();
         float fraction = (elapsed % 4f) / 4f;
-        driver().post(() -> determinate.setFraction(fraction));
+        viewport().execute(() -> determinate.setFraction(fraction));
     }
 
     /** A startup capture, so this scene contributes to the pixel-regression set. */
     @Override
     protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
-        if (driver().presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
+        if (viewport().presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
 }

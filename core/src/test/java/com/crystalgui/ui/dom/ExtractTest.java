@@ -2,10 +2,7 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.FakeGameThreads;
-import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.signal.Connection;
-import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.UiFrame;
 import org.junit.After;
 import org.junit.Test;
 
@@ -21,17 +18,6 @@ public class ExtractTest {
     @After
     public void unbind() {
         FakeGameThreads.bind(CgHostThread.SERVER, null);
-    }
-
-    /** Frames the document and paints nothing: what a driver needs to run a frame with no GL. */
-    private static DocumentDriver.Painter<Void> framesOnly(UIDocument document) {
-        return new DocumentDriver.Painter<>() {
-            @Override
-            public UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height) {
-                document.frame(deltaSeconds, width, height);
-                return null;
-            }
-        };
     }
 
     @Test
@@ -83,30 +69,6 @@ public class ExtractTest {
             thread.join();
         } catch (InterruptedException interrupted) {
             throw new AssertionError(interrupted);
-        }
-    }
-
-    @Test
-    public void onASequenceTheReadIsTheHostsAndTheUseTheDocuments() {
-        UIDocument document = new UIDocument();
-        DocumentDriver<Void> driver = DocumentDriver.attach(document, DocumentDriver.Mode.LOCKSTEP, "extract");
-        try {
-            UiSequence sequence = driver.sequence();
-            List<Boolean> readOnSequence = new ArrayList<>();
-            List<Boolean> usedOnSequence = new ArrayList<>();
-            driver.run(() -> document.extract(
-                    () -> {
-                        readOnSequence.add(UiSequence.current() == sequence);
-                        return "state";
-                    },
-                    value -> usedOnSequence.add(sequence.isCurrent())));
-
-            driver.frame(null, 0.016f, 100, 100, framesOnly(document));
-
-            assertEquals(List.of(false), readOnSequence);
-            assertEquals(List.of(true), usedOnSequence);
-        } finally {
-            driver.close();
         }
     }
 }

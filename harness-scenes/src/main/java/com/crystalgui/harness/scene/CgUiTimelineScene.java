@@ -6,7 +6,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.display.CounterTrack;
@@ -72,8 +72,8 @@ public class CgUiTimelineScene extends UiDocumentScene {
 
     /** Inline: its gate is this scene's own frame time, which asynchronously is not the frame it times. */
     @Override
-    protected DocumentDriver.Mode mode() {
-        return DocumentDriver.Mode.INLINE;
+    protected CgUiViewport.Threading threading() {
+        return CgUiViewport.Threading.INLINE;
     }
 
     @Override

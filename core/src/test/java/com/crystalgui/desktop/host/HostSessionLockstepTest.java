@@ -38,7 +38,7 @@ public class HostSessionLockstepTest {
         try {
             HostSession session = install(Files.createTempDirectory("cgui-async"));
             session.shown();
-            UiSequence sequence = session.document().driver().sequence();
+            UiSequence sequence = session.viewport().ask(UiSequence::current);
             assertNotNull(sequence);
 
             session.frame(0.016f);
@@ -65,7 +65,7 @@ public class HostSessionLockstepTest {
         HostSession session = install(Files.createTempDirectory("cgui-lockstep"));
 
         session.shown();
-        UiSequence sequence = session.document().driver().sequence();
+        UiSequence sequence = session.viewport().ask(UiSequence::current);
         assertNotNull("the desktop's document was not given a sequence", sequence);
 
         session.frame(0.016f);

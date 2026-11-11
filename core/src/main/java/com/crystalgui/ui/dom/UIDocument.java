@@ -53,7 +53,7 @@ import lombok.Getter;
  *       other thread is refused. A tree nothing frames (a test, a server) is free.</li>
  *   <li>{@code connected}, {@code disconnected} and {@code slotChanged} run after the outermost mutation, in queued
  *       order, with slots assigned first. A callback may mutate; an observer notification may not.</li>
- *   <li>A host normally runs a document through a {@link DocumentDriver}, not by calling {@link #frame} itself.</li>
+ *   <li>A host normally runs a document through a viewport ({@code CgUiViewport}), not by calling {@link #frame} itself.</li>
  * </ul>
  */
 public final class UIDocument extends UIElement {
@@ -155,6 +155,11 @@ public final class UIDocument extends UIElement {
 
         /** For messages: what runs the document. */
         String name();
+
+        /** Whether a compositor moves and fades between the document's frames, so animations may be handed to it. */
+        default boolean compositesMotion() {
+            return false;
+        }
     }
 
     /**
@@ -234,19 +239,6 @@ public final class UIDocument extends UIElement {
                 work.run();
             }
         });
-    }
-
-    @Nullable
-    private volatile DocumentDriver<?> driver;
-
-    /** What runs this document for its host, or null when nothing was attached. @see DocumentDriver#attach */
-    @Nullable
-    public DocumentDriver<?> driver() {
-        return driver;
-    }
-
-    void useDriver(DocumentDriver<?> driver) {
-        this.driver = driver;
     }
 
     // ── Reading the host ─────────────────────────────────────────────────────
@@ -363,7 +355,10 @@ public final class UIDocument extends UIElement {
 
     /** Timelines and the per-frame hooks a tree is allowed to have. */
     public Animation animation() {
-        if (animation == null) animation = new Animation(() -> driver != null && driver.compositesMotion());
+        if (animation == null) animation = new Animation(() -> {
+            Owner by = owner;
+            return by != null && by.compositesMotion();
+        });
         return animation;
     }
 
@@ -606,8 +601,8 @@ public final class UIDocument extends UIElement {
     private void runFrame(float deltaSeconds, float width, float height) {
         claimFrameThread();
         for (Runnable arrived; (arrived = inbox.poll()) != null; ) arrived.run();
-        // With no driver the host calls this on its own thread, which is where an extract reads; a driver reads them itself.
-        if (driver == null) {
+        // Unowned, the host calls this on its own thread, which is where an extract reads; an owner reads them itself.
+        if (owner == null) {
             Runnable delivery = extracts.read();
             if (delivery != null) delivery.run();
         }
@@ -691,7 +686,7 @@ public final class UIDocument extends UIElement {
 
     /**
      * Paints the laid-out document into {@code ctx}, a frame its owner opened: the document owns no paint context, and
-     * a {@code DocumentDriver}'s view hands its painter one.
+     * a viewport opens one for its content.
      */
     public void paint(CgUiPaintContext ctx) {
         boxes().paint(ctx);

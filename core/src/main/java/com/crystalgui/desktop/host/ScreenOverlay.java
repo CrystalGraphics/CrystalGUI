@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.Desktop;
@@ -61,9 +61,13 @@ public final class ScreenOverlay {
      * committed regions, and what a press outside does to the tree is posted to the document.
      */
     private boolean async() {
-        DocumentDriver<?> driver = window.driver();
-        return driver != null && driver.isAsync();
+        CgUiViewport shown = viewport;
+        return shown != null && shown.isSequenced();
     }
+
+    /** What puts the window's document on screen; null until a host says. */
+    @Nullable
+    private volatile CgUiViewport viewport;
     /** Compare the two answers on every press and say where they differ. */
     private static final boolean CHECK_REGIONS = Boolean.getBoolean("crystalgui.input.regionsCheck");
 
@@ -71,7 +75,12 @@ public final class ScreenOverlay {
 
     public ScreenOverlay(UIDocument window) {
         this.window = window;
-        this.input = new HostInput(() -> window);
+        this.input = new HostInput(() -> viewport);
+    }
+
+    /** The viewport the document is on screen through: where its input goes, and whether it records off this thread. */
+    public void shownThrough(@Nullable CgUiViewport viewport) {
+        this.viewport = viewport;
     }
 
     /**
@@ -139,7 +148,7 @@ public final class ScreenOverlay {
                 // and that will not accept a single character -- which reads as chat being broken.
                 keyboardIsOurs = false;
                 if (async()) {
-                    window.driver().post(this::pressedOutside);
+                    window.execute(this::pressedOutside);
                     return false;
                 }
                 // AND THE FOCUS RING GOES WITH IT, or the editor keeps drawing itself focused while

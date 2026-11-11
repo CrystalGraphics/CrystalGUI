@@ -1,8 +1,6 @@
 package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.harness.ui.UiDocumentScene;
-import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.UiFrame;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.util.trace.CgChannels;
@@ -10,7 +8,7 @@ import com.crystalgraphics.harness.trace.TraceReport;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -140,8 +138,8 @@ public class CgUiTextStressScene extends UiDocumentScene {
 
     /** Inline: it measures the document's own frame, which asynchronously is not the frame it times. */
     @Override
-    protected DocumentDriver.Mode mode() {
-        return DocumentDriver.Mode.INLINE;
+    protected CgUiViewport.Threading threading() {
+        return CgUiViewport.Threading.INLINE;
     }
 
     @Override
@@ -159,28 +157,30 @@ public class CgUiTextStressScene extends UiDocumentScene {
 
     /** Painted or layout only, the document's frame inside one zone, and the mode's line over it either way. */
     @Override
-    protected DocumentDriver.Painter<Void> painter() {
-        return new DocumentDriver.Painter<>() {
+    protected CgUiViewport.Content content() {
+        return new CgUiViewport.Content() {
             @Override
-            public UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height) {
+            public boolean frame(float deltaSeconds, int width, int height) {
                 UIDocument document = document();
-                CgUiPaintContext context = view.paintContext();
                 try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "document.paintFrame")) {
                     float scale = document.boxes().uiScale();
-                    if (DRAW_LABELS) {
-                        document.frame(deltaSeconds, width / scale, height / scale);
-                        context.recordFrame(width, height);
-                        document.paint(context);
-                    } else {
-                        document.update(width / scale, height / scale);
-                        context.recordFrame(width, height);
+                    if (DRAW_LABELS) document.frame(deltaSeconds, width / scale, height / scale);
+                    else document.update(width / scale, height / scale);
+                }
+                return true;
+            }
+
+            @Override
+            public void paint(CgUiPaintContext context) {
+                if (DRAW_LABELS) {
+                    try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "document.paintFrame")) {
+                        document().paint(context);
                     }
                 }
                 context.text().at(0, 0)
                         .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
                                 + String.format(Locale.ROOT, "  [%.1f/%.1fs]", elapsed, TOTAL_SECONDS))
                         .font(context.getFont().atSize(14)).submit();
-                return context.seal();
             }
         };
     }
