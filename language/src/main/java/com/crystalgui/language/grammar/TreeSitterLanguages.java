@@ -39,6 +39,15 @@ public final class TreeSitterLanguages {
         return register(JobScheduler.shared());
     }
 
+    /** Loads the native and builds the Java grammar ahead of {@link #register}, on any thread; a failure is register's to report. */
+    public static void loadAhead() {
+        try {
+            Grammar.JAVA.newTokenizer(null).close();
+        } catch (Throwable later) {
+            // register's probe meets it again and keeps the built-in lexer
+        }
+    }
+
     /**
      * @param scheduler where reparses run, or {@code null} to parse on the calling thread
      * @return whether the native loaded and the grammars are now in front of core's lexers

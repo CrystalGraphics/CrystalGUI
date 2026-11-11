@@ -65,6 +65,9 @@ public final class JsLanguage {
     private static JsSourceAnalyzer analyzer;
     private static JsExecutor executor;
     private static JobScheduler scheduler;
+    /** Opened by {@link #openAhead}, for register to take. */
+    private static JsSourceAnalyzer aheadAnalyzer;
+    private static JsExecutor aheadExecutor;
 
     /** The adapters, by name. Reached through the band host because the host cannot see their types. */
     private static final String ANALYZER = "com.crystalgui.language.js.rhino.RhinoSourceAnalyzer";
@@ -76,6 +79,23 @@ public final class JsLanguage {
     /** Registers with the shared scheduler and whatever engines this environment offers. */
     public static boolean register() {
         return register(JobScheduler.shared(), defaultSource());
+    }
+
+    /**
+     * Opens Rhino's adapters from {@link #defaultSource} ahead of {@link #register}, on any thread: their classes
+     * defined off the render thread. Registers nothing; register takes them. A failure is register's to report.
+     */
+    public static synchronized void openAhead() {
+        if (analyzer != null || aheadAnalyzer != null) return;
+        EngineHost host = EngineHost.shared(defaultSource());
+        if (host == null) return;
+        try {
+            aheadAnalyzer = host.adapter(ANALYZER, JsSourceAnalyzer.class);
+            aheadExecutor = host.adapter(EXECUTOR, JsExecutor.class);
+        } catch (RuntimeException later) {
+            aheadAnalyzer = null;
+            aheadExecutor = null;
+        }
     }
 
     /**
@@ -101,8 +121,10 @@ public final class JsLanguage {
         EngineHost host = EngineHost.shared(source);
         if (host == null) return false;
         try {
-            analyzer = host.adapter(ANALYZER, JsSourceAnalyzer.class);
-            executor = host.adapter(EXECUTOR, JsExecutor.class);
+            analyzer = aheadAnalyzer != null ? aheadAnalyzer : host.adapter(ANALYZER, JsSourceAnalyzer.class);
+            executor = aheadExecutor != null ? aheadExecutor : host.adapter(EXECUTOR, JsExecutor.class);
+            aheadAnalyzer = null;
+            aheadExecutor = null;
         } catch (RuntimeException unavailable) {
             System.err.println("[crystalgui] the JavaScript engine did not open; the editor will colour "
                     + "but not analyse: " + unavailable);

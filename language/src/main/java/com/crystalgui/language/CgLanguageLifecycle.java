@@ -20,8 +20,8 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  *
  * <ul>
  *   <li>A client starts it behind the loading screen, a dedicated server as its first server starts.</li>
- *   <li>On the render thread, never a worker: registering writes {@code CommandRegistry}, which the UI reads
- *       unsynchronised.</li>
+ *   <li>Registering on the render thread, never a worker: it writes {@code CommandRegistry}, which the UI reads
+ *       unsynchronised. What it costs that touches no registry runs first on a worker ({@link LanguageStack#prepare}).</li>
  * </ul>
  */
 public final class CgLanguageLifecycle implements CgLifecycleListener {
@@ -40,16 +40,19 @@ public final class CgLanguageLifecycle implements CgLifecycleListener {
     public void onLoad(CgLoadPlan plan) {
         if (!claim()) return;
         LanguageProbe.register();
-        // About 440 ms in one slice: once, under the loading screen rather than on the first editor open
-        plan.task("crystalgui_language:start").render(task -> {
-            start(true);
+        // Under the loading screen rather than on the first editor open. The engine band, the tree-sitter native and the
+        // classpath on a worker: on the render thread they held the screen ~400 ms
+        plan.task("crystalgui_language:start").work(() -> prepare(true)).render(task -> {
+            register();
             return true;
         }).start();
     }
 
     @Override
     public void onServerStarting(@Nullable Object server) {
-        if (claim()) start(false);
+        if (!claim()) return;
+        prepare(false);
+        register();
     }
 
     private synchronized boolean claim() {
@@ -58,14 +61,13 @@ public final class CgLanguageLifecycle implements CgLifecycleListener {
         return true;
     }
 
-    private static void start(boolean client) {
+    /** What touches no registry, on any thread. */
+    private static void prepare(boolean client) {
         CrystalGuiDownloads.LOCATIONS.useCacheRoot(ScriptService.cacheRoot());
-        LanguageRegistry.bootstrap();
-        // Before any analysis, which would otherwise read identity names and not hear when the mapping lands
+        LanguageStack.prepare();
+        // Before registering, and so before any analysis, which would otherwise read identity names and not hear when
+        // the mapping lands
         if (client) PlatformMappings.start();
-
-        CrystalGuiCore.LOGGER.info("[cgui-lang] language stack started; contributors: {}",
-                LanguageRegistry.contributors());
         if (!ScriptService.live()) {
             CrystalGuiCore.LOGGER.info("[cgui-lang] no game: scripts resolve against the classpath alone");
             return;
@@ -73,6 +75,13 @@ public final class CgLanguageLifecycle implements CgLifecycleListener {
         CrystalGuiCore.LOGGER.info("[cgui-lang] live bytes from {}, cache {}",
                 ScriptService.runningNodeClass().getName(), ScriptService.cacheRoot());
         if (client) reportResolution();
+    }
+
+    /** The registries: on the render thread on a client. */
+    private static void register() {
+        LanguageRegistry.bootstrap();
+        CrystalGuiCore.LOGGER.info("[cgui-lang] language stack started; contributors: {}",
+                LanguageRegistry.contributors());
     }
 
     private static void reportResolution() {

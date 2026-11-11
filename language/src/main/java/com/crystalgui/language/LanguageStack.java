@@ -3,6 +3,7 @@ package com.crystalgui.language;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.grammar.TreeSitterLanguages;
 import com.crystalgui.language.java.JavaLanguage;
+import com.crystalgui.language.java.classpath.HostClasspath;
 import com.crystalgui.language.js.JsLanguage;
 import com.crystalgui.text.syntax.LanguageKinds;
 import com.crystalgui.text.syntax.LanguageRegistry;
@@ -28,6 +29,29 @@ public final class LanguageStack implements LanguageKinds {
     @Override
     public void register() {
         registerAll();
+    }
+
+    /**
+     * What registering costs that any thread may pay, paid ahead on a worker: the tree-sitter native, the engine band
+     * opened and its classes defined, the classpath's archives checked. Registers nothing; {@link #registerAll} then
+     * finds each done.
+     *
+     * <pre>{@code
+     * plan.task("mymod:languages").work(LanguageStack::prepare).render(task -> {
+     *     LanguageRegistry.bootstrap();   // the render thread's part: the registries
+     *     return true;
+     * }).start();
+     * }</pre>
+     */
+    public static void prepare() {
+        TreeSitterLanguages.loadAhead();
+        try {
+            JavaLanguage.openAhead();
+            JsLanguage.openAhead();
+            HostClasspath.detect();
+        } catch (Throwable later) {
+            // Registering opens it again and reports what failed
+        }
     }
 
     /** Registers the grammars, then the engines; each carries the other's entry over, so the order is free. */

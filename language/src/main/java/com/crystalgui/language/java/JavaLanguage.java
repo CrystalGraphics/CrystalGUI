@@ -92,6 +92,16 @@ public final class JavaLanguage {
     }
 
     /**
+     * Opens the engine from {@link #defaultSource} ahead of {@link #register}, on any thread: the band's jars read and
+     * its classes defined. Registers and announces nothing; register finds it open.
+     */
+    public static synchronized void openAhead() {
+        if (registered || engine != null) return;
+        source = defaultSource();
+        openEngine();
+    }
+
+    /**
      * Opens the engine for this host's band and puts it behind the {@code .java} registration.
      *
      * <p>Idempotent, and <b>returns whether it worked</b> rather than throwing. An environment with no
