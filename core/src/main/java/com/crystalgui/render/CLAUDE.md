@@ -7,9 +7,19 @@
 **The V3.1 draw-list design is gone.** `CgUiDrawList`, `CgUiDrawListExecutor`, `CgUiDrawState`,
 `CgUiBatchSlots`, and `CgScissorRect` do not exist. Do not reference them.
 
-### `CgUiPaintContext` and `UiPresenter` — one each per document
+### `CgUiRenderer`, `CgUiRenderer.View`, `CgUiPaintContext` and `UiPresenter`
 
-`document.paintContext()` gives a document its own. **It records** (`render-graph` G4): every draw of a frame is a
+**`CgUiRenderer` is the one global part**: the UI's pipelines named to the precache (`precache`, `parseAhead`), a
+`CgUiRenderer.View` handed out per place a document is drawn (`openView`), and every open view's textures freed when the
+graphics context goes (`contextDestroyed`). **A `CgUiRenderer.View` is per document**: its `CgUiPaintContext`, made at the first
+`paintContext()`, and its `UiPresenter`, which shows the context's target, so the two are closed together
+(`close()`, render thread). **A `DocumentDriver` owns its document's view** and hands it to its `Painter`; the document
+owns none, since it is the DOM and runs on a dedicated server. A view is never shared: each document records on its
+own thread into a target of its own size, and its replay segments, surfaces and icon raster are keyed to its tree.
+Anything drawing without a driver (a rehearsal, a scene with no document) opens a view and closes it when done; one
+left open holds its textures until the context goes.
+
+**The paint context records** (`render-graph` G4): every draw of a frame is a
 chunk in one `CgRecording`; `seal()` builds it into a `UiFrame` that refers back to nothing. **A `UiPresenter` shows it
 at a CrystalGraphics GUI stage** (`SCREEN` or `HUD`), from a renderer's turn: the frame executes at its place in the
 firing (`CgStageFrame.include`, at depth 0, timed as `gpu:ui`), and its picture is composited with the stage's canvas
@@ -23,17 +33,19 @@ frames is `requestLayer`'s — made when the frame executes, freed by `releaseTe
 and gives back the host's state round every execution, inside the stage's host section. Drawing outside a frame throws.
 
 ```java
-CgUiPaintContext ctx = document.paintContext();   // first call on the render thread
+CgUiRenderer.View view = CgUiRenderer.openView();
+CgUiPaintContext ctx = view.paintContext();       // first call on the render thread
 ctx.recordFrame(w, h);                            // no GPU from here: any thread the document is framed on...
 document.paint(ctx);
 UiFrame frame = ctx.seal();                       // ...to here
 
 CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage ->
-        presenter.present(stage, frame));         // render thread: included in the firing, composited
+        view.presenter().present(stage, frame));  // render thread: included in the firing, composited
+view.close();                                     // render thread, with the document
 ```
 
-A host never writes that by hand: `DocumentDriver.frame(stage, painter)` records (on the document's sequence, or at
-the firing inline) and shows through its `presenter()`, and `HostSession` paints the desktop on both GUI stages.
+A host never writes that by hand: `DocumentDriver.frame(stage, painter)` records into its view (on the document's
+sequence, or at the firing inline) and shows through its `presenter()`, and `DocumentDriver.close` closes the view; `HostSession` paints the desktop on both GUI stages.
 
 | Group | Methods |
 |---|---|
@@ -67,10 +79,10 @@ the firing inline) and shows through its `presenter()`, and `HostSession` paints
 | Opacity | `pushLayerOpacity`/`popLayerOpacity` and `withLayerOpacity(opacity, body)`: composed with the opacity in force and stamped on every quad and curve after (`CG_QUAD_OPACITY`, `CG_CURVE_OPACITY`). No flush, no material written, no batch broken. Distinct from `getColor()`'s alpha, which a box applies to its fill alone; text takes none |
 | Layers | `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `surface(key, region)` |
 | Pixels | `update(texture, x, y, w, h, rgba)` into a requested texture, recorded |
-| Lifecycle | `CgUiPaintContext.releaseAll()`, `UiPresenter.release()` |
+| Lifecycle | `CgUiRenderer.View.close()` with its document (a driver's `close` does), `CgUiRenderer.contextDestroyed()` at shutdown |
 
-> **`CgUiPaintContext.releaseAll()` must be called on GL-context destruction** (`CgUiClientLifecycle.onContextDestroy` does).
-> It frees what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
+> **A view's textures are freed by its `close()`, and by `CgUiRenderer.contextDestroyed()` for one left open**
+> (`CgUiClientLifecycle.onContextDestroy` calls it). Both free what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
 > requested from the graph, which no registry holds (`CgExecutor.freeStorage`) — and the contexts' renderers. Not
 > what is borrowed from CrystalGraphics' registries (materials, the fallback white pixel, font atlases):
 > `destroyContext()` sweeps those, and freeing them here would be a double free.

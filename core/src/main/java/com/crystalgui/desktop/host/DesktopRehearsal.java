@@ -7,8 +7,8 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
-import com.crystalgui.render.UiPresenter;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -46,7 +46,8 @@ final class DesktopRehearsal {
 
     private final CgRehearsal rehearsal = CgRehearsal.of(pass -> CgRenderStage.SCREEN.rehearse())
             .minPasses(MIN_PASSES).maxPasses(MAX_PASSES).window(QUIET_WINDOW);
-    private final UiPresenter presenter = new UiPresenter();
+    /** Its own: closed when it settles, so the throwaway desktop's targets and rasters go with it. */
+    private final CgUiRenderer.View view = CgUiRenderer.openView();
     @Nullable
     private Desktop desktop;
     private final long begun = System.nanoTime();
@@ -55,7 +56,8 @@ final class DesktopRehearsal {
     /** Runs passes within this frame's warm budget; true once it has settled or failed. Render thread. */
     boolean step() {
         if (!rehearsal.step()) return false;
-        presenter.release();
+        view.close();
+        desktop = null;
         RuntimeException failure = rehearsal.failure();
         if (failure != null) {
             CrystalGuiCore.LOGGER.error("[cgui] the desktop rehearsal failed; the first open pays for it", failure);
@@ -69,8 +71,9 @@ final class DesktopRehearsal {
     /** One frame of the throwaway desktop in a rehearsal's firing of {@code SCREEN}. Render thread. */
     void paint(CgStageFrame stage) {
         if (desktop == null) desktop = build();
-        UiFrame frame = desktop.record(DesktopPresentation.DESKTOP, DELTA, stage.host().width(), stage.host().height());
-        if (frame != null) presenter.present(stage, frame);
+        UiFrame frame = desktop.record(view, DesktopPresentation.DESKTOP, DELTA, stage.host().width(),
+                stage.host().height());
+        if (frame != null) view.presenter().present(stage, frame);
         passes++;
     }
 

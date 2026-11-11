@@ -4,6 +4,7 @@ import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.FakeGameThreads;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.signal.Connection;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
 import org.junit.After;
 import org.junit.Test;
@@ -26,7 +27,7 @@ public class ExtractTest {
     private static DocumentDriver.Painter<Void> framesOnly(UIDocument document) {
         return new DocumentDriver.Painter<>() {
             @Override
-            public UiFrame record(float deltaSeconds, int width, int height) {
+            public UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height) {
                 document.frame(deltaSeconds, width, height);
                 return null;
             }

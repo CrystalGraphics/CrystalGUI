@@ -11,9 +11,10 @@ import org.jspecify.annotations.Nullable;
  * Shows a document's frames at a GUI stage: executes each {@link UiFrame} at its place in the firing
  * ({@link CgStageFrame#include}) and composites its picture onto the stage's target with the stage's canvas, under the
  * stage's camera. Keeps the last frame, so a host frame with no new one shows it again, moved or as it was. One per
- * document; a {@code DocumentDriver} owns one.
+ * {@link CgUiRenderer.View}, beside the paint context whose target it shows.
  *
  * <pre>{@code
+ * UiPresenter presenter = view.presenter();
  * CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> {
  *     UiFrame next = sequence.poll();
  *     if (next != null) presenter.present(stage, next);               // executed, composited, kept
@@ -27,7 +28,7 @@ import org.jspecify.annotations.Nullable;
  *       it under the stage's GPU zone; the frame's own passes as {@code gpu:ui} inside it.</li>
  *   <li>A frame recorded at another size than the stage's still composites at its own; {@link #redraw} and
  *       {@link #presentAgain} show nothing once the stage's size has changed.</li>
- *   <li>{@link #release} hands the kept frame's buffers back; a presenter is not used after.</li>
+ *   <li>Its view's {@link CgUiRenderer.View#close() close} hands the kept frame's buffers back.</li>
  * </ul>
  */
 public final class UiPresenter {
@@ -38,6 +39,9 @@ public final class UiPresenter {
 
     @Nullable
     private UiFrame shown;
+
+    UiPresenter() {
+    }
 
     /** Executes {@code frame} at this point of {@code stage}'s firing, composites it, and keeps it in place of the last. */
     public void present(CgStageFrame stage, UiFrame frame) {
@@ -95,7 +99,7 @@ public final class UiPresenter {
     }
 
     /** Hands the kept frame's buffers back and forgets it. Render thread. */
-    public void release() {
+    void release() {
         UiFrame last = shown;
         shown = null;
         if (last != null) last.builder.recycle(last.frame);

@@ -9,6 +9,7 @@ import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.style.property.visual.transform.Transform;
@@ -49,7 +50,7 @@ import java.util.function.Supplier;
  * boolean ours = driver.offerKey(event, () -> myKeys(event) || document.input().consumeKeyboardEvent(event));
  *
  * Painter<Facts> painter = new Painter<>() {
- *     public UiFrame record(float d, int w, int h) { ... frame the document, record it, seal it ... }
+ *     public UiFrame record(CgUiRenderer.View view, float d, int w, int h) { ... frame, record, seal ... }
  *     public Facts facts() { return new Facts(desktop.hasPinnedWindows()); }
  * };
  * Facts shown = driver.shownFacts();   // of the frame on screen, null before the first or when not async
@@ -65,8 +66,10 @@ import java.util.function.Supplier;
  *       a host that hands the document events some other way leaves it a stale picture of the keyboard.</li>
  *   <li>{@link #run} waits for the sequence, and so for a frame being recorded. For a probe or a script, never per
  *       frame.</li>
- *   <li>Every mode records the same way and shows its frame through the document's {@link #presenter()} at the stage:
- *       inline the frame is recorded at the firing, asynchronously the last one committed is shown.</li>
+ *   <li>Every mode records the same way, into the driver's {@link #view()}, and shows its frame through the view's
+ *       presenter at the stage: inline the frame is recorded at the firing, asynchronously the last one committed is
+ *       shown.</li>
+ *   <li>{@link #close} frees the view's GPU resources: close the driver with its document.</li>
  * </ul>
  */
 public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInput.Keyboard {
@@ -98,11 +101,20 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     public interface Painter<F> {
 
         /**
-         * Frames the document and records it, for the render thread to present; null when nothing paints. A throw
-         * leaves the paint context open: abort its frame ({@link CgUiPaintContext#abortFrame}).
+         * Frames the document and records it into {@code view}'s paint context, for the render thread to present; null
+         * when nothing paints. Ask for the context once something paints: a view nothing painted into holds no GPU
+         * resource. A throw leaves the paint context open: abort its frame ({@link CgUiPaintContext#abortFrame}).
+         *
+         * <pre>{@code
+         * document.frame(deltaSeconds, width, height);
+         * CgUiPaintContext ctx = view.paintContext();
+         * ctx.recordFrame(width, height);
+         * try { document.paint(ctx); } catch (RuntimeException | Error failed) { ctx.abortFrame(); throw failed; }
+         * return ctx.seal();
+         * }</pre>
          */
         @Nullable
-        UiFrame record(float deltaSeconds, int width, int height);
+        UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height);
 
         /** What the host reads back about the frame just recorded. Asynchronous only. */
         @Nullable
@@ -116,36 +128,29 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      *
      * <pre>{@code
      * DocumentDriver.whole(document);
-     * DocumentDriver.whole(document, this::refreshReadout, null);                // after the frame, before paint
-     * DocumentDriver.whole(document, null, ctx -> ctx.text()...submit()); // over the document, in its frame
+     * DocumentDriver.whole(document, ctx -> refreshReadout(), null);          // after the frame, before paint
+     * DocumentDriver.whole(document, null, ctx -> ctx.text()...submit());   // over the document, in its frame
      * }</pre>
      *
-     * <p>{@code afterFrame} runs between the document's frame and its paint, and {@code overlay} draws after the
+     * <p>{@code beforePaint} runs between the document's frame and its paint, and {@code overlay} draws after the
      * document in the same frame; both on the document, null for none.</p>
      */
-    public static <F> Painter<F> whole(UIDocument document, @Nullable Runnable afterFrame,
+    public static <F> Painter<F> whole(UIDocument document, @Nullable Consumer<CgUiPaintContext> beforePaint,
                                        @Nullable Consumer<CgUiPaintContext> overlay) {
-        return new Painter<>() {
-            @Override
-            public UiFrame record(float deltaSeconds, int width, int height) {
-                CgUiPaintContext ctx = frame(deltaSeconds, width, height);
-                ctx.recordFrame(width, height);
-                try {
-                    document.paint(ctx);
-                    if (overlay != null) overlay.accept(ctx);
-                } catch (RuntimeException | Error failed) {
-                    ctx.abortFrame();
-                    throw failed;
-                }
-                return ctx.seal();
+        return (view, deltaSeconds, width, height) -> {
+            float scale = document.boxes().uiScale();
+            document.frame(deltaSeconds, width / scale, height / scale);
+            CgUiPaintContext ctx = view.paintContext();
+            if (beforePaint != null) beforePaint.accept(ctx);
+            ctx.recordFrame(width, height);
+            try {
+                document.paint(ctx);
+                if (overlay != null) overlay.accept(ctx);
+            } catch (RuntimeException | Error failed) {
+                ctx.abortFrame();
+                throw failed;
             }
-
-            private CgUiPaintContext frame(float deltaSeconds, int width, int height) {
-                float scale = document.boxes().uiScale();
-                document.frame(deltaSeconds, width / scale, height / scale);
-                if (afterFrame != null) afterFrame.run();
-                return document.paintContext();
-            }
+            return ctx.seal();
         };
     }
 
@@ -164,8 +169,8 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private final PostedPlatformPort port;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
-    /** Shows what this document records, at the stage that frames it. */
-    private final UiPresenter presenter = new UiPresenter();
+    /** Where this document is drawn: what it records with, and what shows it at the stage that frames it. */
+    private final CgUiRenderer.View view = CgUiRenderer.openView();
     /** {@link CgFrameClock}'s seconds at this document's last frame; NaN before the first. Render thread. */
     private double lastFrameSeconds = Double.NaN;
 
@@ -365,16 +370,17 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
             Runnable delivery = document.readExtracts();
             UiFrame recorded = ask(() -> {
                 if (delivery != null) delivery.run();
-                return painter.record(deltaSeconds, width, height);
+                return painter.record(view, deltaSeconds, width, height);
             });
-            if (recorded != null && stage != null) presenter.present(stage, recorded);
+            if (recorded != null && stage != null) view.presenter().present(stage, recorded);
             presented++;
             return true;
         }
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
-        document.paintContext();
+        if (stage != null) view.paintContext();
         port.service();
-        boolean shown = compositor.present(stage, presenter, commit -> followPointer(commit) | animate(commit)) != null;
+        boolean shown = compositor.present(stage, view.presenter(),
+                commit -> followPointer(commit) | animate(commit)) != null;
         lastPresentNanos = System.nanoTime();
         lastPainter = painter;
         lastWidth = width;
@@ -395,7 +401,12 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     /** What shows this document's frames: the last presented, which a host may move and draw again. Render thread. */
     public UiPresenter presenter() {
-        return presenter;
+        return view.presenter();
+    }
+
+    /** Where this document is drawn: its paint context and its presenter, closed with the driver. */
+    public CgUiRenderer.View view() {
+        return view;
     }
 
     /** What a recording chained behind a slow one records: the painter and size the host last framed with. */
@@ -423,7 +434,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     }
 
     private UiCommit<F> commit(Painter<F> painter, float deltaSeconds, int width, int height) {
-        UiFrame frame = painter.record(deltaSeconds, width, height);
+        UiFrame frame = painter.record(view, deltaSeconds, width, height);
         return new UiCommit<>(frame, painter.facts(), ++commits, follow(frame), motions(frame));
     }
 
@@ -608,15 +619,18 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     }
 
     /**
-     * Waits for the frame being recorded, then stops the sequence: after it returns nothing of the document runs, so
-     * the host may free what its frames use. The document is not touched; dispose it first, through {@link #run}.
+     * Waits for the frame being recorded, stops the sequence, then closes the view, freeing what the document's frames
+     * drew with: after it returns nothing of the document runs. The document is not touched; dispose it first, through
+     * {@link #run}. Render thread; idempotent.
      */
     public void close() {
-        presenter.release();
-        if (sequence == null || closed) return;
+        if (closed) return;
         closed = true;
-        sequence.runNow(() -> { });
-        sequence.close();
-        if (port != null) JobScheduler.asynchronousDocumentClosed();
+        if (sequence != null) {
+            sequence.runNow(() -> { });
+            sequence.close();
+            if (port != null) JobScheduler.asynchronousDocumentClosed();
+        }
+        view.close();
     }
 }

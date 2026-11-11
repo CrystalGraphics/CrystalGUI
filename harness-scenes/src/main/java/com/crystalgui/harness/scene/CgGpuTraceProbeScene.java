@@ -5,7 +5,7 @@ import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.UiPresenter;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
@@ -128,19 +128,19 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
 
     /** Where the load draws: a stage of this scene's, fired from {@link #render}, not the harness's SCREEN. */
     private static final CgRenderStage LOAD = CgRenderStage.define("crystalgui:gpu_trace_probe");
-    private static final UiPresenter PRESENTER = new UiPresenter();
+    private static final CgUiRenderer.View VIEW = CgUiRenderer.openView();
     private static int loadQuads;
 
     static {
         LOAD.register(stage -> {
             int w = stage.host().width(), h = stage.host().height();
-            CgUiPaintContext paint = paintContext();
+            CgUiPaintContext paint = VIEW.paintContext();
             paint.recordFrame(w, h);
             paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
             for (int i = loadQuads; i > 1; i--) {
                 paint.quad().at(0, 0).size(w, h).color((i & 1) == 0 ? 0x08FF8040 : 0x084080FF).submit();
             }
-            PRESENTER.present(stage, paint.seal());
+            VIEW.presenter().present(stage, paint.seal());
         });
     }
 
@@ -228,6 +228,7 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     @Override
     public void dispose() {
         for (long fence : fences.values()) PlatformServiceHarness.deleteFence(fence);
+        VIEW.close();
         CgGpuTrace.dispose();
         CgTrace.disableAll();
     }
@@ -245,13 +246,5 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     @Override
     public boolean shouldShutdownOnComplete() {
         return true;
-    }
-
-    /** This scene's paint context: it has no document to ask for one. */
-    private static CgUiPaintContext paintContext;
-
-    private static CgUiPaintContext paintContext() {
-        if (paintContext == null) paintContext = CgUiPaintContext.create();
-        return paintContext;
     }
 }

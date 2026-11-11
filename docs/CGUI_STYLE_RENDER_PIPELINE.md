@@ -238,7 +238,7 @@ UIDocument.paintFrame()
     styleEngine.calculateStyle(deltaSeconds)   // drainDirtyMatch() (selector rematch) + transitionEngine.tick()
     animation().tick(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
     calculateLayout()                          // Taffy computeLayout(), while dirty
-  document.paintContext()                          // the document's own CgUiPaintContext
+  driver.view().paintContext()                     // the document's own CgUiPaintContext, its driver's view's
   paintContext.recordFrame(actualScreenW, actualScreenH)  // the frame target, its ortho, the scissor reset
     pose.pushPose(); pose.mulPoseMatrix(rootTransform)   // rootTransform = the ONE definition of uiScale
       ui.rootElement.the paint walk(paintContext) // paintContent → children (z-sorted) → paintDecoration → paintOutline

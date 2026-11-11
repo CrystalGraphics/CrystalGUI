@@ -4581,7 +4581,7 @@ com/crystalgui/desktop/Desktop
   method public presentation (ZZ)Lcom/crystalgui/core/window/DesktopPresentation;
   method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public reattach (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public record (Lcom/crystalgui/core/window/DesktopPresentation;FII)Lcom/crystalgui/render/UiFrame;
+  method public record (Lcom/crystalgui/render/CgUiRenderer$View;Lcom/crystalgui/core/window/DesktopPresentation;FII)Lcom/crystalgui/render/UiFrame;
   method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
   method public rememberPlacement (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public renormaliseStack ()V
@@ -8125,10 +8125,6 @@ com/crystalgui/render/CgUiPaintContext
   method public warmUpLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;)V
   method public withLayerOpacity (FLjava/lang/Runnable;)V
   method public withoutRetention (Ljava/lang/Runnable;)V
-  method public,static create ()Lcom/crystalgui/render/CgUiPaintContext;
-  method public,static parseAhead ()V
-  method public,static precache ()V
-  method public,static releaseAll ()V
 com/crystalgui/render/CgUiPaintContext$Backdrop
   access public,final
   extends java/lang/Object
@@ -8139,6 +8135,20 @@ com/crystalgui/render/CgUiPaintContext$Backdrop
   method public x1 ()I
   method public y0 ()I
   method public y1 ()I
+com/crystalgui/render/CgUiRenderer
+  access public,final
+  extends java/lang/Object
+  method public,static contextDestroyed ()V
+  method public,static openView ()Lcom/crystalgui/render/CgUiRenderer$View;
+  method public,static parseAhead ()V
+  method public,static precache ()V
+com/crystalgui/render/CgUiRenderer$View
+  access public,final
+  extends java/lang/Object
+  method public close ()V
+  method public isClosed ()Z
+  method public paintContext ()Lcom/crystalgui/render/CgUiPaintContext;
+  method public presenter ()Lcom/crystalgui/render/UiPresenter;
 com/crystalgui/render/InkOverflow
   access public,final,record
   extends java/lang/Record
@@ -8253,12 +8263,10 @@ com/crystalgui/render/UiPaintWarmup
 com/crystalgui/render/UiPresenter
   access public,final
   extends java/lang/Object
-  method public <init> ()V
   method public present (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/render/UiFrame;)V
   method public presentAgain (Lcom/crystalgraphics/render/stage/CgStageFrame;)Z
   method public presented ()Lcom/crystalgui/render/UiFrame;
   method public redraw (Lcom/crystalgraphics/render/stage/CgStageFrame;Z)Z
-  method public release ()V
 com/crystalgui/render/text/CssTextStyle
   access public,final
   extends java/lang/Object
@@ -13072,10 +13080,11 @@ com/crystalgui/ui/dom/DocumentDriver
   method public run (Ljava/lang/Runnable;)V
   method public sequence ()Lcom/crystalgui/core/async/UiSequence;
   method public shownFacts ()Ljava/lang/Object;
+  method public view ()Lcom/crystalgui/render/CgUiRenderer$View;
   method public,static attach (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/ui/dom/DocumentDriver;
   method public,static attach (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/ui/dom/DocumentDriver$Mode;Ljava/lang/String;)Lcom/crystalgui/ui/dom/DocumentDriver;
   method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/ui/dom/DocumentDriver$Painter;
-  method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;Ljava/lang/Runnable;Ljava/util/function/Consumer;)Lcom/crystalgui/ui/dom/DocumentDriver$Painter;
+  method public,static whole (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Consumer;Ljava/util/function/Consumer;)Lcom/crystalgui/ui/dom/DocumentDriver$Painter;
 com/crystalgui/ui/dom/DocumentDriver$Mode
   access public,final,enum
   extends java/lang/Enum
@@ -13089,7 +13098,7 @@ com/crystalgui/ui/dom/DocumentDriver$Painter
   access public,abstract,interface
   extends java/lang/Object
   method public facts ()Ljava/lang/Object;
-  method public,abstract record (FII)Lcom/crystalgui/render/UiFrame;
+  method public,abstract record (Lcom/crystalgui/render/CgUiRenderer$View;FII)Lcom/crystalgui/render/UiFrame;
 com/crystalgui/ui/dom/GlyphRole
   access public,final,enum
   extends java/lang/Enum
@@ -13318,7 +13327,6 @@ com/crystalgui/ui/dom/UIDocument
   method public markFrameThread ()Lcom/crystalgui/ui/dom/UIDocument;
   method public overlayHost (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UIElement;
   method public paint (Lcom/crystalgui/render/CgUiPaintContext;)V
-  method public paintContext ()Lcom/crystalgui/render/CgUiPaintContext;
   method public platform ()Lcom/crystalgui/ui/service/PlatformPort;
   method public promote (Lcom/crystalgui/ui/dom/UIElement;)V
   method public promote (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)V

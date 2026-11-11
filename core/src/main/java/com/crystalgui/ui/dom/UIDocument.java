@@ -116,8 +116,6 @@ public final class UIDocument extends UIElement {
     @Nullable
     private BoxTree boxes;
     @Nullable
-    private CgUiPaintContext paintContext;
-    @Nullable
     private Input input;
     @Nullable
     private Focus focus;
@@ -298,22 +296,6 @@ public final class UIDocument extends UIElement {
     public BoxTree boxes() {
         if (boxes == null) boxes = new BoxTree(this);
         return boxes;
-    }
-
-    /**
-     * This document's paint context: what {@link #paint} records a frame into, built on first use. Ask for it on the
-     * render thread the first time — its font and text renderer are set up there.
-     *
-     * <pre>{@code
-     * CgUiPaintContext ctx = document.paintContext();
-     * ctx.recordFrame(width, height);
-     * document.paint(ctx);
-     * UiFrame frame = ctx.seal();         // a DocumentDriver's presenter shows it at a GUI stage
-     * }</pre>
-     */
-    public CgUiPaintContext paintContext() {
-        if (paintContext == null) paintContext = CgUiPaintContext.create();
-        return paintContext;
     }
 
     // ── Services (5.5) ───────────────────────────────────────────────────────
@@ -766,7 +748,10 @@ public final class UIDocument extends UIElement {
         layout(width, height);
     }
 
-    /** Paints the laid-out document through the shared paint context (5.4). */
+    /**
+     * Paints the laid-out document into {@code ctx}, a frame its owner opened: the document owns no paint context, and
+     * a {@code DocumentDriver}'s view hands its painter one.
+     */
     public void paint(CgUiPaintContext ctx) {
         boxes().paint(ctx);
         // AFTER the tree: cursor art belongs over everything and inside no scissor. @see CursorDecoration

@@ -11,6 +11,7 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.box.BoxPainter;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.desktop.host.ScreenOverlay;
 import com.crystalgui.core.window.DesktopPresentation;
@@ -2066,13 +2067,13 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Records one frame in {@code presentation} — <b>the one paint entry a host calls</b>, through its
-     * {@code DocumentDriver}, which shows it at a GUI stage. Null when the presentation paints nothing. On the document's
-     * thread.
+     * Records one frame in {@code presentation} into {@code view} — <b>the one paint entry a host calls</b>, through its
+     * {@code DocumentDriver}, which shows it at a GUI stage. Null when the presentation paints nothing, and then the
+     * view's paint context is not asked for. On the document's thread.
      *
      * <pre>{@code
-     * UiFrame frame = desktop.record(presentation, delta, width, height);   // the document's thread
-     * if (frame != null) presenter.present(stage, frame);                   // the render thread, at the stage
+     * UiFrame frame = desktop.record(view, presentation, delta, width, height);   // the document's thread
+     * if (frame != null) view.presenter().present(stage, frame);                  // the render thread, at the stage
      * }</pre>
      *
      * <p>Folding the arms together is not tidiness: it is what stops two callers each deciding
@@ -2085,10 +2086,11 @@ public class Desktop extends UIElement implements DataProvider {
      * window pixel-identical on the desktop, over a foreign GUI and on the HUD.</p>
      */
     @Nullable
-    public UiFrame record(DesktopPresentation presentation, float deltaSeconds, int surfaceWidth, int surfaceHeight) {
+    public UiFrame record(CgUiRenderer.View view, DesktopPresentation presentation, float deltaSeconds, int surfaceWidth,
+                          int surfaceHeight) {
         UIDocument document = prepare(presentation, deltaSeconds, surfaceWidth, surfaceHeight);
         if (document == null) return null;
-        CgUiPaintContext ctx = document.paintContext();
+        CgUiPaintContext ctx = view.paintContext();
         ctx.recordFrame(surfaceWidth, surfaceHeight);
         try {
             paintInto(presentation, document, ctx);

@@ -10,7 +10,6 @@ import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.compute.ops.CgGpuOps;
 import com.crystalgraphics.job.CgJob;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.render.CgFrameClock;
@@ -22,7 +21,6 @@ import com.crystalgraphics.render.canvas.CgClipTable;
 import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.render.canvas.CgQuadBatch;
 import com.crystalgraphics.render.canvas.CgShapeTable;
-import com.crystalgraphics.render.draw.CgInstanceKind;
 import com.crystalgraphics.render.draw.CgPassConstants;
 import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgExecutor;
@@ -36,7 +34,6 @@ import com.crystalgraphics.render.graph.CgReplay;
 import com.crystalgraphics.render.graph.CgTextureDesc;
 import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
-import com.crystalgraphics.render.world.CgPipelinePrecache;
 import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.trace.CgTrace;
@@ -50,23 +47,22 @@ import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * A document's paint context: it records a frame of the document onto a {@link CgCanvas}, touching no GPU, and hands
- * back a sealed {@link UiFrame} that a {@link UiPresenter} shows at a GUI stage. One per document, from
- * {@link com.crystalgui.ui.dom.UIDocument#paintContext()}; a {@code DocumentDriver} drives it.
+ * back a sealed {@link UiFrame} that a {@link UiPresenter} shows at a GUI stage. One per {@link CgUiRenderer.View}, which a
+ * {@code DocumentDriver} owns for its document and hands its painter.
  *
  * <pre>{@code
- * CgUiPaintContext ctx = document.paintContext();
- * ctx.recordFrame(w, h);             // any thread the document is framed on
+ * CgUiPaintContext ctx = view.paintContext();
+ * ctx.recordFrame(w, h);                     // any thread the document is framed on
  * document.paint(ctx);
  * UiFrame frame = ctx.seal();
  *
- * presenter.present(stage, frame);   // render thread, at CgRenderStage.SCREEN or HUD
+ * view.presenter().present(stage, frame);    // render thread, at CgRenderStage.SCREEN or HUD
  * }</pre>
  *
  * <p>Everything drawn is a canvas item stamped with the context's state as it is built: the pose on
@@ -96,62 +92,7 @@ import java.util.List;
  */
 public final class CgUiPaintContext {
 
-    /**
-     * A paint context for one document; {@link com.crystalgui.ui.dom.UIDocument#paintContext()} makes it. Render thread:
-     * it loads the default font.
-     */
-    public static CgUiPaintContext create() {
-        CgUiPaintContext context = new CgUiPaintContext();
-        LIVE.removeIf(ref -> ref.get() == null);
-        LIVE.add(new WeakReference<>(context));
-        return context;
-    }
-
-    /** Every context made, for {@link #releaseAll()}: what each requested, no registry holds. Render thread. */
-    private static final List<WeakReference<CgUiPaintContext>> LIVE = new ArrayList<>();
-
-    /**
-     * Frees what every paint context made: frame targets, surfaces, backdrop and icon-raster textures, requested from
-     * the graph, which no registry sweeps. At GL context destruction ({@code CgUiClientLifecycle.onContextDestroy}), before
-     * CrystalGraphics frees its own. Render thread; idempotent.
-     */
-    public static void releaseAll() {
-        for (WeakReference<CgUiPaintContext> ref : LIVE) {
-            CgUiPaintContext context = ref.get();
-            if (context != null) context.release();
-        }
-        LIVE.clear();
-    }
-
-    /**
-     * Names every shader and kernel the UI draws to CrystalGraphics' precache, so the desktop's first frame compiles
-     * nothing. Once, at client init; any thread. The canvas materials are CrystalGraphics', precached there.
-     *
-     * <pre>{@code
-     * CgUiPaintContext.precache();   // CgUiClientLifecycle.onPreInit does it
-     * }</pre>
-     */
-    public static void precache() {
-        CgPipelinePrecache.register("crystalgui:ui", pipelines -> {
-            for (String quad : QUAD_SHADERS) pipelines.addPass(quad, CgInstanceKind.QUAD);
-            // The backdrop's blur and a thumbnail's shrink on the layer format, and an icon shadow's blur on the atlas's.
-            pipelines.kernels(() -> {
-                CgGpuOps.precacheBlur(CgTextureType.RGBA8);
-                CgGpuOps.precacheBlur(CgTextureType.RGBA16F);
-                CgGpuOps.precacheShrink(CgTextureType.RGBA8);
-            });
-        });
-    }
-
-    /** Parses the UI's own shaders on a worker, from the graphics start: the precache's first collect then parses none. */
-    public static void parseAhead() {
-        CgPipelinePrecache.parseAhead(QUAD_SHADERS);
-    }
-
-    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_color_field.shader"};
-
     // ── What it draws with ───────────────────────────────────────────────────
-
 
     static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
             .color(0, CgTextureType.RGBA8).build();
@@ -234,7 +175,8 @@ public final class CgUiPaintContext {
     /** Requested textures released between frames: the next frame records their release first. */
     private final List<CgGraphTexture> pendingReleases = new ArrayList<>();
 
-    private CgUiPaintContext() {
+    /** {@link CgUiRenderer.View#paintContext()} makes one per view. */
+    CgUiPaintContext() {
         this.backdrop = new CgUiBackdrop(this);
         this.svgRaster = new SvgRasterCache(this);
         this.segments = new PaintSegments(this, recorder, recording);
@@ -1717,9 +1659,9 @@ public final class CgUiPaintContext {
     // ── Teardown ─────────────────────────────────────────────────────────────
 
     /**
-     * Frees what this context made: its surfaces, frame target, and the backdrop's and icon raster's textures.
-     * {@link #releaseAll} calls it at context destruction. Materials, fonts and the fallback textures are
-     * CrystalGraphics' registries', swept there; freeing them here would be a double free.
+     * Frees what this context made: its surfaces, frame target, and the backdrop's and icon raster's textures. Its view
+     * calls it at close and at graphics context destruction; the next frame makes them again. Materials, fonts and the
+     * fallback textures are CrystalGraphics' registries', swept there; freeing them here would be a double free.
      */
     void release() {
         Arrays.fill(layers, 0, layerDepth, null);

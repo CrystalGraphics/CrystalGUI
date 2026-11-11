@@ -226,7 +226,7 @@ com.crystalgui.lifecycle       CrystalGUI's two CgLifecycleListeners, one a side
                                desktop, loading tasks, reloads, paint teardown), CgUiCommonLifecycle (protocols,
                                the server workspace, the server smoke)
 
-com.crystalgui.render          CgUiPaintContext (one per document: records), UiPresenter (one per document: shows at a GUI stage), UiFrame
+com.crystalgui.render          CgUiRenderer (the global part), CgUiRenderer.View (one per document: a CgUiPaintContext that records and a UiPresenter that shows), UiFrame
                                (a sealed frame), Surface (a moved box's kept texture), PaintSegments, PaintSurfaces, CgUiBackdrop,
                                ScissorStack,
                                SvgRasterCache — icon fills rasterised once by additive accumulation into an

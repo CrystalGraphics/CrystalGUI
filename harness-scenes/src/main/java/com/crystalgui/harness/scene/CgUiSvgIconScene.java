@@ -6,7 +6,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.UiPresenter;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -234,7 +234,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     /** The scene's picture, on the SCREEN stage the harness fires over a 2D scene. */
     private void paint(CgStageFrame stage) {
         int screenHeight = stage.host().height();
-        CgUiPaintContext paint = paintContext();
+        CgUiPaintContext paint = view.paintContext();
         paint.recordFrame(stage.host().width(), screenHeight);
 
         drawStudyStrip(paint);
@@ -291,7 +291,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
                         entries.size(), missing, blank, cells, segments, zoom))
                 .font(paint.getFont().atSize(12)).submit();
 
-        presenter.present(stage, paint.seal());
+        view.presenter().present(stage, paint.seal());
     }
 
     /** What follows the frame: its captures, the one-shot's end and the profile. */
@@ -424,7 +424,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     @Override
     public void dispose() {
         if (screen != null) screen.close();
-        presenter.release();
+        view.close();
         if (profileInteractive && profileCtx != null) {
             java.io.File out = TraceDump.dump(
                     new java.io.File(profileCtx.getOutputDir()), "svg-lod-live", 0L);
@@ -432,13 +432,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
     }
 
-    /** This scene's paint context: it has no document to ask for one; and what shows its frames. */
-    private CgUiPaintContext paintContext;
-    private final UiPresenter presenter = new UiPresenter();
+    /** Where this scene draws: it paints with no document, so no driver gives it one. */
+    private final CgUiRenderer.View view = CgUiRenderer.openView();
     private CgRenderStage.Registration screen;
-
-    private CgUiPaintContext paintContext() {
-        if (paintContext == null) paintContext = CgUiPaintContext.create();
-        return paintContext;
-    }
 }

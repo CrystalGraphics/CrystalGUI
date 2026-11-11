@@ -1,6 +1,7 @@
 package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.harness.ui.UiDocumentScene;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.trace.CgTrace;
@@ -161,9 +162,9 @@ public class CgUiTextStressScene extends UiDocumentScene {
     protected DocumentDriver.Painter<Void> painter() {
         return new DocumentDriver.Painter<>() {
             @Override
-            public UiFrame record(float deltaSeconds, int width, int height) {
+            public UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height) {
                 UIDocument document = document();
-                CgUiPaintContext context = document.paintContext();
+                CgUiPaintContext context = view.paintContext();
                 try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "document.paintFrame")) {
                     float scale = document.boxes().uiScale();
                     if (DRAW_LABELS) {

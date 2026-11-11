@@ -10,7 +10,7 @@ import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.gauntlet.DesktopScriptTest;
 import com.crystalgui.gauntlet.DesktopTest;
 import com.crystalgui.gauntlet.OpenCloseTest;
-import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiPaintWarmup;
 import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -39,7 +39,7 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
         HostSession.install();
         DesktopKeys.declare();
         CgUiStart.ahead();
-        CgUiPaintContext.precache();
+        CgUiRenderer.precache();
         gauntlet();
     }
 
@@ -52,7 +52,7 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
     
     @Override
     public void onContextInit(int width, int height) {
-        CgUiPaintContext.parseAhead();
+        CgUiRenderer.parseAhead();
     }
 
     /** The paint preload, then the desktop built and rehearsed behind the loading screen. */
@@ -93,15 +93,15 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
     }
     
     /**
-     * Releases the paint contexts' textures, which no registry holds. Only at game shutdown, before CrystalGraphics
+     * Frees every open view's textures, which no registry holds. Only at game shutdown, before CrystalGraphics
      * frees anything; caches and documents die with the process.
      */
     @Override
     public void onContextDestroy() {
         try {
-            CgUiPaintContext.releaseAll();
+            CgUiRenderer.contextDestroyed();
         } catch (Throwable t) {
-            CrystalGuiCore.LOGGER.warn("CgUiClientLifecycle: failed to tear down the paint context", t);
+            CrystalGuiCore.LOGGER.warn("CgUiClientLifecycle: failed to free the UI views' textures", t);
         }
     }
 }

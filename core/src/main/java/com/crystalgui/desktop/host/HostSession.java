@@ -7,6 +7,7 @@ import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.graph.CgRehearsal;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
+import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.core.CrystalGuiCore;
@@ -680,9 +681,9 @@ public final class HostSession {
 
         @Override
         @Nullable
-        public UiFrame record(float deltaSeconds, int width, int height) {
+        public UiFrame record(CgUiRenderer.View view, float deltaSeconds, int width, int height) {
             try {
-                return desktop.record(presentation, deltaSeconds, width, height);
+                return desktop.record(view, presentation, deltaSeconds, width, height);
             } catch (RuntimeException | LinkageError failed) {
                 CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode", failed);
                 desktop.exitHudMode();
