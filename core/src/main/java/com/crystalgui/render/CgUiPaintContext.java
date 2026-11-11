@@ -3,14 +3,12 @@ package com.crystalgui.render;
 import com.crystalgraphics.gpu.resource.CgTextureAbstract;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
-import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.api.state.CgBlendState;
 import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.canvas.CgCanvas;
 import com.crystalgraphics.render.canvas.CgCanvasBackdrop;
@@ -48,6 +46,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
+import com.crystalgraphics.platform.rhi.format.CgFormat;
 
 /**
  * A document's paint context: it records a frame of the document onto a {@link CgCanvas}, touching no GPU, and hands
@@ -92,8 +91,7 @@ public final class CgUiPaintContext {
 
     // ── What it draws with ───────────────────────────────────────────────────
 
-    static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
-            .color(0, CgTextureType.RGBA8).build();
+    static final CgFormat LAYER_FORMAT = CgFormat.RGBA8_UNORM;
 
     private final CgUiBackdrop backdrop;
     private final SvgRasterCache svgRaster;
@@ -1487,8 +1485,8 @@ public final class CgUiPaintContext {
     // ── Kept pictures and passes of the caller's own ─────────────────────────
 
     /** A texture made when the frame executes and kept until {@link #releaseTexture}: what a recording may not make itself. */
-    CgGraphTexture requestTexture(String name, int width, int height, CgFrameBufferFormat format) {
-        return CgGraphTexture.requested(name, new CgTextureDesc(Math.max(1, width), Math.max(1, height), format));
+    CgGraphTexture requestTexture(String name, int width, int height, CgFormat format) {
+        return CgGraphTexture.requested(name, CgTextureDesc.of(Math.max(1, width), Math.max(1, height), format));
     }
 
     /**

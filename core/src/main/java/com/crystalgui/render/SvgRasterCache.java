@@ -1,8 +1,6 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.material.CgMaterial;
-import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.compute.ops.CgGpuOps;
 import com.crystalgraphics.render.canvas.CgCanvasMaterials;
@@ -22,6 +20,7 @@ import org.joml.Matrix4f;
 
 import java.util.HashMap;
 import java.util.Map;
+import com.crystalgraphics.platform.rhi.format.CgFormat;
 
 /**
  * Icon fills rasterised once, on the GPU, and drawn from a texture after that.
@@ -109,8 +108,8 @@ public final class SvgRasterCache {
      * Half floats: a cell's contribution is often a fiftieth of a level, and eight bits would round every
      * one of them to zero. Colour is premultiplied by construction — every cell adds {@code colour × area}.
      */
-    private static final CgFrameBufferFormat ATLAS_FORMAT =
-            CgFrameBufferFormat.builder("cgui_svg_raster").color(0, CgTextureType.RGBA16F).build();
+    private static final CgFormat ATLAS_FORMAT =
+            CgFormat.RGBA16_FLOAT;
 
     /**
      * A raster's identity. Mutable so every draw looks up through {@link #probe} and only a miss stores a copy:

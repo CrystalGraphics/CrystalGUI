@@ -1,6 +1,5 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.compute.ops.CgGpuOps;
 import com.crystalgraphics.render.draw.CgInstanceKind;
 import com.crystalgraphics.render.world.CgPipelinePrecache;
@@ -10,6 +9,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.crystalgraphics.platform.rhi.format.CgFormat;
 
 /**
  * The UI's renderer: what every document's painting shares, held once for the process. It names the UI's pipelines to
@@ -51,9 +51,9 @@ public final class CgUiRenderer {
             for (String quad : QUAD_SHADERS) pipelines.addPass(quad, CgInstanceKind.QUAD);
             // The backdrop's blur and a thumbnail's shrink on the layer format, and an icon shadow's blur on the atlas's.
             pipelines.kernels(() -> {
-                CgGpuOps.precacheBlur(CgTextureType.RGBA8);
-                CgGpuOps.precacheBlur(CgTextureType.RGBA16F);
-                CgGpuOps.precacheShrink(CgTextureType.RGBA8);
+                CgGpuOps.precacheBlur(CgFormat.RGBA8_UNORM);
+                CgGpuOps.precacheBlur(CgFormat.RGBA16_FLOAT);
+                CgGpuOps.precacheShrink(CgFormat.RGBA8_UNORM);
             });
         });
     }

@@ -1,7 +1,6 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.render.canvas.CgCanvasBackdrop;
 import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.render.graph.CgGraphTexture;
@@ -9,6 +8,7 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.platform.rhi.format.CgFormat;
 
 /**
  * What is behind an element, captured and blurred once a frame: the primitive under {@code backdrop-filter}, reached
@@ -182,7 +182,7 @@ final class CgUiBackdrop {
         capH = Math.max(1, Math.min(h - y0, y1 - y0));
 
         // The scene behind the UI, the host's target as the frame began, at its place in the backdrop's texels.
-        CgGraphTexture capture = backdrop.capture(ctx.breakPass(), CgGraphTexture.current(), w, h, CgTextureType.RGBA8,
+        CgGraphTexture capture = backdrop.capture(ctx.breakPass(), CgGraphTexture.current(), w, h, CgFormat.RGBA8_UNORM,
                 capX0, h - (capY0 + capH), capX0 + capW, h - capY0);
 
         // Then what the UI drew, premultiplied `over`: the frame target, then each enclosing layer where it sits. Read
