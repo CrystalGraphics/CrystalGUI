@@ -1,5 +1,6 @@
 package com.crystalgui.app.vfxlab;
 
+import com.crystalgraphics.platform.rhi.CgExternalTarget;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gl.framebuffer.CgFrameBuffer;
@@ -186,7 +187,8 @@ final class VfxViewport extends UIElement {
         CgHostFrame first = WORLD[0].host();
         CgHostView host = first.view();
         float tick = first.partialTick();
-        int hostWidth = first.width(), hostHeight = first.height(), hostTarget = first.mainFramebuffer();
+        int hostWidth = first.width(), hostHeight = first.height();
+        CgExternalTarget hostTarget = first.target();
         double hostX = host.x(), hostY = host.y(), hostZ = host.z();
         hostView.set(host.view());
         hostProjection.set(host.projection());
@@ -197,15 +199,16 @@ final class VfxViewport extends UIElement {
             projection.setPerspective((float) Math.toRadians(60), aspect, 0.05f, 1000f);
         }
 
+        CgExternalTarget into = target.external();
         for (CgRenderStage stage : WORLD) {
-            stage.host().set(0f, width, height, target.getId()).view().set(atX, atY, atZ, view, projection);
-            stage.fireInto(target);
+            stage.host().set(0f, width, height, into).view().set(atX, atY, atZ, view, projection);
+            stage.fireInto(into);
         }
         for (CgRenderStage stage : WORLD) {
             stage.host().set(tick, hostWidth, hostHeight, hostTarget).view().set(hostX, hostY, hostZ, hostView, hostProjection);
         }
         picture = target.getColorTexture(0);
-        particles = CgVfxSystem.particlesDrawn(target.getId());
+        particles = CgVfxSystem.particlesDrawn(into);
     }
 
     /** Where the eye is, from the point {@link #draw} is given. */

@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.gl.texture.CgTextureAbstract;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
@@ -10,8 +11,6 @@ import com.crystalgraphics.api.state.CgRenderState;
 import com.crystalgraphics.api.texture.CgSampler;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.texture.CgTextureType;
-import com.crystalgraphics.job.CgJob;
-import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.canvas.CgCanvas;
 import com.crystalgraphics.render.canvas.CgCanvasBackdrop;
@@ -37,7 +36,6 @@ import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.trace.CgTrace;
-import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -344,7 +342,7 @@ public final class CgUiPaintContext {
     public void drawImage(CgTexture texture, float x, float y, float width, float height,
                           float u0, float v0, float u1, float v1, int argb) {
         CgQuadBatch.Quad quad = quad().texture(0, texture).at(x, y).size(width, height).color(argb);
-        (texture.isMissing() ? quad : quad.uv(u0, v0, u1, v1)).submit();
+        (texture instanceof CgTextureAbstract file && file.isMissing() ? quad : quad.uv(u0, v0, u1, v1)).submit();
     }
 
     /**

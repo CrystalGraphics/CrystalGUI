@@ -123,7 +123,7 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     /** The load, executed before this returns: fired on a stage of its own, so a wait for the GPU after covers it. */
     private static void paint(HarnessContext ctx, int quads) {
         loadQuads = quads;
-        LOAD.fireOverlay(ctx.getScreenWidth(), ctx.getScreenHeight(), 1f, ctx.getTargetFramebuffer());
+        LOAD.fireOverlay(ctx.getScreenWidth(), ctx.getScreenHeight(), 1f, ctx.getTarget());
     }
 
     /** Where the load draws: a stage of this scene's, fired from {@link #render}, not the harness's SCREEN. */
