@@ -19,6 +19,11 @@ import com.crystalgraphics.trace.CgTraceSnapshot;
 import com.crystalgui.core.trace.UiTrace;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -69,9 +74,16 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.app.shadergraph.ShaderGraphDocument;
 import com.crystalgui.document.Document;
 import com.crystalgui.graph.NodeData;
+import com.crystalgui.harness.DesktopBaselineProbe;
 import com.crystalgui.harness.HoverSweepProbe;
 import com.crystalgui.harness.ShaderGraphCostProbe;
 import com.crystalgui.harness.TraceCostProbe;
+
+import com.crystalgui.app.vfxlab.VfxLab;
+import com.crystalgui.core.storage.CrystalGuiStorage;
+import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.style.theme.UiTheme;
+import com.crystalgui.style.theme.UiThemeManager;
 
 import javax.annotation.Nullable;
 
@@ -229,6 +241,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         ui.openAtStart(() -> build(ctx));
         document = HostSession.session().document();
         driver = document.driver();
+        if (BASELINE) baseline = baselineProbe(ctx);
     }
 
     private void build(HarnessContext ctx) {
@@ -299,7 +312,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
         // Where it writes and the arrangement it restores are the host's: every window here carries a key, which is
         // what the record names a window by, so each comes back where it was left.
-        if (EDITOR_AT <= 0) openEditorWindow();
+        // The baseline launches the editor itself, late, to time its first open.
+        if (EDITOR_AT <= 0 && !BASELINE) openEditorWindow();
     }
 
     /**
@@ -449,6 +463,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // Waited for, which is why they are off unless asked.
         if (probing()) driver.run(() -> afterFrame(ctx, frame, workStart));
         if (FOLLOW_SHOT) driveFollowShot(ctx);
+        if (baseline != null && baseline.frame()) baselineDone = true;
         // Late enough that the first window's placement, the entry animations and the editor's own
         // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
         // still assembling itself and every diff against it is noise. Counted in frames that showed the
@@ -793,6 +808,99 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     private final TraceCostProbe traceCost = TRACE_COST ? new TraceCostProbe(240) : null;
     private boolean traceCostDone;
+
+    /**
+     * -Dcrystalgui.harness.desktop.baseline=true: the desktop as a user feels it, measured the same way every run: the
+     * editor's first open, three applications open, steady state, theme switches keeping the editor busy, a large file
+     * opened. Prints {@code [baseline]} lines, writes {@code baseline.txt} and exits. @see DesktopBaselineProbe
+     */
+    private static final boolean BASELINE = Boolean.getBoolean("crystalgui.harness.desktop.baseline");
+    /** The large file the baseline opens, generated in the scratch project on first use. */
+    private static final String BASELINE_FILE = "src/BaselineLarge.java";
+    private static final int BASELINE_FILE_METHODS = 2000;
+
+    @Nullable
+    private DesktopBaselineProbe baseline;
+    private boolean baselineDone;
+
+    private DesktopBaselineProbe baselineProbe(HarnessContext ctx) {
+        // Before the run, so the workspace has it before the open
+        writeLargeFile();
+        return new DesktopBaselineProbe(GRAPH_COST_WARMUP, new DesktopBaselineProbe.Target() {
+            @Override
+            public DocumentDriver<?> driver() {
+                return driver;
+            }
+
+            @Override
+            public void openEditor() {
+                openEditorWindow();
+            }
+
+            @Override
+            public void openOthers() {
+                desktop.applications().launch(VfxLab.KIND, HostSession.session().workspace());
+                FrameProfiler.openOn(desktop);
+            }
+
+            @Override
+            public void switchTheme() {
+                UiThemeManager themes = UiThemeManager.getInstance();
+                List<UiTheme> all = ThemeRegistry.themes();
+                if (all.size() < 2) return;
+                int at = 0;
+                for (int i = 0; i < all.size(); i++) if (all.get(i).id().equals(themes.activeThemeId())) at = i;
+                themes.setTheme(all.get((at + 1) % all.size()).id());
+            }
+
+            @Override
+            public void openLargeFile(Runnable onOpened) {
+                if (editor == null) return;
+                editor.workbench().openFile(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE), onOpened);
+            }
+
+            @Override
+            public void closeLargeFile() {
+                if (editor != null) editor.workbench().dock().closePanel(
+                        editor.workbench().refFor(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE)));
+            }
+
+            @Override
+            public float[] taskbarPoint(int which) {
+                return at(desktop.taskbar(), which == 0 ? 0.3f : 0.6f, 0.5f);
+            }
+
+            @Override
+            public void dispatch(CgSystemInput.Mouse.Event event) {
+                document.input().consumeMouseEvent(event);
+            }
+        }, Paths.get(ctx.getOutputSettings().getOutputDir()));
+    }
+
+    /** About 20,000 lines of Java, written once into the scratch project. */
+    private static void writeLargeFile() {
+        Path file = CrystalGuiStorage.projectsIn(Paths.get(".").toAbsolutePath().normalize())
+                .resolve("scratch").resolve(BASELINE_FILE);
+        if (Files.exists(file)) return;
+        StringBuilder source = new StringBuilder("public class BaselineLarge {").append('\n');
+        for (int i = 0; i < BASELINE_FILE_METHODS; i++) {
+            source.append("    /** Method ").append(i).append(", one of many, so the file is long. */").append('\n')
+                    .append("    public static int method").append(i).append("(int value) {").append('\n')
+                    .append("        int sum = value;").append('\n')
+                    .append("        for (int i = 0; i < ").append(i % 17 + 3).append("; i++) sum += i * value;").append('\n')
+                    .append("        String text = \"value \" + sum;").append('\n')
+                    .append("        if (text.length() > 12) return sum - ").append(i).append(";").append('\n')
+                    .append("        return sum + text.length();").append('\n')
+                    .append("    }").append('\n').append('\n');
+        }
+        source.append("}").append('\n');
+        try {
+            Files.createDirectories(file.getParent());
+            Files.write(file, source.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (IOException failed) {
+            throw new IllegalStateException("could not write " + file, failed);
+        }
+    }
 
     /**
      * -Dcrystalgui.harness.desktop.hoverSweep=true: what moving the pointer across the editor costs a frame, against
@@ -1985,7 +2093,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean isRunning() {
-        return !profilerShotDone && !traceCostDone && !graphCostDone && !hoverSweepDone;
+        return !profilerShotDone && !traceCostDone && !graphCostDone && !hoverSweepDone && !baselineDone;
     }
 
     @Override
@@ -2000,6 +2108,6 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean shouldShutdownOnComplete() {
-        return PROFILER_SHOT || TRACE_COST;
+        return PROFILER_SHOT || TRACE_COST || BASELINE;
     }
 }

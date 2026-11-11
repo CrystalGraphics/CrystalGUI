@@ -4,6 +4,8 @@ import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -149,6 +151,7 @@ public final class FrameProfiler {
             desktop.activate(existing, true);
             return existing;
         }
+        long opening = CgTrace.stamp(UiTrace.FLOW);
         WindowFrame frame = new WindowFrame("Frame Profiler");
         frame.setKey(WINDOW_KEY);
         frame.setApplication(KIND);
@@ -163,6 +166,7 @@ public final class FrameProfiler {
             else gear.removeClass(WindowFrame.ACTION_ON_CLASS);
         });
         desktop.addWindow(frame);
+        CgTrace.zoneDone(UiTrace.FLOW, "profiler:open", opening);
         return frame;
     }
 

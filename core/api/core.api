@@ -13060,6 +13060,7 @@ com/crystalgui/ui/dom/DocumentDriver
   method public advance ()F
   method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public close ()V
+  method public committedFrames ()J
   method public compositesMotion ()Z
   method public consumeComposition (Ljava/lang/String;I)Z
   method public consumeKeyboardEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
@@ -13075,6 +13076,7 @@ com/crystalgui/ui/dom/DocumentDriver
   method public offerMouse (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;Ljava/util/function/BooleanSupplier;)Z
   method public pollUnhandledKey ()Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;
   method public post (Ljava/lang/Runnable;)V
+  method public presentedCommit ()J
   method public presentedFrames ()J
   method public presenter ()Lcom/crystalgui/render/UiPresenter;
   method public run (Ljava/lang/Runnable;)V

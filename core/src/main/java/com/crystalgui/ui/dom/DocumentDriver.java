@@ -33,7 +33,7 @@ import java.util.function.Supplier;
  *
  * <pre>{@code
  * // once, after the tree is built on the host's thread
- * DocumentDriver<Void> driver = DocumentDriver.attach(document);
+ * DocumentDriver<Void> driver = DocumentDriver.attach(document);   
  *
  * // every host frame: a renderer at a GUI stage, which gives it the size, the target and the clock
  * CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> driver.frame(stage, painter));
@@ -611,6 +611,28 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      */
     public long presentedFrames() {
         return presented;
+    }
+
+    /**
+     * How many frames the document has committed. Read it on the document's thread: an event dispatched there shows in
+     * the first commit numbered above it.
+     *
+     * <pre>{@code
+     * driver.offerMouse(event, () -> { dispatchedAfter = driver.committedFrames(); return dispatch(event); });
+     * // later, render thread: the event is on screen once presentedCommit() > dispatchedAfter
+     * }</pre>
+     */
+    public long committedFrames() {
+        return compositor == null ? presented : commits;
+    }
+
+    /**
+     * The number of the commit on screen, counted as {@link #committedFrames()} counts them; 0 before the first. It
+     * moves only when a new frame is shown, so its rate is the document's real frame rate: a busy document's host
+     * frames show the last commit again and leave it where it was. Render thread.
+     */
+    public long presentedCommit() {
+        return compositor == null ? presented : compositor.shownIndex();
     }
 
     /** Whether a frame has been committed: asynchronously, whether there is anything to present yet. */

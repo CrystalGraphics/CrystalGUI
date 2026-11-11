@@ -14,6 +14,8 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.Signal;
@@ -273,8 +275,11 @@ public final class ApplicationRegistry {
             return null;
         }
         Application application;
+        // On the document's thread outside any frame: without a zone, a launch is a stretch of nothing in the trace.
+        long launching = CgTrace.stamp(UiTrace.FLOW);
         try {
             application = kind.factory().apply(context);
+            CgTrace.zoneDone(UiTrace.FLOW, "app:launch", launching);
         } catch (RuntimeException failed) {
             // AN APPLICATION THAT THROWS COSTS ITS OWN LAUNCH AND NOTHING ELSE. A desktop is a shell:
             // one product failing to start must leave every other window on screen, the same isolation

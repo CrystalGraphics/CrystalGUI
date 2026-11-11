@@ -81,6 +81,11 @@ final class SurfaceCompositor<F> {
         return active;
     }
 
+    /** The index of the commit last presented; 0 until the first. Render thread. */
+    long shownIndex() {
+        return active == null ? 0L : active.index();
+    }
+
     /** The commit last presented, without drawing anything; null until the first. */
     @Nullable
     UiCommit<F> active() {
