@@ -39,36 +39,29 @@ import javax.annotation.Nullable;
 import lombok.Getter;
 
 /**
- * The root of a tree, and the owner of what a tree has exactly one of: the frame thread, the id
- * index, and the lifecycle queue.
+ * The root of a tree, and the owner of what a tree has exactly one of: the frame thread, the id index, the cascade,
+ * the box tree, the services and the lifecycle queue.
  *
- * <h3>The frame thread owns the tree</h3>
+ * <pre>{@code
+ * UIDocument document = new UIDocument();
+ * document.append(root);
+ * document.frame(delta, width, height);   // animation, style, layout, input: nothing drawn
+ * document.paint(ctx);                    // into a frame its owner opened
+ * }</pre>
  *
- * <p>Every mutation entry asks {@link #require} first, keyed on the thread that
- * {@link #markFrameThread() claimed} this document — per tree, so a document nothing paints is free
- * (every headless test, every server) while one that is being painted refuses everyone but its
- * painter. The old engine had the marker and asserted nowhere; row 235 of the invariants is what that
- * permits, and this is the one line per entry point the audit (§9) asked for, at the boundary rather
- * than in two hundred setters.</p>
- *
- * <h3>Callbacks run after the mutation, never during it</h3>
- *
- * <p>{@code connected}, {@code disconnected} and {@code slotChanged} are queued while a mutation is
- * in progress and dispatched, in the order they were queued, once the outermost mutation has
- * finished — with slot assignment settled first, since a slot's callback is about its assignment.
- * A callback may mutate the tree; that is a new mutation whose own callbacks join the same queue and
- * run in the same drain. What is refused is a mutation from inside an <em>observer notification</em>:
- * the mirror is being told about a change that is still being made, and a second change under it
- * would put the edit script out of order.</p>
+ * <ul>
+ *   <li>The thread that runs the first frame owns the tree: every mutation entry calls {@link #require}, and any
+ *       other thread is refused. A tree nothing frames (a test, a server) is free.</li>
+ *   <li>{@code connected}, {@code disconnected} and {@code slotChanged} run after the outermost mutation, in queued
+ *       order, with slots assigned first. A callback may mutate; an observer notification may not.</li>
+ *   <li>A host normally runs a document through a {@link DocumentDriver}, not by calling {@link #frame} itself.</li>
+ * </ul>
  */
 public final class UIDocument extends UIElement {
 
     /**
-     * Widget state that outlives its widget, or null when the host is not persisting any.
-     *
-     * <p>Held here rather than by whoever is saving, because the two moments a widget's state can be
-     * read are attaching and detaching, and only the document sees those. A host installs one and
-     * the tree seeds and harvests itself.</p>
+     * Widget state that outlives its widget, or null when the host persists none. Held here because attaching and
+     * detaching, the moments a widget's state is read, are only seen by the document.
      */
     @Nullable
     private SessionState<?> sessionState;
@@ -83,15 +76,8 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * This surface's own commands.
-     *
-     * <p>The counterpart of {@code UIWindow.getCommands()}, and the second half of the seam that kept
-     * {@code CommandPalette} out of two batches: a palette lists what the SURFACE can do, and asking
-     * the global registry instead would show one window's verbs in another's picker.</p>
-     *
-     * <p>Its own registry rather than a view of the global one, exactly as the old engine has it —
-     * {@code CommandRegistry.global()} is where an application registers what is always true, and
-     * this is where a surface adds what is true of itself.</p>
+     * This surface's own commands, beside {@code CommandRegistry.global()}: what a palette lists for this surface, so
+     * one window's verbs never show in another's picker.
      */
     @Getter
     private final CommandRegistry commands = new CommandRegistry();
@@ -129,19 +115,16 @@ public final class UIDocument extends UIElement {
     public UIDocument() {
         super(NAME);
         this.document = this;
-        // EVERY LAYER HAS SPOKEN BEFORE ANY NODE IS STYLED. A service declares more than names -- it is
-        // also how the widget layer tells the engine to build a resize handle -- and a UI assembled in
-        // process decodes nothing, so a registry that only bootstrapped on decode left that
-        // unregistered for exactly the trees nobody sends over a wire. Idempotent.
+        // Before any node is styled: services register more than names (a resize handle), and a tree built in
+        // process decodes nothing that would bootstrap them. Idempotent.
         UIElementRegistry.bootstrap();
     }
 
     // ── The frame thread ─────────────────────────────────────────────────────
 
     /**
-     * Claims the current thread as the one that runs frames for this tree. {@link #frame} claims it on
-     * the first frame, so a host need not; a test that mutates before any frame calls this to arm the
-     * check.
+     * Claims the current thread as the one that runs frames for this tree. {@link #frame} claims it on the first
+     * frame; a test that mutates before any frame calls this to arm the check.
      */
     public UIDocument markFrameThread() {
         frameThread = Thread.currentThread();
@@ -292,13 +275,13 @@ public final class UIDocument extends UIElement {
         return styles;
     }
 
-    /** The document's box tree, built on first use: layout, world matrices, hit-testing (5.3). */
+    /** The document's box tree, built on first use: layout, world matrices, hit-testing. */
     public BoxTree boxes() {
         if (boxes == null) boxes = new BoxTree(this);
         return boxes;
     }
 
-    // ── Services (5.5) ───────────────────────────────────────────────────────
+    // ── Services ─────────────────────────────────────────────────────────────
 
     /** Platform events in, tree events out: the hit test, the dispatch, the mode stack. */
     public Input input() {
@@ -318,7 +301,6 @@ public final class UIDocument extends UIElement {
         return animation;
     }
 
-    /** Freeze, thaw, destroy. */
     // ── The top layer ────────────────────────────────────────────────────────
 
     /** @see #topLayer() */
@@ -328,51 +310,43 @@ public final class UIDocument extends UIElement {
     private UIElement topLayerNode;
 
     /**
-     * Promoted nodes in the order they were promoted, each against the host it asked for — or {@code
-     * this} standing for "the top layer", which may not have been built yet when the promotion is made.
+     * Promoted nodes in the order they were promoted, each against the host it asked for — or {@code this} for the
+     * top layer, which may not be built yet when the promotion is made.
      */
     private final LinkedHashMap<UIElement, UIElement> promoted = new LinkedHashMap<>();
 
     /**
-     * Promotes {@code node} into the top layer — or RAISES it if already promoted.
+     * Promotes {@code node} into the top layer, or raises it if already promoted: the web's {@code showPopover()}, a
+     * call rather than a property.
      *
-     * <p><b>Promotion is recorded on the NODE, not written onto its box</b>, and that is the whole
-     * reason this method exists beside {@link Box#setHost}. A box is destroyed and rebuilt whenever
-     * its subtree is hidden, frozen or restructured, so a host written onto one is lost on the next
-     * sync: a popup hidden and reshown would silently come back UNPROMOTED — clipped by its
-     * scroller again, and only for a popup that had been closed once, which is the shape of bug that
-     * reads as intermittent. The box tree re-applies this set on every sync instead.</p>
+     * <pre>{@code
+     * document.promote(popup);     // above everything, out of every overflow clip
+     * document.promote(popup);     // again: raised to the top
+     * document.demote(popup);      // back in flow
+     * }</pre>
      *
-     * <p>Imperative rather than a declaration, exactly as the web promotes with
-     * {@code showPopover()} and {@code showModal()}: CSS's own {@code overlay} property is set by the
-     * UA as a side effect so transitions can observe promotion, and is not the trigger. Re-promoting
-     * removes and re-appends, which is the spec's own add algorithm — so "raise this popup" is one
-     * idempotent call rather than a remove/add dance every caller has to get right.</p>
+     * <p>Recorded on the node, never on its box: a box is rebuilt whenever its subtree is hidden or restructured, and
+     * the box tree re-applies this set on every sync.</p>
      */
     public void promote(UIElement node) {
         promote(node, null);
     }
 
     /**
-     * Promotes {@code node} into {@code host} rather than into the top layer.
+     * Promotes {@code node} into {@code host} rather than the top layer: for what belongs above its panel but under a
+     * compositor's chrome, as a dialog under the taskbar. Hosting decides the containing block and the paint order
+     * together.
      *
-     * <p>Everything above holds; only the destination differs. <b>The top layer is not the only place a
-     * box may be hosted out to</b> — it paints after the whole main tree, which is right for a menu and
-     * wrong for anything that should sit UNDER a compositor's chrome: a dialog escaping the panel that
-     * raised it still belongs beneath the taskbar, exactly as a window does. Promoting it into the work
-     * area gets both, because hosting decides the containing block and the paint order together.</p>
+     * <pre>{@code
+     * document.promote(dialog, document.workArea());
+     * }</pre>
      *
-     * @param host where to host it, or null for the top layer
+     * @param host where to host it, or null (or the document) for the top layer
      */
     public void promote(UIElement node, @Nullable UIElement host) {
         Objects.requireNonNull(node, "node");
         if (node == this) throw new IllegalArgumentException("the document cannot be promoted");
-        // THE DOCUMENT MEANS THE TOP LAYER, and saying so here is what makes `this` safe as the stored
-        // sentinel. The two are the same request -- both span the whole surface -- and a caller reaching
-        // this way is one whose work area is the document because no compositor declared another. Left
-        // apart, `promote(node, document)` recorded a host the sync could not tell from "top layer" and
-        // then found no top layer to use, because nothing had built one: the promotion was dropped in
-        // silence and the node simply stayed in flow.
+        // The document means the top layer, which is what makes `this` safe as the stored sentinel.
         UIElement into = host == null ? this : host;
         if (into == this) topLayerNode();
         promoted.remove(node);
@@ -380,10 +354,7 @@ public final class UIDocument extends UIElement {
         fireStructureChanged();
     }
 
-    /**
-     * Where {@code node} was promoted to, or null for the top layer — and null when it is not promoted
-     * at all, which no caller distinguishes because they ask {@link #isPromoted} first.
-     */
+    /** Where {@code node} was promoted to; null for the top layer, and when it is not promoted. */
     @Nullable
     public UIElement promotionHost(UIElement node) {
         UIElement host = promoted.get(node);
@@ -411,16 +382,9 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * Keeps the top layer the LAST child, whatever is appended after it.
-     *
-     * <p>The layer and the {@code Desktop} are both appended lazily, so their sibling order was decided
-     * by whichever was touched first -- and paint order and hit-test order both read it. Promote before
-     * the desktop exists and the desktop becomes the later sibling: every popup, dialog and tooltip then
-     * draws BEHIND it and takes none of its clicks, for the rest of the session. It reproduced on every
-     * loader and never in dev, because dev builds the desktop before anything can promote.</p>
-     *
-     * <p>Overriding {@code insertAt} alone covers {@code append} and its varargs form too: both funnel
-     * through it and the call dispatches virtually.</p>
+     * Keeps the top layer the last child, whatever is appended after it: paint and hit-test order read sibling order,
+     * and a desktop appended after the layer would draw over every popup and take its clicks. {@code append} funnels
+     * through here.
      */
     @Override
     public UIElement insertAt(int index, UIElement child) {
@@ -437,22 +401,8 @@ public final class UIDocument extends UIElement {
     public UIElement topLayerNode() {
         if (topLayerNode == null) {
             topLayerNode = new UIElement(TOP_LAYER);
-            // THE SIZE OF THE VIEWPORT, because a promoted element's percentages resolve against
-            // whatever HOSTS it -- and on this engine that is this node rather than the root.
-            //
-            // The old engine had no such node: `TopLayer.reparentTaffyNodeToRoot` made a promoted
-            // element a child of the ROOT, which is where "a promoted element's containing block is
-            // the root" comes from and why `width: 100%` there meant the screen. Introducing a layer
-            // between the two quietly broke that: this node had no size of its own, so it shrank to
-            // its content, and every promoted element sizing itself as a fraction of the screen got a
-            // fraction of ITSELF instead. The window switcher is the clearest case -- it is a
-            // full-screen overlay that centres its panel with flexbox precisely so it never has to
-            // measure anything, and it collapsed onto its own content in the top-left corner.
-            //
-            // WRITTEN THROUGH THE NODE, which is an INLINE write, and after the append: a style set on
-            // a DETACHED node is a candidate nothing resolves, so the first version of this stayed at
-            // `auto` and measured nothing. It is the layer's own geometry rather than a look, so
-            // there is nothing here a theme should be overriding.
+            // The viewport's size: a promoted element's percentages resolve against this node, its host. Written
+            // inline and after the append, since a style set on a detached node resolves nothing.
             append(topLayerNode);
             topLayerNode.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
                     .left(0f)
@@ -464,24 +414,14 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * The <b>top layer</b> — CSS Position 4's, and what lets a tooltip escape an
-     * {@code overflow: hidden} ancestor.
+     * The top layer's box: CSS Position 4's, where a promoted node escapes every {@code overflow: hidden} ancestor.
+     * Promote with {@link #promote}.
      *
-     * <p>Promote by hosting: {@code node.box().setHost(document.topLayer())}. It is imperative rather
-     * than a declaration for the same reason the web promotes with {@code showPopover()} and
-     * {@code showModal()} rather than a property — CSS's own {@code overlay} is set by the UA as a
-     * side effect so transitions can observe promotion, not as the trigger. Demote with
-     * {@code setHost(null)}.</p>
-     *
-     * <p><b>Order is the whole stacking model here</b>: the box stacks what it hosts by INSERTION and
-     * ignores {@code z-index}, per spec, so re-hosting something already promoted RAISES it and
-     * "raise this popup" is one idempotent call. @see Box#setStacksByInsertion</p>
-     *
-     * <p>The layer is a light child of the document and takes NO space — {@code ua/core.css}'s
-     * {@code top-layer} rule makes it a zero-sized out-of-flow box. That is not a detail: a full-size
-     * layer over the document hit-tests across the whole surface and eats every click that misses a
-     * popup, which is the compositor's own rule one level up and this codebase's most-repeated
-     * failure. Built on first use, so a document that never promotes anything pays a null field.</p>
+     * <ul>
+     *   <li>It stacks what it hosts by insertion and ignores {@code z-index}, per spec, so promoting again raises.</li>
+     *   <li>It takes no hit-test space ({@code ua/core.css}'s {@code top-layer} rule): only what is promoted into it
+     *       takes clicks.</li>
+     * </ul>
      *
      * @return the host box, or null before the first layout has given the layer one
      */
@@ -492,7 +432,7 @@ public final class UIDocument extends UIElement {
         return box;
     }
 
-    /** Whether anything is promoted. Never BUILDS the layer, so a query cannot create one. */
+    /** Whether anything is promoted. Never builds the layer. */
     public boolean hasTopLayerContent() {
         if (topLayerNode == null) return false;
         Box box = boxes().boxOf(topLayerNode);
@@ -500,14 +440,13 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * Where an overlay belongs in the NODE tree — the nearest ancestor of {@code near} that accepts
-     * children, or the document.
+     * Where an overlay lives in the node tree: the nearest ancestor of {@code near} that accepts children, or the
+     * document. Promotion decides where it draws; this decides what it inherits from and dies with.
      *
-     * <p>Hosting decides where a promoted thing is DRAWN; this decides where it LIVES, and the two
-     * are different questions with different answers. The node parent still settles cascade
-     * inheritance (an overlay inherits the colours of the panel it belongs to) and lifetime (it goes
-     * away when that panel does) — which is why a context menu passes the thing that was clicked and
-     * a command palette passes null.</p>
+     * <pre>{@code
+     * document.overlayHost(clicked);   // a context menu: inherits the clicked panel's colours
+     * document.overlayHost(null);      // a command palette: the document's
+     * }</pre>
      */
     public UIElement overlayHost(@Nullable UIElement near) {
         for (UIElement node = near; node != null; node = node.parentElement()) {
@@ -517,16 +456,8 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * <b>The area a floating overlay may travel in</b> — a compositor's work area when there is one,
-     * else the whole surface.
-     *
-     * <p>Separate from where the overlay PAINTS, and deliberately: a dialog belongs above every window,
-     * which is what the top layer is for, but it must not be draggable over the taskbar — the same
-     * split {@code WindowFrame} makes between its parent and its {@code resizeContainingBlock}.</p>
-     *
-     * <p>Answered by the document rather than looked up, because the layer that needs it may not name a
-     * compositor. Falls back to this the moment the declared area leaves the tree, so a suspended
-     * desktop needs no withdrawal of its own.</p>
+     * The area a floating overlay may travel in: a compositor's work area when one is declared and still in this
+     * tree, else the document. A dialog paints above every window but is not dragged over the taskbar.
      */
     public UIElement workArea() {
         return workArea != null && workArea.document() == this ? workArea : this;
@@ -552,6 +483,7 @@ public final class UIDocument extends UIElement {
         return dismiss;
     }
 
+    /** Freeze, thaw, destroy. */
     public Lifecycle lifecycle() {
         if (lifecycle == null) lifecycle = new Lifecycle(this);
         return lifecycle;
@@ -562,25 +494,21 @@ public final class UIDocument extends UIElement {
     private final List<DataProvider> scopeProviders = new ArrayList<>();
 
     /**
-     * Registers a provider {@code DataContext} asks once nothing in the element chain has answered.
+     * Registers a provider {@code DataContext} asks last, once nothing in the element chain has answered: for an
+     * answer whose owner is not an ancestor of what asks, as the desktop's active window for a command run from the
+     * palette.
      *
-     * <p><b>This is the LAST resort by construction, and that is the whole design.</b> A command
-     * invoked from inside a window resolves its subject by walking outward from the focused element
-     * and finds the frame; one invoked from a taskbar entry finds the entry's own answer; one invoked
-     * from the palette with nothing focused finds neither, and the desktop's "the active window" is
-     * the only sensible answer left. Registering it here rather than on an element is what keeps it
-     * last: an element that answers still wins, so two open windows never both resolve to whatever
-     * the desktop named.</p>
+     * <pre>{@code
+     * document.addDataProvider(key -> key == WindowFrame.WINDOW_FRAME ? activeWindow : null);   // as Desktop does
+     * }</pre>
      *
-     * <p>Document-level rather than a node's own because the consumer is not an ancestor of the
-     * things that ask. {@code DataContext} records the case at length — a workbench is a DESCENDANT
-     * of the root, so with nothing focused the outward walk never reaches it.</p>
+     * Remove it when its owner leaves the tree, or it answers for something gone.
      */
     public void addDataProvider(DataProvider provider) {
         if (provider != null && !scopeProviders.contains(provider)) scopeProviders.add(provider);
     }
 
-    /** Drops a provider. A provider whose owner has left the tree must go, or it answers for a corpse. */
+    /** Drops a provider. */
     public void removeDataProvider(DataProvider provider) {
         scopeProviders.remove(provider);
     }
@@ -591,16 +519,13 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * A whole frame with nothing drawn: the hover is invalidated, motion advances, the cascade
-     * settles, layout runs once, and the pointer is diffed against the layout that just ran.
-     *
-     * <p>When that diff moves the hover, style and layout run once more, so a reflow under a still pointer
-     * paints {@code :hover} on the right element in the same frame. The host paints after this returns.</p>
+     * A whole frame with nothing drawn: the hover is invalidated, motion advances, the cascade settles, layout runs
+     * once, and the pointer is diffed against the layout that just ran. When that diff moves the hover, style and
+     * layout run once more, so {@code :hover} lands on the right element this frame. The host paints after.
      */
     public void frame(float deltaSeconds, float width, float height) {
         try (Running ignored = makeCurrent()) {
-            // ON A SEQUENCE THIS IS WORK INSIDE THE RENDER THREAD'S FRAME, not a frame of its own: the trace ring's
-            // unit is a presented frame, and only the host's frame opens one.
+            // On a sequence this is work inside the host's frame, which alone opens one in the trace.
             if (sequence == null) {
                 UiTrace.frameBegin();
                 runFrame(deltaSeconds, width, height);
@@ -613,9 +538,6 @@ public final class UIDocument extends UIElement {
     }
 
     private void runFrame(float deltaSeconds, float width, float height) {
-        // A FRAME STARTS HERE AND ENDS IN THE PAINT CONTEXT, because the host drives the two halves
-        // separately: this is animation, style and layout, and the paint that follows is a call the
-        // host makes itself. @see CgUiPaintContext#endFrame
         claimFrameThread();
         for (Runnable arrived; (arrived = inbox.poll()) != null; ) arrived.run();
         // With no driver the host calls this on its own thread, which is where an extract reads; a driver reads them itself.
@@ -630,8 +552,7 @@ public final class UIDocument extends UIElement {
             CgTrace.zoneDone(UiTrace.FRAME, "frame:jobs", drained);
         }
         input().beginFrame();
-        // READINGS, not counts: a hook registered again every frame without its twin being dropped grows
-        // these by one a frame for as long as its owner lives -- a leak nothing else shows.
+        // Readings, not counts: a hook re-registered every frame without its twin dropped shows as growth here.
         CgTrace.counter(UiTrace.FRAME, "anim-hooks", animation().hookCount());
         CgTrace.counter(UiTrace.FRAME, "anim-after-layout-hooks", animation().afterLayoutCount());
         long timed = CgTrace.stamp(UiTrace.FRAME);
@@ -641,28 +562,17 @@ public final class UIDocument extends UIElement {
         timed = CgTrace.stamp(UiTrace.FRAME);
         layout(width, height);
         CgTrace.zoneDone(UiTrace.FRAME, "frame:layout", timed);
-        // AFTER layout, for the hooks that READ geometry -- see Animation.afterLayout. Before
-        // endFrame, so a placement made here is what the hover diff and the paint both see.
+        // Before endFrame, so a placement made here is what the hover diff and the paint both see.
         timed = CgTrace.stamp(UiTrace.FRAME);
         settleAfterLayout(width, height, deltaSeconds);
         CgTrace.zoneDone(UiTrace.FRAME, "frame:afterLayout", timed);
-        // The hover diff, and every listener the frame's pointer events reach.
         timed = CgTrace.stamp(UiTrace.FRAME);
         boolean hoverMoved = input().endFrame();
         CgTrace.zoneDone(UiTrace.FRAME, "frame:input", timed);
         if (hoverMoved) {
-            // THE HOVER MOVED AFTER THE CASCADE RAN, so `:hover` would paint on the element the pointer just
-            // left for one frame. A reflow under a still pointer does exactly that: a virtualised list recycles
-            // the row element under it, and the highlight jumps to wherever that element went, then back.
-            // One more pass on the frames the hover changed, at zero delta as settling does.
-            //
-            // AND IT SETTLES, because this can be the FIRST layout a node has ever had. An enter
-            // dispatched here is what shows a tooltip, and a placer cannot measure a box that did not
-            // exist until this pass -- so without settling the tip is laid out at the top layer's
-            // origin and PAINTED there, and only the next frame moves it: the corner flash, for
-            // everything shown straight from an input dispatch rather than from a ticker. It is why
-            // Popover parks itself off-screen on open and Tooltip, which has no such hack, showed the
-            // flash wherever `tooltip-delay` is 0 and the enter shows the tip at once.
+            // The hover moved after the cascade ran, so `:hover` would sit on the element the pointer left for a
+            // frame (a recycled list row). It settles too: an enter dispatched above can show a tooltip, and this is
+            // the tip's first layout, which its placer needs.
             timed = CgTrace.stamp(UiTrace.FRAME);
             calculateStyle(0f);
             layout(width, height);
@@ -672,72 +582,37 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * How many times layout may be re-run for what a post-layout hook wrote. @see #settleAfterLayout
-     *
-     * <p>Two, because that is what the worst real case needs and it is a fixed point rather than a
-     * convergence: pass one creates the box a hook is waiting for, pass two carries the position that
-     * hook then writes. A third would find nothing left to do. The bound is there so a hook that
-     * answers differently every pass costs a constant rather than the frame.</p>
+     * How many times layout may re-run for what a post-layout hook wrote: one pass makes the box a hook waits for,
+     * the next carries the position it writes. Bounded so a hook that answers differently each pass costs a constant.
      */
     public static final int MAX_SETTLE_PASSES = 2;
 
     /**
-     * Re-runs style and layout for whatever the post-layout hooks just wrote.
+     * Re-runs style and layout for what the post-layout hooks wrote: the one place layout feeds back into itself. A
+     * node placed from its own measured size (a popup flipping against its width, a dialog centring on its height)
+     * places itself in an {@code afterLayout} hook, and this lands that placement in the same frame.
      *
-     * <p><b>The one place in the engine where layout is allowed to feed back into itself, and the
-     * reason it has to exist.</b> A node whose position depends on its own measured size cannot be
-     * placed before it has been measured — a popup flips and clamps against its own width, a window
-     * steps its cascade offset from a measured caption, a dialog centres on half its own height. So
-     * they all place themselves in an {@code afterLayout} hook, and with layout running exactly once
-     * that write landed on the NEXT frame: for one frame each of them was drawn at its containing
-     * block's origin, at full opacity, before jumping to where it belonged.</p>
-     *
-     * <p>It reached four widgets before it was fixed here, and every one of them worked around it the
-     * same way — parking itself off-screen until placed, which is a hack each had to remember, could
-     * not be shared, and left the thing invisible for a frame instead of misplaced for one. The old
-     * engine had no such problem: {@code calculateLayout} ran {@code while (isLayoutDirty())}, so a
-     * placement written from {@code onLayoutChanged} settled inside the same pass. This is that loop,
-     * bounded, and run only when something actually asked for it.</p>
-     *
-     * <p><b>Style is re-run, not only layout.</b> A hook writes a position through the cascade, so the
-     * candidate has to be resolved before Taffy can hear about it — and it is re-run with a delta of
-     * zero, because transitions have already been ticked for this frame and advancing them again would
-     * make an animation run at the number of settle passes times its proper speed.</p>
-     *
-     * <p><b>The hooks ARE re-run on every pass</b>, which is the half that took longest to get right and
-     * the opposite of what this paragraph used to claim: the pass that CREATES a box is itself a layout,
-     * so a placer run only once finds nothing to measure and declines. It does not oscillate because a
-     * placer is a fixed point — handed the same geometry it writes the same position — and
-     * {@code replaceOrPutCandidate} no-ops on an unchanged value, so the pass after the one that settles
-     * dirties nothing and the loop breaks on its own.</p>
+     * <ul>
+     *   <li>Style is re-run at zero delta: transitions were ticked once this frame.</li>
+     *   <li>The hooks run on every pass, since the pass that creates a box is itself a layout. A placer is a fixed
+     *       point and an unchanged candidate dirties nothing, so the loop ends on its own.</li>
+     * </ul>
      */
     private void settleAfterLayout(float width, float height, float deltaSeconds) {
         for (int pass = 0; pass < MAX_SETTLE_PASSES; pass++) {
-            // THE HOOKS ARE INSIDE THE LOOP, which is the half that took longest to get right. Running
-            // them once and then settling is not enough: a hook reads a box, and the pass that CREATES
-            // a box is itself a layout. A modal shown this frame has no box when the hooks first run --
-            // its `display` is resolved but the box tree syncs during layout -- so a placer that ran
-            // only once found nothing to measure, declined, and placed on the following frame. Which is
-            // the bug, one layer further in.
-            //
-            // ZERO DELTA on every pass but the first. A hook is free to be an animation tick, and time
-            // passes once per frame however many times layout runs.
+            // Time passes once a frame, however many passes run.
             if (!animation().tickAfterLayout(pass == 0 ? deltaSeconds : 0f)) break;
             int before = boxes().layoutPasses();
             calculateStyle(0f);
             layout(width, height);
-            // NOTHING RECOMPUTED, so another round of hooks would be handed the tree they have already
-            // seen. Exact rather than a heuristic -- the counter moves only when Taffy actually ran --
-            // and it is what keeps a settled frame at ONE extra style pass instead of the full bound.
+            // Nothing recomputed: another round of hooks would see the tree they already saw.
             if (boxes().layoutPasses() == before) break;
         }
-        // AND COMPOSE, for a hook that moved a box without dirtying layout at all -- a compositor
-        // transform is layout-free by design, so no pass above would have run for it. Free when
-        // nothing moved.
+        // For a hook that moved a box without dirtying layout (a compositor transform). Free when nothing moved.
         boxes().composeIfDirty();
     }
 
-    /** Lays the document out at the viewport size -- the box tree's one pass. Run style first. */
+    /** Lays the document out at the viewport size: the box tree alone, no cascade. Run style first. */
     public void layout(float width, float height) {
         boxes().layout(width, height);
     }
@@ -754,14 +629,14 @@ public final class UIDocument extends UIElement {
      */
     public void paint(CgUiPaintContext ctx) {
         boxes().paint(ctx);
-        // AFTER the tree: cursor art belongs over everything and inside no scissor. @see CursorDecoration
+        // Cursor art goes over everything, inside no scissor. @see CursorDecoration
         input().paintCursorDecoration(ctx);
     }
 
     /**
-     * Hears every change to the COMPOSED structure -- an insert, a remove, a move, a shadow root
-     * attached, a slot reassigned, a {@code display} toggled -- so a consumer that derives a tree
-     * from this one (the box tree) walks it only on frames where something moved.
+     * Hears every change to the composed structure (an insert, a remove, a move, a shadow root attached, a slot
+     * reassigned, a {@code display} toggled), so a tree derived from this one is walked only on frames where
+     * something moved.
      *
      * <pre>{@code
      * document.addStructureListener(where -> {
@@ -798,16 +673,8 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * Every connected ELEMENT, light and shadow — what a sheet change has to re-match.
-     *
-     * <p><b>A shadow root is not one, and used to be.</b> It is a {@code DocumentFragment}: no id, no
-     * classes, no tag a selector can name. Collecting it meant every shadow root in the tree was
-     * matched against every selector in every sheet and cascaded into a full {@code ElementStyle}
-     * that nothing ever read — the box tree walks {@code composedChildren()}, where a shadow root is
-     * transparent by construction, so it is never laid out and never painted. One wasted entry per
-     * shadow-hosting widget INSTANCE. A sheet writing {@code shadow-root { }} matched it, silently.
-     * Nothing could see any of it, because a cascade result nobody reads looks exactly like no
-     * cascade at all; the Node/Element split is what turned it into a compile error.</p>
+     * Every connected element, light and shadow: what a sheet change re-matches. A shadow root is not an element and
+     * is walked through, never collected; frozen subtrees are skipped.
      */
     public List<UIElement> allNodes() {
         List<UIElement> out = new ArrayList<>();
@@ -820,20 +687,14 @@ public final class UIDocument extends UIElement {
         UIElement self = at.asElement();
         if (self != null) into.add(self);
         for (UIElement child : at.children()) collect(child, into);
-        // Its CHILDREN are elements and are styled; the root itself is walked THROUGH, not into.
         if (self != null && self.shadowRoot() != null) collect(self.shadowRoot(), into);
     }
 
     // ── Ids ──────────────────────────────────────────────────────────────────
 
     /**
-     * The connected node with this id, or null. The first to claim an id keeps it.
-     *
-     * <p>Overrides {@link UIElement#getElementById} with the INDEX rather than the walk — every node
-     * that joins registers its id here, so this is O(1) where a subtree query is O(n), and a document
-     * is where the question is nearly always asked. It also reaches nodes inside shadow trees, which
-     * the light-tree walk deliberately does not: the index is the engine's own bookkeeping rather
-     * than a query an author makes, and the mount paths use it to find what they just built.</p>
+     * The connected node with this id, or null; the first to claim an id keeps it. From the index rather than a walk,
+     * and unlike {@link UIElement#getElementById} it reaches inside shadow trees.
      */
     @Override
     @Nullable
