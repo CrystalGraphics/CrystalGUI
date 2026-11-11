@@ -1,6 +1,6 @@
 package com.crystalgui.widget.scroll;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -310,11 +310,9 @@ public class Scroller extends UIElement {
      */
     private boolean tickFrame(float deltaSeconds) {
         if (heldDirection == 0f) return false;
-        // Poll the real button state rather than waiting for a mouse-up event: a release outside the
-        // button (or outside the window entirely) would never be delivered here, and the repeat would
-        // run forever.
-        PlatformPort adapter = PlatformPort.current();
-        if (adapter == null || !adapter.isMouseDown(CgMouseCodes.LEFT_BUTTON)) {
+        // Poll the document's held button rather than wait for a mouse-up here: a release off the button
+        // (or outside the window) reaches Input but never this listener, and the repeat would run forever.
+        if (!Input.isButtonDownNow(CgMouseCodes.LEFT_BUTTON)) {
             heldDirection = 0f;
             return false;
         }

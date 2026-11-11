@@ -50,6 +50,9 @@ tree observer, and document-level `DataProvider`s.
   rebuilt whenever its subtree is hidden or restructured, so a flag written onto one is lost.
 - `addDataProvider` — document-level, because the consumer of a key is often not an ancestor of the
   thing that asks.
+- **`execute(work)` is the way onto the document's thread from anywhere**: at once when already there, else
+  posted. Never reach for a sequence: a document has one seam in, `own(Owner)`, which only its driver calls and
+  whose `Ownership` alone reads extracts and gives the document back.
 
 **`DocumentDriver` is how a host runs one** — recording on a sequence while the render thread presents (the
 default), on a sequence in lockstep (`-Dcrystalgui.ui.sequence=true`), or inline on the host's thread

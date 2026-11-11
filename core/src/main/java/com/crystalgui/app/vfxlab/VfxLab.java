@@ -1,5 +1,6 @@
 package com.crystalgui.app.vfxlab;
 
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.mesh.CgMesh;
 import com.crystalgraphics.api.mesh.CgMeshShapes;
@@ -36,7 +37,6 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.composite.SearchField;
@@ -502,7 +502,8 @@ public class VfxLab extends UIElement {
             out.append(")\n");
             count++;
         }
-        PlatformPort.current().setClipboard(out.toString());
+        String copied = out.toString();
+        CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
         tell("Copied " + count + " values");
     }
 

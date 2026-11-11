@@ -2,6 +2,8 @@ package com.crystalgui.ui.service;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.cursor.Cursor;
+import com.crystalgui.core.cursor.CursorService;
+import com.crystalgraphics.platform.input.CgInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgSystemInput;
@@ -401,7 +403,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         if (resolved == lastCursor) return;
         lastCursor = resolved;
         // Inert until CrystalGraphics has a cursor adapter, which is correct for a headless tree.
-        document.platform().setCursor(resolved);
+        CursorService.setCursor(resolved);
     }
 
     /**
@@ -856,6 +858,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     }
 
     private boolean mouseEvent(Mouse.Event event) {
+        if (event.button() >= 0 && event.button() < BUTTONS) polledButtons[event.button()] = event.state();
         releaseEndedDrag = false;
         boolean moved = event.x() != position.x || event.y() != position.y;
         if (moved) hoverValid = false;
@@ -1012,6 +1015,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private boolean checkingKey;
 
     private boolean keyboardEvent(Keyboard.Event event) {
+        if (event.key() >= 0 && event.key() < KEYS) heldKeys[event.key()] = event.pressed();
         // A shortcut is not keyboard navigation: Ctrl+C after a click leaves the next scripted focus unringed.
         if (event.pressed() && !isChord(modifiers())) document.focus().keyPressed();
         if (!CLAIMS_CHECK || !event.pressed()) return decideKey(event);
@@ -1139,13 +1143,88 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
                 || CgModifiers.hasAlt(modifiers);
     }
 
+    // ── Held keys and buttons ────────────────────────────────────────────────
+
+    private static final int[] MODIFIER_KEYS = {
+            CgKeyCodes.KEY_LSHIFT, CgKeyCodes.KEY_RSHIFT, CgKeyCodes.KEY_LCONTROL, CgKeyCodes.KEY_RCONTROL,
+            CgKeyCodes.KEY_LMENU, CgKeyCodes.KEY_RMENU, CgKeyCodes.KEY_LMETA, CgKeyCodes.KEY_RMETA};
+    private static final int KEYS = 512;
+
+    /** As the dispatched events and the frame's {@link #reconcile} left them. */
+    private final boolean[] heldKeys = new boolean[KEYS];
     /**
-     * The live modifier mask. A raw {@code Keyboard.Event} does not carry one, so it comes from the
-     * platform — and a tree with no platform registered (every headless test) answers none rather
-     * than failing, which is the honest reading of "this host has no modifier state".
+     * The buttons a poll reads ({@link #isButtonDownNow}): reconciled with the platform, so a release the window never
+     * delivered ends a repeat. A gesture asks {@link #isButtonDown}, the press it was dispatched, which no frame resets.
      */
-    private int modifiers() {
-        return document.platform().modifiers();
+    private final boolean[] polledButtons = new boolean[BUTTONS];
+    /** Whether {@link #modifiers} and {@link #isKeyDown} answer from the events rather than the platform. */
+    private boolean heldFromEvents;
+
+    /**
+     * Answers key and button state from the events this service dispatched rather than from the platform: for a
+     * document that runs off the client thread, where the platform's state is the window's now, not the event's.
+     */
+    public void answerFromEvents() {
+        heldFromEvents = true;
+    }
+
+    /**
+     * The modifier bits held as of the event being handled ({@code CgModifiers}). A raw {@code Keyboard.Event}
+     * carries none; with no toolkit (a headless test) nothing is held.
+     */
+    public int modifiers() {
+        if (!heldFromEvents) return CgInput.modifiers();
+        int held = CgModifiers.NONE;
+        if (heldKeys[CgKeyCodes.KEY_LSHIFT] || heldKeys[CgKeyCodes.KEY_RSHIFT]) held |= CgModifiers.SHIFT;
+        if (heldKeys[CgKeyCodes.KEY_LCONTROL] || heldKeys[CgKeyCodes.KEY_RCONTROL]) held |= CgModifiers.CTRL;
+        if (heldKeys[CgKeyCodes.KEY_LMENU] || heldKeys[CgKeyCodes.KEY_RMENU]) held |= CgModifiers.ALT;
+        if (heldKeys[CgKeyCodes.KEY_LMETA] || heldKeys[CgKeyCodes.KEY_RMETA]) held |= CgModifiers.SUPER;
+        return held;
+    }
+
+    /** Whether {@code key} ({@code CgKeyCodes}) is held, as of the event being handled.. */
+    public boolean isKeyDown(int key) {
+        if (!heldFromEvents) return CgInput.isKeyDown(key);
+        return key >= 0 && key < KEYS && heldKeys[key];
+    }
+
+    /**
+     * The modifier keys and buttons the platform holds now, packed for {@link #reconcile}: read once a host frame on
+     * the client thread, so a release the window never delivered (focus lost mid-chord) does not stay held.
+     */
+    public static int platformHeld() {
+        int packed = 0;
+        for (int i = 0; i < MODIFIER_KEYS.length; i++) if (CgInput.isKeyDown(MODIFIER_KEYS[i])) packed |= 1 << i;
+        for (int b = 0; b < BUTTONS; b++) if (CgInput.isMouseDown(b)) packed |= 1 << (MODIFIER_KEYS.length + b);
+        return packed;
+    }
+
+    /** Takes {@link #platformHeld}'s reading on the document's thread. */
+    public void reconcile(int platformHeld) {
+        for (int i = 0; i < MODIFIER_KEYS.length; i++) heldKeys[MODIFIER_KEYS[i]] = (platformHeld & (1 << i)) != 0;
+        for (int b = 0; b < BUTTONS; b++) polledButtons[b] = (platformHeld & (1 << (MODIFIER_KEYS.length + b))) != 0;
+    }
+
+    /** {@link #modifiers} of the document running on this thread; outside any, the platform's. */
+    public static int modifiersNow() {
+        UIDocument running = UIDocument.current();
+        return running == null ? CgInput.modifiers() : running.input().modifiers();
+    }
+
+    /** {@link #isKeyDown} of the document running on this thread; outside any, the platform's. */
+    public static boolean isKeyDownNow(int key) {
+        UIDocument running = UIDocument.current();
+        return running == null ? CgInput.isKeyDown(key) : running.input().isKeyDown(key);
+    }
+
+    /**
+     * Whether mouse {@code button} is held, for a poll that must stop when it is released anywhere (a repeat): the
+     * running document's, reconciled with the platform each host frame; outside any document, the platform's.
+     */
+    public static boolean isButtonDownNow(int button) {
+        UIDocument running = UIDocument.current();
+        if (running == null || !running.input().heldFromEvents) return CgInput.isMouseDown(button);
+        return button >= 0 && button < BUTTONS && running.input().polledButtons[button];
     }
 
     /**

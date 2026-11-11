@@ -4,7 +4,6 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
@@ -15,6 +14,7 @@ import com.crystalgui.render.UiPresenter;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.CompositorAnimation;
+import com.crystalgui.ui.service.Input;
 import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
@@ -62,7 +62,7 @@ import java.util.function.Supplier;
  *   <li>Attach after building the tree: from then on only the driver's own entries may touch it.</li>
  *   <li>Asynchronously an input event answers "taken" before it is dispatched; a key the document then leaves comes
  *       back from {@link #pollUnhandledKey} a frame later.</li>
- *   <li>Asynchronously the document's {@code PlatformPort} answers key and button state from the events offered here:
+ *   <li>Asynchronously the document's {@code Input} answers key and button state from the events offered here:
  *       a host that hands the document events some other way leaves it a stale picture of the keyboard.</li>
  *   <li>{@link #run} waits for the sequence, and so for a frame being recorded. For a probe or a script, never per
  *       frame.</li>
@@ -164,9 +164,6 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     private final UiSequence sequence;
     @Nullable
     private final SurfaceCompositor<F> compositor;
-    /** What the document asks of the platform when it records on its own; null otherwise. */
-    @Nullable
-    private final PostedPlatformPort port;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
 
     /** Where this document is drawn: what it records with, and what shows it at the stage that frames it. */
@@ -179,6 +176,45 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     /** Host frames that drew the document. Render thread. */
     private long presented;
     private boolean closed;
+    /** The host's side of the document: its extracts, and giving it back at close. */
+    private final UIDocument.Ownership ownership;
+    /** Inline, the owner the frame names its thread to; null on a sequence. */
+    @Nullable
+    private final HostThreadOwner inlineOwner;
+
+    /**
+     * Inline, the document's thread is the one that frames it: the first frame's, or until then whoever builds it.
+     * Work sent from elsewhere waits for the next frame.
+     */
+    private final class HostThreadOwner implements UIDocument.Owner {
+        private final String name;
+        @Nullable
+        private volatile Thread thread;
+
+        HostThreadOwner(String name) {
+            this.name = name;
+        }
+
+        @Override
+        public boolean isCurrent() {
+            Thread known = thread;
+            return known == null || known == Thread.currentThread() || !known.isAlive();
+        }
+
+        @Override
+        public void execute(Runnable work) {
+            document.post(work);
+        }
+
+        @Override
+        public String name() {
+            return name + " (inline)";
+        }
+
+        void frameOn(Thread current) {
+            thread = current;
+        }
+    }
 
     private DocumentDriver(UIDocument document, Mode mode, String name) {
         this.document = document;
@@ -186,15 +222,31 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         if (mode == Mode.INLINE) {
             sequence = null;
             compositor = null;
-            port = null;
+            inlineOwner = new HostThreadOwner(name);
+            ownership = document.own(inlineOwner);
             return;
         }
         sequence = UiSequence.create(name);
-        document.runOn(sequence);
+        inlineOwner = null;
+        ownership = document.own(new UIDocument.Owner() {
+            @Override
+            public boolean isCurrent() {
+                return sequence.isCurrent();
+            }
+
+            @Override
+            public void execute(Runnable work) {
+                sequence.execute(work);
+            }
+
+            @Override
+            public String name() {
+                return sequence.name();
+            }
+        });
         compositor = mode == Mode.ASYNC ? new SurfaceCompositor<>(sequence) : null;
-        port = mode == Mode.ASYNC ? new PostedPlatformPort(sequence) : null;
-        if (port != null) {
-            document.usePlatform(port);
+        if (mode == Mode.ASYNC) {
+            document.input().answerFromEvents();
             JobScheduler.asynchronousDocumentOpened();
         }
         CrystalGuiCore.LOGGER.info("[cgui] document '{}' runs on its own sequence, {}", name,
@@ -285,7 +337,6 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     public boolean offerKey(CgSystemInput.Keyboard.Event key, BooleanSupplier dispatch) {
         if (mode != Mode.ASYNC) return offer(dispatch);
         sequence.execute(() -> {
-            port.note(key);
             if (!dispatch.getAsBoolean()) unhandledKeys.add(key);
         });
         return true;
@@ -296,10 +347,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         if (mode != Mode.ASYNC) return offer(dispatch);
         pointerX = event.x();
         pointerY = event.y();
-        sequence.execute(() -> {
-            port.note(event);
-            dispatch.getAsBoolean();
-        });
+        sequence.execute(dispatch::getAsBoolean);
         return true;
     }
 
@@ -364,11 +412,12 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     /** {@link #frame(CgStageFrame, float, Painter)} at a given size; with no stage it records and shows nothing. Tests. */
     boolean frame(@Nullable CgStageFrame stage, float deltaSeconds, int width, int height, Painter<F> painter) {
-        // This thread is where documents are framed: work and answers queued for it run first.
-        CgHostThread.drainFrames();
+        int held = Input.platformHeld();
+        if (inlineOwner != null) inlineOwner.frameOn(Thread.currentThread());
         if (compositor == null) {
-            Runnable delivery = document.readExtracts();
+            Runnable delivery = ownership.readExtracts();
             UiFrame recorded = ask(() -> {
+                document.input().reconcile(held);
                 if (delivery != null) delivery.run();
                 return painter.record(view, deltaSeconds, width, height);
             });
@@ -378,14 +427,14 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         }
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
         if (stage != null) view.paintContext();
-        port.service();
+        sequence.execute(() -> document.input().reconcile(held));
         boolean shown = compositor.present(stage, view.presenter(),
                 commit -> followPointer(commit) | animate(commit)) != null;
         lastPresentNanos = System.nanoTime();
         lastPainter = painter;
         lastWidth = width;
         lastHeight = height;
-        Runnable delivery = document.readExtracts();
+        Runnable delivery = ownership.readExtracts();
         if (compositor.accepting()) {
             compositor.requestFrame(() -> {
                 if (delivery != null) delivery.run();
@@ -651,8 +700,9 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         if (sequence != null) {
             sequence.runNow(() -> { });
             sequence.close();
-            if (port != null) JobScheduler.asynchronousDocumentClosed();
+            if (mode == Mode.ASYNC) JobScheduler.asynchronousDocumentClosed();
         }
+        ownership.release();
         view.close();
     }
 }

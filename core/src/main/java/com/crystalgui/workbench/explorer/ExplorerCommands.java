@@ -1,6 +1,7 @@
 package com.crystalgui.workbench.explorer;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.command.ActionIcons;
@@ -30,7 +31,6 @@ import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.fs.project.SourceRoots;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
-import java.util.function.BiFunction;
 import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
@@ -634,7 +634,7 @@ public final class ExplorerCommands {
     public static void copyPath(@Nullable CgPath path, boolean relative) {
         if (path == null) return;
         String text = relative ? path.path() : path.toString();
-        PlatformPort.current().setClipboard(text);
+        CgHostThread.CLIENT.run(() -> CgClipboard.set(text));
         Notifications.show(Notification.info("Copied").withDetail(text));
     }
 

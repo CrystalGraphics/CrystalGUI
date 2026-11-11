@@ -1,10 +1,9 @@
 package com.crystalgui.workbench.chrome.menu;
 
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -724,7 +723,7 @@ public class MenuBarView extends UIElement {
      * two cannot disagree about what is currently drawn.</p>
      */
     public boolean tickFrame(float deltaSeconds) {
-        boolean want = revealed || CgModifiers.hasAlt(PlatformPort.current().modifiers());
+        boolean want = revealed || CgModifiers.hasAlt(Input.modifiersNow());
         if (want == mnemonicsShown) return true;
         mnemonicsShown = want;
         for (Title title : titles) title.showMnemonic(want);

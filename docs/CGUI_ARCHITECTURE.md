@@ -542,13 +542,13 @@ one a capability, each read through its owner and carrying its own absent-value.
 
 | Need | Reached via | Lives in |
 |---|---|---|
-| Modifier, key and button state, the clipboard, UI sounds, the cursor — **from UI code** | `PlatformPort.current()` | `ui/service/PlatformPort`: the running document's port, which a document on its own thread routes to the render thread (plan engine-threaded-ui). Calling the services below directly from a widget bypasses that |
-| What is held, a toolkit's codes in the engine's | `CgInput` — hosts and `PlatformPort.INLINE` only | `platform/input/CgInput` |
-| The clipboard | `CgClipboard` — `PlatformPort.INLINE` only | `platform/input/CgClipboard` |
-| UI sounds | `PlatformPort.playSound` → CrystalGraphics' `CgSounds.play2D`: a host sound event or a file, unplaced in the `UI` class | `com.crystalgraphics.audio.CgSounds` |
+| Modifier, key and button state — **from UI code** | `document.input().modifiers()`/`isKeyDown`/`isButtonDown`, or `Input.modifiersNow()` for the running document | `ui/service/Input`: as of the event being handled. A document on its own thread answers from the events it dispatched, the modifiers reconciled with the platform once a host frame |
+| What is held, a toolkit's codes in the engine's | `CgInput` — hosts, and `Input` for a document on the client thread | `platform/input/CgInput` |
+| The clipboard | `CgClipboard`, on the client thread: from UI code `CgHostThread.CLIENT.run(() -> CgClipboard.set(text))`, and `CgHostThread.CLIENT.call(CgClipboard::get).then(paste)`, answered on the document's thread | `platform/input/CgClipboard` |
+| UI sounds | `CgSounds.play2D`, from any thread: a host sound event or a file, unplaced in the `UI` class | `com.crystalgraphics.audio.CgSounds` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
-| **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
+| **Presenting a cursor** | `CursorService.setCursor(...)`, from any thread (the last asked wins) | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
 | The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades: `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCamera`, `CgSounds` — never their slots | `platform/world/` |
 
 **A slot is read through its facade, never `CgPlatform.get(X.SERVICE)`**: one SPI per concern, one static facade per

@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -112,7 +112,7 @@ public final class GradientBar extends ValueControl<Gradient> {
             int key = down.getKeyCode();
             int at = picked();
             if (key == CgKeyCodes.KEY_LEFT || key == CgKeyCodes.KEY_RIGHT) {
-                boolean fine = CgModifiers.hasCtrl(PlatformPort.current().modifiers());
+                boolean fine = CgModifiers.hasCtrl(Input.modifiersNow());
                 float step = (fine ? 0.001f : 0.01f) * (key == CgKeyCodes.KEY_LEFT ? -1 : 1);
                 Gradient now = gradient();
                 float moved = Math.max(0f, Math.min(1f, Math.round((now.position(at) + step) * 1000f) / 1000f));

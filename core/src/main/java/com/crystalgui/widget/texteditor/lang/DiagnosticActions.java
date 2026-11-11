@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
@@ -88,7 +89,8 @@ final class DiagnosticActions {
                 }
                 text = joined.toString();
             }
-            PlatformPort.current().setClipboard(text);
+            String copied = text;
+            CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
             return true;
         }
         return false;

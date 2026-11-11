@@ -13313,14 +13313,15 @@ com/crystalgui/ui/dom/UIDocument
   method public demote (Lcom/crystalgui/ui/dom/UIElement;)V
   method public dismiss ()Lcom/crystalgui/ui/service/Dismiss;
   method public driver ()Lcom/crystalgui/ui/dom/DocumentDriver;
+  method public execute (Ljava/lang/Runnable;)V
   method public focus ()Lcom/crystalgui/ui/service/Focus;
   method public frame (FFF)V
-  method public frameThread ()Ljava/lang/Thread;
   method public getCommands ()Lcom/crystalgui/core/command/CommandRegistry;
   method public getElementById (Ljava/lang/String;)Lcom/crystalgui/ui/dom/UIElement;
   method public hasTopLayerContent ()Z
   method public input ()Lcom/crystalgui/ui/service/Input;
   method public insertAt (ILcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UIElement;
+  method public isCurrent ()Z
   method public isMutating ()Z
   method public isPromoted (Lcom/crystalgui/ui/dom/UIElement;)Z
   method public layout (FF)V
@@ -13328,17 +13329,15 @@ com/crystalgui/ui/dom/UIDocument
   method public makeCurrent ()Lcom/crystalgui/ui/dom/UIDocument$Running;
   method public markFrameThread ()Lcom/crystalgui/ui/dom/UIDocument;
   method public overlayHost (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UIElement;
+  method public own (Lcom/crystalgui/ui/dom/UIDocument$Owner;)Lcom/crystalgui/ui/dom/UIDocument$Ownership;
   method public paint (Lcom/crystalgui/render/CgUiPaintContext;)V
-  method public platform ()Lcom/crystalgui/ui/service/PlatformPort;
   method public promote (Lcom/crystalgui/ui/dom/UIElement;)V
   method public promote (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)V
   method public promotedNodes ()Ljava/util/Collection;
   method public promotionHost (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UIElement;
   method public removeDataProvider (Lcom/crystalgui/core/data/DataProvider;)V
   method public require (Ljava/lang/String;)V
-  method public runOn (Lcom/crystalgui/core/async/UiSequence;)Lcom/crystalgui/ui/dom/UIDocument;
   method public scopeProviders ()Ljava/util/List;
-  method public sequence ()Lcom/crystalgui/core/async/UiSequence;
   method public sessionState ()Lcom/crystalgui/ui/dom/SessionState;
   method public setSessionState (Lcom/crystalgui/ui/dom/SessionState;)V
   method public setWorkArea (Lcom/crystalgui/ui/dom/UIElement;)V
@@ -13348,9 +13347,19 @@ com/crystalgui/ui/dom/UIDocument
   method public topLayerNode ()Lcom/crystalgui/ui/dom/UIElement;
   method public topLayerNodeIfPresent ()Lcom/crystalgui/ui/dom/UIElement;
   method public update (FF)V
-  method public usePlatform (Lcom/crystalgui/ui/service/PlatformPort;)V
   method public workArea ()Lcom/crystalgui/ui/dom/UIElement;
   method public,static current ()Lcom/crystalgui/ui/dom/UIDocument;
+com/crystalgui/ui/dom/UIDocument$Owner
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract execute (Ljava/lang/Runnable;)V
+  method public,abstract isCurrent ()Z
+  method public,abstract name ()Ljava/lang/String;
+com/crystalgui/ui/dom/UIDocument$Ownership
+  access public,final
+  extends java/lang/Object
+  method public readExtracts ()Ljava/lang/Runnable;
+  method public release ()V
 com/crystalgui/ui/dom/UIDocument$Running
   access public,abstract,interface
   extends java/lang/Object
@@ -13812,7 +13821,6 @@ com/crystalgui/ui/input/DragScrub
   method public,static axisValue (DFILcom/crystalgui/ui/input/DragScrub$Spec;)D
   method public,static decimalsFor (D)I
   method public,static dominantDelta (FF)F
-  method public,static modifiersNow ()I
   method public,static passesThreshold (FFF)Z
   method public,static quantity (Ljava/lang/String;)Lcom/crystalgui/ui/input/DragScrub$Quantity;
   method public,static unitsPerPixel (Lcom/crystalgui/ui/input/DragScrub$Spec;I)D
@@ -14209,6 +14217,7 @@ com/crystalgui/ui/service/Input
   implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
   implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
   method public <init> (Lcom/crystalgui/ui/dom/UIDocument;)V
+  method public answerFromEvents ()V
   method public beginFrame ()V
   method public claimedStrokes ()Ljava/util/Set;
   method public consumeComposition (Ljava/lang/String;I)Z
@@ -14224,10 +14233,12 @@ com/crystalgui/ui/service/Input
   method public hoverTarget ()Lcom/crystalgui/ui/dom/UIElement;
   method public invalidateHover ()V
   method public isButtonDown (I)Z
+  method public isKeyDown (I)Z
   method public latchWheel (Lcom/crystalgui/ui/dom/UIElement;)V
   method public markReleaseEndedDrag ()V
   method public mode (Ljava/lang/Class;)Lcom/crystalgui/ui/service/InputMode;
   method public modes ()Ljava/util/List;
+  method public modifiers ()I
   method public offerGhost (Lcom/crystalgui/ui/dom/UIElement;)V
   method public offerGhost (Lcom/crystalgui/ui/dom/UIElement;FF)V
   method public paintCursorDecoration (Lcom/crystalgui/render/CgUiPaintContext;)V
@@ -14239,6 +14250,7 @@ com/crystalgui/ui/service/Input
   method public pointerMovedSincePress ()Z
   method public popMode (Lcom/crystalgui/ui/service/InputMode;)V
   method public pushMode (Lcom/crystalgui/ui/service/InputMode;)V
+  method public reconcile (I)V
   method public releaseEndedDrag ()Z
   method public releasePointerCapture ()V
   method public send (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/event/UIEvent;)V
@@ -14250,6 +14262,10 @@ com/crystalgui/ui/service/Input
   method public textInputArea ()[F
   method public useWheelClock (Ljava/util/function/LongSupplier;)V
   method public wheelLatch ()Lcom/crystalgui/ui/dom/UIElement;
+  method public,static isButtonDownNow (I)Z
+  method public,static isKeyDownNow (I)Z
+  method public,static modifiersNow ()I
+  method public,static platformHeld ()I
 com/crystalgui/ui/service/Input$Chords
   access public,abstract,interface
   extends java/lang/Object
@@ -14278,18 +14294,6 @@ com/crystalgui/ui/service/Lifecycle
   method public destroy (Lcom/crystalgui/ui/dom/UIElement;)V
   method public freeze (Lcom/crystalgui/ui/dom/UIElement;)V
   method public thaw (Lcom/crystalgui/ui/dom/UIElement;)V
-com/crystalgui/ui/service/PlatformPort
-  access public,abstract,interface
-  extends java/lang/Object
-  field public,static,final INLINE Lcom/crystalgui/ui/service/PlatformPort;
-  method public,abstract clipboard ()Ljava/lang/String;
-  method public,abstract isKeyDown (I)Z
-  method public,abstract isMouseDown (I)Z
-  method public,abstract modifiers ()I
-  method public,abstract playSound (Ljava/lang/String;)V
-  method public,abstract setClipboard (Ljava/lang/String;)V
-  method public,abstract setCursor (Lcom/crystalgui/core/cursor/Cursor;)V
-  method public,static current ()Lcom/crystalgui/ui/service/PlatformPort;
 com/crystalgui/ui/service/RotationCursor
   access public,final
   extends java/lang/Object

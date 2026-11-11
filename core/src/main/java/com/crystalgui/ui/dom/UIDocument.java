@@ -16,7 +16,6 @@ import com.crystalgui.ui.box.BoxTree;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Dismiss;
 import com.crystalgui.ui.service.Focus;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -131,31 +130,111 @@ public final class UIDocument extends UIElement {
         return this;
     }
 
+    // ── The owner ────────────────────────────────────────────────────────────
+
     /**
-     * Gives this tree to {@code sequence}: from now on it is touched only from the sequence's tasks, on whichever pool
-     * thread runs them, and {@link #require} asks the sequence rather than a thread. Null hands it back to whichever
-     * thread next runs a frame.
+     * Who runs a document's thread: a viewport, which frames it and feeds it input. Application code never implements
+     * one; it reaches the document's thread through {@link #execute}.
      *
      * <pre>{@code
-     * UiSequence sequence = UiSequence.create("desktop");
-     * document.runOn(sequence);
-     * sequence.execute(() -> document.frame(delta, w, h));
+     * UIDocument.Ownership owned = document.own(new UIDocument.Owner() {
+     *     public boolean isCurrent() { return sequence.isCurrent(); }
+     *     public void execute(Runnable work) { sequence.execute(work); }
+     *     public String name() { return sequence.name(); }
+     * });
+     * Runnable readings = owned.readExtracts();   // the host's side of a frame
+     * owned.release();                            // the viewport closed
      * }</pre>
      */
-    public UIDocument runOn(@Nullable UiSequence sequence) {
-        this.sequence = sequence;
+    public interface Owner {
+        /** Whether the calling code is on the document's thread now. */
+        boolean isCurrent();
+
+        /** Runs {@code work} on the document's thread, after what is queued there. */
+        void execute(Runnable work);
+
+        /** For messages: what runs the document. */
+        String name();
+    }
+
+    /**
+     * What {@link #own} hands its caller, and nobody else: the host's side of the document.
+     *
+     * <ul>
+     *   <li>{@link #readExtracts} runs on the host's thread, at its frame, never the document's.</li>
+     *   <li>After {@link #release} it does nothing; the document is free to be owned again.</li>
+     * </ul>
+     */
+    public final class Ownership {
+        private final Owner by;
+
+        private Ownership(Owner by) {
+            this.by = by;
+        }
+
+        /** The extracts' readings for this frame, taken on the calling thread; null when none is registered. */
+        @Nullable
+        public Runnable readExtracts() {
+            return owner == by ? extracts.read() : null;
+        }
+
+        /** Gives the document back: from now on the thread that next runs a frame owns it. */
+        public void release() {
+            if (owner != by) return;
+            owner = null;
+            frameThread = null;
+        }
+    }
+
+    @Nullable
+    private volatile Owner owner;
+
+    /**
+     * Gives this document to {@code owner}: from now on it is touched only on the owner's thread, which
+     * {@link #require} asks rather than a thread. Once: a viewport owns one document.
+     *
+     * @throws IllegalStateException if another owner holds it
+     */
+    public Ownership own(Owner owner) {
+        Objects.requireNonNull(owner, "owner");
+        if (this.owner != null) throw new IllegalStateException("The document is already owned by " + this.owner.name());
+        this.owner = owner;
         frameThread = null;
-        return this;
+        return new Ownership(owner);
     }
 
-    /** The sequence this tree runs on, or null when a thread owns it. */
-    @Nullable
-    public UiSequence sequence() {
-        return sequence;
+    /** Whether the calling code is on this document's thread: its owner's, else the one that framed it. */
+    public boolean isCurrent() {
+        Owner by = owner;
+        if (by != null) return by.isCurrent();
+        Thread known = frameThread;
+        return known == null || known == Thread.currentThread();
     }
 
-    @Nullable
-    private volatile UiSequence sequence;
+    /**
+     * Runs {@code work} on this document: at once on its thread, else after what is queued there, or at the start of
+     * its next frame when nothing owns it. From any thread.
+     *
+     * <pre>{@code
+     * connection.onWindow(spec -> document.execute(() -> desktop.open(spec)));
+     * }</pre>
+     */
+    public void execute(Runnable work) {
+        if (isCurrent()) {
+            work.run();
+            return;
+        }
+        Owner by = owner;
+        if (by == null) {
+            post(work);
+            return;
+        }
+        by.execute(() -> {
+            try (Running ignored = makeCurrent()) {
+                work.run();
+            }
+        });
+    }
 
     @Nullable
     private volatile DocumentDriver<?> driver;
@@ -187,15 +266,9 @@ public final class UIDocument extends UIElement {
         inbox.add(work);
     }
 
-    /** The extracts' readings for this frame, taken on the calling thread; null when none is registered. */
-    @Nullable
-    Runnable readExtracts() {
-        return extracts.read();
-    }
-
     /** The first frame claims its thread, as does a frame after the claiming thread died. */
     private void claimFrameThread() {
-        if (sequence != null) {
+        if (owner != null) {
             require("A frame");
             return;
         }
@@ -209,15 +282,22 @@ public final class UIDocument extends UIElement {
     }
 
     @Nullable
-    public Thread frameThread() {
+    Thread frameThread() {
         return frameThread;
     }
 
-    /** Refuses a caller on any thread but the frame thread, once one has been claimed. */
+    /** Refuses a caller on any thread but the document's: its owner's, else the frame thread once one is claimed. */
     public void require(String what) {
-        UiSequence owner = sequence;
-        if (owner != null) UiThread.require(what, owner);
-        else UiThread.require(what, frameThread);
+        Owner by = owner;
+        if (by == null) {
+            UiThread.require(what, frameThread);
+            return;
+        }
+        if (!UiThread.isEnforcing() || by.isCurrent()) return;
+        UiSequence running = UiSequence.current();
+        throw new IllegalStateException(what + " must happen on the document's thread (" + by.name() + "), not on "
+                + (running == null ? "thread " + Thread.currentThread().getName() : running.name())
+                + ". Post it there: document.execute(...).");
     }
 
     // ── The running document ─────────────────────────────────────────────────
@@ -253,20 +333,6 @@ public final class UIDocument extends UIElement {
             UiThread.exit();
             RUNNING.set(previous);
         };
-    }
-
-    // ── The platform ─────────────────────────────────────────────────────────
-
-    private PlatformPort platform = PlatformPort.INLINE;
-
-    /** What this document asks of the platform: modifiers, keys, clipboard, sound, cursor. */
-    public PlatformPort platform() {
-        return platform;
-    }
-
-    /** Installs the port a host routes this document's platform calls through. */
-    public void usePlatform(PlatformPort port) {
-        this.platform = port == null ? PlatformPort.INLINE : port;
     }
 
     // ── Style ────────────────────────────────────────────────────────────────
@@ -525,8 +591,8 @@ public final class UIDocument extends UIElement {
      */
     public void frame(float deltaSeconds, float width, float height) {
         try (Running ignored = makeCurrent()) {
-            // On a sequence this is work inside the host's frame, which alone opens one in the trace.
-            if (sequence == null) {
+            // Owned, this is work inside the host's frame, which alone opens one in the trace.
+            if (owner == null) {
                 UiTrace.frameBegin();
                 runFrame(deltaSeconds, width, height);
             } else {

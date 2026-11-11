@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.core.command.ClipboardCommands;
@@ -306,10 +307,14 @@ public final class EditorCommands {
         // unselected line did nothing whatever, which reads as the editor ignoring the key rather than as
         // a disabled command. @see TextEditor#selectionOrTouchedLines
         registry.register(editorCommand(PREFIX + "copy", "Copy")
-                .run(on(editor -> PlatformPort.current().setClipboard(editor.selectionOrTouchedLines()))));
+                .run(on(editor -> {
+                    String copied = editor.selectionOrTouchedLines();
+                    CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
+                })));
         registry.register(Command.of(PREFIX + "cut", "Cut")
                 .run(on(editor -> {
-                    PlatformPort.current().setClipboard(editor.selectionOrTouchedLines());
+                    String copied = editor.selectionOrTouchedLines();
+                    CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
                     // The line, not a collapsed selection: deleteSelections would remove nothing at all
                     // when there is none, so the text would be on the clipboard and still on screen.
                     if (editor.hasSelection()) editor.deleteSelections();
@@ -320,9 +325,10 @@ public final class EditorCommands {
                 .enabledWhen(when(editor -> !editor.isReadOnly())));
         registry.register(Command.of(PREFIX + "paste", "Paste")
                 .run(on(editor -> {
-                    String pasted = PlatformPort.current().clipboard();
                     // A LINE COMES BACK AS A LINE. @see TextEditor#pasteAtCaret
-                    if (pasted != null && !pasted.isEmpty()) editor.pasteAtCaret(pasted);
+                    CgHostThread.CLIENT.call(CgClipboard::get).then(pasted -> {
+                        if (!pasted.isEmpty()) editor.pasteAtCaret(pasted);
+                    });
                 }))
                 .enabledWhen(whenEditable()));
 

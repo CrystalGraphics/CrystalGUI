@@ -16,7 +16,6 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.service.Input;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.widget.text.UIText;
 import org.joml.Matrix4f;
 
@@ -128,10 +127,9 @@ final class VfxViewport extends UIElement {
 
     /** Moves the eye on the held keys. */
     private void fly(float delta) {
-        PlatformPort keys = PlatformPort.current();
-        float step = FLY_SPEED * delta * (CgModifiers.hasCtrl(keys.modifiers()) ? SPRINT : 1f);
-        move(axis(keys, CgKeyCodes.KEY_W, CgKeyCodes.KEY_S) * step, axis(keys, CgKeyCodes.KEY_D, CgKeyCodes.KEY_A) * step,
-                axis(keys, CgKeyCodes.KEY_SPACE, CgKeyCodes.KEY_LSHIFT) * step);
+        float step = FLY_SPEED * delta * (CgModifiers.hasCtrl(Input.modifiersNow()) ? SPRINT : 1f);
+        move(axis(CgKeyCodes.KEY_W, CgKeyCodes.KEY_S) * step, axis(CgKeyCodes.KEY_D, CgKeyCodes.KEY_A) * step,
+                axis(CgKeyCodes.KEY_SPACE, CgKeyCodes.KEY_LSHIFT) * step);
     }
 
     /** Moves the eye: {@code forward} where it looks, {@code right} level to its right, {@code up} straight up. */
@@ -143,8 +141,8 @@ final class VfxViewport extends UIElement {
         eyeZ += -cosYaw * cosPitch * forward - sinYaw * right;
     }
 
-    private static float axis(PlatformPort keys, int positive, int negative) {
-        return (keys.isKeyDown(positive) ? 1f : 0f) - (keys.isKeyDown(negative) ? 1f : 0f);
+    private static float axis(int positive, int negative) {
+        return (Input.isKeyDownNow(positive) ? 1f : 0f) - (Input.isKeyDownNow(negative) ? 1f : 0f);
     }
 
     /**

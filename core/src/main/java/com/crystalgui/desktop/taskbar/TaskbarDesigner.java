@@ -1,6 +1,7 @@
 package com.crystalgui.desktop.taskbar;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
@@ -244,8 +245,9 @@ public final class TaskbarDesigner {
 
         Button copy = new Button("Copy CSS");
         copy.onPressed.connect(() -> {
-            PlatformPort.current().setClipboard(css());
-            CrystalGuiCore.LOGGER.info("Taskbar CSS copied to the clipboard:\n{}", css());
+            String copied = css();
+            CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
+            CrystalGuiCore.LOGGER.info("Taskbar CSS copied to the clipboard:\n{}", copied);
         });
         row.append(copy);
 

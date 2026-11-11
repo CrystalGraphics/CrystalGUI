@@ -18,7 +18,6 @@ import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
-import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.desktop.switcher.WindowSwitcher;
@@ -858,9 +857,7 @@ public class Desktop extends UIElement implements DataProvider {
                 box.onDestroyed.connect(() -> failureWindows.remove(applicationId, box));
             }
         };
-        UiSequence sequence = document.sequence();
-        if (sequence != null && !sequence.isCurrent()) sequence.execute(show);
-        else show.run();
+        document.execute(show);
     }
 
     /** Each application's open failure window. */

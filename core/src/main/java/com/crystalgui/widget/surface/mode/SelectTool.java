@@ -1,6 +1,5 @@
 package com.crystalgui.widget.surface.mode;
 
-import com.crystalgui.ui.service.PlatformPort;
 import java.util.List;
 
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -116,10 +115,5 @@ public final class SelectTool implements Tool {
         ctx.picking().setHovered(null);
     }
 
-    /** Whichever modifiers the platform reports now — a drag callback carries none of its own. */
-    static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 
 }

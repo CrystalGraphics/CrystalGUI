@@ -17,7 +17,7 @@ import org.apache.logging.log4j.Logger;
  *   <tr><th>Was</th><th>Is</th></tr>
  *   <tr><td>{@code CrystalGuiCore.getAdapter()}</td><td>{@code CgInput}</td></tr>
  *   <tr><td>{@code CrystalGuiCore.getClipboard().get()}</td><td>{@code CgClipboard.get()}</td></tr>
- *   <tr><td>{@code CrystalGuiCore.getSoundSystem()}</td><td>{@code PlatformPort.playSound}, through CrystalGraphics' mixer</td></tr>
+ *   <tr><td>{@code CrystalGuiCore.getSoundSystem()}</td><td>{@code CgSounds.play2D}</td></tr>
  *   <tr><td>{@code CrystalGuiCore.getCursorService()}</td><td>{@code CursorService.setCursor(…)}</td></tr>
  * </table>
  *

@@ -1,7 +1,8 @@
 package com.crystalgui.widget.collection.list;
 
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.ui.service.Animation;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -948,14 +949,12 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
     private int pendingSelectOnRelease = -1;
 
     private static boolean isShiftDown() {
-        PlatformPort input = PlatformPort.current();
-        return input != null && CgModifiers.hasShift(input.modifiers());
+        return CgModifiers.hasShift(Input.modifiersNow());
     }
 
     /** Ctrl, or Command on a Mac — {@code CgModifiers} already resolves which one this platform means. */
     private static boolean isMultiSelectModifierDown() {
-        PlatformPort input = PlatformPort.current();
-        return input != null && CgModifiers.hasCtrl(input.modifiers());
+        return CgModifiers.hasCtrl(Input.modifiersNow());
     }
 
     public ListView<T> selectAll() {
@@ -1233,7 +1232,8 @@ public class ListView<T> extends ScrollerView implements ClipboardActions, DataP
             if (out.length() > 0) out.append('\n');
             out.append(renderer.copyTextFor(model.get(index)));
         }
-        PlatformPort.current().setClipboard(out.toString());
+        String copied = out.toString();
+        CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
     }
 
     @Override

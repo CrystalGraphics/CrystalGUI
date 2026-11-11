@@ -1,6 +1,6 @@
 package com.crystalgui.widget.scroll;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import com.crystalgui.ui.dom.*;
 import dev.vfyjxf.taffy.style.AlignContent;
@@ -313,13 +313,12 @@ public class ScrollerView extends UIElement {
             // where `editor.zoomIn` and anything else can bind it -- and declining is the only way, since
             // the resolver runs after dispatch and only on what nothing consumed. Shift+wheel is still
             // ours: it is this view's horizontal scroll, and the convention everywhere.
-            int held = PlatformPort.current().modifiers();
+            int held = Input.modifiersNow();
             if (CgModifiers.hasCtrl(held)
                     || CgModifiers.hasSuper(held)) {
                 return;
             }
-            PlatformPort adapter = PlatformPort.current();
-            int modifiers = adapter == null ? 0 : adapter.modifiers();
+            int modifiers = held;
 
             // MOD+WHEEL IS NOT OURS. Input only consults the keymap for a wheel nothing default-prevented,
             // so consuming this is what stopped `Mod+WheelUp` reaching editor.zoomIn -- the scroller took

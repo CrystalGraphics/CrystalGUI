@@ -106,7 +106,12 @@ public class UiSequenceTest {
     @Test
     public void theTreeIsRefusedOutsideItsSequence() throws Exception {
         UiSequence sequence = sequence("owner");
-        UIDocument document = new UIDocument().runOn(sequence);
+        UIDocument document = new UIDocument();
+        document.own(new UIDocument.Owner() {
+            @Override public boolean isCurrent() { return sequence.isCurrent(); }
+            @Override public void execute(Runnable work) { sequence.execute(work); }
+            @Override public String name() { return sequence.name(); }
+        });
         on(sequence, () -> {
             document.append(new UIElement());
             document.frame(0.016f, 200f, 100f);

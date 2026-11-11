@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.List;
@@ -347,7 +347,7 @@ public final class ResizeHandles extends UIElement {
         Drag.start(this, event.getPosition().x(), event.getPosition().y(), new Drag.Listener() {
             @Override
             public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                int modifiers = modifiersNow();
+                int modifiers = Input.modifiersNow();
                 // ABOUT THE CENTRE doubles the delta: the handle moves one edge, and holding both edges
                 // apart by the same amount is what "about the centre" means for a box whose position is
                 // its parent's business.
@@ -495,17 +495,6 @@ public final class ResizeHandles extends UIElement {
         badge.setDisplayed(true);
     }
 
-    /**
-     * Whatever the platform reports now.
-     *
-     * <p>A drag callback carries no modifiers of its own — it reports where the pointer went, not what
-     * the other hand is doing — so a gesture that changes meaning under Shift or Alt has to ask. The
-     * engine's own Select tool asks the same way.</p>
-     */
-    private static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 
     private void hideBadge() {
         badge.setDisplayed(false);

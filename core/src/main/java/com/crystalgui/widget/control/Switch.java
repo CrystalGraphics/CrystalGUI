@@ -1,5 +1,6 @@
 package com.crystalgui.widget.control;
 
+import com.crystalgraphics.audio.CgSounds;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.signal.Signal;
@@ -15,7 +16,6 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.ShadowRoot;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
-import com.crystalgui.ui.service.PlatformPort;
 import dev.vfyjxf.taffy.style.AlignItems;
 import dev.vfyjxf.taffy.style.FlexDirection;
 
@@ -115,7 +115,7 @@ public class Switch extends UIElement {
             // activated the control underneath a context menu.
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             if (event.isWasPressTarget() && isEnabled()) {
-                PlatformPort.current().playSound("button_click");
+                CgSounds.play2D("button_click");
                 setChecked(!checked);
             }
         });

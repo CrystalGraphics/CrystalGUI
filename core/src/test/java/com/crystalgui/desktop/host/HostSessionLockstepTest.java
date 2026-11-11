@@ -9,7 +9,6 @@ import org.junit.Test;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.util.Locale;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -39,7 +38,7 @@ public class HostSessionLockstepTest {
         try {
             HostSession session = install(Files.createTempDirectory("cgui-async"));
             session.shown();
-            UiSequence sequence = session.document().sequence();
+            UiSequence sequence = session.document().driver().sequence();
             assertNotNull(sequence);
 
             session.frame(0.016f);
@@ -66,7 +65,7 @@ public class HostSessionLockstepTest {
         HostSession session = install(Files.createTempDirectory("cgui-lockstep"));
 
         session.shown();
-        UiSequence sequence = session.document().sequence();
+        UiSequence sequence = session.document().driver().sequence();
         assertNotNull("the desktop's document was not given a sequence", sequence);
 
         session.frame(0.016f);

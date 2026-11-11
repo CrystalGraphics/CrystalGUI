@@ -1,6 +1,6 @@
 package com.crystalgui.ui.input;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgModifiers;
 
 import java.math.BigDecimal;
@@ -256,11 +256,6 @@ public final class DragScrub {
         return dxPixels * dxPixels + dyPixels * dyPixels >= thresholdPx * thresholdPx;
     }
 
-    /** What is held down now, and nothing when there is no platform to ask — a headless tree still drags. */
-    public static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 
     /**
      * One drag of one or two numbers, press to release: everything a scrub does beyond the arithmetic.
@@ -333,7 +328,7 @@ public final class DragScrub {
 
         /** @see #update(float, float, int) */
         public boolean update(float dx, float dy) {
-            return update(dx, dy, modifiersNow());
+            return update(dx, dy, Input.modifiersNow());
         }
 
         /**

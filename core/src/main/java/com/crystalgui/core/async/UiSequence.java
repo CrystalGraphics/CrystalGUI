@@ -22,8 +22,8 @@ import java.util.concurrent.locks.LockSupport;
  *
  * <pre>{@code
  * UiSequence sequence = UiSequence.create("desktop");
- * document.runOn(sequence);                                   // the document now belongs to it
  * sequence.execute(() -> document.frame(delta, w, h));        // from the render thread
+ * // A document's driver owns it on its sequence: UIDocument.own, with an Owner over isCurrent and execute.
  * }</pre>
  *
  * <p>Each sequence has its own {@link JobScheduler}: {@link JobScheduler#shared()} answers it inside a task, and its

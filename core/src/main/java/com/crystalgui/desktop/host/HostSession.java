@@ -11,7 +11,6 @@ import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
@@ -612,8 +611,6 @@ public final class HostSession {
             if (screenStage && playing != null) playing.paint(stage);
             return;
         }
-        // EVERY ARM, painted or not: work and answers for the frame thread must not wait for a desktop to show.
-        CgHostThread.drainFrames();
         Desktop desktop = desktop();
         DocumentDriver<DesktopFacts> owner = driver;
         if (desktop == null || document() == null || owner == null) return;

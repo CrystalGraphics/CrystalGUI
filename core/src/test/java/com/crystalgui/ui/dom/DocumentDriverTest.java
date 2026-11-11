@@ -56,20 +56,20 @@ public class DocumentDriverTest {
     public void thePlatformAnswersHeldKeysFromTheEventsPosted() throws Exception {
         driver.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_LCONTROL, true, false, 0L));
         flush();
-        assertTrue(CgModifiers.hasCtrl(driver.ask(() -> document.platform().modifiers())));
+        assertTrue(CgModifiers.hasCtrl(driver.ask(() -> document.input().modifiers())));
 
         driver.consumeKeyboardEvent(new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_LCONTROL, false, false, 0L));
         flush();
-        assertEquals(CgModifiers.NONE, (int) driver.ask(() -> document.platform().modifiers()));
+        assertEquals(CgModifiers.NONE, (int) driver.ask(() -> document.input().modifiers()));
     }
 
     @Test
     public void theDocumentIsTheSequencesAndAskedThere() {
         UiSequence sequence = driver.sequence();
-        assertSame(sequence, document.sequence());
         assertSame(driver, document.driver());
-        assertFalse(sequence.isCurrent());
+        assertFalse(document.isCurrent());
         assertTrue(driver.ask(sequence::isCurrent));
+        assertTrue(driver.ask(document::isCurrent));
     }
 
     @Test(expected = IllegalStateException.class)
