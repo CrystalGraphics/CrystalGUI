@@ -54,12 +54,6 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /** Per-draw scratch for {@link #quadBody}, a field so a draw allocates no capture. Not part of the value. */
-    private CgUiPaintContext drawCtx;
-    private float drawX, drawY, drawWidth, drawHeight;
-    private int drawTint;
-    private final Runnable quadBody = this::quadBody;
-
     /**
      * @param cellWidth  horizontal cell pitch, in logical pixels
      * @param cellHeight vertical cell pitch, in logical pixels
@@ -129,13 +123,6 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
         if (gpu == null) gpu = new CgCanvasGrid(CgCanvasMaterials.SCREEN);
         gpu.size(width, height).cell(cellWidth, cellHeight).line(lineWidth).color(argb)
                 .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).apply();
-        drawCtx = ctx;
-        drawX = x; drawY = y; drawWidth = width; drawHeight = height;
-        drawTint = tint;
-        ctx.withMaterial(gpu.material(), quadBody);
-    }
-
-    private void quadBody() {
-        drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawTint).submit();
+        ctx.quad(gpu.material()).at(x, y).size(width, height).color(tint).submit();
     }
 }

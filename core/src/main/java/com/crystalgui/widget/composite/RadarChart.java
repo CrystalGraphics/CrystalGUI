@@ -644,9 +644,6 @@ public class RadarChart extends UIElement {
         paintWeb(ctx, cx, cy, radius, webColor, line);
         paintWedges(ctx, cx, cy, radius);
         paintRim(ctx, cx, cy, radius, line);
-        // ONE flush for both paths. curve() and triangle() share a material, so alternating them is
-        // free and only a switch to the quad path costs anything -- which is why neither half flushes.
-        ctx.flush();
     }
 
     /** The fill's strength, 0..1 — the alpha of {@link #FILL_PART}'s computed background colour. */

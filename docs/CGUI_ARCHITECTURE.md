@@ -226,7 +226,7 @@ com.crystalgui.lifecycle       CgUiLifecycle — the ONE CgLifecycleListener Cry
                                CrystalGraphics; drives paint-context teardown + cache invalidation
 
 com.crystalgui.render          CgUiPaintContext (one per document: records), UiGpu (one per process: executes), UiFrame
-                               (a sealed frame), Surface (a moved box's kept texture), CgUiRenderer,
+                               (a sealed frame), Surface (a moved box's kept texture), PaintSegments, PaintSurfaces, CgUiBackdrop,
                                ScissorStack,
                                SvgRasterCache — icon fills rasterised once by additive accumulation into an
                                RGBA16F atlas and drawn as a tinted quad; sits beside the paint context and

@@ -2455,9 +2455,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
      *       different instance buffers, so alternating them forces a material switch each way, and
      *       painter's order has to survive it. A switch that failed to flush the outgoing path would
      *       draw geometry in material order instead of submission order, putting every stroke on top.</li>
-     *   <li><b>Layer opacity</b> — {@code _LayerOpacity} is a material property, so it must be applied
-     *       to the curve material in its own right; a curve that stayed opaque inside
-     *       {@code withLayerOpacity} would mean it was only ever synced onto the quad material.</li>
+     *   <li><b>Layer opacity</b> — stamped on each item, so a curve inside {@code withLayerOpacity} fades as
+     *       a quad does; one that stayed opaque would mean curves no longer read {@code CG_CURVE_OPACITY}.</li>
      * </ul>
      */
     private void curvePage(UIElement pane) {

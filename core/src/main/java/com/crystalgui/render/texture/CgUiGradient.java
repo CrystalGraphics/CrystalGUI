@@ -102,13 +102,9 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /** Per-draw scratch for {@link #quadBody}, a field so a draw allocates no capture. Not part of the value. */
-    private CgUiPaintContext drawCtx;
-    private float drawX, drawY, drawWidth, drawHeight;
-    private int drawTint;
+    /** Per-draw scratch, so a draw allocates nothing. Not part of the value. */
     private final float[] centre = new float[2];
     private final float[] radii = new float[2];
-    private final Runnable quadBody = this::quadBody;
 
     /**
      * @param angleDeg CSS's angle: 0 = to top, 90 = to right, 180 = to bottom, 270 = to left
@@ -316,16 +312,10 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
             gpu.angle(angleFor(width, height));
         }
         for (int i = 0; i < stops.size(); i++) gpu.stop(stops.get(i).position(), stops.get(i).argb());
-        drawCtx = ctx;
-        drawX = x; drawY = y; drawWidth = width; drawHeight = height;
-        drawTint = tint;
+        // Each window writes its stops into the material, which its quad takes as it is submitted.
         for (int i = 0, n = gpu.windows(); i < n; i++) {
             gpu.window(i);
-            ctx.withMaterial(gpu.material(), quadBody);
+            ctx.quad(gpu.material()).at(x, y).size(width, height).color(tint).submit();
         }
-    }
-
-    private void quadBody() {
-        drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawTint).submit();
     }
 }

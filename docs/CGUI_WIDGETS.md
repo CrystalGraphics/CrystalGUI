@@ -1549,8 +1549,8 @@ slowest 13.1ms cpu: phases 12.9ms
 
 ### Reading the counts
 
-The count rows are `CgTrace.add(UiTrace.FRAME, ...)` calls — summed per frame and written once, since
-`add(..., "drawcalls", 1)` fires once per draw. Phase timing follows the channel mask, so they all reach
+The count rows are `CgTrace.add(UiTrace.FRAME, ...)` calls — summed per frame and written once; `drawcalls` is
+the sealed frame's draw calls after batching (`CgFrame.batches()`), added once a frame. Phase timing follows the channel mask, so they all reach
 the HUD with no property set. The layer ones answer the question a paint-bound frame actually
 raises — *why are there seventeen layers?* — and they account for every one:
 

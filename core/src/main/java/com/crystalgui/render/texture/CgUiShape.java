@@ -162,7 +162,6 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
             case ARROW_DOWN:  arrow(ctx, x0, y0, size, size, hw, argb, 0.5f, 0.16f, 0.5f, 0.62f); break;
             case ARROW_UP:    arrow(ctx, x0, y0, size, size, hw, argb, 0.5f, 0.84f, 0.5f, 0.38f); break;
         }
-        ctx.flush();
     }
 
     // ── Kind implementations ────────────────────────────────────────────────

@@ -6,6 +6,7 @@ import com.crystalgraphics.api.texture.CgTextureType;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.compute.ops.CgGpuOps;
 import com.crystalgraphics.render.canvas.CgCanvasMaterials;
+import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgGraphTexture;
@@ -293,24 +294,19 @@ public final class SvgRasterCache {
         if (!entry.baked) {
             // Straight-alpha white coverage under the tint: an ordinary textured quad, batched with
             // whatever is around it. This is the whole of what a cached icon costs per frame.
-            ctx.bindTexture(texture);
-            ctx.quad().at(left, top).size(width, height).uv(u0, v0, u1, v1).color(argb).submit();
+            ctx.quad().texture(0, texture).at(left, top).size(width, height).uv(u0, v0, u1, v1).color(argb).submit();
             return;
         }
 
-        // Premultiplied, because a baked raster is: the composite material multiplies texture by colour
-        // and blends ONE / ONE_MINUS_SRC_ALPHA, so a translucent tint has to arrive with its alpha
-        // already folded into its channels.
+        // Premultiplied, because a baked raster is: the box's premultiplied shape multiplies texture by colour,
+        // so a translucent tint has to arrive with its alpha already folded into its channels.
         int a = argb >>> 24;
         int tint = (a << 24)
                 | (((argb >> 16 & 0xFF) * a / 255) << 16)
                 | (((argb >> 8 & 0xFF) * a / 255) << 8)
                 | ((argb & 0xFF) * a / 255);
-        ctx.withMaterial(ctx.layerBlitMaterial(), () -> {
-            ctx.bindTexture(texture);
-            ctx.quad().at(left, top).size(width, height).uv(u0, v0, u1, v1).color(tint).submit();
-            ctx.flush();
-        });
+        ctx.quad().texture(0, texture).custom2(CgShapeTable.PREMULTIPLIED).at(left, top).size(width, height)
+                .uv(u0, v0, u1, v1).color(tint).submit();
     }
 
     /**
@@ -342,9 +338,8 @@ public final class SvgRasterCache {
         float left = x + entry.originX * perPx + shadow.dx() * scale;
         float top = y + entry.originY * perPx + shadow.dy() * scale;
         CgTrace.add(UiTrace.FRAME, "svg-shadow-draws", 1);
-        ctx.bindTexture(entry.texture);
         // Its own texture, whole, and V flipped as every layer is
-        ctx.quad().at(left, top).size(entry.width * perPx, entry.height * perPx)
+        ctx.quad().texture(0, entry.texture).at(left, top).size(entry.width * perPx, entry.height * perPx)
                 .uv(0f, 1f, 1f, 0f).color(shadow.argb()).submit();
     }
 

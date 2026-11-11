@@ -8143,12 +8143,9 @@ com/crystalgui/render/CgUiPaintContext
   method public beginPasses ()Lcom/crystalgraphics/render/graph/CgRecording;
   method public beginSegment ()V
   method public beginSurface (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;Z)V
-  method public bindCompositeTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)V
-  method public bindTexture (Lcom/crystalgraphics/api/texture/CgTexture;)V
   method public blitLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FLcom/crystalgui/render/LayerRegion;)I
   method public blitLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FLcom/crystalgui/render/LayerRegion;Z)I
   method public blitLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FLcom/crystalgui/render/LayerRegion;ZLorg/joml/Matrix4f;)I
-  method public boxMaterial ()Lcom/crystalgraphics/api/material/CgMaterial;
   method public clipInDraw ([F)Z
   method public compareSurface (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;Ljava/lang/String;)V
   method public compositeMask (Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgui/render/LayerRegion;)V
@@ -8172,16 +8169,11 @@ com/crystalgui/render/CgUiPaintContext
   method public flush ()V
   method public frameId ()J
   method public getColor ()I
-  method public getCurrentMaterial ()Lcom/crystalgraphics/api/material/CgMaterial;
-  method public getCurrentTexture ()Lcom/crystalgraphics/api/texture/CgTexture;
   method public getFont ()Lcom/crystalgraphics/api/font/CgFont;
-  method public getLayerOpacity ()F
   method public getPictureTint ()I
   method public getPoseStack ()Lcom/crystalgraphics/api/PoseStack;
-  method public getRenderer ()Lcom/crystalgui/render/CgUiRenderer;
   method public getScissorDepth ()I
   method public getScissorStack ()Lcom/crystalgui/render/ScissorStack;
-  method public getWhitePixel ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
   method public isFrameActive ()Z
   method public isPoseAxisAligned ()Z
   method public isVisible (FFFF)Z
@@ -8200,6 +8192,7 @@ com/crystalgui/render/CgUiPaintContext
   method public pushRoundedClip (FFFF[F[F[F)Z
   method public pushScissor (FFFF)V
   method public quad ()Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
+  method public quad (Lcom/crystalgraphics/api/material/CgMaterial;)Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
   method public reapplyScissor ()V
   method public recordFrame (II)V
   method public rect ()Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -8232,16 +8225,14 @@ com/crystalgui/render/CgUiPaintContext
   method public walkingSurface ()Lcom/crystalgui/render/Surface;
   method public warmUpLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;)V
   method public withLayerOpacity (FLjava/lang/Runnable;)V
-  method public withMaterial (Lcom/crystalgraphics/api/material/CgMaterial;Ljava/lang/Runnable;)V
   method public withoutRetention (Ljava/lang/Runnable;)V
   method public,static create ()Lcom/crystalgui/render/CgUiPaintContext;
   method public,static parseAhead ()V
   method public,static precache ()V
   method public,static warm ()Lcom/crystalgui/render/CgUiPaintContext$Warm;
 com/crystalgui/render/CgUiPaintContext$Backdrop
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Lcom/crystalgraphics/render/canvas/CgCanvasBackdrop;FFIIII)V
+  access public,final
+  extends java/lang/Object
   method public offsetX ()F
   method public offsetY ()F
   method public source ()Lcom/crystalgraphics/render/canvas/CgCanvasBackdrop;
@@ -8249,25 +8240,12 @@ com/crystalgui/render/CgUiPaintContext$Backdrop
   method public x1 ()I
   method public y0 ()I
   method public y1 ()I
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
 com/crystalgui/render/CgUiPaintContext$Warm
   access public,final
   extends java/lang/Object
   method public cancel ()V
   method public progress ()F
   method public step (II)Z
-com/crystalgui/render/CgUiRenderer
-  access public,final
-  extends java/lang/Object
-  method public curve ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Curve;
-  method public filledCell ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Cell;
-  method public flush ()V
-  method public quad ()Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
-  method public triangle ()Lcom/crystalgraphics/render/canvas/CgCurveBatch$Triangle;
-  method public useCurveMaterial (Lcom/crystalgraphics/api/material/CgMaterial;)V
-  method public useMaterial (Lcom/crystalgraphics/api/material/CgMaterial;)V
 com/crystalgui/render/InkOverflow
   access public,final,record
   extends java/lang/Record
@@ -8626,7 +8604,6 @@ com/crystalgui/render/texture/CgUiRect
 com/crystalgui/render/texture/CgUiRect$Draw
   access public,final
   extends java/lang/Object
-  implements java/lang/Runnable
   method public <init> ()V
   method public at (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public begin (Lcom/crystalgui/render/CgUiPaintContext;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -8639,7 +8616,6 @@ com/crystalgui/render/texture/CgUiRect$Draw
   method public fillTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public radii (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public radius (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public run ()V
   method public size (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public submit ()V
 com/crystalgui/render/texture/CgUiRect$Fill

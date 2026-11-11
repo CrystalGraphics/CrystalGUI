@@ -304,7 +304,7 @@ two identically-named rows, which is the one thing that arrangement cannot yet t
 | Channel | Set via | Meaning | Consumed by |
 |---|---|---|---|
 | **Tint** | `ctx.setColor(argb)` | Per-drawable multiplicative color, baked per-vertex | `CgUiRect`'s own fragment output `*= i.color` |
-| **Layer opacity** | `ctx.withLayerOpacity(t, drawBody)` | Whole-draw compositing weight | `_LayerOpacity` material property, multiplied into `fragColor.a` |
+| **Layer opacity** | `ctx.pushLayerOpacity(t)` / `withLayerOpacity(t, drawBody)` | Whole-draw compositing weight | Stamped on every quad and curve (`opacity(f)`), read as `CG_QUAD_OPACITY`/`CG_CURVE_OPACITY`: no material is written and no batch breaks. Text takes none |
 
 They're separate because conflating them was an earlier bug: an initial `CgUiCrossFade` draft scaled
 the ambient tint's alpha channel to blend `from`/`to`, which corrupted the RGB tint channel used for
@@ -579,14 +579,7 @@ The shader is a genuine "canvas": interior filled by `_FillColor` or a sampled `
 (`WITH_TEXTURE_FILL` keyword), an optional `_BorderColor` stroke band (`WITH_BORDER` keyword) along the
 outer edge, both masked by the same distance field so corners clip fill and border consistently.
 
-**`CgUiPaintContext.withMaterial(material, drawBody)`** — used because an SDF rect needs its own
-shader/program, not the shared box-model batch. **`bind()` must run after `drawBody`, not before** —
-`applyProperties(...)` is CPU-only (it marks the block dirty only if a value actually moved; the GPU upload
-only happens inside `bind()`, which sends the block only if its packed bytes changed or it is the frame's
-first bind -- the block is `CgBufferLifetime.FRAME`), and `drawBody` is exactly where the caller sets its per-instance properties. Binding
-first uploads whatever was dirty from the *previous* draw call — one draw stale, invisible for a static
-shape re-drawing identical values every frame, badly broken for two different instances alternating
-every frame (a fixed bug from an earlier session).
+**A drawable with a shader of its own draws `ctx.quad(material)`**, having set its properties first: the quad takes the material's values as it is submitted, so a property set after it reaches only the quads after (`docs/CGUI_INVARIANTS.md`).
 
 **Transitions, not morphing**: `CgUiRect` is built fresh every frame by `paintContent` from
 whatever the currently-interpolated style values are — it is never itself held inside the `background`
@@ -621,9 +614,8 @@ only inside a layer**, which is the one failure worth knowing about here.
 
 **Two layers are never opened at all.** A mask over a childless box did nothing — the multiply only
 ever applied to the children's layer — and an `opacity` whose box paints at most one primitive folds
-into the draw through `_LayerOpacity` instead of flattening anything. The fold is refused for any node
-that overrides a paint hook, because CrystalGraphics' text material carries no `_LayerOpacity` and a
-folded label would ignore the fade.
+into the draw through the layer opacity each item carries instead of flattening anything. The fold is refused for
+any node that overrides a paint hook, because text takes no layer opacity and a folded label would ignore the fade.
 
 **A layer lives for one frame; what is kept is a surface.** A layer is drawn again every frame it is
 open, and what did not change inside it is replayed from its kept chunks rather than painted (render-graph

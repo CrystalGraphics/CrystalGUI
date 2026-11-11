@@ -437,6 +437,5 @@ final class PortDefaultEditor {
                 .width(view.getWireWidth())
                 .colors(color, color)
                 .submit();
-        ctx.flush();
     }
 }

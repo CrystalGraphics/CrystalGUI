@@ -256,7 +256,6 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
         // width set at construction is a guess that every later mapping inherits.
         axis.setPixels(box.width());
         paintTrack(ctx, box);
-        ctx.flush();
     }
 
     /**

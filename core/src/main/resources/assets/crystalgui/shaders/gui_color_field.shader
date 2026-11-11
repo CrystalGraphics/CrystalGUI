@@ -28,7 +28,6 @@ Properties {
     _CornerRadiusX ("Corner Radii X (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _CornerRadiusY ("Corner Radii Y (TL,TR,BR,BL)", vec4) = (0.0, 0.0, 0.0, 0.0)
     _BoxSize       ("Box Size (px)",        vec2)  = (0.0, 0.0)
-    _LayerOpacity  ("Layer Opacity",        float) = 1.0
 }
 
 struct v2f {
@@ -104,7 +103,7 @@ Pass {
 
         result *= i.color;
 
-        result.a *= coverage * _LayerOpacity;
+        result.a *= coverage * CG_QUAD_OPACITY;
         fragColor = vec4(result.rgb, result.a * boxClip);
     }
 }

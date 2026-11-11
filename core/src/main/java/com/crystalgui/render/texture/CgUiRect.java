@@ -226,11 +226,8 @@ public final class CgUiRect implements CgUiDrawable {
      * a graph: through the value that was a {@code Fill}, one or two {@code CgUiRect}s, and the two
      * capturing lambdas the draw itself needed, per element per frame. A painter that HAS radii and a
      * fill but no rect comes straight here and builds none of them.</p>
-     *
-     * <p>It is its own {@code Runnable} for the same reason: {@code withMaterial} takes a callback, and a lambda over
-     * the draw's arguments is a fresh capture every time one runs.</p>
      */
-    public static final class Draw implements Runnable {
+    public static final class Draw {
 
         /** What fill was last set. Distinguishes a colour fill from a texture fill whose texture is
          * null, which draws nothing rather than drawing white. */
@@ -246,10 +243,6 @@ public final class CgUiRect implements CgUiDrawable {
         private int fillColorArgb;
         private CgTexture2D texture;
         private CgUiSprite sprite;
-
-        /** Set by {@link #drawShaped} for {@link #run} to read: the callback takes no arguments, so what it draws
-         * with lives here. */
-        private int quadTint, shaderFillArgb;
 
         /** Resets to a bare rect and binds the context. {@code CgUiPaintContext.rect()} is the way in;
          * nothing else should call this. */
@@ -376,9 +369,7 @@ public final class CgUiRect implements CgUiDrawable {
                 case TEXTURE -> {
                     if (texture == null) return;
                     if (isPlain()) {
-                        ctx.bindTexture(texture);
-                        ctx.quad().at(x, y).size(width, height).color(ctx.getColor()).submit();
-                        ctx.flush();
+                        ctx.quad().texture(0, texture).at(x, y).size(width, height).color(ctx.getColor()).submit();
                     } else {
                         drawShaped(ctx.getColor(), 0);
                     }
@@ -407,11 +398,9 @@ public final class CgUiRect implements CgUiDrawable {
             // the whole checkerboard says "missing" at any size. CgUiPaintContext.drawImage is the only
             // other site that can be handed a fallback.
             if (missing || (!sprite.hasBorder() && isPlain())) {
-                ctx.bindTexture(resolved);
-                CgQuadBatch.Quad q = ctx.quad().at(x, y).size(width, height).color(tint);
+                CgQuadBatch.Quad q = ctx.quad().texture(0, resolved).at(x, y).size(width, height).color(tint);
                 if (!missing) q.uv(sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
                 q.submit();
-                ctx.flush();
                 return;
             }
             // EVERY SHAPED SPRITE GOES DOWN THE SLICED PATH, bordered or not. With zero borders the nine
@@ -424,14 +413,6 @@ public final class CgUiRect implements CgUiDrawable {
 
         /** A radius, a border or a 9-slice: a quad naming its shape, on the box material. */
         private void drawShaped(int quadTint, int shaderFillArgb) {
-            this.quadTint = quadTint;
-            this.shaderFillArgb = shaderFillArgb;
-            if (ctx.getCurrentMaterial() == ctx.boxMaterial()) run();
-            else ctx.withMaterial(ctx.boxMaterial(), this);
-        }
-
-        @Override
-        public void run() {
             int kind = sprite != null ? CgShapeTable.NINE_SLICE : texture != null ? CgShapeTable.TEXTURE : CgShapeTable.FLAT;
             CgShapeTable.Shape shape = ctx.shapes().begin(kind, width, height)
                     .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
@@ -447,15 +428,13 @@ public final class CgUiRect implements CgUiDrawable {
                         sprite.getU1(), sprite.getV1(), sprite.getU2(), sprite.getV2(),
                         sprite.centerSourceWidth(), sprite.centerSourceHeight(),
                         sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal(), sprite.isFillCenter());
-                ctx.bindTexture(sprite.getTexture());
-            } else if (texture != null) {
-                ctx.bindTexture(texture);
-            } else {
+            } else if (texture == null) {
                 shape.fill(shaderFillArgb);
-                ctx.bindTexture(ctx.getWhitePixel());
             }
             int index = shape.end();
-            ctx.quad().at(x, y).size(width, height).custom2(index).color(quadTint).submit();
+            CgQuadBatch.Quad quad = ctx.quad().at(x, y).size(width, height).custom2(index).color(quadTint);
+            CgTexture2D sampled = sprite != null ? sprite.getTexture() : texture;
+            (sampled != null ? quad.texture(0, sampled) : quad).submit();
         }
     }
 

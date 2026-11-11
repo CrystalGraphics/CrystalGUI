@@ -75,7 +75,6 @@ public class TimelineRuler extends TimelineTrack {
             label(ctx, font, format(at - origin, step), x + 3f, 0f, bottom - 5f, TARGET_SPACING - 8f,
                     (color & 0x00FFFFFF) | 0xB0000000);
         }
-        ctx.flush();
     }
 
     /** The smallest 1, 2 or 5 times a power of ten that is at least {@code rough}. */

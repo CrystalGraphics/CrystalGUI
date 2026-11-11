@@ -545,9 +545,9 @@ public final class BoxPainter {
      * group opacity and per-primitive opacity part company — {@code 0.5} over {@code 0.5} composites to
      * {@code 0.75} drawn separately and to {@code 0.5} drawn as a group.</p>
      *
-     * <p><b>A node that paints its own content is never folded</b>, even a leaf, because
-     * {@code _LayerOpacity} is a property of the materials in this repository and CrystalGraphics' text
-     * material does not carry it — a folded label would simply ignore the fade. That is also why the
+     * <p><b>A node that paints its own content is never folded</b>, even a leaf, because the layer
+     * opacity is stamped on quads and curves and text does not take it — a folded label would simply
+     * ignore the fade. That is also why the
      * question is asked of the CLASS rather than of the style: a subclass painting by hand is invisible
      * from here otherwise. {@code backdrop-filter} is excluded for its own reason: it composites what is
      * behind the element, which is not this element's paint to scale.</p>

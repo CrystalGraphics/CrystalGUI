@@ -338,7 +338,6 @@ public class NodeWireLayer extends UIElement {
             wire(ctx, a.x(), a.y(), pendingX, pendingY, pendingFrom.dotRadius(), 0f, color, color, false);
         }
 
-        ctx.flush();
     }
 
     /** AABB of the two endpoints against the visible slice, both in world space. Conservative on

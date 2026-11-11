@@ -73,18 +73,9 @@ public final class CgUiColorField implements CgUiDrawable {
     private int toArgb = 0xFFFFFFFF;
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /**
-     * <b>Per-draw scratch for {@link #quadBody} and {@link #writeProperties}</b>, which are held as
-     * FIELDS so a draw allocates neither.
-     *
-     * <p>{@code withMaterial} and {@code applyProperties} each take a callback, and a lambda over the
-     * draw's arguments is a fresh capture every time one runs — on a path that is per element per
-     * frame. A method reference stored once costs nothing after the first draw. These fields are not
-     * part of the value: nothing here is read by {@code equals} and nothing survives the draw.</p>
-     */
-    private CgUiPaintContext drawCtx;
-    private float drawX, drawY, drawWidth, drawHeight;
-    private final Runnable quadBody = this::quadBody;
+    /** The drawn box's size, for {@link #writeProperties}. Per-draw scratch, not part of the value. */
+    private float drawWidth, drawHeight;
+    /** {@link #writeProperties}, held once: a lambda over the draw's values would be a capture per element per frame. */
     // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
     // names CgMaterialValues, so resolving it loads a CrystalGraphics CORE class. A dedicated server
     // builds drawables and never paints, which is what headlessTest asserts by running without core.
@@ -152,14 +143,10 @@ public final class CgUiColorField implements CgUiDrawable {
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        drawCtx = ctx;
-        drawX = x; drawY = y; drawWidth = width; drawHeight = height;
-        ctx.withMaterial(material(), quadBody);
-    }
-
-    private void quadBody() {
+        drawWidth = width;
+        drawHeight = height;
         material().applyProperties(propertyWriter());
-        drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawCtx.getColor()).submit();
+        ctx.quad(material()).at(x, y).size(width, height).color(ctx.getColor()).submit();
     }
 
     private void writeProperties(CgMaterialValues b) {

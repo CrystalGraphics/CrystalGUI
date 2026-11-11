@@ -13,12 +13,12 @@
 chunk in one `CgRecording`; `seal()` builds it into a `UiFrame` that refers back to nothing, and `UiGpu` — the render
 thread's half, one per process — executes it and composites it onto the host's target. A layer is a pass on a texture
 the executor lends for the frame; the target around it ends its pass at the layer and continues in another after, so
-passes run in the order they were made and a read follows the write it sees. `flush()` ends the open chunks and
-executes nothing. **CrystalGUI holds no GL state and makes no GL call** (`rhi` H3): a texture paint keeps across
+passes run in the order they were made and a read follows the write it sees. `flush()` lands what is drawn into the
+recording and executes nothing; order never needs it. **CrystalGUI holds no GL state and makes no GL call** (`rhi` H3): a texture paint keeps across
 frames is `requestLayer`'s — made when the frame executes, freed by `releaseTexture` — its pixels written by
 `ctx.update`, and the scene behind the UI is `CgGraphTexture.current()`, copied (`recordCopy`). The executor takes
 and gives back the host's state round every execution, inside the host's section (`CgHostPaint`, a stage's firing).
-Between frames the context draws immediately, and a draw there must `flush()` or it lands in the next frame.
+Drawing outside a frame throws.
 
 ```java
 CgUiPaintContext ctx = document.paintContext();   // first call on the render thread
@@ -35,39 +35,34 @@ UiGpu.present(frame);                             // render thread
 | Group | Methods |
 |---|---|
 | Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split, with `UiGpu.presentAgain(w,h)` showing the last frame again when no new one was sealed — the whole tree records into the context's frame target, composited onto the host's once |
-| Draw | `fillRect`, `drawImage`, `quad()` + `flush`, `rect()`, `curve()`, `bindTexture` (elides redundant rebinds), `text()` → a `CgTextDraw` on the context's canvas, its `PoseStack`, clip, nodes and text gamma already set |
+| Draw | `fillRect`, `drawImage`, `quad()` (the box material) and `quad(material)` (a drawable's own), `rect()`, `curve()`, `triangle()`, `filledCell()`, `text()`: each a `CgCanvas` item with the context's pose, clip entry, nodes and layer opacity already stamped (text takes its text gamma, and no opacity) |
 
-> **`curve()` is `quad()`'s twin.** Bézier strokes are `CgCurveBatch` items with their own instance kind and
-> material (`canvas/curve.shader`), on the same canvas: a switch between the two ends the outgoing run, so painter's
-> order holds whatever the batching. Alternating them per element breaks the batch each way.
+> **Every item names its material; the context holds no current material, texture or path.** A quad's texture is
+> `.texture(0, t)` on the quad (`.texture(0, t, sampler)` to filter it otherwise), a premultiplied picture is
+> `.custom2(CgShapeTable.PREMULTIPLIED)`, a different blend is `.state(s)`. A drawable with a shader of its own sets
+> its properties, then draws `ctx.quad(material)`: the item takes the material's values as it is submitted. The
+> canvas keeps order across quads, curves and text and batches neighbours that match, so nothing here flushes for
+> order; a flush ends a batch and is only for a boundary (a segment's edge, a read of the target).
 >
-> `curve()` applies the `PoseStack` exactly as `quad()` does — **never call `.pose(...)` on the result** —
-> and stroke widths are scaled by the pose too, so a 2px stroke stays 2 *logical* px at any `uiScale`,
-> the same as a 2px border.
+> **Never call `.pose`, `.clip`, `.node` or `.opacity` on what `quad()`, `curve()` or `text()` answer**: each replaces
+> the context's, and dropping the pose drops `uiScale` and the element transform. Stroke widths scale with the
+> pose, so a 2px stroke stays 2 *logical* px at any `uiScale`, as a 2px border does. Each answer is the canvas's one
+> scratch builder: build and `submit()` in one expression, never hold it.
 
 > **`rect()` is `quad()`'s shape-aware twin, and the only place a rounded or bordered rect is drawn.**
 > `ctx.rect().at(x,y).size(w,h).radius(6f,6f).border(1f,edge).fillColor(bg).submit()` — same scratch rule
-> as `quad()` (build and `submit()` in one expression), and `submit()` picks the batch or the SDF material
-> by asking whether the rect is plain. **`CgUiRect` is a VALUE and drawing one must not build one**: its
+> as `quad()` (build and `submit()` in one expression), and `submit()` names a shape only when the rect is
+> not plain. **`CgUiRect` is a VALUE and drawing one must not build one**: its
 > `with` methods each answer a copy, which is right for something the cascade shares and ruinous for a
 > painter that needs a rect per element per frame. `BoxPainter` composes the element's radii, its border
 > and the background's own `Fill` straight into this scratch, so a shaped element allocates nothing;
-> `CgUiRect.draw` does the same with its own fields. The scratch is also its own `Runnable` and
-> `Consumer`, because `withMaterial` and `applyProperties` each take a callback and a lambda over the
-> draw's arguments is a fresh capture every frame — the same reason every other material-owning drawable
-> (`CgUiGradient`, `CgUiGrid`, `CgUiColorField`, `CgUiBackdropFilter`) holds its two callbacks as fields
-> over per-draw scratch rather than writing them inline. Per-draw scratch is not part of a drawable's
-> value: nothing in it is read by `equals` and nothing survives the draw.
->
-> `quad()` returns `CgQuadBatch.Quad` — `ctx.quad().at(x,y).size(w,h).uv(...).color(argb).submit()`,
-> then `flush()` to draw (`submit()` only queues). **Never call `.pose(...)` on it**: `CgUiRenderer.quad()`
-> is the single place the `PoseStack` is applied, and overwriting it silently drops `uiScale` and the
-> element transform. It's re-applied per call because `CgCanvas.quad()` resets the scratch
-> instance's pose to null. The returned object is that shared scratch — build and `submit()` in one
-> expression, never hold it.
+> `CgUiRect.draw` does the same with its own fields. A drawable that writes properties through
+> `applyProperties` holds its writer as a field (`CgUiColorField`), since a lambda over the draw's values is a
+> capture per element per frame. Per-draw scratch is not part of a drawable's value: nothing in it is read by
+> `equals` and nothing survives the draw.
 | Clip | `pushScissor` / `popScissor` — a whole-pixel clip entry every draw is stamped with, no flush (a real scissor inside a snapshot or capture, under a node that is not a whole-pixel translation, or past the clip chain's depth; `-Dcrystalgui.paint.squareClips=false` everywhere) — and `pushRoundedClip` / `popRoundedClip`, a rounded rect stamped the same way (`CgClipTable`), no layer and no flush |
-| Material | `withMaterial(material, body)` |
-| Layers | `withLayerOpacity(opacity, body)` and its lambda-free pair `pushLayerOpacity`/`popLayerOpacity`, `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `surface(key, region)` |
+| Opacity | `pushLayerOpacity`/`popLayerOpacity` and `withLayerOpacity(opacity, body)`: composed with the opacity in force and stamped on every quad and curve after (`CG_QUAD_OPACITY`, `CG_CURVE_OPACITY`). No flush, no material written, no batch broken. Distinct from `getColor()`'s alpha, which a box applies to its fill alone; text takes none |
+| Layers | `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `surface(key, region)` |
 | Pixels | `update(texture, x, y, w, h, rgba)` into a requested texture, recorded |
 | Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |
 
@@ -162,12 +157,14 @@ did. Under a node the
 
 ### Supporting classes
 
-- **`CgUiRenderer`** — the paint context's items on its `CgCanvas` (CrystalGraphics' `render/canvas`): each
-  `quad()`/`curve()` starts a canvas item with the context's current material (`useMaterial`,
-  `useCurveMaterial`), state and hand-bound texture, and the `PoseStack` baked in at `submit()` — three transforms
-  per quad, affine-correct under `transform:`. An item captures its material's values as it is submitted, so a
-  drawable's `applyProperties` reaches the quads after it. Text is an item of the same canvas (`ctx.text()`), in
-  order with the rest.
+- **`PaintSegments`**, **`PaintSurfaces`** — the paint context's segments and replay (G6), and its surfaces and
+  damage (G7), behind the context's own methods (`beginSegment`, `replay`, `surface`, `beginSurface`...).
+- **`CgUiBackdrop`** — `backdropFor`'s capture: the scene, the frame target and every enclosing layer composed
+  into CrystalGraphics' `CgCanvasBackdrop` (the web's backdrop root), one capture a frame shared by every glass
+  element and retaken where something was painted over it (`notePainted`). Allocates nothing per element; its
+  answer is the context's one `Backdrop`, valid until the next call.
+- **`UiPaintWarmup`** — the default font, the stylesheets' glyphs and the shipped icons, loaded off the render
+  thread for `CgUiPaintContext.Warm`.
 - **`ScissorStack`** — the paint context's allocation-free nested clip stack (16 levels), top-left rects
   flipped per target. It touches no GL: each level becomes a whole-pixel clip entry or a link in the recorder's
   scissor chain (`CgCanvas`), recorded in the node it was pushed under, so a moved node's clips move with it.

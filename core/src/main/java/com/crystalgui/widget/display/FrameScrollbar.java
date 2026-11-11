@@ -189,7 +189,6 @@ public class FrameScrollbar extends UIElement implements Measurable {
         // THE GRIPS say the ends can be taken hold of; lit in the accent while one is under the pointer.
         paintGrip(ctx, thumb[0] + 3f, height, hover == Grab.START || grab == Grab.START ? accent : 0xFF000000);
         paintGrip(ctx, thumb[0] + thumb[1] - 5f, height, hover == Grab.END || grab == Grab.END ? accent : 0xFF000000);
-        ctx.flush();
     }
 
     private static void paintGrip(CgUiPaintContext ctx, float x, float height, int argb) {

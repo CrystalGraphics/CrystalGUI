@@ -84,7 +84,7 @@ public final class CgUiSpriteRegistry {
     }
 
     /** Same fallback texture the rest of the engine already uses for a broken texture load
-     * ({@code CgUiRenderer}/{@code CgUiSprite} both reference {@code CgTextureManager.get().getFallback()}
+     * ({@code CgUiPaintContext.drawImage}/{@code CgUiSprite} both reference {@code CgTextureManager.get().getFallback()}
      * directly) — wrapped in a fresh {@link CgUiSprite} since {@link CgTextureManager#getFallback()}
      * returns a raw {@link CgTexture2D}, not a {@link CgUiDrawable}. Deliberately a method, not a
      * cached static field: {@code getFallback()} lazily creates a real GPU texture on first use,

@@ -799,7 +799,6 @@ public class MarkupView extends UIElement {
                     stroke(ctx, x, y0, x, y1, colour);
                 }
             }
-            ctx.flush();
         }
 
         /**
@@ -807,7 +806,7 @@ public class MarkupView extends UIElement {
          *
          * <p>A cubic whose control points equal its endpoints degenerates to a segment, which is how
          * {@code PortDefaultEditor} draws its stub — reusing {@code ctx.curve()} rather than inventing a
-         * second draw path. The width is in LOGICAL pixels: {@code CgUiRenderer} applies the
+         * second draw path. The width is in LOGICAL pixels: the paint context applies the
          * {@code PoseStack} to the stroke, so one pixel stays one pixel at any {@code uiScale}.</p>
          */
         private static void stroke(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,

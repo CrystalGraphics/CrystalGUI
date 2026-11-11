@@ -40,11 +40,6 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
-    /** Per-draw scratch for {@link #quadBody}, a field so a draw allocates no capture. Not part of the value. */
-    private CgUiPaintContext drawCtx;
-    private float drawX, drawY, drawWidth, drawHeight;
-    private final Runnable quadBody = this::quadBody;
-
     /** Radius of the Gaussian, in logical px. */
     @Getter @Setter
     private float blurRadius = CgCanvasGlass.DEFAULT.blur();
@@ -159,14 +154,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
         }
         gpu.backdrop(backdrop.source(), backdrop.offsetX(), backdrop.offsetY(), backdrop.x0(), backdrop.y0(),
                         backdrop.x1(), backdrop.y1())
-                // Before withMaterial: binding validates the samplers it holds, deleted by a surface resize.
-                .apply();
-        drawCtx = ctx;
-        drawX = x; drawY = y; drawWidth = width; drawHeight = height;
-        ctx.withMaterial(gpu.material(), quadBody);
-    }
-
-    private void quadBody() {
-        drawCtx.quad().at(drawX, drawY).size(drawWidth, drawHeight).color(drawCtx.getColor()).submit();
+                .apply();   // before the quad, which takes the material's values as it is submitted
+        ctx.quad(gpu.material()).at(x, y).size(width, height).color(ctx.getColor()).submit();
     }
 }
