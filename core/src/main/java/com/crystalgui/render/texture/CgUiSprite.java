@@ -1,12 +1,12 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.texture.CgTextureSpec;
 import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgraphics.gpu.resource.CgTextureManager;
+import com.crystalgraphics.gpu.resource.CgTextureSettings;
 import com.crystalgui.render.texture.geometry.Position;
 import com.crystalgui.render.texture.geometry.Size;
-import com.crystalgui.render.CgUiPaintContext;
 import lombok.Getter;
+import com.crystalgraphics.api.texture.CgSampler;
 
 /**
  * Full-rect image draw from a {@link CgTexture2D}, with an optional UV sub-rect for
@@ -64,6 +64,9 @@ public final class CgUiSprite {
     private boolean uvDirty = true;
     private boolean hasBorder = false;
 
+    /** How a sprite sheet loads: texel for texel, its pixels kept sharp. */
+    public static final CgTextureSettings PIXELS = CgTextureSettings.PLAIN.withSampler(CgSampler.NEAREST_CLAMP);
+
     private float u0, u1, u2, u3;
     private float v0, v1, v2, v3;
     private float borderSumX = 0f;
@@ -75,7 +78,7 @@ public final class CgUiSprite {
         if (texture == null && texturePath != null) {
             String path = texturePath;
             texturePath = null; // clear first: setTexture(CgTexture2D) would otherwise re-clear it
-            setTexture(CgTextureManager.get().getOrCreate(path, CgTextureSpec.RGBA8_NEAREST));
+            setTexture(CgTextureManager.get().getOrCreate(path, PIXELS));
         }
         return texture;
     }

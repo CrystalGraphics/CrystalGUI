@@ -1,6 +1,5 @@
 package com.crystalgui.render.texture.asset;
 
-import com.crystalgraphics.api.texture.CgTextureSpec;
 import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgraphics.gpu.resource.CgTextureManager;
 import com.crystalgraphics.serialization.CgCodec;
@@ -175,7 +174,7 @@ public final class CgUiSpriteRegistry {
                 throw new IllegalArgumentException("element has no 'texture' and pack has none either");
             }
 
-            CgTexture2D tex = CgTextureManager.get().getOrCreate(resolvedTexture, CgTextureSpec.RGBA8_NEAREST);
+            CgTexture2D tex = CgTextureManager.get().getOrCreate(resolvedTexture, CgUiSprite.PIXELS);
             CgUiSprite sprite2 = new CgUiSprite().setTexture(tex);
             if (resolvedTextureSize != null && resolvedTextureSize.length == 2) {
                 sprite2.setTextureSizeReference(resolvedTextureSize[0], resolvedTextureSize[1]);
