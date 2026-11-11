@@ -42,6 +42,10 @@ build. There are currently **no exemptions** — the guard is clean.
 ```
 com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing else. The platform
                                registry it used to hold now lives in CrystalGraphics; see below.
+  .async                       UiSequence (a document's sequence; services(), the one owned services
+                               live on; forDocument, which -Dcrystalgui.ui.singleSequence=true makes
+                               one for all), Broadcast<T> (an event across sequences: posted, heard on
+                               the subscriber's), JobScheduler, UiThread, UiBudget
   .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
   .dispose                     Disposable, Disposable.Gl, Disposer — the ownership tree. NOT a

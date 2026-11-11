@@ -1,6 +1,6 @@
 package com.crystalgui.core.notify;
 
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.Broadcast;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -40,7 +40,7 @@ public final class NotificationGroups {
     }
 
     /** A group's effective display changed — what a settings panel and the balloon layer both watch. */
-    public static final Signal.Value<String> onDidChangeDisplay = new Signal.Value<>();
+    public static final Broadcast<String> onDidChangeDisplay = Broadcast.create("notifications.display");
 
     private static final Map<String, Group> GROUPS = new LinkedHashMap<>();
 
@@ -57,7 +57,7 @@ public final class NotificationGroups {
         if (id == null || id.isEmpty()) return;
         GROUPS.put(id, new Group(id, displayName == null || displayName.isEmpty() ? id : displayName,
                 defaultDisplay == null ? NotificationDisplay.BALLOON : defaultDisplay));
-        onDidChangeDisplay.emit(id);
+        onDidChangeDisplay.post(id);
     }
 
     /** Every declared group, in registration order — what a settings list enumerates. */
@@ -85,7 +85,7 @@ public final class NotificationGroups {
         NotificationDisplay previous = displayOf(groupId);
         if (display == null) OVERRIDES.remove(groupId);
         else OVERRIDES.put(groupId, display);
-        if (displayOf(groupId) != previous) onDidChangeDisplay.emit(groupId);
+        if (displayOf(groupId) != previous) onDidChangeDisplay.post(groupId);
     }
 
     /** Whether the user has overridden this group. */

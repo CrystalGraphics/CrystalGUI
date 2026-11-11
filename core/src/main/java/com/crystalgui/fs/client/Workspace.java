@@ -5,6 +5,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Signal;
@@ -22,6 +23,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 import java.util.function.UnaryOperator;
 import org.jetbrains.annotations.Nullable;
@@ -74,14 +76,27 @@ public final class Workspace implements Disposable {
     public final Signal.Value<FsHello> onDidGreet = new Signal.Value<>();
 
     private Workspace(FsCall.Caller<Object> caller, Subscriber subscriber, CgDynamicOps<Object> ops) {
-        this.calls = new FsCall<>(caller, ops, health);
+        // A wire's replies, timeouts and notifications arrive on its tick thread, and this workspace's signals
+        // belong to the sequence it was made on: hand every callback back there.
+        Executor home = Broadcast.sequenceHere();
+        this.calls = new FsCall<>(home == null ? caller : homed(caller, home), ops, health);
         this.files = new FileOperations(calls);
-        subscribe(subscriber, ops);
+        subscribe(home == null ? subscriber : homed(subscriber, home), ops);
         // DRAINED INTO THIS WORKSPACE'S OWN TABLE, and kept in step. A language module contributes at
         // mod init, long before any world is joined -- so it cannot be handed a workspace, and it must
         // not name one either. @see ContentProviders
         adoptContributions();
-        ContentProviders.onDidChange.connect(this::adoptContributions);
+        ContentProviders.onDidChange.subscribe(this::adoptContributions);
+    }
+
+    private static FsCall.Caller<Object> homed(FsCall.Caller<Object> caller, Executor home) {
+        return (method, args, onResult, onError) -> caller.call(method, args,
+                result -> home.execute(() -> onResult.accept(result)),
+                error -> home.execute(() -> onError.accept(error)));
+    }
+
+    private static Subscriber homed(Subscriber subscriber, Executor home) {
+        return (method, handler) -> subscriber.subscribe(method, message -> home.execute(() -> handler.accept(message)));
     }
 
     private void adoptContributions() {

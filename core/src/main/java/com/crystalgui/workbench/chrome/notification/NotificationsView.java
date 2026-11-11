@@ -108,7 +108,7 @@ public class NotificationsView extends UIElement {
     public NotificationsView() {
         super(NAME);
         addClass(PANEL_CLASS);
-        whileConnected(() -> Notifications.onDidChange.connect(this::apply));
+        whileConnected(() -> Notifications.onDidChange.subscribe(this::apply));
         // OPENING THE PANEL IS READING IT, which is why the mark is here and not in a click handler.
         onConnected(() -> {
             rebuild();

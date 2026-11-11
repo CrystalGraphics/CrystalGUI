@@ -12,7 +12,6 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
 
 /**
  * What is selected on a surface: any number of items, and at most one secondary thing beside them.
@@ -69,18 +68,13 @@ public class SurfaceSelection {
     private Object secondary;
 
     /**
-     * Fires after any change. One signal, because every consumer re-reads the whole selection.
-     *
-     * <p>Also announces to {@link InspectorRegistry}, so a contribution never has to wire that itself —
-     * forgetting the line produced a surface whose inspector tab never appeared while an identical one
-     * beside it worked. Cheap: the inspector defers to the next frame and drops the rebuild when its
-     * subject key has not moved.</p>
+     * Fires after any change. One signal, because every consumer re-reads the whole selection; the surface that owns
+     * it tells its inspectors from here.
      */
     public final Signal.Action onChanged = new Signal.Action();
 
     public SurfaceSelection(Marking marking) {
         this.marking = marking;
-        onChanged.connect(InspectorRegistry::subjectChanged);
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────

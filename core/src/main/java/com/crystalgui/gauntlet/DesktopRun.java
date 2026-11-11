@@ -60,7 +60,7 @@ public abstract class DesktopRun extends CgGauntletController {
         if (!opened) {
             if (!state().equals(CgGauntletState.IN_WORLD) || timeInState() < OPEN_AFTER.get()) return;
             opened = true;
-            Notifications.onDidChange.connect(event -> {
+            Notifications.onDidChange.subscribe(event -> {
                 if (event.kind() != NotificationEvent.Kind.ADDED || event.notification() == null) return;
                 Notification added = event.notification();
                 CrystalGuiCore.LOGGER.info("{} notification: {}{}", id(), added,

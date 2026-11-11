@@ -605,7 +605,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // ATTACHED WORKBENCHES ONLY, for the reason above it: this is a listener on a PROCESS-LIVED
         // static, so a workbench that subscribed from its constructor would stay reachable for ever and
         // keep an entire editor tree alive behind it.
-        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(projectSources::attachLateServices));
+        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.subscribe(projectSources::attachLateServices));
         // A LIBRARY TYPE'S KIND ARRIVING LATE is the same event as a project file's declaration arriving
         // late, so it sets the same flag and is coalesced with it. `symbolOf` is allowed to answer "not
         // yet" precisely so that working it out cannot land on a frame; this is the other half of that

@@ -31,6 +31,7 @@ import org.joml.Vector2f;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -263,8 +264,14 @@ public class SurfaceEditor extends CanvasView
                 + "does not override createPolicy()");
     }
 
+    /**
+     * The selection, announcing every change to this surface's document's inspectors, so a contribution never wires
+     * that itself: forgetting the line once produced a surface whose inspector tab never appeared.
+     */
     protected SurfaceSelection createSelection(SurfacePolicy policy) {
-        return new SurfaceSelection(policy::markSelected);
+        SurfaceSelection selection = new SurfaceSelection(policy::markSelected);
+        selection.onChanged.connect(() -> InspectorSubject.changed(this));
+        return selection;
     }
 
     /**

@@ -1073,7 +1073,7 @@ com/crystalgui/app/uibuilder/BuilderSelection
   access public,final
   extends java/lang/Object
   field public,final onChanged Lcom/crystalgui/core/signal/Signal$Action;
-  method public <init> ()V
+  method public <init> (Ljava/util/function/Supplier;)V
   method public add (Lcom/crystalgui/ui/dom/UIElement;)V
   method public canvasSelected ()Z
   method public clear ()V
@@ -2929,6 +2929,19 @@ com/crystalgui/core/async/ActiveJob
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/core/async/Broadcast
+  access public,final
+  extends java/lang/Object
+  method public disconnectAll ()V
+  method public name ()Ljava/lang/String;
+  method public post (Ljava/lang/Object;)V
+  method public subscribe (Ljava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
+  method public subscribe (Ljava/util/function/Consumer;)Lcom/crystalgui/core/signal/Connection;
+  method public subscriberCount ()I
+  method public toString ()Ljava/lang/String;
+  method public,static create (Ljava/lang/String;)Lcom/crystalgui/core/async/Broadcast;
+  method public,static deliverThrough (Ljava/util/function/Supplier;)V
+  method public,static sequenceHere ()Ljava/util/concurrent/Executor;
 com/crystalgui/core/async/JobScheduler
   access public,final
   extends java/lang/Object
@@ -2967,6 +2980,7 @@ com/crystalgui/core/async/UiBudget
 com/crystalgui/core/async/UiSequence
   access public,final
   extends java/lang/Object
+  field public,static,final ZONE_PREFIX Ljava/lang/String;
   implements java/util/concurrent/Executor
   method public close ()V
   method public execute (Ljava/lang/Runnable;)V
@@ -2980,6 +2994,8 @@ com/crystalgui/core/async/UiSequence
   method public,static create (Ljava/lang/String;)Lcom/crystalgui/core/async/UiSequence;
   method public,static create (Ljava/lang/String;Ljava/util/concurrent/Executor;)Lcom/crystalgui/core/async/UiSequence;
   method public,static current ()Lcom/crystalgui/core/async/UiSequence;
+  method public,static forDocument (Ljava/lang/String;)Lcom/crystalgui/core/async/UiSequence;
+  method public,static services ()Lcom/crystalgui/core/async/UiSequence;
 com/crystalgui/core/async/UiThread
   access public,final
   extends java/lang/Object
@@ -3829,7 +3845,7 @@ com/crystalgui/core/notify/NotificationEvent$Kind
 com/crystalgui/core/notify/NotificationGroups
   access public,final
   extends java/lang/Object
-  field public,static,final onDidChangeDisplay Lcom/crystalgui/core/signal/Signal$Value;
+  field public,static,final onDidChangeDisplay Lcom/crystalgui/core/async/Broadcast;
   method public,static displayOf (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationDisplay;
   method public,static group (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationGroups$Group;
   method public,static isOverridden (Ljava/lang/String;)Z
@@ -3859,8 +3875,8 @@ com/crystalgui/core/notify/Notifications
   access public,final
   extends java/lang/Object
   field public,static,final HISTORY_LIMIT I
-  field public,static,final onDidChange Lcom/crystalgui/core/signal/Signal$Value;
-  field public,static,final onDidChangeUnread Lcom/crystalgui/core/signal/Signal$Value;
+  field public,static,final onDidChange Lcom/crystalgui/core/async/Broadcast;
+  field public,static,final onDidChangeUnread Lcom/crystalgui/core/async/Broadcast;
   method public,static clear ()V
   method public,static error (Ljava/lang/String;)V
   method public,static history ()Ljava/util/List;
@@ -5682,7 +5698,7 @@ com/crystalgui/fs/client/ContentProvider
 com/crystalgui/fs/client/ContentProviders
   access public,final
   extends java/lang/Object
-  field public,static,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  field public,static,final onDidChange Lcom/crystalgui/core/async/Broadcast;
   method public,static all ()Ljava/util/List;
   method public,static contribute (Ljava/lang/String;Lcom/crystalgui/fs/client/ContentProvider;)Lcom/crystalgui/core/dispose/Disposable;
   method public,static resetForTesting ()V
@@ -10894,7 +10910,7 @@ com/crystalgui/template/UiTemplateException
 com/crystalgui/template/UiTemplates
   access public,final
   extends java/lang/Object
-  field public,static,final onDidReload Lcom/crystalgui/core/signal/Signal$Action;
+  field public,static,final onDidReload Lcom/crystalgui/core/async/Broadcast;
   method public,static install (Ljava/lang/String;Lcom/crystalgui/template/UiTemplate;)V
   method public,static installSheets (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/List;)V
   method public,static load (Ljava/lang/String;)Lcom/crystalgui/template/UiTemplate;
@@ -12454,7 +12470,7 @@ com/crystalgui/text/syntax/LanguageRegistry
   access public,final
   extends java/lang/Object
   field public,static,final PLAIN Lcom/crystalgui/text/syntax/LanguageRegistry$Entry;
-  field public,static,final onCapabilityChanged Lcom/crystalgui/core/signal/Signal$Action;
+  field public,static,final onCapabilityChanged Lcom/crystalgui/core/async/Broadcast;
   method public,static bootstrap ()V
   method public,static capabilityChanged ()V
   method public,static contributors ()Ljava/util/List;
@@ -13227,8 +13243,10 @@ com/crystalgui/ui/dom/UIDocument
   method public isCurrent ()Z
   method public isMutating ()Z
   method public isPromoted (Lcom/crystalgui/ui/dom/UIElement;)Z
+  method public later (Ljava/lang/Runnable;)V
   method public layout (FF)V
   method public lifecycle ()Lcom/crystalgui/ui/service/Lifecycle;
+  method public local (Lcom/crystalgui/ui/dom/UIDocument$Local;)Ljava/lang/Object;
   method public makeCurrent ()Lcom/crystalgui/ui/dom/UIDocument$Running;
   method public markFrameThread ()Lcom/crystalgui/ui/dom/UIDocument;
   method public overlayHost (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UIElement;
@@ -13252,6 +13270,11 @@ com/crystalgui/ui/dom/UIDocument
   method public update (FF)V
   method public workArea ()Lcom/crystalgui/ui/dom/UIElement;
   method public,static current ()Lcom/crystalgui/ui/dom/UIDocument;
+com/crystalgui/ui/dom/UIDocument$Local
+  access public,final
+  extends java/lang/Object
+  method public toString ()Ljava/lang/String;
+  method public,static of (Ljava/lang/String;Ljava/util/function/Function;)Lcom/crystalgui/ui/dom/UIDocument$Local;
 com/crystalgui/ui/dom/UIDocument$Owner
   access public,abstract,interface
   extends java/lang/Object
@@ -15527,15 +15550,11 @@ com/crystalgui/widget/config/inspector/Inspector
 com/crystalgui/widget/config/inspector/InspectorRegistry
   access public,final
   extends java/lang/Object
-  field public,static,final onDidChangeSubject Lcom/crystalgui/core/signal/Signal$Action;
-  field public,static,final onDidCloseSubject Lcom/crystalgui/core/signal/Signal$Value;
   method public,static all ()Ljava/util/List;
   method public,static register (Lcom/crystalgui/widget/config/inspector/InspectorSection;)Lcom/crystalgui/core/dispose/Disposable;
   method public,static remove (Lcom/crystalgui/widget/config/inspector/InspectorSection;)Z
   method public,static resetForTesting ()V
   method public,static sectionsFor (Lcom/crystalgui/core/data/DataContext;)Ljava/util/List;
-  method public,static subjectChanged ()V
-  method public,static subjectClosed (Lcom/crystalgui/ui/dom/UIElement;)V
 com/crystalgui/widget/config/inspector/InspectorSection
   access public,abstract,interface
   extends java/lang/Object
@@ -15544,6 +15563,14 @@ com/crystalgui/widget/config/inspector/InspectorSection
   method public,abstract accepts (Lcom/crystalgui/core/data/DataContext;)Z
   method public,abstract build (Lcom/crystalgui/widget/config/ConfigForm;Lcom/crystalgui/core/data/DataContext;)V
   method public,abstract tab ()Ljava/lang/String;
+com/crystalgui/widget/config/inspector/InspectorSubject
+  access public,final
+  extends java/lang/Object
+  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  field public,final onDidClose Lcom/crystalgui/core/signal/Signal$Value;
+  method public,static changed (Lcom/crystalgui/ui/dom/UINode;)V
+  method public,static closed (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/ui/dom/UIElement;)V
+  method public,static of (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/widget/config/inspector/InspectorSubject;
 com/crystalgui/widget/control/Button
   access public
   extends com/crystalgui/ui/dom/UIElement

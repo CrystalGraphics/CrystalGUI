@@ -127,8 +127,8 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         ScriptWorkbench[] installed = {install(registry, workbench, cacheRoot)};
         // A RUNTIME THAT ARRIVES LATER STILL GETS ITS PANEL. On a first launch the engine band may not be
         // open when the workbench is built, and a workbench asked only then kept no Run panel for its
-        // life. A band that opens later is announced as a capability change, on the UI thread.
-        Connection late = installed[0] != null ? null : LanguageRegistry.onCapabilityChanged.connect(() -> {
+        // life. A band that opens later is announced as a capability change, heard on this document.
+        Connection late = installed[0] != null ? null : LanguageRegistry.onCapabilityChanged.subscribe(() -> {
             if (installed[0] == null) installed[0] = withRuntimes(registry, workbench, cacheRoot);
         });
         return () -> {

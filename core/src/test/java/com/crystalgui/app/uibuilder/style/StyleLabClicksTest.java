@@ -228,9 +228,6 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         float[] shown = worldCentre(specimen.box());
         assertEquals("with the specimen in the middle", middle[0], shown[0], 1.5f);
         assertEquals(middle[1], shown[1], 1.5f);
-
-        // THE PICK IS EVERY LAB'S, so forget it: a later lab in this process would open on it.
-        StyleLab.forgetGroundPick();
     }
 
     /**

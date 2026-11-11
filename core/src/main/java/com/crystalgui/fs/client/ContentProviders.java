@@ -1,7 +1,7 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -24,8 +24,10 @@ public final class ContentProviders {
 
     private static final Map<String, ContentProvider> BY_SCHEME = new LinkedHashMap<>();
 
-    /** A provider was contributed or withdrawn — what a live {@link Workspace} re-reads. */
-    public static final Signal.Action onDidChange = new Signal.Action();
+    /** A provider was contributed or withdrawn — what a live {@link Workspace} re-reads. Carries the change's number. */
+    public static final Broadcast<Long> onDidChange = Broadcast.create("content-providers");
+
+    private static long changes;
 
     private ContentProviders() {
     }
@@ -40,10 +42,10 @@ public final class ContentProviders {
         Objects.requireNonNull(scheme, "scheme");
         Objects.requireNonNull(provider, "provider");
         BY_SCHEME.put(scheme, provider);
-        onDidChange.emit();
+        onDidChange.post(++changes);
         return () -> {
             synchronized (ContentProviders.class) {
-                if (BY_SCHEME.remove(scheme, provider)) onDidChange.emit();
+                if (BY_SCHEME.remove(scheme, provider)) onDidChange.post(++changes);
             }
         };
     }
@@ -58,7 +60,7 @@ public final class ContentProviders {
     /** For a test, which needs a clean slate and shares statics with every other test in the run. */
     public static synchronized void resetForTesting() {
         BY_SCHEME.clear();
-        onDidChange.emit();
+        onDidChange.post(++changes);
     }
 
     public record Contribution(String scheme, ContentProvider provider) {

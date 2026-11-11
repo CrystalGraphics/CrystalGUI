@@ -158,6 +158,9 @@ opens that frame in the profiler.
   images. Saved to `apps/crystalgui.frameprofiler/settings.json`.
 - **Tabs**: Hints, Zones, Call tree (callers beside it), Counters, Chains (the `flow` spans), Compare,
   Screen (the frame's picture, with `images` on), Buffers.
+- **Lanes**: one per thread, and one per **sequence**: a document's turns land on whichever UI pool thread is free,
+  so each turn is a `sequence:<name>` zone (`crystalgui.frame`) and everything inside it is drawn in that
+  sequence's lane.
 - **Buffers** is live, not the selected frame's: every buffer a compute pass binds, a row per buffer and pass. Pick one
   and a page of its elements is read after that pass next runs, each field decoded by the kernel's declaration
   (CrystalGraphics' `CgBufferInspector`); **Follow** reads it again at the refresh rate. It watches from when it first

@@ -5,13 +5,15 @@ import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 
 /**
  * What the UI builder is pointed at — <b>one object</b>, shared by the canvas, the hierarchy and the
@@ -26,8 +28,8 @@ import com.crystalgui.widget.config.inspector.InspectorRegistry;
  * hierarchy agree on, a RULE is what the Styles panel adds on top of it, and a TOKEN is what the Tokens
  * panel adds. An inspector showing a node's box model and the rule that set it is showing both at once.</p>
  *
- * <p><b>Announcing is not the caller's job.</b> Every change tells {@link InspectorRegistry} the subject
- * moved, which is what {@code GraphSelection} does — so no panel has to remember to, and none of them can
+ * <p><b>Announcing is not the caller's job.</b> Every change tells its owner's document's
+ * {@link InspectorSubject} the subject moved, which is what {@code GraphSelection} does — so no panel has to remember to, and none of them can
  * forget. That is the whole reason this is one object rather than three fields on three widgets.</p>
  */
 public final class BuilderSelection {
@@ -36,6 +38,14 @@ public final class BuilderSelection {
     public final Signal.Action onChanged = new Signal.Action();
 
     private final Set<UIElement> nodes = new LinkedHashSet<>();
+
+    /** The document whose inspectors are told: its owner's, or null while the owner is in none. */
+    private final Supplier<UIDocument> document;
+
+    /** A selection whose changes are announced in {@code document}'s answer, read at each change. */
+    public BuilderSelection(Supplier<UIDocument> document) {
+        this.document = document;
+    }
 
     @Nullable
     private StyleRule rule;
@@ -187,6 +197,7 @@ public final class BuilderSelection {
 
     private void changed() {
         onChanged.emit();
-        InspectorRegistry.subjectChanged();
+        UIDocument where = document.get();
+        if (where != null) InspectorSubject.changed(where);
     }
 }

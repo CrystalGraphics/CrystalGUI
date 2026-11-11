@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.UiSequence;
@@ -24,6 +25,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,6 +34,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.Queue;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -238,6 +241,89 @@ public final class UIDocument extends UIElement {
             try (Running ignored = makeCurrent()) {
                 work.run();
             }
+        });
+    }
+
+    // ── Locals ───────────────────────────────────────────────────────────────
+
+    /**
+     * State a feature keeps per document, without the document knowing the feature (Blink's
+     * {@code Supplement<Document>}): made on first use, gone with the document, touched on its thread.
+     *
+     * <pre>{@code
+     * public static final UIDocument.Local<InspectorSubject> SUBJECT =
+     *         UIDocument.Local.of("inspector-subject", document -> new InspectorSubject());
+     *
+     * InspectorSubject subject = element.document().local(SUBJECT);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>One key per kind of state, held in a {@code static final}: the key's identity is the slot.</li>
+     *   <li>The value is the document's, so it holds no node of another document and crosses no sequence.</li>
+     * </ul>
+     *
+     * @param <T> what the document keeps
+     */
+    public static final class Local<T> {
+        private final String name;
+        private final Function<UIDocument, T> make;
+
+        private Local(String name, Function<UIDocument, T> make) {
+            this.name = name;
+            this.make = make;
+        }
+
+        /** A slot named {@code name}, filled by {@code make} the first time a document is asked. */
+        public static <T> Local<T> of(String name, Function<UIDocument, T> make) {
+            return new Local<>(Objects.requireNonNull(name, "name"), Objects.requireNonNull(make, "make"));
+        }
+
+        @Override
+        public String toString() {
+            return "Local(" + name + ")";
+        }
+    }
+
+    /** Made on first use: most documents keep none. */
+    @Nullable
+    private Map<Local<?>, Object> locals;
+
+    /** This document's value for {@code key}, made on first ask. On the document's thread. */
+    @SuppressWarnings("unchecked")
+    public <T> T local(Local<T> key) {
+        require("A document local");
+        if (locals == null) locals = new IdentityHashMap<>();
+        Object held = locals.get(key);
+        if (held == null) {
+            held = Objects.requireNonNull(key.make.apply(this), key.name);
+            locals.put(key, held);
+        }
+        return (T) held;
+    }
+
+    /**
+     * Runs {@code work} on this document later, never at once: after what is queued on its owner, or at the start of
+     * its next frame while nothing owns it. From any thread. What a {@code Broadcast} delivers through, so an event
+     * never runs inside the post that caused it.
+     */
+    public void later(Runnable work) {
+        Owner by = owner;
+        if (by == null) {
+            post(work);
+            return;
+        }
+        by.execute(() -> {
+            try (Running ignored = makeCurrent()) {
+                work.run();
+            }
+        });
+    }
+
+    static {
+        // A subscriber made inside a running document is told on that document, wherever it runs by then.
+        Broadcast.deliverThrough(() -> {
+            UIDocument running = UIDocument.RUNNING.get();
+            return running == null ? null : running::later;
         });
     }
 

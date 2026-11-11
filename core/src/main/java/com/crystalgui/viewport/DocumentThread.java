@@ -159,7 +159,7 @@ abstract class DocumentThread implements UIDocument.Owner {
 
         Lockstep(CgUiViewport viewport, String name) {
             super(viewport, name);
-            sequence = UiSequence.create(name);
+            sequence = UiSequence.forDocument(name);
         }
 
         @Override
@@ -238,7 +238,7 @@ abstract class DocumentThread implements UIDocument.Owner {
 
         Sequenced(CgUiViewport viewport, String name) {
             super(viewport, name);
-            sequence = UiSequence.create(name);
+            sequence = UiSequence.forDocument(name);
             queue = new CommitQueue(sequence);
             JobScheduler.asynchronousDocumentOpened();
         }

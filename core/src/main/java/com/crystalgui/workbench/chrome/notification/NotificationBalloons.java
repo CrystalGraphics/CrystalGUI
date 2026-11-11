@@ -119,7 +119,7 @@ public class NotificationBalloons extends UIElement {
     public NotificationBalloons() {
         super(NAME);
         addClass(LAYER_CLASS);
-        whileConnected(() -> Notifications.onDidChange.connect(this::apply));
+        whileConnected(() -> Notifications.onDidChange.subscribe(this::apply));
         // The hook is dropped with the detach, so it needs no "am I still in that window" guard of its
         // own -- which is what the flag this used to keep got wrong. @see UINode#onConnected
         onConnected(() -> document().animation().every(this, this::tickFrame));

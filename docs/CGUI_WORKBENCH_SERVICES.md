@@ -1647,7 +1647,8 @@ A contributor declares *what* it can describe and *how to read it*. Everything e
 | Deferring the rebuild off the event that caused it | `Inspector` (a frame later — never rebuild what is being clicked) |
 | Skipping the rebuild when the subject has not moved | `Inspector`, via `subjectKey` |
 | Releasing a replaced panel's subscriptions | `ConfiguratorPanel.clearRows()` |
-| Announcing that a **selection** moved | the widget that owns it — `GraphSelection` does it itself |
+| Announcing that a **selection** moved | the widget that owns it, through its document's `InspectorSubject` (`InspectorSubject.changed(node)`) — `GraphSelection` and `SurfaceEditor` do it themselves |
+| Letting go of a **closed** subject | its owner: `InspectorSubject.closed(document, element)`, the document named because a closed view is often already detached |
 
 > **Nothing outside a document could be inspected** until this moved. The application resolved the
 > subject as `workbench.activeDocument().view()`, so a section describing a file-tree row or a timeline
@@ -1723,17 +1724,18 @@ StatusBarEntryAccessor caret = StatusBar.addEntry(
 
 ## The notification model
 
-`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`.
+`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`. Its changes are
+a `Broadcast`: posted, and heard on the subscriber's own document, a turn later.
 
 ```java
-Notifications.onDidChange.connect(event -> {
+whileConnected(() -> Notifications.onDidChange.subscribe(event -> {
     switch (event.kind()) {
         case ADDED   -> add(event.notification());
         case CHANGED -> restate(event.notification());   // a repeat, or a handle's updateMessage
         case REMOVED -> remove(event.notification());    // aged out, or withdrawn
         case CLEARED -> rebuild();                       // one event, not N removals
     }
-});
+}));
 NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
 handle.updateMessage("Reconnecting");   // arrives as CHANGED — not a new event, does not re-ring the bell
 handle.close();                          // arrives as REMOVED

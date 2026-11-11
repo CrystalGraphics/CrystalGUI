@@ -160,7 +160,7 @@ public class TemplateInstance extends UIElement {
     protected void connected() {
         super.connected();
         if (reloadWatch == null) {
-            reloadWatch = UiTemplates.onDidReload.connect(() -> {
+            reloadWatch = UiTemplates.onDidReload.subscribe(() -> {
                 built = false;
                 rebuild();
                 installSheets();

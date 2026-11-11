@@ -2,7 +2,7 @@ package com.crystalgui.text.syntax;
 
 import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
@@ -12,6 +12,7 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -91,14 +92,16 @@ public final class LanguageRegistry {
 
     /**
      * A language gained services it lacked (an engine band downloaded after the workbench came up): whoever owns open
-     * documents attaches services to the ones that have none. Emit on the UI thread, since a listener reaches the
-     * widget tree; from a job, hop through {@code JobScheduler.onDone} first.
+     * documents attaches services to the ones that have none. Post from any thread: each listener hears it on its own
+     * document. Carries the change's number.
      */
-    public static final Signal.Action onCapabilityChanged = new Signal.Action();
+    public static final Broadcast<Long> onCapabilityChanged = Broadcast.create("language-capabilities");
+
+    private static final AtomicLong CAPABILITY_CHANGES = new AtomicLong();
 
     /** Announces that a language now offers services it did not. @see #onCapabilityChanged */
     public static void capabilityChanged() {
-        onCapabilityChanged.emit();
+        onCapabilityChanged.post(CAPABILITY_CHANGES.incrementAndGet());
     }
 
     private static final FilePatternMap<Entry> RULES = new FilePatternMap<>();

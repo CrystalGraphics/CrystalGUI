@@ -1,5 +1,7 @@
 package com.crystalgui.text.syntax;
 
+import com.crystalgraphics.job.CgHostThread;
+
 import com.crystalgui.core.signal.Connection;
 import org.junit.Test;
 
@@ -30,12 +32,15 @@ public class LateCapabilityTest {
     @Test
     public void aCapabilityChangeIsAnnouncedToWhoeverIsListening() {
         AtomicInteger heard = new AtomicInteger();
-        Connection listening = LanguageRegistry.onCapabilityChanged.connect(heard::incrementAndGet);
+        Connection listening = LanguageRegistry.onCapabilityChanged.subscribe(heard::incrementAndGet);
         try {
             assertEquals("nothing until something changes", 0, heard.get());
             LanguageRegistry.capabilityChanged();
+            assertEquals("posted, never heard inside the announcement", 0, heard.get());
+            CgHostThread.drainFrames();
             assertEquals(1, heard.get());
             LanguageRegistry.capabilityChanged();
+            CgHostThread.drainFrames();
             assertEquals("each change is its own announcement", 2, heard.get());
         } finally {
             listening.disconnect();
@@ -54,10 +59,12 @@ public class LateCapabilityTest {
     @Test
     public void aDisconnectedListenerStopsHearing() {
         AtomicInteger heard = new AtomicInteger();
-        Connection listening = LanguageRegistry.onCapabilityChanged.connect(heard::incrementAndGet);
+        Connection listening = LanguageRegistry.onCapabilityChanged.subscribe(heard::incrementAndGet);
+        LanguageRegistry.capabilityChanged();
+        CgHostThread.drainFrames();
         LanguageRegistry.capabilityChanged();
         listening.disconnect();
-        LanguageRegistry.capabilityChanged();
-        assertEquals("a released workbench must not still be reacting", 1, heard.get());
+        CgHostThread.drainFrames();
+        assertEquals("a released workbench must not still be reacting, even to what was queued", 1, heard.get());
     }
 }
