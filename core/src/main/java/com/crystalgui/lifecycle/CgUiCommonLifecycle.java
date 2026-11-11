@@ -48,6 +48,7 @@ public final class CgUiCommonLifecycle implements CgLifecycleListener {
     @Override
     public void onInit() {
         WindowProtocol.register();
+        if (CgGauntlet.plays(ConnectionTest.ID)) ConnectionTest.declare();
         CgNetwork.onPeerClosed(this::forget);
         MachineExample.registerServer();
         CgEngineLifecycle.onServerTick(this::serverTick);

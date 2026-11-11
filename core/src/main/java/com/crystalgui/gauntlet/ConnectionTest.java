@@ -9,12 +9,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.CgAudience;
-import com.crystalgraphics.platform.world.CgPlayers;
 import com.crystalgraphics.platform.service.CgServers;
 import com.crystalgraphics.platform.service.CgGameSession;
 import com.crystalgraphics.platform.service.CgScreens;
@@ -247,14 +247,21 @@ public final class ConnectionTest extends CgGauntletController {
 
     private static final String SHARED_FILE = "two-client-probe.txt";
 
-    /** Declared with the class, which loads at the first client tick: before the hello names the namespaces. */
+    /** Declared by {@link #declare()}, at init: a namespace declared after the hello is one the peer never heard of. */
     private static final CgMessage<String> AUDIENCE = CgMessage.toClients("crystalgui:probe/audience", CgCodecs.STRING);
 
     private static final CgRequest<String, String> ASK =
             CgRequest.toServer("crystalgui:probe/ask", CgCodecs.STRING, CgCodecs.STRING);
 
+    /**
+     * Declares the test's message and request, and the server's answer, on a run that plays it. At init, before any
+     * connection opens: the test itself starts a world later, after the hello has named the namespaces.
+     */
+    public static void declare() {
+        ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
+    }
+
     private static boolean audienceSent;
-    private static boolean askAnswering;
     private static boolean asked;
     private static boolean audienceListening;
     private static volatile boolean elsewhereArrived;
@@ -339,12 +346,18 @@ public final class ConnectionTest extends CgGauntletController {
         return CgServers.running() && !CgServers.dedicated() ? Topology.INTEGRATED : Topology.DEDICATED;
     }
 
-    /** The integrated server's connection to this client's player, or null before it has joined. */
+    /**
+     * The integrated server's connection to its one player, or null before they have joined. Found among the server's
+     * own: the client's player has no id there, being no server player.
+     */
     @Nullable
     private static CgProtocolConnection<Object> connectionToFirstPlayer() {
         if (!CgServers.running() || CgServers.dedicated()) return null;
-        Object local = CgPlayers.local();
-        return local == null ? null : CgNetwork.forPlayer(CgPlayers.idOf(local));
+        UUID[] first = new UUID[1];
+        CgNetwork.forEachPlayer(id -> {
+            if (first[0] == null) first[0] = id;
+        });
+        return first[0] == null ? null : CgNetwork.forPlayer(first[0]);
     }
 
     // ── The server half ─────────────────────────────────────────────────────────────────────────
@@ -352,10 +365,6 @@ public final class ConnectionTest extends CgGauntletController {
     /** Once per server tick. */
     private static void serverTick() {
         if (!enabled() || reported) return;
-        if (!askAnswering) {
-            askAnswering = true;
-            ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
-        }
         if (!audienceSent && clientReady) sendAudiences();
 
         if (server == null) {

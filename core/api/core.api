@@ -6769,6 +6769,7 @@ com/crystalgui/gauntlet/ConnectionTest
   field public,static,final ID Ljava/lang/String;
   field public,static,final ROLE_PROPERTY Ljava/lang/String;
   method public <init> ()V
+  method public,static declare ()V
   method public,static enabled ()Z
 com/crystalgui/gauntlet/ConnectionTest$Role
   access public,final,enum
