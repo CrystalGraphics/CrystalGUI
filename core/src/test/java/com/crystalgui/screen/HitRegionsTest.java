@@ -1,4 +1,4 @@
-package com.crystalgui.desktop.host;
+package com.crystalgui.screen;
 
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -15,7 +15,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * The router's frozen answer is the live hit test's: {@link HitRegions#takes} against
- * {@link ScreenOverlay#overlayHitTest} at every point of a surface holding what decides it -- overlapping windows,
+ * {@link CgUiScreenInput#overlayHitTest} at every point of a surface holding what decides it -- overlapping windows,
  * rounded corners, a rotated window, something promoted, the taskbar over the windows, and a modal.
  */
 public class HitRegionsTest extends UiDocumentTestBase {
@@ -53,14 +53,13 @@ public class HitRegionsTest extends UiDocumentTestBase {
 
     /** Every point the two answers disagree at, over the whole surface; none expected. */
     private void assertAgreeEverywhere(String state) {
-        ScreenOverlay overlay = desktop().screenOverlay();
         HitRegions regions = HitRegions.capture(document);
         int disagreements = 0;
         int ours = 0;
         String first = null;
         for (int y = 0; y < 1200; y += 3) {
             for (int x = 0; x < 1600; x += 3) {
-                boolean live = overlay.overlayHitTest(x, y) != null;
+                boolean live = CgUiScreenInput.overlayHitTest(document, x, y) != null;
                 if (live) ours++;
                 if (regions.takes(x, y) != live) {
                     if (first == null) first = x + "," + y + " live " + live;

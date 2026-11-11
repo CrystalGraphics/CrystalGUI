@@ -1,12 +1,12 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.screen.CgUiScreen;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.variable.CgVar;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIElement;
@@ -47,16 +47,16 @@ public final class OpenCloseTest extends DesktopRun {
 
     @Override
     protected void onDesktopFrame(int frame) {
-        if (frame == OPEN_AT) HostSession.session().inDocument(this::open);
-        else if (frame == OPEN_AT + CLOSE_AFTER) HostSession.session().inDocument(this::close);
+        if (frame == OPEN_AT) CgUiScreen.run(this::open);
+        else if (frame == OPEN_AT + CLOSE_AFTER) CgUiScreen.run(this::close);
         else if (frame == OPEN_AT + CLOSE_AFTER + GONE_AFTER) {
-            HostSession.session().inDocument(() -> check("open-close.closed", window() == null, KIND + "'s window is gone"));
+            CgUiScreen.run(() -> check("open-close.closed", window() == null, KIND + "'s window is gone"));
             endTest();
         }
     }
 
     private void open() {
-        Desktop desktop = HostSession.session().desktop();
+        Desktop desktop = CgUiScreen.desktop();
         ApplicationKind kind = desktop == null ? null : kind(desktop);
         if (kind == null) {
             fail("open-close.installed", "no application " + KIND + " is installed");
@@ -77,7 +77,7 @@ public final class OpenCloseTest extends DesktopRun {
 
     @Nullable
     private WindowFrame window() {
-        Desktop desktop = HostSession.session().desktop();
+        Desktop desktop = CgUiScreen.desktop();
         if (desktop == null) return null;
         String app = WindowFrame.applicationClass(KIND);
         for (WindowFrame frame : desktop.windows()) if (frame.hasClass(app)) return frame;

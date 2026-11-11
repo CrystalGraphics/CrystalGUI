@@ -1,13 +1,10 @@
 package com.crystalgui.desktop;
 
-import com.crystalgraphics.platform.input.CgSystemInput;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
-import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -18,7 +15,6 @@ import com.crystalgui.widget.control.Button;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Locale;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -578,47 +574,5 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         } finally {
             Desktop.setAnimationsEnabled(false);
         }
-    }
-
-    // -- A pinned window outlives its surface ---------------------------------
-
-    private DesktopHost hostOnTempStorage() throws Exception {
-        return DesktopHost.create();
-    }
-
-    /**
-     * <b>Closing the surface with something pinned goes to the HUD, not to a suspend.</b>
-     *
-     * <p>The pinned branch lived in the 1.7.10 screen until W3 folded that screen into {@link DesktopHost}
-     * and the move kept only the suspend. {@link Desktop#presentation} answers {@code NONE} for a detached
-     * compositor, so the HUD a pin promises went unreachable on every host at once.</p>
-     */
-    @Test
-    public void closingTheSurfaceWithAPinnedWindowGoesToTheHud() throws Exception {
-        DesktopHost host = hostOnTempStorage();
-        Desktop hosted = host.desktop();
-        hosted.addWindow(new WindowFrame("Pinned")).setPinned(true);
-
-        host.hidden();
-
-        assertFalse("still on the tree, or presentation() answers NONE", hosted.isSuspended());
-        assertTrue(hosted.isHudMode());
-        assertEquals(DesktopPresentation.HUD, hosted.presentation(false, false));
-        assertEquals("and over somebody else's screen", DesktopPresentation.OVERLAY,
-                hosted.presentation(false, true));
-    }
-
-    /** Nothing pinned is the ordinary case, and it still detaches. */
-    @Test
-    public void closingTheSurfaceWithNothingPinnedStillSuspends() throws Exception {
-        DesktopHost host = hostOnTempStorage();
-        Desktop hosted = host.desktop();
-        hosted.addWindow(new WindowFrame("Ordinary"));
-
-        host.hidden();
-
-        assertTrue(hosted.isSuspended());
-        assertFalse(hosted.isHudMode());
-        assertEquals(DesktopPresentation.NONE, hosted.presentation(false, false));
     }
 }

@@ -34,7 +34,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 | a game event (start, stop, tick, join, leave) | a `CgLifecycleListener` declared in `core`'s `META-INF/crystalgraphics/listeners` (`onServerStarting`, `onServerStopping`), `CgEngineLifecycle.onServerTick`/`onClientTick`, `CgNetwork.onPeerClosed`: `CgUiCommonLifecycle` |
 | a permission or "who is this player" | CrystalGraphics' `CgPlayers.isOperator` (`PlayersModern`, `PlayersLegacy`, `Players1710`) |
 | client input, a key binding | CrystalGraphics' `CgInputStage.SCREEN` (`docs/INPUT.md`) and `CgKeyBindings`, which every era's host fires and registers |
-| HUD, a screen | CrystalGraphics' `CgRenderStage.HUD`/`SCREEN` and `CgScreens` (`Screens<Era>`); CrystalGUI's desktop is `core`'s `HostSession` |
+| HUD, a screen | CrystalGraphics' `CgRenderStage.HUD`/`SCREEN` and `CgScreens` (`Screens<Era>`); CrystalGUI's desktop is `core`'s `CgUiScreen` |
 | a member renamed across versions | CrystalGraphics' hosts (`CgMinecraftClient`); the controller's `replacements.string` |
 | a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
 

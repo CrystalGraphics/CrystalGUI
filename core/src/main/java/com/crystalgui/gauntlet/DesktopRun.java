@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.screen.CgUiScreen;
 import com.crystalgraphics.gauntlet.CgGauntletController;
 import com.crystalgraphics.gauntlet.CgGauntletState;
 import com.crystalgraphics.variable.CgVar;
@@ -7,7 +8,6 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
-import com.crystalgui.desktop.host.HostSession;
 
 /**
  * A test that drives CrystalGUI's desktop in a world: it enters one, opens the desktop a few seconds after it loads,
@@ -17,7 +17,7 @@ import com.crystalgui.desktop.host.HostSession;
  * final class MyTest extends DesktopRun {
  *     MyTest() { super(true); }                         // the desktop bare, no application brought forward
  *     @Override protected void onDesktopFrame(int frame) {
- *         if (frame == 30) check("my.window", HostSession.session().desktop().windows().size() > 0, "one window");
+ *         if (frame == 30) check("my.window", CgUiScreen.desktop().windows().size() > 0, "one window");
  *         if (frame == 60) endTest();
  *     }
  * }
@@ -66,8 +66,8 @@ public abstract class DesktopRun extends CgGauntletController {
                 CrystalGuiCore.LOGGER.info("{} notification: {}{}", id(), added,
                         added.getDetail().isEmpty() ? "" : " -- " + added.getDetail().replace('\n', ' '));
             });
-            if (bare) HostSession.session().openDesktop();
-            else HostSession.session().openApplication();
+            if (bare) CgUiScreen.open();
+            else CgUiScreen.openApplication();
             markHeartbeatActive("desktop opened" + (bare ? ", bare" : ""));
             onOpened();
             return;

@@ -1,10 +1,9 @@
-package com.crystalgui.desktop.host;
+package com.crystalgui.screen;
 
 import com.crystalgraphics.render.graph.CgRehearsal;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.style.theme.UiThemeManager;
@@ -25,7 +24,7 @@ import javax.annotation.Nullable;
  * <pre>{@code
  * DesktopRehearsal rehearsal = new DesktopRehearsal();
  * while (!rehearsal.step()) { }          // a pass or a few a call, from a load task; render thread
- * // HostSession's SCREEN renderer, while a pass runs:
+ * // the desktop's SCREEN renderer, while a pass runs:
  * if (CgRehearsal.active()) rehearsal.paint(stage);
  * }</pre>
  *
@@ -73,8 +72,9 @@ final class DesktopRehearsal {
     void paint(CgStageFrame stage) {
         if (viewport == null) {
             Desktop desktop = build();
-            viewport = CgUiViewport.open(desktop.document(), CgUiViewport.Threading.INLINE, "rehearsal");
-            content = new DesktopContent(desktop, DesktopPresentation.DESKTOP);
+            UIDocument document = desktop.document();
+            viewport = CgUiViewport.open(document, CgUiViewport.Threading.INLINE, "rehearsal");
+            content = new DesktopContent(desktop, document, CgUiScreen.Mode.DESKTOP);
         }
         viewport.frame(stage, DELTA, content);
         passes++;
@@ -82,7 +82,7 @@ final class DesktopRehearsal {
 
     private static Desktop build() {
         UIDocument document = new UIDocument();
-        document.boxes().setUiScale(DesktopHost.UI_SCALE);
+        document.boxes().setUiScale(CgUiScreen.UI_SCALE);
         UiThemeManager.getInstance().installInto(document.styles());
         Desktop desktop = Desktop.of(document);
         desktop.addWindow(new WindowFrame("Warm-up"));

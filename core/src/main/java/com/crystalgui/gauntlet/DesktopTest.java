@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.screen.CgUiScreen;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -12,7 +13,6 @@ import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgraphics.variable.CgVar;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.desktop.host.HostSession;
 
 /**
  * {@code crystalgui:desktop}: the desktop opens in a world, paints, brings its application forward, and draws over a
@@ -106,8 +106,7 @@ public final class DesktopTest extends DesktopRun {
     protected void onDesktopFrame(int frame) {
         runSteps(frame);
         long now = System.nanoTime();
-        HostSession session = HostSession.session();
-        boolean ready = session.hasPainted() && (BARE || session.application() != null);
+        boolean ready = CgUiScreen.hasPainted() && (BARE || CgUiScreen.application() != null);
         if (ready && readyNanos == 0) {
             readyNanos = now;
             readyFrame = frame;
@@ -116,7 +115,7 @@ public final class DesktopTest extends DesktopRun {
             boolean settled = readyNanos != 0 && frame >= readyFrame + SETTLE_FRAMES
                     && (now - readyNanos) / 1e9 >= READY_SETTLE;
             if (frame >= SETTLE_FRAMES && (settled || (now - openedNanos) / 1e9 >= READY_GRACE)) {
-                photographed(session);
+                photographed();
                 early = capture("desktop");
                 earlyFrame = frame;
             }
@@ -133,10 +132,10 @@ public final class DesktopTest extends DesktopRun {
     }
 
     /** What the photograph shows, stated beside it. */
-    private void photographed(HostSession session) {
-        check("desktop.painted", session.hasPainted(), "the desktop presented a frame");
+    private void photographed() {
+        check("desktop.painted", CgUiScreen.hasPainted(), "the desktop presented a frame");
         if (BARE) skip("desktop.application", "the bare desktop");
-        else check("desktop.application", session.application() != null, "the primary application is up");
+        else check("desktop.application", CgUiScreen.application() != null, "the primary application is up");
         check("desktop.stage-screen", mark.screen > 0, "a mod's renderer on the SCREEN stage drew " + mark.screen
                 + " frames, on HUD " + mark.hud);
     }
@@ -164,7 +163,7 @@ public final class DesktopTest extends DesktopRun {
     /** A mod's renderer on CrystalGUI's GUI stages: a mark over the windows, top left, and a count of each stage's draws. */
     private static final class StageMark {
         /** Over CrystalGUI's windows. */
-        private static final int ORDER = HostSession.COMPOSITOR + 1000;
+        private static final int ORDER = CgUiScreen.ORDER + 1000;
         private static final int MARK = 0xFFFF00FF;
         volatile int screen, hud;
         private CgRenderStage.Registration onScreen, onHud;

@@ -576,7 +576,7 @@ public class WorkbenchApplication extends UIElement
         // because the directory has already said which workspace this is.
         CgConfigStorage mine = desktop.workspaceStore(identityFor(workspace, roots));
         sessionKey = kind.id();
-        // BACKUPS AND HISTORY TOO, and not before now: see DesktopHost#frame, which used to set a store
+        // BACKUPS AND HISTORY TOO, and not before now: the desktop's connection binding used to set a store
         // here that every workspace shared.
         workspace.setStorage(mine);
         session.useStorage(mine);

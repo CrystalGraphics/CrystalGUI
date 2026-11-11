@@ -1,8 +1,8 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgui.screen.CgUiScreen;
 import com.crystalgraphics.harness.ui.HarnessServer;
 import com.crystalgraphics.harness.ui.HarnessUi;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.service.Animation;
@@ -190,7 +190,7 @@ import org.joml.Vector2f;
  *
  * <h3>It is the harness's desktop</h3>
  *
- * <p>The desktop is the one the harness keeps over every 3D scene ({@code HarnessUi}, {@code HostSession}), opened at
+ * <p>The desktop is the one the harness keeps over every 3D scene ({@code HarnessUi}, {@code CgUiScreen}), opened at
  * the scene's start over an empty world, as a game's sits over its world: Escape closes it to game mode, where only
  * <b>pinned</b> windows paint over the world and keep ticking, and Escape opens it again. VFX Lab and the Frame Profiler
  * are in its launcher. F7 and F8 are the frame readout, the commands every desktop has.</p>
@@ -238,14 +238,14 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         ui.sceneKeys(this::desktopKey);
         ui.afterFrames(frame -> afterDesktop(ctx, frame));
         ui.openAtStart(() -> build(ctx));
-        document = HostSession.session().document();
-        viewport = HostSession.session().viewport();
+        document = CgUiScreen.document();
+        viewport = CgUiScreen.viewport();
         if (BASELINE) baseline = baselineProbe(ctx);
     }
 
     private void build(HarnessContext ctx) {
         // Here as well as in init: inline, this runs inside openAtStart, before init has read them
-        document = HostSession.session().document();
+        document = CgUiScreen.document();
         desktop = Desktop.of(document);
 
         WindowFrame welcome = desktop.addWindow(new WindowFrame("Welcome"));
@@ -351,7 +351,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // Beside the scratch workspace, never inside it: a session record is private and must not become
         // part of a project a resource pack ships. The dock scene keeps its own for the same reason.
         editor = (WorkbenchApplication) desktop.applications().launch(CrystalEditor.KIND,
-                HostSession.session().workspace());
+                CgUiScreen.workspace());
         if (editor == null) return;
         if (GRAPH_COST) graphCost = graphCostProbe();
         if (HOVER_SWEEP) hoverSweep = hoverSweepProbe();
@@ -507,7 +507,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /** A pointer event into the desktop, through the host's input as a real one arrives. Render thread. */
     private static void pointer(CgSystemInput.Mouse.Event event) {
-        HostSession.session().input().consumeMouseEvent(event);
+        CgUiScreen.mouse().consumeMouseEvent(event);
     }
 
     // ── -Dcrystalgui.harness.desktop.follow=true: a window dragged across a busy document ──
@@ -838,7 +838,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
             @Override
             public void openOthers() {
-                desktop.applications().launch(VfxLab.KIND, HostSession.session().workspace());
+                desktop.applications().launch(VfxLab.KIND, CgUiScreen.workspace());
                 FrameProfiler.openOn(desktop);
             }
 

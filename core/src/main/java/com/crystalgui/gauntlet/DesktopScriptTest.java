@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.screen.CgUiScreen;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -18,8 +19,6 @@ import com.crystalgraphics.platform.service.CgScreens;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
-import com.crystalgui.desktop.host.DesktopHost;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.window.SystemMenu;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
@@ -133,7 +132,7 @@ public final class DesktopScriptTest extends CgGauntletController {
         }
         try {
             // ON THE DOCUMENT'S SEQUENCE when it has one: a step reads and writes the tree.
-            if (HostSession.isInstalled()) HostSession.session().inDocument(this::advance);
+            if (CgUiScreen.isInstalled()) CgUiScreen.run(this::advance);
             else advance();
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[{}] step {} failed; ending", ID, step, failed);
@@ -171,7 +170,7 @@ public final class DesktopScriptTest extends CgGauntletController {
                 step = Step.OPEN_DESKTOP;
                 break;
             case OPEN_DESKTOP:
-                HostSession.session().openApplication();
+                CgUiScreen.openApplication();
                 step = Step.WAIT_WINDOW;
                 windowWaited = 0;
                 break;
@@ -325,7 +324,7 @@ public final class DesktopScriptTest extends CgGauntletController {
                 waitTicks = SETTLE;
                 break;
             case SHOOT_OVERLAY:
-                say("fps in " + HostSession.session().presentation() + " = " + fps());
+                say("fps in " + CgUiScreen.mode() + " = " + fps());
                 shoot("overlay");
                 step = Step.HUD_GRABBED_CLICK;
                 waitTicks = SETTLE;
@@ -336,16 +335,20 @@ public final class DesktopScriptTest extends CgGauntletController {
                 CgScreens.closeFront();
                 CgInput.grabPointer();
                 boolean consumed = offerMouse(0, true);
-                say("grabbed=" + CgInput.pointerGrabbed() + " presentation=" + HostSession.session().presentation());
+                say("grabbed=" + CgInput.pointerGrabbed() + " presentation=" + CgUiScreen.mode());
                 check("desktop-script.grabbed-press", !consumed, "a press while playing is the game's, not the desktop's");
                 step = Step.FINISH;
                 waitTicks = SETTLE;
                 break;
             }
-            case FINISH:
+            case FINISH: {
+                // The pin is saved with the desktop: left on, the run's editor would sit on the player's HUD for good.
+                WindowFrame pinned = mainWindow();
+                if (pinned != null) pinned.setPinned(false);
                 check("desktop-script.routine", true, "every step ran");
                 finish();
                 break;
+            }
             default:
                 break;
         }
@@ -353,8 +356,8 @@ public final class DesktopScriptTest extends CgGauntletController {
 
     /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
     private void parkPointerOver(WindowFrame frame) {
-        if (frame.box() == null || !HostSession.isInstalled()) return;
-        float scale = DesktopHost.UI_SCALE;
+        if (frame.box() == null || !CgUiScreen.isInstalled()) return;
+        float scale = CgUiScreen.UI_SCALE;
         pointerX = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
         pointerY = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
         CgInput.movePointer(pointerX, pointerY);
@@ -395,17 +398,17 @@ public final class DesktopScriptTest extends CgGauntletController {
 
     @Nullable
     private static Desktop desktop() {
-        return HostSession.isInstalled() ? HostSession.session().desktop() : null;
+        return CgUiScreen.isInstalled() ? CgUiScreen.desktop() : null;
     }
 
     @Nullable
     private static UIDocument document() {
-        return HostSession.isInstalled() ? HostSession.session().document() : null;
+        return CgUiScreen.isInstalled() ? CgUiScreen.document() : null;
     }
 
     @Nullable
     private static Workbench workbench() {
-        Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
+        Application app = CgUiScreen.isInstalled() ? CgUiScreen.application() : null;
         return app instanceof WorkbenchApplication ? ((WorkbenchApplication) app).workbench() : null;
     }
 

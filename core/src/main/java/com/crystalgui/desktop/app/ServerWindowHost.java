@@ -26,7 +26,7 @@ import javax.annotation.Nullable;
  * client with this application closed would then have nowhere to put one.</p>
  *
  * <p>Asked through a supplier and re-asked per frame, so an application built after the host is
- * still picked up. @see com.crystalgui.desktop.host.HostSession</p>
+ * still picked up. @see com.crystalgui.screen.CgUiScreen</p>
  */
 public interface ServerWindowHost {
 

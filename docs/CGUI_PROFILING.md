@@ -204,6 +204,7 @@ opens that frame in the profiler.
 | Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*` -- `sg-preview-lost` is a preview that had a picture painting none, a blink on screen. `widget/canvas`, `widget/graph`, `app/shadergraph`; the renderers under them are CrystalGraphics' `shadergraph` channel |
 | Hooks | frame | `anim-hooks`, `anim-after-layout-hooks`: live per-frame and post-layout hooks, a count that climbs while nothing happens being a leak (`UIDocument`) |
 | Work on the document's thread outside its frames | flow | `app:launch` (`desktop/app/ApplicationRegistry`), `profiler:open` (`app/frameprofiler/FrameProfiler`), `lang:analyzeNow` (`language/…/AnalysedLanguageServices`: a document opened with text is analysed before its services return) |
+| The desktop's screen on the render thread | flow | `screen:build`, `screen:shown` (an open's render-thread share), `screen:tick` (once a host frame), `screen:paint` (the viewport's frame at `HUD` or `SCREEN`) in `screen/CgUiScreen` |
 
 **Not instrumented** — zone these before any question that touches them:
 

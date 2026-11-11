@@ -1,12 +1,11 @@
 package com.crystalgui.lifecycle;
 
+import com.crystalgui.screen.CgUiScreen;
 import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgraphics.mc.CgReloadListener;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.desktop.host.DesktopKeys;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.gauntlet.DesktopScriptTest;
 import com.crystalgui.gauntlet.DesktopTest;
 import com.crystalgui.gauntlet.OpenCloseTest;
@@ -35,9 +34,8 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
     /** The desktop, its keys, its tests for an unattended run, and CrystalGUI's start on a worker. */
     @Override
     public void onPreInit() {
-        // Before the keys: a key pressed before the session exists would open nothing.
-        HostSession.install();
-        DesktopKeys.declare();
+        // Its stages, its input and its key, before any key can be pressed.
+        CgUiScreen.install();
         CgUiStart.ahead();
         CgUiRenderer.precache();
         gauntlet();
@@ -69,14 +67,20 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
         }).start();
         // Built behind the screen, so opening it is a resume.
         plan.task("crystalgui:desktop").after("crystalgui:paint").render(task -> {
-            if (HostSession.isInstalled()) HostSession.session().preload();
+            if (CgUiScreen.isInstalled()) CgUiScreen.preload();
             return true;
         }).start();
         // Its first paint rehearsed into a hidden target, out of the open animation. After the engine's programs,
         // which its canvas's glass and text use.
         plan.task("crystalgui:desktop-warm").after("crystalgui:desktop", "crystalgraphics:programs").render(task -> {
-            return !HostSession.isInstalled() || HostSession.session().rehearseStep();
+            return !CgUiScreen.isInstalled() || CgUiScreen.rehearseStep();
         }).start();
+    }
+
+    /** The end of every host frame, title screen included: the desktop's tick (the game read, the next mode). */
+    @Override
+    public void onFrame(long frame) {
+        CgUiScreen.tick();
     }
 
     /** F3+T and a resource pack change: re-reads the icons and stylesheets. Font families are CrystalGraphics'. */

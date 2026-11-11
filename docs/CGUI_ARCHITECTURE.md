@@ -137,13 +137,8 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                plan/platform-trace-engine.md
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
-  .window                      WindowState, WindowPolicy, DesktopPresentation — three types BOTH engines
-                               name, so a package both may name. The D27 rule that gave 6.3
-                               `core.collection` and 6.4 `graph.port`; a pure enum, a policy record and a
-                               presentation enum, none of them naming an engine type at all. ScreenOverlay
-                               was the fourth candidate and does NOT qualify: it holds a document and reads
-                               its focus owner, so it is a facade OVER the engine rather than an SPI a host
-                               implements, and it lives in `desktop.host`. plan/engine-port.md 6.6
+  .window                      WindowState, WindowPolicy — types BOTH engines name, so a package both
+                               may name: a pure enum and a policy record, naming no engine type.
 
 com.crystalgui.widget.texteditor  THE EDITOR ON THE NEW ENGINE (M6.5) — TextEditor and
                                EditorCommands (its named actions). TWO files at the root; everything
@@ -183,11 +178,7 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
   .taskbar                     Taskbar (the registry RENDERED), TaskbarEntryMotion, TaskbarPreviews,
                                TaskbarDesigner, WindowPreview, WindowThumbnail
   .switcher                    WindowSwitcher — Mod+Tab, MRU order, live thumbnails
-  .host                        HostSession, ScreenOverlay, DesktopHost, DesktopWindowMount — the one
-                               desktop a client has. It asks CrystalGraphics where private files go, how
-                               big the window is, whether there is a connection and what language the
-                               player reads, and gives a desktop, a workspace that follows the wire, and
-                               somewhere for a server's windows to land
+  DesktopWindowMount           where a server's windows land on this desktop
   .launcher                    WHAT CAN RUN: LauncherButton (the taskbar's start button) and Launcher
                                (the ApplicationRegistry, rendered -- searched by name, id and the
                                keywords() slot that was deliberately withheld until this existed to
@@ -295,6 +286,11 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
                                vocabulary class: a kind is a string an Event declares, unique only
                                within its own widget's contract, so a third party mints one without
                                editing anything of ours. plan/engine-rewrite.md M1
+
+com.crystalgui.screen          THE CLIENT'S ONE DESKTOP: CgUiScreen (static: install, open, close, Mode, the
+                               tick, the paint at HUD and SCREEN), CgUiScreenInput (the one input router),
+                               DesktopConnection, GameState, DesktopContent per Mode, HitRegions, the
+                               rehearsal. Names `viewport` and `desktop`; neither names it.
 
 com.crystalgui.viewport        ONE DOCUMENT ON SCREEN: CgUiViewport (owns the document's thread, input, frames,
                                readouts) over a DocumentThread per threading (inline, lockstep, sequenced),

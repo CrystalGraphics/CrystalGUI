@@ -1,5 +1,6 @@
 package com.crystalgui.language.probe;
 
+import com.crystalgui.screen.CgUiScreen;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -18,7 +19,6 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.CommandRegistry;
 import com.crystalgui.desktop.app.Application;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
@@ -212,7 +212,7 @@ public final class LanguageProbe {
     static void runScriptOnce() {
         if (!DesktopTest.plays() || SCRIPT == null || scriptRun) return;
         scriptRun = true;
-        Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
+        Application app = CgUiScreen.isInstalled() ? CgUiScreen.application() : null;
         if (!(app instanceof WorkbenchApplication)) {
             CrystalGuiCore.LOGGER.error("crystalgui:desktop script: no workbench is open to run {} in", SCRIPT);
             return;
@@ -237,7 +237,7 @@ public final class LanguageProbe {
     /** Presses Run on the script {@link #runScriptOnce} opened, once it is open. @see #RUN_ATTEMPTS */
     static void runOpenedScript(boolean last) {
         if (!DesktopTest.plays() || SCRIPT == null || scriptPressed) return;
-        Application app = HostSession.isInstalled() ? HostSession.session().application() : null;
+        Application app = CgUiScreen.isInstalled() ? CgUiScreen.application() : null;
         if (!(app instanceof WorkbenchApplication)) return;
         WorkbenchContext workbench = ((WorkbenchApplication) app).workbench();
         CgPath path = CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SCRIPT);

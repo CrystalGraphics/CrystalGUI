@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.ServiceConfigurationError;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
 
@@ -384,6 +383,38 @@ public final class ApplicationRegistry {
         if (!running.contains(application)) return;
         application.dispose();
         forget(application);
+    }
+
+    /**
+     * The primary application with a window: the running one, else launched now, synchronously, onto this desktop's
+     * storage. What a host's "open the editor" key asks for, before it raises the window.
+     *
+     * <pre>{@code
+     * Application app = desktop.applications().openPrimary(workspace);
+     * if (app != null) desktop.activate(app.mainWindow());
+     * }</pre>
+     *
+     * <ul>
+     *   <li>Null when no primary is installed, or it refused to launch yet (a world it needs is not there): the refusal
+     *       is logged at debug under its id, and a host retries next frame.</li>
+     *   <li>Launches nothing when one runs, so a second key press raises rather than duplicates.</li>
+     * </ul>
+     */
+    @Nullable
+    public Application openPrimary(@Nullable Workspace workspace) {
+        ApplicationKind kind = primary();
+        if (kind == null) return null;
+        for (Application live : running(kind)) {
+            if (live.mainWindow() != null) return live;
+        }
+        Application launched;
+        try {
+            launched = launch(kind, workspace);
+        } catch (RuntimeException refused) {
+            CrystalGuiCore.LOGGER.debug("[cgui] '{}' cannot launch yet", kind.id(), refused);
+            return null;
+        }
+        return launched == null || launched.mainWindow() == null ? null : launched;
     }
 
     /**

@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.screen.CgUiScreen;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -34,7 +35,6 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.world.CgEntityQueries;
 import com.crystalgraphics.world.CgWorldQueries;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -239,8 +239,8 @@ public final class ConnectionTest extends CgGauntletController {
 
     private static final int WINDOW_ID = 4242;
 
-    /** Long enough for a world to load, a handshake to finish and a listing to cross. */
-    private static final int DEADLINE_TICKS = 20 * 90;
+    /** Five seconds of ticks: the run is in a world already, and a stalled probe ends the run rather than holding it. */
+    private static final int DEADLINE_TICKS = 20 * 5;
 
     /** So the watcher's two reports are two events rather than one coalesced change. */
     private static final int BETWEEN_WRITES = 40;
@@ -283,8 +283,6 @@ public final class ConnectionTest extends CgGauntletController {
     private static boolean writeStarted;
     private static boolean desktopOpened;
     private static boolean loopAskStarted;
-    /** @see #isDrivingDesktop() */
-    private static volatile boolean drivingDesktop;
 
     /** How many times a screen may be closed before the probe stops fighting whoever opens it. */
     private static final int MAX_SCREEN_CLOSES = 40;
@@ -347,20 +345,6 @@ public final class ConnectionTest extends CgGauntletController {
         if (!CgServers.running() || CgServers.dedicated()) return null;
         Object local = CgPlayers.local();
         return local == null ? null : CgNetwork.forPlayer(CgPlayers.idOf(local));
-    }
-
-    /**
-     * Whether the probe is the one asking for the desktop right now.
-     *
-     * <p><b>A host refuses every other request while a run is in progress</b>, and that is not tidiness:
-     * opening the desktop installs the client window host, which claims {@code ui/openWindow} from the
-     * probe's session mid-check and ends the run on an {@code IllegalStateException} out of the router.
-     * A probe run opens a real window somebody can see, and two different keys reached that path —
-     * the desktop keybind and the worked example's own — so gating the callers one at a time was
-     * treating symptoms. The host gates the door instead.</p>
-     */
-    public static boolean isDrivingDesktop() {
-        return drivingDesktop;
     }
 
     // ── The server half ─────────────────────────────────────────────────────────────────────────
@@ -570,8 +554,9 @@ public final class ConnectionTest extends CgGauntletController {
         // of every tick it had, because an unattended client has no window focus and Minecraft re-opens
         // its pause menu constantly. And closing it EVERY tick for ever makes the window unusable by a
         // person: Escape opens the menu and the next tick shuts it, so a run that has stalled cannot
-        // even be closed by hand. A diagnostic may not trap the person watching it.
-        if (CgScreens.anyOpen() && !done(WRITE)) {
+        // even be closed by hand. A diagnostic may not trap the person watching it. The desktop pauses nothing, which
+        // LOOP_ALIVE asserts, so it stays up.
+        if (CgScreens.anyOpen() && !CgUiScreen.isOpen() && !done(WRITE)) {
             if (screenCloses < MAX_SCREEN_CLOSES) {
                 screenCloses++;
                 CgScreens.closeFront();
@@ -809,8 +794,7 @@ public final class ConnectionTest extends CgGauntletController {
 
         if (!desktopOpened) {
             desktopOpened = true;
-            drivingDesktop = true;
-            HostSession.session().openApplication();
+            CgUiScreen.openApplication();
             return;
         }
         if (!CgScreens.anyOpen() || loopAskStarted) return;

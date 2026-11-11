@@ -92,7 +92,7 @@ public final class FontFamilyCache {
     private static volatile int generation;
 
     /**
-     * The language the player reads; {@code DesktopHost} pushes the game's here every frame. It decides
+     * The language the player reads; the desktop's screen pushes the game's here when it changes. It decides
      * how a Han character nothing in the stack covers is drawn — Japanese, Simplified, Traditional or
      * Korean — when its own text does not say. A change clears the cache; the same locale again is free.
      *

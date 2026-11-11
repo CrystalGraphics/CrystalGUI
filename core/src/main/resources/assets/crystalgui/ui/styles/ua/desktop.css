@@ -132,7 +132,7 @@ desktop .__overlays__ {
  * answer inside the island.
  *
  * A full-width bar dissolves the conflict instead of tuning it. IT COVERS THE HOTBAR, and that is
- * correct rather than a loss: the strip paints only while OUR screen is up (DesktopPresentation — the
+ * correct rather than a loss: the strip paints only while OUR screen is up (the screen's Mode — the
  * HUD and overlay presentations paint pinned windows alone), and with a screen up the hotbar cannot be
  * used anyway. Minecraft draws the in-game HUD before every screen, so it is behind chat and inventories
  * too. What the bar lets through is a Mica-style TONE, never a picture: a bar over grass is fractionally

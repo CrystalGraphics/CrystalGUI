@@ -51,12 +51,20 @@ public final class WindowProtocol {
         //
         // The SERVER half stays: nothing on that side collides, and a probe that stopped the server
         // lifecycle would be testing a configuration production never has.
-        if (CgGauntlet.plays(ConnectionTest.ID)) {
+        if (clientHostStandsDown()) {
             CrystalGuiCore.LOGGER.warn("[cgui] the client window host is NOT installed -- the run's "
                     + ConnectionTest.ID + " owns ui/openWindow");
             return;
         }
         CgProtocols.client("ui", ClientWindows::install);
+    }
+
+    /**
+     * Whether this run leaves {@code ui/openWindow} to the connection test, which opens a window on a session of its
+     * own: then nothing installs the client window host, the desktop's mount included.
+     */
+    public static boolean clientHostStandsDown() {
+        return CgGauntlet.plays(ConnectionTest.ID);
     }
 
     /** Whether {@link #register()} has run. Diagnostics, and what a test asserts before opening. */

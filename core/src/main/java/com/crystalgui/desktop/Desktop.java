@@ -9,10 +9,6 @@ import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.app.ApplicationRegistry;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.ui.box.BoxPainter;
-import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.desktop.host.ScreenOverlay;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
@@ -317,19 +313,27 @@ public class Desktop extends UIElement implements DataProvider {
     private boolean suspended;
     @Nullable
     private UIDocument suspendedIn;
-    @Nullable
-    private volatile ScreenOverlay screenOverlay;
 
     public static final String LIVE_CLASS = "__live__";
 
     /** Whether this desktop is being painted as the whole surface rather than over someone's screen. */
-    private boolean wholeSurface;
+    private boolean coversSurface;
+
+    /**
+     * Whether the desktop is painted as the whole surface, taskbar and all, rather than its window layer over another
+     * screen: what its live class answers. Its host says so each frame. On the document.
+     */
+    public void setCoversSurface(boolean covers) {
+        if (covers == coversSurface) return;
+        coversSurface = covers;
+        syncPresence();
+    }
 
     private void syncPresence() {
         // A class, not a size: ua/desktop.css sizes `desktop.__live__` full and the base rule takes no space,
         // so forgetting it fails safe. Live when the desktop is the surface (its taskbar always shows) or
         // holds a window; one laid over a game screen with none stays zero-sized.
-        setClass(this, LIVE_CLASS, wholeSurface || isLive());
+        setClass(this, LIVE_CLASS, coversSurface || isLive());
     }
 
     private static void setClass(UIElement node, String className, boolean on) {
@@ -1592,7 +1596,7 @@ public class Desktop extends UIElement implements DataProvider {
      * Writes the arrangement now.
      *
      * <p>Called automatically when the desktop leaves the tree, which is what suspending a compositor
-     * does and therefore covers a host whose screen closes, and by {@code HostSession.dispose}. A host that
+     * does and therefore covers a host whose screen closes, and by {@code CgUiScreen.dispose}. A host that
      * tears down some other way calls this itself.</p>
      */
     public void savePersistedState() {
@@ -2025,102 +2029,6 @@ public class Desktop extends UIElement implements DataProvider {
         suspendedIn = null;
         if (document != null && parent() == null) document.append(this);
         onSuspendedChanged.emit(true);
-    }
-
-    /**
-     * What the compositor should be showing, given what the host has on screen.
-     *
-     * <p>The host answers two booleans it can see and this answers the one thing it cannot: what
-     * state the desktop is actually in. Keeping the decision here rather than at each hook is what
-     * removed the close flicker — @see DesktopPresentation.</p>
-     *
-     * @param ourScreenIsUp the host's own CrystalGUI screen is the current one
-     * @param anyScreenIsUp some GuiScreen is up, ours or a foreign one
-     */
-    public DesktopPresentation presentation(boolean ourScreenIsUp, boolean anyScreenIsUp) {
-        return presentation(ourScreenIsUp, anyScreenIsUp, parent() != null, hasPinnedWindows());
-    }
-
-    /**
-     * {@link #presentation(boolean, boolean)} from facts about a desktop rather than the desktop: what a host asks of a
-     * document that runs on another thread, from what it last committed.
-     */
-    public static DesktopPresentation presentation(boolean ourScreenIsUp, boolean anyScreenIsUp, boolean attached,
-                                                   boolean hasPinnedWindows) {
-        if (ourScreenIsUp) return DesktopPresentation.DESKTOP;
-        if (!attached) return DesktopPresentation.NONE;
-        if (!hasPinnedWindows) return DesktopPresentation.NONE;
-        return anyScreenIsUp ? DesktopPresentation.OVERLAY : DesktopPresentation.HUD;
-    }
-
-    /** What {@link #enterHudMode} put away, so a foreign screen's input can still reach a pinned window. */
-    public ScreenOverlay screenOverlay() {
-        UIDocument document = document();
-        if (document == null) return null;
-        if (screenOverlay == null) screenOverlay = new ScreenOverlay(document);
-        return screenOverlay;
-    }
-
-    /**
-     * The desktop's frame in {@code presentation}, at a surface of {@code surfaceWidth} by {@code surfaceHeight} pixels:
-     * presence, then the document's frame and the overlay's regions. False when the presentation paints nothing, and then
-     * nothing is painted. <b>The one frame entry a host calls</b>, through its viewport's content; then
-     * {@link #paintInto}. On the document's thread.
-     *
-     * <pre>{@code
-     * public boolean frame(float delta, int w, int h) { return desktop.prepare(presentation, delta, w, h); }
-     * public void paint(CgUiPaintContext ctx) { desktop.paintInto(presentation, ctx); }
-     * }</pre>
-     *
-     * <p>Folding the arms together is not tidiness: it is what stops two callers each deciding
-     * whether it is their turn, which is what dropped a frame every time the screen closed.</p>
-     *
-     * <p>Three things vary and nothing else does — <b>what</b> is painted (the whole document, or
-     * the window layer alone), whether the <b>top layer</b> goes with it, and whether <b>input</b>
-     * runs. Each is a question the presentation answers, so a new situation is a new arm rather than
-     * a new path. The root transform is the box tree's in every arm, which is what makes a pinned
-     * window pixel-identical on the desktop, over a foreign GUI and on the HUD.</p>
-     */
-    public boolean prepare(DesktopPresentation presentation, float deltaSeconds, int surfaceWidth, int surfaceHeight) {
-        // Whether the compositor owns the surface, which is a different question from whether it holds a
-        // window. Asked before the returns below so the answer is never a stale one.
-        boolean whole = presentation.paintsWholeDesktop();
-        if (whole != wholeSurface) {
-            wholeSurface = whole;
-            syncPresence();
-        }
-        if (!presentation.paintsAnything()) return false;
-        UIDocument document = document();
-        if (document == null) return false;
-        if (!presentation.paintsWholeDesktop() && parent() == null) return false;
-
-        // SURFACE pixels in, LOGICAL units to lay out in: the scale lives on the box tree's root
-        // transform and nowhere else, so this is the only division and painting picks it up by
-        // reading the matrix it already reads.
-        float scale = document.boxes().uiScale();
-        document.frame(deltaSeconds, surfaceWidth / scale, surfaceHeight / scale);
-        // What the router answers a host from until the next frame. Only over another UI's screen is it asked.
-        if (screenOverlay != null && !presentation.paintsWholeDesktop()) screenOverlay.commit();
-        return true;
-    }
-
-    /** Paints what {@link #prepare} framed in {@code presentation}, into a frame its viewport opened on {@code ctx}. */
-    public void paintInto(DesktopPresentation presentation, CgUiPaintContext ctx) {
-        UIDocument document = document();
-        if (document == null) return;
-        if (presentation.paintsWholeDesktop()) {
-            document.paint(ctx);
-            return;
-        }
-        // THE WINDOW LAYER, not the desktop: the taskbar is chrome for a desktop that is not up,
-        // and a strip listing windows most of which are hidden is not something to put over a
-        // game. The top layer is skipped for the same reason unless the presentation asks.
-        Box layer = windowLayer().box();
-        if (layer != null) BoxPainter.paintSubtree(layer, ctx);
-        if (presentation.paintsTopLayer()) {
-            Box top = document.hasTopLayerContent() ? document.topLayer() : null;
-            if (top != null) BoxPainter.paintSubtree(top, ctx);
-        }
     }
 
     private final ApplicationRegistry applications = new ApplicationRegistry(this);
