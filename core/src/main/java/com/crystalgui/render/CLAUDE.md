@@ -143,7 +143,7 @@ did. Under a node the
 > `[damage-check]` where the two differ.
 
 > **Every arm of the desktop draws at CrystalGraphics' GUI stages**: `CgRenderStage.HUD` over the in-game HUD and
-> `CgRenderStage.SCREEN` over a screen, which CrystalGraphics' hosts fire once a frame. `HostSession.attachStages` puts
+> `CgRenderStage.SCREEN` over a screen, which CrystalGraphics' hosts fire once a frame. `HostSession.install` puts
 > the compositor on both at `HostSession.COMPOSITOR`, its frame included in the firing at its place: the HUD arm on
 > `HUD`; on `SCREEN` whichever arm is current -- our own screen's desktop (which draws nothing itself), the overlay
 > over somebody else's, or the HUD arm on the frame a screen closed itself while it drew. One arm a frame. While the

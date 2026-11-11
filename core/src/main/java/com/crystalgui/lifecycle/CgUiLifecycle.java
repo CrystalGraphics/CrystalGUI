@@ -233,7 +233,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         // tree the process is about to stop having. This file's own rule for `onContextDestroy` says the same
         // thing about caches: at game shutdown there is no next context to protect, so anything that
         // only tidies state is ceremony rather than correctness. What genuinely must happen on close
-        // -- writing the session -- is the HOST's, and `CgUiScreen` does it when the screen closes.
+        // -- writing the session -- is the desktop's, and `HostSession` does it when its screen closes.
         //
         // What stays below is the one thing nobody else frees.
         try {

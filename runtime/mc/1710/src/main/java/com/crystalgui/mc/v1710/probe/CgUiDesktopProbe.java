@@ -1,10 +1,9 @@
 package com.crystalgui.mc.v1710.probe;
 
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.platform.input.CgInputStage;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.mc.v1710.client.CgUiHud;
-import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
 import cpw.mods.fml.common.FMLCommonHandler;
@@ -49,7 +48,7 @@ public final class CgUiDesktopProbe {
 
         @Override
         public void openDesktop() {
-            CgUiScreen.openEditor();
+            HostSession.session().openApplication();
         }
 
         /**
@@ -141,7 +140,7 @@ public final class CgUiDesktopProbe {
 
         @Override
         public DesktopPresentation presentation() {
-            return CgUiHud.presentation();
+            return HostSession.session().presentation();
         }
     };
 

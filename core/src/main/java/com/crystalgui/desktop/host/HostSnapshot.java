@@ -18,7 +18,6 @@ import javax.annotation.Nullable;
  */
 final class HostSnapshot {
 
-    private final HostServices host;
     private final Path installation;
     private volatile Path localWorld;
     private volatile int surfaceWidth;
@@ -27,8 +26,7 @@ final class HostSnapshot {
     private volatile CgProtocolConnection<Object> connection;
     private volatile Locale locale;
 
-    HostSnapshot(HostServices host) {
-        this.host = host;
+    HostSnapshot() {
         // Never changes under a running game
         this.installation = CgGameDirectory.game();
         refresh();
@@ -39,8 +37,7 @@ final class HostSnapshot {
         localWorld = CgServers.running() ? CgGameDirectory.world() : null;
         surfaceWidth = CgHostWindow.width();
         surfaceHeight = CgHostWindow.height();
-        CgProtocolConnection<Object> own = host.connection();
-        connection = own != null ? own : CgNetwork.client();
+        connection = CgNetwork.client();
         locale = CgI18n.locale();
     }
 
@@ -71,9 +68,5 @@ final class HostSnapshot {
 
     Locale locale() {
         return locale;
-    }
-
-    String desktopId() {
-        return host.desktopId();
     }
 }

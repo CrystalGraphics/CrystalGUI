@@ -8,10 +8,9 @@ import java.util.Arrays;
 /**
  * The server-side half: nothing.
  *
- * <p>Everything CrystalGUI does on 1.7.10 is a screen, and a dedicated server has no screens. This
- * class exists so {@link ClientProxy} has something to extend and so the client-only classes are
- * unreachable from common code — {@code CgUiScreen} imports {@code GuiScreen}, which does not exist
- * server-side, and a static reference from a common class is enough to fail class loading there.</p>
+ * <p>A dedicated server has no desktop. This class exists so {@link ClientProxy} has something to extend and so
+ * the client-only classes are unreachable from common code: the probes name client classes, and a static reference
+ * from a common class is enough to fail class loading there.</p>
  *
  * <p>{@code core/} is headless-clean by construction (its build fails on a {@code net.minecraft.*}
  * import), and that property is worth not undoing at the loader.</p>
@@ -34,7 +33,7 @@ public class CommonProxy {
     public void init() {
         // .probe too: every class in there is client-only. CommonProxy exists so ClientProxy is unreachable from common code.
         CgPlatform.provide(ServerSmoke.FOOTPRINT, new ServerSmoke.Footprint(CommonProxy.class,
-                Arrays.asList("com.crystalgui.mc.v1710.client", "com.crystalgui.mc.v1710.probe"),
+                Arrays.asList("com.crystalgui.mc.v1710.probe"),
                 Arrays.asList("com.crystalgui.mc.v1710.ClientProxy")));
     }
 }

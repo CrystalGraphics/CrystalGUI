@@ -15,15 +15,16 @@ final class HostStages {
     private HostStages() {
     }
 
-    static synchronized void attach(HostSession.PaintHost host) {
+    /** Once a process, from {@link HostSession#install}. */
+    static synchronized void attach() {
         if (attached) return;
         attached = true;
-        CgInputStage.SCREEN.register(HostSession.COMPOSITOR, new HostInputListener(host));
+        CgInputStage.SCREEN.register(HostSession.COMPOSITOR, new HostInputListener());
         CgRenderStage.HUD.register(HostSession.COMPOSITOR, frame -> {
-            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, false, host);
+            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, false);
         });
         CgRenderStage.SCREEN.register(HostSession.COMPOSITOR, frame -> {
-            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, true, host);
+            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, true);
         });
     }
 }

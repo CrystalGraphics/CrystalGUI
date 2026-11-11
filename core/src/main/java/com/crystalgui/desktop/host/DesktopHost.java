@@ -22,15 +22,16 @@ import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 
 /**
- * <b>The one object a loader talks to</b> - build it from {@link HostServices} and you have a working
- * desktop.
+ * <b>The one object a loader talks to</b> - build it and you have a working desktop, its directory, window, language
+ * and connection read from CrystalGraphics' services ({@code CgGameDirectory}, {@code CgHostWindow}, {@code CgI18n},
+ * {@code CgNetwork}).
  *
  * <p>It owns the four things every host would otherwise assemble identically: the {@link UIDocument} and
  * its scale, the user-agent stylesheet, the {@link Desktop} compositor with its arrangement record, and
  * a {@link Workspace} that follows the connection. A host writes none of that.</p>
  *
  * <pre>{@code
- * host = DesktopHost.create(myServices);      // once, when a GL context exists
+ * host = DesktopHost.create();                // once, when a GL context exists
  * host.shown();                               // the screen opened
  * host.frame(delta, width, height);           // every frame: pumps the wire, ticks, paints
  * host.hidden();                              // the screen closed -- the desktop stays alive
@@ -80,6 +81,15 @@ public final class DesktopHost implements Disposable {
     /** The theme a desktop opens in when nothing has chosen one. */
     public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
 
+    /**
+     * The scale every host runs the desktop at. <b>Deliberately not the game's GUI Scale</b>, which sizes 16px
+     * widgets and an 8px bitmap font; the shipped sheets are authored and measured at this.
+     */
+    public static final float UI_SCALE = 2f;
+
+    /** What a client's desktop arrangement is saved under. */
+    private static final String DESKTOP_ID = "client";
+
     private DesktopHost(HostSnapshot services, boolean ownsSnapshot) {
         this.ownsSnapshot = ownsSnapshot;
         this.services = services;
@@ -89,7 +99,7 @@ public final class DesktopHost implements Disposable {
         // THE SCALE, ONCE. It lives on the box tree's root transform, which is the matrix layout
         // composes, painting reads and hit-testing inverts -- so there is no second place it can be
         // applied and no window in which the three can disagree.
-        this.document.boxes().setUiScale(HostServices.DEFAULT_UI_SCALE);
+        this.document.boxes().setUiScale(UI_SCALE);
         // NOT INSTALLED FOR YOU. Without the sheets the surface matches no selector at all, and without a
         // theme every token falls back to the sheet's literal: until an editor opened and installed one,
         // the bar drew in those fallbacks.
@@ -111,7 +121,7 @@ public final class DesktopHost implements Disposable {
         // What a pin, Start and an entry's menu launch against
         desktop.useWorkspace(this::workspace);
         desktop.useConnection(() -> bound);
-        desktop.persistAs(services.desktopId());
+        desktop.persistAs(DESKTOP_ID);
         this.mount = new DesktopWindowMount(document);
     }
 
@@ -120,8 +130,9 @@ public final class DesktopHost implements Disposable {
         return new DesktopHost(snapshot, false);
     }
 
-    public static DesktopHost create(HostServices services) {
-        return new DesktopHost(new HostSnapshot(services), true);
+    /** A host of its own, outside a session: a test's. */
+    public static DesktopHost create() {
+        return new DesktopHost(new HostSnapshot(), true);
     }
 
     /** The surface everything is drawn on. */

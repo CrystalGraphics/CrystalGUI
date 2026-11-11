@@ -12,8 +12,7 @@ compiles against one loader and is used by three.
 
 | Package | What it contains |
 |---|---|
-| `com.crystalgui.mc.modern.platform` | `LifecycleCrystalGUI` — **the one class a loader talks to**: bootstrap, client init, the server and client ticks, player join/leave, overlay paint. Plus `CrystalGUI`, which holds the mod id and name |
-| `com.crystalgui.mc.modern.client` | The host: `CgUiScreen` (the viewport a desktop attaches to), `HostModern` (`HostServices`) and `CgUiHud`. Input and keys are CrystalGraphics' (`CgInputStage.SCREEN`, `CgKeyBindings`). The client state Minecraft moved (`CgMinecraftClient`), the GL hand-over around a paint (`CgHostPaint`) and host key numbers (`HostKeys`) are CrystalGraphics' modern `platform` package, which this module uses |
+| `com.crystalgui.mc.modern.platform` | `LifecycleCrystalGUI` — **the one class a loader talks to**: bootstrap, client init (`HostSession.install`), the server and client ticks, player join/leave, overlay paint. Plus `CrystalGUI`, which holds the mod id and name |
 | `com.crystalgui.mc.modern.net` | `Connections`, `Peer` |
 | `com.crystalgui.mc.modern.probe` | Every adapter over `core`'s probes: `CgUiAutoTest`, `ClientProbe`, `ConnectionProbeModern`. **`serverSmoke` enumerates this package as client-only** (`ServerSmoke.Footprint`), so a probe added here is checked without anyone listing it |
 
@@ -26,7 +25,8 @@ compiles against one loader and is used by three.
   `CgNetworkChannel` and passes it to `LifecycleCrystalGUI.bootstrap`.
 - **The desktop paints on CrystalGraphics' `HUD` and `SCREEN` stages**, our own screen's included, which its hosts
   fire once a frame (at the frame end from 26.1, after the GUI, since 26.1 extracts the GUI before it renders the
-  level): `CgUiHud.attachStages` from `bootstrapClient`. `CgUiScreen` draws nothing; no loader here hooks the HUD or a
+  level), attached by `HostSession.install` from `bootstrapClient`. Its screen is CrystalGraphics' (`CgScreens`,
+  `ScreensModern`), which draws nothing; no loader here hooks the HUD or a
   screen's render.
 - **No GL in constructors or static initialisers.** GL work waits for the first paint.
 - **Mixin AP comes from the toolchain.** A second `annotationProcessor` for Mixin produces duplicate-AP

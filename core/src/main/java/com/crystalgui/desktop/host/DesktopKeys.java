@@ -27,7 +27,7 @@ public final class DesktopKeys {
         declared = true;
         // Touches no window, so a desktop left with everything minimised comes back that way
         CgKeyBindings.declare("crystalgui:desktop", CgKeyCodes.KEY_LMENU, CATEGORY, () -> {
-            if (HostSession.isInstalled()) HostSession.session().services().showDesktop();
+            if (HostSession.isInstalled()) HostSession.session().openDesktop();
         });
     }
 }

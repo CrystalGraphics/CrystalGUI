@@ -34,7 +34,7 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 | a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
 | a permission or "who is this player" | CrystalGraphics' `CgPlayers.isOperator` (`PlayersModern`, `PlayersLegacy`, `Players1710`) |
 | client input, a key binding | CrystalGraphics' `CgInputStage.SCREEN` (`docs/INPUT.md`) and `CgKeyBindings`, which every era's host fires and registers |
-| HUD, a screen | `mc.modern.client` (`CgUiHud`, `CgUiScreen`); `legacy/client`; `v1710/client` |
+| HUD, a screen | CrystalGraphics' `CgRenderStage.HUD`/`SCREEN` and `CgScreens` (`Screens<Era>`); CrystalGUI's desktop is `core`'s `HostSession` |
 | a member renamed across versions | legacy `Game`; the controller's `replacements.string` |
 | a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
 
@@ -157,7 +157,7 @@ Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke`
 
 | Kind | Use when | How | Examples |
 |---|---|---|---|
-| **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `HostServices`, `fs.server.WorkspaceRoles`, `ServerSmoke.Host`, `HostSession.PaintHost` |
+| **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `fs.server.WorkspaceRoles`, `ServerSmoke.Host` |
 | **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST`, `Providers.Copies.SERVICE` |
 | **A static owner over a slot** (CrystalGraphics' shape) | a capability every host answers | a final class with a nested `Host`, its `NONE` and a `HOST` slot, read only through the owner's statics; each era provides it from its install (`platform/CLAUDE.md` § *The wiring standard*) | `CgModLoader`, `CgHostResources`, `CgInput`, `CgClipboard` |
 | **A hook into `LifecycleCrystalGUI`** (modern) / the legacy and 1.7.10 lifecycles | "when X happens in the game, run Y" | add a static method to the lifecycle; every loader's event forwards into it | `serverStarting`, `playerJoined`, `onServerTick` |

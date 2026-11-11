@@ -1,6 +1,8 @@
 package com.crystalgui.mc.v1710.probe;
 
-import com.crystalgui.mc.v1710.client.CgUiScreen;
+import com.crystalgraphics.render.stage.CgRenderStage;
+import com.crystalgraphics.render.stage.CgStageFrame;
+import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.probe.AutoTest;
@@ -36,7 +38,7 @@ import java.nio.ByteBuffer;
  *
  * <h3>No world unless one is asked for</h3>
  *
- * <p>{@link CgUiScreen} is an ordinary {@code GuiScreen}: it opens over the main menu just as well as
+ * <p>The desktop's screen is an ordinary screen: it opens over the main menu just as well as
  * over a world, and nothing it paints depends on there being a level. Skipping world gen, an integrated
  * server and chunk loading takes the wait from a minute to a few seconds, so that is the default.</p>
  *
@@ -54,7 +56,7 @@ public final class CgUiAutoTest {
     public static final boolean ENABLED = AutoTest.ENABLED;
 
     /**
-     * PAINTED FRAMES on this era, counted by {@link CgUiScreen} from its first paint.
+     * PAINTED FRAMES on this era, counted on CrystalGraphics' {@code SCREEN} stage while the desktop is up.
      *
      * <p>Frames rather than ticks because layout is what settles — {@code UIText} re-measures and pushes
      * its height back until it stops changing, and a tick clock cannot see that. 1.20.x counts ticks;
@@ -84,8 +86,8 @@ public final class CgUiAutoTest {
 
         @Override
         public void openDesktop() {
-            if (AutoTest.opensBareDesktop()) CgUiScreen.openDesktop();
-            else CgUiScreen.openEditor();
+            if (AutoTest.opensBareDesktop()) HostSession.session().openDesktop();
+            else HostSession.session().openApplication();
         }
 
         @Override
@@ -126,6 +128,7 @@ public final class CgUiAutoTest {
 
     public static void register() {
         if (!ENABLED) return;
+        CgRenderStage.SCREEN.register(HostSession.COMPOSITOR + 1, CgUiAutoTest::painted);
         FMLCommonHandler.instance().bus().register(new Handler());
         CrystalGuiCore.LOGGER.info("CGUI AUTOTEST armed — will open the editor and capture to {}",
                 AutoTest.earlyCapture());
@@ -141,13 +144,14 @@ public final class CgUiAutoTest {
         AutoTest.onFrame(frame, step);
     }
 
-    /**
-     * Called once per painted frame by {@link CgUiScreen#drawScreen}.
-     *
-     * <p>This is the settling clock on 1.7.10, so the captures hang off it rather than off the tick.</p>
-     */
-    public static void onPainted(int framesPainted) {
-        AutoTest.settled(HOST, framesPainted);
+    /** Desktop frames painted: this era's settling clock, so the captures hang off it rather than off the tick. */
+    private static int framesPainted;
+
+    /** Each frame the desktop paints, just after it on the {@code SCREEN} stage: the settling clock's tick. */
+    private static void painted(CgStageFrame frame) {
+        if (HostSession.isInstalled() && HostSession.session().presentation() == DesktopPresentation.DESKTOP) {
+            AutoTest.settled(HOST, ++framesPainted);
+        }
     }
 
     /** Instance methods, because {@code @SubscribeEvent} is not honoured on statics. */

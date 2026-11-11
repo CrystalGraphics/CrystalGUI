@@ -13,7 +13,7 @@ import com.crystalgui.ui.input.HostPointer;
  * <ul>
  *   <li><b>Our own screen</b> ({@link DesktopPresentation#DESKTOP}): every event goes to the document. Pointer events
  *       are always consumed, since the desktop covers the screen; a key only when the document took it, so an Escape
- *       nothing wanted reaches the screen, which closes on it.</li>
+ *       nothing wanted reaches the screen, whose owner, the session, closes it.</li>
  *   <li><b>Another screen</b> ({@link DesktopPresentation#OVERLAY}): the pinned windows take what lands on them.</li>
  * </ul>
  *
@@ -21,12 +21,6 @@ import com.crystalgui.ui.input.HostPointer;
  * positive rolled down), so nothing converts here.</p>
  */
 final class HostInputListener implements CgInputListener {
-
-    private final HostSession.PaintHost host;
-
-    HostInputListener(HostSession.PaintHost host) {
-        this.host = host;
-    }
 
     @Override
     public boolean wants() {
@@ -66,7 +60,7 @@ final class HostInputListener implements CgInputListener {
 
     private DesktopPresentation presentation() {
         if (!HostSession.isInstalled()) return DesktopPresentation.NONE;
-        DesktopPresentation shown = HostSession.session().presentation(host);
+        DesktopPresentation shown = HostSession.session().presentation();
         return shown == DesktopPresentation.DESKTOP || shown == DesktopPresentation.OVERLAY
                 ? shown : DesktopPresentation.NONE;
     }
@@ -78,8 +72,7 @@ final class HostInputListener implements CgInputListener {
                         HostPointer.of(e.x(), e.y(), e.dx(), e.dy(), button, pressed, wheel, e.millis()));
                 return true;
             case OVERLAY:
-                return HostSession.session().offerMouse(host, CgInput.pointerGrabbed(), e.x(), e.y(), button,
-                        pressed, wheel);
+                return HostSession.session().offerMouse(CgInput.pointerGrabbed(), e.x(), e.y(), button, pressed, wheel);
             default:
                 return false;
         }

@@ -2,6 +2,7 @@ package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.platform.service.CgScreens;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.graph.CgRehearsal;
 import com.crystalgraphics.render.stage.CgRenderStage;
@@ -20,6 +21,7 @@ import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.ui.dom.DocumentDriver;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -37,40 +39,26 @@ import java.util.function.Predicate;
  * windows, the unsaved documents in them and the request to bring one forward all have to outlive it.
  * This is where they live.</p>
  *
- * <p>Install once, when the client starts:</p>
+ * <p>Install once, when a client starts: the rest is the session's own. It paints at CrystalGraphics' GUI stages,
+ * takes input at its {@code SCREEN} input stage, and puts its desktop up as the engine's screen ({@code CgScreens}):</p>
  *
  * <pre>{@code
- * HostSession.install(new MyHostServices(), CrystalEditor.KIND);
- * }</pre>
+ * HostSession.install(CrystalEditor.KIND);                 // a Minecraft client
+ * HostSession.install(null);                               // a host opening every application by its own keys
  *
- * <p>Then the desktop paints itself at CrystalGraphics' GUI stages, every arm of it, and a host's screen is four calls
- * and owns nothing:</p>
- *
- * <pre>{@code
- * HostSession.attachStages(myPaintHost);   // once, on a client: HUD and SCREEN, input included
- *
- * void onScreenShown()  { HostSession.session().shown(); }
- * void onEscape()       { if (!HostSession.session().requestHide(() -> closeLater = true)) closeNow(); }
- * void onScreenHidden() { HostSession.session().hidden(); }
- * void onGameShutdown() { HostSession.session().dispose(); }
- * }</pre>
- *
- * <p>And the two keys a host binds:</p>
- *
- * <pre>{@code
- * void openApp()     { HostSession.session().requestApplication(); showMyScreen(); }
- * void openDesktop() { showMyScreen(); }   // touches nothing that is already open
+ * HostSession.session().openDesktop();                     // a key: the desktop, nothing on it touched
+ * HostSession.session().openApplication();                 // a key: the desktop, the primary application forward
+ * HostSession.session().closeDesktop();                    // it plays itself off, then its screen closes
+ * HostSession.session().dispose();                         // game shutdown
  * }</pre>
  *
  * <h3>Easy to get wrong</h3>
  *
  * <ul>
- *   <li>{@link #shown()} is not "build" — it is "the surface is up", and it builds only the first time.
- *       Call it from every screen-open, including a resize.</li>
- *   <li>{@link #requestApplication()} is a <em>request</em> and is consumed. Leaving it latched would
- *       re-raise a window on the next resize, which is how a window the player put away comes back.</li>
- *   <li>{@link #hidden()} destroys nothing. Only {@link #dispose()} does, and only at shutdown.</li>
- *   <li>{@link #frame(float)} must run before anything reads {@link #workspace()} — it is what binds a
+ *   <li>Nothing opens while CrystalGraphics' loading screen shows: an open then is dropped, and logged.</li>
+ *   <li>Closing the screen destroys nothing: the desktop, its windows and every running application outlive it, and
+ *       the next open resumes them. Only {@link #dispose()} ends them, at shutdown.</li>
+ *   <li>{@link #frame(float)} must run before anything reads {@link #workspace()} -- it is what binds a
  *       workspace to a live connection. The desktop's arm runs it each frame; a host opening an application before
  *       the first paint calls it once itself.</li>
  * </ul>
@@ -104,10 +92,9 @@ public final class HostSession {
     @Nullable
     private static volatile HostSession current;
 
-    private final HostServices services;
-    /** Who is offered a key the desktop left, before the game is. */
     /** Who is offered a key before the desktop, while no text field has focus. */
     private final List<Predicate<CgSystemInput.Keyboard.Event>> hotKeys = new CopyOnWriteArrayList<>();
+    /** Who is offered a key the desktop left, before the game is. */
     private final List<Predicate<CgSystemInput.Keyboard.Event>> keysLeft = new CopyOnWriteArrayList<>();
     @Nullable
     private final ApplicationKind primaryKind;
@@ -177,7 +164,7 @@ public final class HostSession {
     @Nullable
     private WindowFrame primaryWindow;
 
-    /** Consumed by {@link #shown()}, never merely read. @see #requestApplication() */
+    /** Consumed by {@link #shown()}, never merely read. @see #openApplication() */
     private volatile boolean raiseOnShow;
 
     /** A launch was wanted and could not be done. Cleared once there is a window. @see #frame(float) */
@@ -189,23 +176,23 @@ public final class HostSession {
     private long traceNanos;
     private boolean painted;
 
-    private HostSession(HostServices services, @Nullable ApplicationKind primaryKind) {
-        this.services = services;
+    private HostSession(@Nullable ApplicationKind primaryKind) {
         this.primaryKind = primaryKind;
-        // The game's threads, as UI code reaches them. @see CgHostThread
     }
 
     /**
-     * Declares this process's host and the application its desktop opens with. Once, at client start.
+     * Declares this process's desktop and the application it opens with. Once, at client start; everything the desktop
+     * asks of its host is read from CrystalGraphics' services.
      *
      * @param primaryKind what a host's "open the application" key launches — and what fills an empty
      *                    desktop, since a desktop with nothing on it is a blank screen rather than a
      *                    desktop; null for a host that opens every application itself, by its own keys,
      *                    whose empty desktop stays empty
      */
-    public static HostSession install(HostServices services, @Nullable ApplicationKind primaryKind) {
+    public static HostSession install(@Nullable ApplicationKind primaryKind) {
         if (current != null) return current;
-        current = new HostSession(services, primaryKind);
+        current = new HostSession(primaryKind);
+        HostStages.attach();
         return current;
     }
 
@@ -214,7 +201,7 @@ public final class HostSession {
         HostSession session = current;
         if (session == null) {
             throw new IllegalStateException(
-                    "No HostSession: call HostSession.install(services, kind) when the client starts.");
+                    "No HostSession: call HostSession.install(kind) when the client starts.");
         }
         return session;
     }
@@ -223,36 +210,89 @@ public final class HostSession {
         return current != null;
     }
 
-    /**
-     * Whether a host may open the desktop now: never while CrystalGraphics' loading screen shows, which nothing opens
-     * over. Every host's open asks first.
-     *
-     * <pre>{@code
-     * public static void openDesktop() {
-     *     if (!HostSession.mayOpen()) return;
-     *     ...
-     * }
-     * }</pre>
-     */
-    public static boolean mayOpen() {
+    /** Whether the desktop may open now: never while CrystalGraphics' loading screen shows, which nothing opens over. */
+    private static boolean mayOpen() {
         if (!CgLoadingScreen.shown()) return true;
         CrystalGuiCore.LOGGER.info("[cgui] not opening the desktop: the loading screen shows");
         return false;
     }
 
-    // ── What a host asks for ────────────────────────────────────────────────────────────────────
+    // ── Its screen ──────────────────────────────────────────────────────────────────────────────
+
+    /** The desktop as the engine's screen: what opens it, hears it come and go, and takes its Escape. */
+    private final CgScreens.Owner screen = new CgScreens.Owner() {
+        @Override
+        public void shown() {
+            HostSession.this.shown();
+        }
+
+        @Override
+        public void hidden() {
+            HostSession.this.hidden();
+        }
+
+        @Override
+        public void escape() {
+            closeDesktop();
+        }
+
+        /** It covers the window, so the HUD drawn over screens (1.21.6 to 26.0) would land on it. */
+        @Override
+        public boolean hidesHud() {
+            return true;
+        }
+
+        @Override
+        public boolean textInputArea(float[] out) {
+            float[] area = HostSession.this.textInputArea();
+            if (area == null) return false;
+            System.arraycopy(area, 0, out, 0, 4);
+            return true;
+        }
+    };
 
     /**
-     * Bring the primary application forward the next time the surface is shown — restoring it from
-     * minimised, un-hiding it if it was closed, raising it and giving it the keyboard.
-     *
-     * <p>"Open the editor" has to mean all of that or the key is unreliable: a window that is merely
-     * retained is still a window nobody can see. Showing the surface <em>without</em> calling this is
-     * the other key, and it deliberately touches nothing.</p>
+     * Puts the desktop up, touching no window on it: what comes back is what was left, minimised windows included. The
+     * Show Desktop key's. Client thread.
      */
-    public void requestApplication() {
+    public void openDesktop() {
+        if (!mayOpen()) return;
+        // THE PROBE OWNS THE DESKTOP WHILE IT RUNS: opening claims ui/openWindow, which the probe's own session holds.
+        if (ConnectionProbe.enabled() && !ConnectionProbe.isDrivingDesktop()) {
+            CrystalGuiCore.LOGGER.info("[cgui] not opening the desktop: the connection probe is driving");
+            return;
+        }
+        CgScreens.open(screen);
+    }
+
+    /**
+     * Puts the desktop up with the primary application brought forward: restored from minimised, un-hidden if it was
+     * closed, raised and given the keyboard, launched if nothing runs it. "Open the editor" has to mean all of that or
+     * the key is unreliable. Client thread.
+     */
+    public void openApplication() {
+        if (!mayOpen()) return;
         raiseOnShow = true;
         launchPending = true;
+        openDesktop();
+    }
+
+    /**
+     * {@link #openDesktop} while the loading screen shows, for a host whose first frame is the desktop: it is built
+     * behind that screen and up when it hides. Client thread.
+     */
+    public void openBehindLoadingScreen() {
+        CgScreens.open(screen);
+    }
+
+    /** Closes the desktop's screen once the desktop has played itself off; at once with animations off. Client thread. */
+    public void closeDesktop() {
+        if (!requestHide(() -> CgScreens.close(screen))) CgScreens.close(screen);
+    }
+
+    /** Whether the desktop's screen is the one in front. */
+    public boolean isOpen() {
+        return CgScreens.isOpen(screen);
     }
 
     /**
@@ -290,12 +330,8 @@ public final class HostSession {
         return true;
     }
 
-    /**
-     * The surface is up. Builds the desktop the first time and resumes it every time after.
-     *
-     * <p>Safe to call on a resize, which is how a game re-initialises a screen.</p>
-     */
-    public void shown() {
+    /** Its screen is up: builds the desktop the first time and resumes it every time after, a resize included. */
+    void shown() {
         closing = null;
         left = false;
         refreshHost();
@@ -305,13 +341,11 @@ public final class HostSession {
     }
 
     /**
-     * The surface went away — and nothing is destroyed.
-     *
-     * <p>The desktop records its arrangement and each application its session, because each went off
-     * screen. A pending launch is abandoned: closing the surface withdraws the request, and carrying it
-     * across would open a window the next time the desktop appeared for some unrelated reason.</p>
+     * Its screen went away, and nothing is destroyed: the desktop records its arrangement and each application its
+     * session. A pending launch is abandoned, or it would open a window the next time the desktop appeared for some
+     * unrelated reason.
      */
-    public void hidden() {
+    void hidden() {
         closing = null;
         left = false;
         launchPending = false;
@@ -320,20 +354,10 @@ public final class HostSession {
     }
 
     /**
-     * Asks to close the surface: the desktop plays itself off screen, then {@code close} runs, here on the host's
-     * thread from a later {@link #frame}. What a screen's Escape or close key calls instead of closing; {@code close}
-     * is the real close, which then reports {@link #hidden}. False, having run nothing, when the surface should close
-     * now: nothing is built, or animations are off. Asked again while it plays, true and nothing more.
-     *
-     * <pre>{@code
-     * public void onClose() {
-     *     if (!HostSession.session().requestHide(() -> closeReady = true)) super.onClose();   // tick() closes it
-     * }
-     * }</pre>
-     *
-     * <p>Hosts must keep calling {@link #frame} while it plays, or {@code close} waits out its longest second.</p>
+     * The desktop plays itself off screen, then {@code close} runs from a later {@link #frame}. False, having run
+     * nothing, when it should close now: nothing is built, or animations are off. Asked again while it plays, true.
      */
-    public boolean requestHide(Runnable close) {
+    private boolean requestHide(Runnable close) {
         DesktopHost built = host;
         if (built == null || !WindowAnimator.isEnabled()) return false;
         if (closing != null) return true;
@@ -432,10 +456,6 @@ public final class HostSession {
         return primary;
     }
 
-    public HostServices services() {
-        return services;
-    }
-
     /** Whether the desktop has been built. */
     public boolean isBuilt() {
         return host != null;
@@ -472,29 +492,6 @@ public final class HostSession {
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
 
     /**
-     * What only the host can answer about a paint: whether a screen is up, and whose. The stage's firing is the
-     * bracket: CrystalGraphics takes the host's state and gives it back.
-     *
-     * <pre>{@code
-     * HostSession.attachStages(new HostSession.PaintHost() {
-     *     public boolean ownScreenUp() { return mc.screen instanceof MyDesktopScreen; }
-     *     public boolean anyScreenUp() { return mc.screen != null; }
-     * });
-     * }</pre>
-     */
-    public interface PaintHost {
-
-        /** Whether the screen currently up is <b>ours</b>. */
-        boolean ownScreenUp();
-
-        /** Whether <b>any</b> screen is up, ours or somebody else's. */
-        boolean anyScreenUp();
-
-        /** Once per painted frame, before the compositor draws. For a host that must offer the pointer. */
-        default void beforePaint() {}
-    }
-
-    /**
      * What the desktop should be showing right now — <b>the one place a game condition becomes a
      * presentation</b>, which is what keeps every paint hook and every input hook agreeing.
      *
@@ -503,19 +500,19 @@ public final class HostSession {
      * and is wrong for the case that matters least often and breaks worst: a screen that renders no world
      * fires no such event, so the close is never seen and ownership survives into the next screen.</p>
      */
-    public DesktopPresentation presentation(PaintHost host) {
+    public DesktopPresentation presentation() {
         DocumentDriver<DesktopFacts> owner = driver;
         if (owner == null) return DesktopPresentation.NONE;
-        if (owner.isAsync()) return presentationFromCommit(host);
-        return owner.ask(() -> presentationOnDocument(host));
+        if (owner.isAsync()) return presentationFromCommit();
+        return owner.ask(this::presentationOnDocument);
     }
 
     /** {@link #presentationOnDocument}, from what the document last committed rather than from its tree. */
-    private DesktopPresentation presentationFromCommit(PaintHost host) {
+    private DesktopPresentation presentationFromCommit() {
         Desktop desktop = desktop();
         if (desktop == null) return DesktopPresentation.NONE;
-        boolean ours = host.ownScreenUp();
-        boolean any = host.anyScreenUp();
+        boolean ours = CgScreens.isOpen(screen);
+        boolean any = CgScreens.anyOpen();
         noteForeignScreen(desktop, any && !ours);
         DesktopFacts shown = driver.shownFacts();
         // Before the first commit the desktop is attached and holds nothing pinned, as it was built.
@@ -533,12 +530,12 @@ public final class HostSession {
         if (overlay != null) overlay.onForeignScreenChanged(foreignUp);
     }
 
-    private DesktopPresentation presentationOnDocument(PaintHost host) {
+    private DesktopPresentation presentationOnDocument() {
         Desktop desktop = desktop();
         if (desktop == null) return DesktopPresentation.NONE;
 
-        boolean ours = host.ownScreenUp();
-        boolean any = host.anyScreenUp();
+        boolean ours = CgScreens.isOpen(screen);
+        boolean any = CgScreens.anyOpen();
 
         noteForeignScreen(desktop, any && !ours);
         return desktop.presentation(ours, any);
@@ -550,8 +547,8 @@ public final class HostSession {
      * Offers one pointer event to the pinned windows, and <b>refuses it while the pointer is the camera</b>.
      *
      * <pre>{@code
-     * // a host's screen-input hook: forward only what the desktop did not take
-     * if (session.offerMouse(myPaintHost, Mouse.isGrabbed(), x, displayHeight - y, button, pressed, wheel)) {
+     * // the SCREEN input stage's listener: forward only what the desktop did not take
+     * if (session.offerMouse(CgInput.pointerGrabbed(), x, y, button, pressed, wheel)) {
      *     event.setCanceled(true);
      * }
      * }</pre>
@@ -561,14 +558,12 @@ public final class HostSession {
      * under a screen means the same, since a mod may capture the pointer there. A host reports the grab;
      * this decides.</p>
      *
-     * @param host    answers whether a screen is up
      * @param grabbed whether the host has captured the pointer
      * @param yPx     surface pixels from the TOP; a host whose toolkit measures from the bottom flips it
      * @return whether the desktop consumed it, so the screen must not see it. See {@link ScreenOverlay#offerMouse}
      */
-    public boolean offerMouse(PaintHost host, boolean grabbed, int xPx, int yPx, int button, boolean pressed,
-                              float wheel) {
-        if (grabbed || !host.anyScreenUp()) return false;
+    public boolean offerMouse(boolean grabbed, int xPx, int yPx, int button, boolean pressed, float wheel) {
+        if (grabbed || !CgScreens.anyOpen()) return false;
         ScreenOverlay overlay = screenOverlay();
         if (overlay == null) return false;
         // Asynchronously the overlay answers from its committed regions and posts what it delivers.
@@ -605,18 +600,6 @@ public final class HostSession {
     public static final int COMPOSITOR = CgRenderStage.VIEWPORT_WIDGETS;
 
     /**
-     * Puts the pinned windows on CrystalGraphics' GUI stages: over the HUD, and over a screen that is not ours. Once, on
-     * a client; a later call does nothing.
-     *
-     * <pre>{@code
-     * HostSession.attachStages(CgUiHud.HOST);
-     * }</pre>
-     */
-    public static void attachStages(PaintHost host) {
-        HostStages.attach(host);
-    }
-
-    /**
      * Paints the desktop in {@code stage}'s firing, at {@link #COMPOSITOR}, <b>only when the compositor is actually in
      * it</b>: from {@link CgRenderStage#HUD} the HUD arm, from {@link CgRenderStage#SCREEN} whichever arm is current --
      * our own screen's desktop, the overlay over somebody else's, or the HUD arm on the frame a screen closed itself
@@ -629,7 +612,7 @@ public final class HostSession {
      * back in a working game with their windows intact on the desktop. Deciding what to present is inside the guard
      * too: it reads the compositor and can throw for the same reasons painting it can.</p>
      */
-    void paintAt(CgStageFrame stage, boolean screenStage, PaintHost host) {
+    void paintAt(CgStageFrame stage, boolean screenStage) {
         if (CgRehearsal.active()) {
             DesktopRehearsal playing = rehearsal;
             if (screenStage && playing != null) playing.paint(stage);
@@ -642,7 +625,7 @@ public final class HostSession {
         if (desktop == null || document() == null || owner == null) return;
         DesktopPresentation now;
         try {
-            now = presentation(host);
+            now = presentation();
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] could not decide a presentation; leaving HUD mode", failed);
             post(desktop::exitHudMode);
@@ -658,7 +641,6 @@ public final class HostSession {
         paintedFrame = frameIndex;
         refreshHost();
         returnUnhandledKeys();
-        host.beforePaint();
         BiConsumer<CgStageFrame, UiPresenter> replaced = replacement;
         if (replaced != null) {
             replacement = null;
@@ -725,7 +707,7 @@ public final class HostSession {
     /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
     private void returnUnhandledKeys() {
         for (CgSystemInput.Keyboard.Event key; (key = input.pollUnhandledKey()) != null; ) {
-            if (!offerLeftKey(key)) services.reinjectKey(key);
+            if (!offerLeftKey(key)) CgScreens.giveBack(key);
         }
     }
 
@@ -777,7 +759,7 @@ public final class HostSession {
 
     private void build() {
         trace("begin");
-        snapshot = new HostSnapshot(services);
+        snapshot = new HostSnapshot();
         DesktopHost built = DesktopHost.create(snapshot);
         // WHERE A SERVER'S WINDOW IS OFFERED FIRST. An application with places of its own takes what it
         // recognises and hands the rest back, so a client with it closed still gets every window. A
@@ -849,7 +831,7 @@ public final class HostSession {
     /**
      * Raises the primary window if that is what was asked for, and builds it if nothing is open.
      *
-     * <p>The bare-desktop key launches nothing: only {@link #requestApplication()} builds the primary
+     * <p>The bare-desktop key launches nothing: only {@link #openApplication()} builds the primary
      * application, so an empty desktop stays empty.</p>
      */
     private void bringForward() {

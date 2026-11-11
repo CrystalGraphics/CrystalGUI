@@ -6,8 +6,8 @@ import com.crystalgui.ui.dom.UIElement;
 /**
  * <b>Where a server's window lands on this client</b> — the one thing a platform implements.
  *
- * <p>On 1.7.10 it wraps the tree in a {@code WindowFrame} and opens it on the desktop {@code CgUiScreen}
- * already owns. In the GL harness it is a scene. In a headless test it is three fields. That is the whole
+ * <p>On a client it wraps the tree in a {@code WindowFrame} and opens it on the desktop
+ * ({@code DesktopWindowMount}). In the GL harness it is a scene. In a headless test it is three fields. That is the whole
  * platform surface for networked UI: everything above it — sessions, ids, the close matrix, dispatch by
  * type — is the engine's and is written once.</p>
  *

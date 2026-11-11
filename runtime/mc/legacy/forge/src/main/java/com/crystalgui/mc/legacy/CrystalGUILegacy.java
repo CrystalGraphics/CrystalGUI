@@ -34,7 +34,7 @@ public final class CrystalGUILegacy implements VariantEntry {
         String root = CrystalGUILegacy.class.getPackage().getName();
         events.on("FMLInitializationEvent", event -> CgPlatform.provide(ServerSmoke.FOOTPRINT,
                 new ServerSmoke.Footprint(CrystalGUILegacy.class,
-                        Arrays.asList(root + ".client", root + ".probe"),
+                        Arrays.asList(root + ".probe"),
                         Arrays.asList(root + ".CrystalGUILegacyClient"))));
     }
 }

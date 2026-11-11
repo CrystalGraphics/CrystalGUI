@@ -471,8 +471,8 @@ tasks.named<JavaExec>("runServer") {
 
         // WHERE THE CLIENT PACKAGE IS, so the never-loaded set is enumerated rather than hand-written.
         // The list this replaces had rotted in both directions: it named a class W3 deleted -- a name
-        // nothing can load is a guard that passes for ever -- while CgUiHud, CgUiOverlayInput and
-        // CgUiAutoTest arrived after it was written and were never checked at all.
+        // nothing can load is a guard that passes for ever -- while CgUiOverlayInput and CgUiAutoTest
+        // arrived after it was written and were never checked at all.
         //
         // No -Xlog:class+load here, unlike the 1.20.x task: that is a Java 9+ flag and this run is on
         // the GTNH toolchain. It needs none -- LaunchWrapper puts no module in the way, so the

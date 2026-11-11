@@ -1,10 +1,10 @@
 package com.crystalgui.mc.modern.probe;
 
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
-import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
@@ -19,8 +19,8 @@ import net.minecraft.server.level.ServerPlayer;
  * session handshake, tree and state deltas, fan-out and the workspace had never been exercised over a
  * connection on this era at all. That is the whole reason the probe went to {@code core}.</p>
  *
- * <p>In {@code .client} rather than {@code .net} deliberately: it names {@link CgUiScreen}, and this
- * package is the one {@code serverSmoke} enumerates as never-loaded-on-a-server.</p>
+ * <p>In {@code .probe}, which {@code serverSmoke} enumerates as never loaded on a server: what asserts it cannot
+ * leak onto one.</p>
  */
 public final class ConnectionProbeModern {
 
@@ -63,7 +63,7 @@ public final class ConnectionProbeModern {
 
         @Override
         public void openDesktop() {
-            CgUiScreen.openEditor();
+            HostSession.session().openApplication();
         }
 
         @Override

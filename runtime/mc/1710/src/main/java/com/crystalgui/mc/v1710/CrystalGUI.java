@@ -50,8 +50,8 @@ public class CrystalGUI {
     /**
      * Client-only work lives behind this.
      *
-     * <p>{@code CgUiScreen} imports {@code GuiScreen}, so naming it from a common class is enough to
-     * break a dedicated server at class load. @see CommonProxy</p>
+         * <p>Its probes name client classes, so naming them from a common class is enough to break a dedicated server
+     * at class load. @see CommonProxy</p>
      */
     @SidedProxy(
         clientSide = "com.crystalgui.mc.v1710.ClientProxy",

@@ -66,8 +66,8 @@ import java.util.Map;
  * in-game HUD <em>before</em> every screen, so the hotbar is behind chat and inventories too, and a
  * full-width, near-opaque bar hides it where a translucent island the same size merely blurred it into
  * blotches behind the labels. What genuinely has to respect the hotbar is W14's pinned windows, which
- * paint over the running game. (This used to say the game was paused; it is not — see
- * {@code CgUiScreen.doesGuiPauseGame}.)</p>
+ * paint over the running game. (This used to say the game was paused; it is not: the desktop's
+ * screen, CrystalGraphics' {@code CgScreens}, pauses nothing.)</p>
  *
  * <h3>Entries are reconciled, never rebuilt</h3>
  * <p>Refresh runs on every registry change, including activation — so rebuilding the strip would destroy

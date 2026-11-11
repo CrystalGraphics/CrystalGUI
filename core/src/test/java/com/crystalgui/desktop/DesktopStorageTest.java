@@ -102,7 +102,7 @@ public class DesktopStorageTest {
     /**
      * <b>No default, and that is the point.</b> A desktop nobody has told has nowhere to write and says
      * so; inventing the working directory would be an answer chosen for a host that never saw the
-     * question, which is the same reason {@code HostServices} declares no defaults either.
+     * question.
      */
     @Test
     public void anUnconfiguredDesktopHasNowhereToWrite() {

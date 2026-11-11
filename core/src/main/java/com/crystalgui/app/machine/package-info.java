@@ -212,8 +212,8 @@
  * <h2>Running it in game</h2>
  *
  * <p>{@code ./gradlew :runtime:mc:1710:runClient}, join a world, press <b>F8</b>. The panel opens as a window
- * on the desktop {@code CgUiScreen} already owns — beside the editor, in the same taskbar. It is
- * emphatically <b>not</b> a second {@code GuiScreen}: there is one, and a second would be a second
+ * on the desktop that already owns the screen — beside the editor, in the same taskbar. It is
+ * emphatically <b>not</b> a second screen: there is one, and a second would be a second
  * claim on the input pump, the GL state handoff, the desktop's persistence and the modal stack, with
  * only one of them able to be in front.</p>
  *

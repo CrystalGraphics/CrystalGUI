@@ -1,6 +1,5 @@
 package com.crystalgui.desktop.host;
 
-import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.async.UiSequence;
@@ -31,11 +30,6 @@ public class HostSessionLockstepTest {
         System.clearProperty("crystalgui.ui.sequence");
     }
 
-    private static final HostSession.PaintHost NO_SCREEN = new HostSession.PaintHost() {
-        @Override public boolean ownScreenUp() { return true; }
-        @Override public boolean anyScreenUp() { return true; }
-    };
-
     /**
      * Asynchronously no host entry reads the tree on the host's thread at all: each answers from the last commit or posts
      * to the sequence, and this thread is one the tree refuses.
@@ -50,7 +44,7 @@ public class HostSessionLockstepTest {
             assertNotNull(sequence);
 
             session.frame(0.016f);
-            assertNotNull(session.presentation(NO_SCREEN));
+            assertNotNull(session.presentation());
             assertNull("no commit yet, so no caret to place", session.textInputArea());
             assertTrue("a key to a document recording on its own is answered ours at once",
                     session.input().consumeKeyboardEvent(
@@ -64,11 +58,7 @@ public class HostSessionLockstepTest {
     }
 
     private static HostSession install(Path root) {
-        return HostSession.install(new HostServices() {
-            @Override public String desktopId() { return "lockstep"; }
-            @Override public CgProtocolConnection<Object> connection() { return null; }
-            @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
-        }, ApplicationKind.of("test.lockstep", "Lockstep"));
+        return HostSession.install(ApplicationKind.of("test.lockstep", "Lockstep"));
     }
 
     @Test
@@ -81,7 +71,7 @@ public class HostSessionLockstepTest {
         assertNotNull("the desktop's document was not given a sequence", sequence);
 
         session.frame(0.016f);
-        assertNotNull(session.presentation(NO_SCREEN));
+        assertNotNull(session.presentation());
         assertFalse(session.input().consumeKeyboardEvent(
                 new CgSystemInput.Keyboard.Event((char) 0, CgKeyCodes.KEY_F12, true, false, 0L)));
         assertNull(session.textInputArea());

@@ -10,7 +10,7 @@ import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
-import com.crystalgui.desktop.host.HostServices;
+import com.crystalgui.desktop.host.DesktopHost;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.window.SystemMenu;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -370,7 +370,7 @@ public final class DesktopProbe {
     /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
     private static void parkPointerOver(Host host, WindowFrame frame) {
         if (frame.box() == null || !HostSession.isInstalled()) return;
-        float scale = HostServices.DEFAULT_UI_SCALE;
+        float scale = DesktopHost.UI_SCALE;
         int x = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
         int y = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
         host.movePointerTo(x, y);

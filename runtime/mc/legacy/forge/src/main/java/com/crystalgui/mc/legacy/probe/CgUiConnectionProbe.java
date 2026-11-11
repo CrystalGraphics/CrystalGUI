@@ -1,11 +1,11 @@
 package com.crystalgui.mc.legacy.probe;
 
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.platform.world.CgPlayers;
 import com.crystalgraphics.world.CgWorldQueries;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
-import com.crystalgui.mc.legacy.client.CgUiScreen;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
@@ -24,9 +24,8 @@ import net.minecraftforge.fml.common.gameevent.TickEvent;
  * <p>Every check, the checklist and the report are {@code core}'s. This says how this era spells a world,
  * a screen and the first joined player.</p>
  *
- * <p>In {@code .client} rather than {@code .net} deliberately: it names {@link CgUiScreen}, and this
- * package is the one {@code serverSmoke} enumerates as never-loaded-on-a-server, so putting it here is
- * what asserts it cannot leak onto one.</p>
+ * <p>In {@code .probe}, which {@code serverSmoke} enumerates as never loaded on a server: what asserts it cannot
+ * leak onto one.</p>
  */
 public final class CgUiConnectionProbe {
 
@@ -86,7 +85,7 @@ public final class CgUiConnectionProbe {
 
         @Override
         public void openDesktop() {
-            CgUiScreen.openEditor();
+            HostSession.session().openApplication();
         }
 
         @Override

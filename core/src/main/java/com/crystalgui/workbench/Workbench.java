@@ -1203,7 +1203,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      *
      * <p>Called by whatever built this — an application — and never by the tree, because a workbench
      * that is merely detached is a hidden window and must come back working. The rule this closes is
-     * the one {@code CgUiScreen.disposeAll}'s javadoc has always stated and nothing performed.</p>
+     * the one a host's shutdown always promised and nothing performed.</p>
      *
      * <p>Idempotent through its parts: a {@code ConnectionGroup} clears itself, a {@code Watch} counts
      * its holders, and {@code EditorService.closeAll} is written to be safe twice.</p>

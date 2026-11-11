@@ -163,7 +163,7 @@ public final class ClientWindows {
     /**
      * Says where windows go, and drains anything that has been waiting for one.
      *
-     * <p>A host installs this once — {@code CgUiScreen} does it while building the desktop. Setting a
+     * <p>A host installs this once — {@code DesktopWindowMount} does it while building the desktop. Setting a
      * second one does not move windows already on screen: they belong to the mount that made them.</p>
      */
     public ClientWindows setMount(@Nullable WindowMount mount) {

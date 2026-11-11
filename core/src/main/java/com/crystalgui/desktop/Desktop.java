@@ -1443,8 +1443,8 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * <b>Where this desktop keeps everything</b> — the client-side twin of
-     * {@code HostServices.installationDirectory()}.
+     * <b>Where this desktop keeps everything</b> — under the game's directory
+     * ({@code CgGameDirectory.game()}).
      *
      * <p>One call, before anything is launched onto this desktop: it derives the config store and the
      * cache root from {@link CrystalGuiStorage}, so nothing else spells those segments. Applications
@@ -1457,7 +1457,7 @@ public class Desktop extends UIElement implements DataProvider {
      * }</pre>
      *
      * <p><b>There is no default.</b> A desktop nobody has told simply has nowhere to write, and says so
-     * when asked to launch something — the same reason {@code HostServices} declares no defaults: an
+     * when asked to launch something — an
      * answer chosen for a host that never saw the question is indistinguishable from one it meant.</p>
      */
     public Desktop useStorage(Path installation) {

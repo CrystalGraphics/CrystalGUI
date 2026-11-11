@@ -526,7 +526,7 @@ host opens the IME's candidate list. `TextEditor` does the same, underlining thr
 OS draws the run itself.
 
 ```java
-// a host with a composing input method -- Minecraft 26.3's CgUiScreen.preeditUpdated
+// a host with a composing input method -- Minecraft 26.3's, from CrystalGraphics' screen (ScreensModern)
 document.input().consumeComposition(preedit.fullText(), preedit.caretPosition());
 float[] caret = document.input().textInputArea();   // {x, y, w, h}, or null
 ```

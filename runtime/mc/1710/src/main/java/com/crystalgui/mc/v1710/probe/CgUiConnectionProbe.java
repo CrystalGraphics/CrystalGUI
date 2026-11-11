@@ -1,9 +1,9 @@
 package com.crystalgui.mc.v1710.probe;
 
+import com.crystalgui.desktop.host.HostSession;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
-import com.crystalgui.mc.v1710.client.CgUiScreen;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgui.probe.ConnectionProbe;
 
@@ -20,9 +20,8 @@ import net.minecraft.server.MinecraftServer;
  * <p>Every check, the checklist and the report are {@code core}'s. This says how 1.7.10 spells a world,
  * a screen and the first joined player.</p>
  *
- * <p>In {@code .client} rather than {@code .net} deliberately: it names {@link CgUiScreen}, and this
- * package is the one {@code serverSmoke} enumerates as never-loaded-on-a-server, so putting it here is
- * what asserts it cannot leak onto one.</p>
+ * <p>In {@code .probe}, which {@code serverSmoke} enumerates as never loaded on a server: what asserts it cannot
+ * leak onto one.</p>
  */
 public final class CgUiConnectionProbe {
 
@@ -84,7 +83,7 @@ public final class CgUiConnectionProbe {
 
         @Override
         public void openDesktop() {
-            CgUiScreen.openEditor();
+            HostSession.session().openApplication();
         }
 
         @Override

@@ -12,7 +12,6 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
-import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.AutoTest;
 
 import com.mojang.blaze3d.pipeline.RenderTarget;
@@ -122,8 +121,8 @@ public final class CgUiAutoTest {
         @Override
         public void openDesktop() {
             sinceOpen = 0;
-            if (AutoTest.opensBareDesktop()) CgUiScreen.openDesktop();
-            else CgUiScreen.openEditor();
+            if (AutoTest.opensBareDesktop()) HostSession.session().openDesktop();
+            else HostSession.session().openApplication();
         }
 
         @Override

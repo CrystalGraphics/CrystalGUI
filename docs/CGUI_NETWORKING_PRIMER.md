@@ -1188,7 +1188,7 @@ public final class MyPanel extends UINode implements Networked<MyModel> {
 // binding fails still renders and reports its events -- only the local extras
 // go quiet, loudly, in the log.
 
-// once per platform, not per mod — CgUiScreen does this on 1.7.10:
+// once per client, not per mod — the desktop's DesktopWindowMount does this on every host:
 ClientWindows.of(c).setMount(myWindowMount);
 ```
 

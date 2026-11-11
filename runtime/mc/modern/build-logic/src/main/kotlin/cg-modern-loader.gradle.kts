@@ -184,8 +184,8 @@ cgbuildlogic.configureShadowJarBundling(project)
 // EVERYTHING A NODE SHIPS LIVES UNDER ITS OWN PACKAGE, `com.crystalgui.mc.<loader>.v<version>` (J11.1b):
 // the single jar carries one copy of common per NODE -- remapped three ways, and one per Minecraft
 // version of each loader -- and two classes cannot share a name. So common goes to `<node>.common`, and
-// the loader's own classes to `<node>` itself. `mc.modern.client.CgUiScreen` ships as
-// `mc.fabric.v1204.common.client.CgUiScreen`, `mc.fabric.CrystalGUIFabric` as `mc.fabric.v1204.CrystalGUIFabric`.
+// the loader's own classes to `<node>` itself. `mc.modern.probe.ClientProbe` ships as
+// `mc.fabric.v1204.common.probe.ClientProbe`, `mc.fabric.CrystalGUIFabric` as `mc.fabric.v1204.CrystalGUIFabric`.
 //
 // EXCEPT THE BOOTSTRAPPERS: each is the one class its loader constructs whatever version is running --
 // named by the descriptor, or found by its @Mod -- so every node ships it at one name and the merge

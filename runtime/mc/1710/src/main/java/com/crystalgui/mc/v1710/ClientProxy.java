@@ -1,14 +1,14 @@
 package com.crystalgui.mc.v1710;
 
+import com.crystalgui.app.crystaleditor.CrystalEditor;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.mc.v1710.probe.CgUiAutoTest;
-import com.crystalgui.mc.v1710.client.CgUiHud;
 import com.crystalgui.mc.v1710.probe.CgUiConnectionProbe;
 import com.crystalgui.mc.v1710.probe.CgUiDesktopProbe;
-import com.crystalgui.mc.v1710.client.CgUiScreen;
 
 /**
- * The client half: the session, the HUD and the probes. CrystalGraphics finds CrystalGUI's lifecycle, which declares
- * its keys, and carries its input.
+ * The client half: the session and the probes. The session paints, takes input and puts its screen up through
+ * CrystalGraphics; CrystalGraphics finds CrystalGUI's lifecycle, which declares its keys.
  */
 public class ClientProxy extends CommonProxy {
 
@@ -18,11 +18,7 @@ public class ClientProxy extends CommonProxy {
 
         // FIRST: the key binding, the probes and the example all reach the session, and a key pressed
         // before it exists would throw rather than open anything.
-        CgUiScreen.install();
-
-        // W14: pinned windows paint over the running game. Costs one no-op branch per frame when
-        // nothing is pinned, which is every frame until somebody pins something.
-        CgUiHud.register();
+        HostSession.install(CrystalEditor.KIND);
         CgUiAutoTest.register();
         // EVERYTHING THAT NEEDS A REAL CONNECTION, in one probe. Off unless
         // -Dcrystalgui.probe.connection=true. It was six classes -- session, net, wire, remote

@@ -76,7 +76,7 @@ final class DesktopRehearsal {
 
     private static Desktop build() {
         UIDocument document = new UIDocument();
-        document.boxes().setUiScale(HostServices.DEFAULT_UI_SCALE);
+        document.boxes().setUiScale(DesktopHost.UI_SCALE);
         UiThemeManager.getInstance().installInto(document.styles());
         Desktop desktop = Desktop.of(document);
         desktop.addWindow(new WindowFrame("Warm-up"));

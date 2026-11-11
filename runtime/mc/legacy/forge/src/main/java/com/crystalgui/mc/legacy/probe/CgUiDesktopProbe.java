@@ -1,12 +1,11 @@
 package com.crystalgui.mc.legacy.probe;
 
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.platform.input.CgInputStage;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.world.CgPlayers;
 import com.crystalgraphics.world.CgWorldQueries;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.mc.legacy.client.CgUiHud;
-import com.crystalgui.mc.legacy.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
 import net.minecraftforge.fml.common.FMLCommonHandler;
@@ -50,7 +49,7 @@ public final class CgUiDesktopProbe {
 
         @Override
         public void openDesktop() {
-            CgUiScreen.openEditor();
+            HostSession.session().openApplication();
         }
 
         /**
@@ -142,7 +141,7 @@ public final class CgUiDesktopProbe {
 
         @Override
         public DesktopPresentation presentation() {
-            return CgUiHud.presentation();
+            return HostSession.session().presentation();
         }
     };
 

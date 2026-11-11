@@ -73,7 +73,7 @@ version add an enum constant, or make an attribute positional? One `javap` now s
 
 | Need | Seam |
 |---|---|
-| core constructs the consumer | an interface passed in (`HostServices`, `WorkspaceRoles`) |
+| core constructs the consumer | an interface passed in (`WorkspaceRoles`, `ServerSmoke.Host`) |
 | optional, read from many places | `CgService.of("crystalgui:x", X.NONE)`; `CgPlatform.provide` / `get` |
 | every host answers it | a static owner over a slot, `CgModLoader`'s shape: nested `Host` + `NONE` + `HOST`, provided from each era's install (`PlatformService1710`, `PlatformServiceLegacy`, `PlatformServiceModern`'s `install`/`installClient`), the harness's `PlatformServiceHarness` and the tests' `TestPlatformService` where they need it. The GL bundle `CgPlatformService` takes nothing new |
 | "when the game does X" | a `LifecycleCrystalGUI` method (+ legacy/1.7.10 lifecycles), called from every loader's event |

@@ -111,9 +111,9 @@ window.getInputHandler().consumeKeyboardEvent(event);
 ```
 
 That is the whole contract. **`UIDocument` is not a Minecraft screen** — it deliberately implements no
-Minecraft interface, so you own the host. On 1.7.10 that is a `GuiScreen` whose `drawScreen` calls
-`paintFrame` and whose input handlers forward events;
-`runtime/mc/1710/.../CgUiScreen` is a working example to copy.
+Minecraft interface, so you own the host: a screen of the engine's (CrystalGraphics' `CgScreens`) to take the
+cursor and the keys, painted at `CgRenderStage.SCREEN` and fed from `CgInputStage.SCREEN`. The desktop's
+`desktop.host.HostSession` is a working example to copy.
 
 > **`init` is required.** Selectors do not match on a detached tree, so without it your UI has no
 > styling at all — everything lays out at its default size and nothing looks wrong enough to explain

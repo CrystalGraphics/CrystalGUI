@@ -1,13 +1,12 @@
 package com.crystalgui.mc.modern.probe;
 
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.mc.modern.platform.HostKeys;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import com.crystalgraphics.mc.modern.platform.ScreenInputModern;
 import com.crystalgraphics.mc.modern.platform.Windows;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.window.DesktopPresentation;
-import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.client.CgUiScreen;
 import com.crystalgui.probe.DesktopProbe;
 
 import net.minecraft.client.Minecraft;
@@ -55,7 +54,7 @@ public final class ClientProbe {
 
         @Override
         public void openDesktop() {
-            CgUiScreen.openEditor();
+            HostSession.session().openApplication();
         }
 
         @Override
@@ -155,7 +154,7 @@ public final class ClientProbe {
 
         @Override
         public DesktopPresentation presentation() {
-            return CgUiHud.presentation();
+            return HostSession.session().presentation();
         }
     };
 }

@@ -2,14 +2,12 @@ package com.crystalgui.desktop;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 
-import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.host.DesktopHost;
-import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -17,8 +15,6 @@ import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.widget.control.Button;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import org.junit.Before;
 import org.junit.Test;
 
@@ -587,12 +583,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
     // -- A pinned window outlives its surface ---------------------------------
 
     private DesktopHost hostOnTempStorage() throws Exception {
-        Path root = Files.createTempDirectory("cgui-host");
-        return DesktopHost.create(new HostServices() {
-            @Override public String desktopId() { return "test"; }
-            @Override public CgProtocolConnection<Object> connection() { return null; }
-            @Override public void reinjectKey(CgSystemInput.Keyboard.Event key) { }
-        });
+        return DesktopHost.create();
     }
 
     /**

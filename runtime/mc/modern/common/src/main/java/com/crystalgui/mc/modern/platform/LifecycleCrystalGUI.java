@@ -2,8 +2,8 @@ package com.crystalgui.mc.modern.platform;
 
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgui.mc.modern.client.CgUiHud;
-import com.crystalgui.mc.modern.client.CgUiScreen;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
+import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.mc.modern.probe.CgUiAutoTest;
 import com.crystalgui.mc.modern.probe.ClientProbe;
 import com.crystalgui.mc.modern.probe.ConnectionProbeModern;
@@ -29,7 +29,7 @@ public final class LifecycleCrystalGUI {
     public static void bootstrap() {
         // .probe too: every class in there is client-only.
         CgPlatform.provide(ServerSmoke.FOOTPRINT, new ServerSmoke.Footprint(LifecycleCrystalGUI.class,
-                Arrays.asList("com.crystalgui.mc.modern.client", "com.crystalgui.mc.modern.probe"),
+                Arrays.asList("com.crystalgui.mc.modern.probe"),
                 Collections.emptyList()));
     }
 
@@ -39,8 +39,7 @@ public final class LifecycleCrystalGUI {
      */
     public static void bootstrapClient() {
         // FIRST: the keys reach the session, and a key pressed before it exists would open nothing.
-        CgUiScreen.install();
-        CgUiHud.attachStages();
+        HostSession.install(CrystalEditor.KIND);
         CgEngineLifecycle.onClientTick(CgUiAutoTest::tick);
         CgEngineLifecycle.onClientTick(ClientProbe::tick);
 
