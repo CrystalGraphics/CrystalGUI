@@ -34,7 +34,8 @@ IDE node, `-PcgRealNodes`, `-PcgStubs=false`); a node added or re-pinned needs t
   compiles against the same Minecraft.
 - **Fabric excludes both CrystalGraphics groups from its runtime classpath** — the libraries' and the
   common node's (`com.crystalgraphics.mc.modern.common`) — because CrystalGraphics arrives there as a mod.
-- **One entry class per loader serves every node**: `ForgeBootstrap` (`runtime/mc/forge-bootstrap`),
-  `NeoForgeBootstrap`, `FabricBootstrap`. Each reads the jar's variant table and constructs the running
-  version's `VariantEntry` — `CrystalGUIForge`, `CrystalGUINeoForge`, `CrystalGUIFabric`. A node class
-  carries no `@Mod` and no `@EventBusSubscriber`: two variants bearing one would be two mods of one id.
+- **No node holds a class of CrystalGUI's**: everything starts from `core`'s lifecycle listeners
+  (`runtime/mc/CLAUDE.md`). What makes it a mod is one `@Mod` per Forge family, `CrystalGUIForge` and
+  `CrystalGUINeoForge`, both in `runtime/mc/forge-stubs`, which read the jar's variant table to refuse an unsupported
+  version and construct nothing; on Fabric, the descriptor alone. A node class carries no `@Mod`: two
+  would be two mods of one id.

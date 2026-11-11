@@ -2,45 +2,36 @@
 
 > Loads itself: Claude Code reads this file the first time an agent reads any file in this folder or below. Moved verbatim from [`AGENTS.md`](../../AGENTS.md), which keeps the rules every session needs.
 
-## Loader modules: wiring, never logic
+## A loader module declares a mod, and nothing else
 
-**This is the rule for everything under `runtime/mc/`.** A loader module says how *this* Minecraft
-spells something; it decides nothing. The seams it answers, all in `core/`:
+**This is the rule for everything under `runtime/mc/`.** CrystalGUI holds no code per loader or per Minecraft
+version, like the language mod (`docs/CGUI_LANGUAGE_STACK.md` § 1a). Everything starts from `core`'s CrystalGraphics
+lifecycle listeners, declared in `core/src/main/resources/META-INF/crystalgraphics/listeners`, and reads the game
+through CrystalGraphics' services. A loader only has to see a mod, so CrystalGraphics reads that file from its root:
 
-| Seam | A loader answers |
+| Loader | What makes CrystalGUI a mod |
 |---|---|
-| `desktop.host.HostSession` | *(nothing — it OWNS)* what opens, when it is raised, the frame clock, the first-run geometry, where every input event goes (`HostInputListener`, registered on CrystalGraphics' `SCREEN` input stage by `install`: all of it to the desktop on our own screen, to a pinned window over another screen when it lands on one), its keys (`DesktopKeys`, through CrystalGraphics' `CgKeyBindings`), its screen (CrystalGraphics' `CgScreens`, one class per era), and which arm paints on CrystalGraphics' `HUD` and `SCREEN` stages. The directories, window, language and connection are read from CrystalGraphics' `CgGameDirectory`, `CgHostWindow`, `CgI18n` and `CgNetwork`, and the game's threads from `CgGameThreads`. A loader calls `HostSession.install(kind)` and nothing else |
-| `desktop.app.ServerWindowHost` | *(an application, not a loader)* where a server's windows land |
-| `probe.ServerSmoke.Footprint` | *(data)* which packages are client-only, and a class in their container; the server, its workspace, its operators and the smoke itself are the engine's, over CrystalGraphics' `CgServers` and `CgPlayers` |
-| `ui.input.HostPointer` | *(nothing — it OWNS)* the scroll sign, and that a move carries no click time |
-| `desktop.host.HostInput` | *(nothing — it OWNS)* where its screen's input enters: a host calls `HostSession.session().input()`, never `document.input()`, so the document's `DocumentDriver` can post events to a document on its own thread |
+| Forge 1.7.10–26.3 | `runtime/mc/forge-stubs`'s `CrystalGUIForge`, carrying both FML 1.7.10's `@Mod` and later Forge's: `ForgeStart` picks the running version's variant, which refuses an unsupported one, and constructs nothing (on 1.7.10, `acceptedMinecraftVersions` checks) |
+| NeoForge | `runtime/mc/forge-stubs`'s `CrystalGUINeoForge`: `NeoForgeStart`, the same |
+| Fabric | the generated `fabric.mod.json`, with empty entrypoint lists |
 
-**A decision made in one loader is a decision the other loader got wrong.** Nothing can see it: each
-copy is internally consistent, so no test fails and no guard fires. Four such decisions had already
-drifted across two loaders by the time anyone compared them.
+What used to be per loader, and where it is now:
 
-> **Naming: bare, unless the simple name collides with the seam it adapts — then an era SUFFIX.** J9
-> deliberately dropped the `1201` suffixes, so `ClientProbe` is bare. An adapter whose core counterpart
-> shares its name cannot import it, and a fully-qualified name at a call site is the thing to avoid — so
-> `ConnectionProbeModern` adapts `ConnectionProbe`.
-> **Never a prefix** — not `Mc1710Host`, and
-> not `ModernHost`.
+| Job | Owner |
+|---|---|
+| The desktop: `HostSession.install(CrystalEditor.KIND)`, its keys, paint stages, input and screen | `CgUiLifecycle.onPreInit` (a `client` listener). `HostSession` owns the rest: what opens, the frame clock, input through CrystalGraphics' `SCREEN` stage (`HostInputListener`), its screen (`CgScreens`), and every host answer from `CgGameDirectory`, `CgHostWindow`, `CgI18n`, `CgNetwork` and `CgGameThreads` |
+| The protocols, the workspace, the server smoke | `CgUiCommonLifecycle` (a `common` listener) |
+| Service providers across mod files (ModLauncher 5 lists no resource of another mod) | `Providers`, over `CgModLoader.roots()` |
+| Which variant ran | `VariantBootstrap`'s log line, and CrystalGraphics' crash-report section |
+
+**Code a loader would need belongs to CrystalGraphics**: a service in its `platform`, answered by each era's host.
+A decision made in one loader is a decision the other loader got wrong, and nothing can see it: each copy is
+internally consistent, so no test fails and no guard fires.
 
 > **Packages: every loader tree owns a segment under `com.crystalgui.mc`, and none of them owns the
-> root.** `com.crystalgui.mc.v1710` (one per Minecraft version, so 1.12.2 becomes `.v1122` with no
-> collision), `com.crystalgui.mc.modern` (one per ERA, because three loaders share one `common`
-> module), and `com.crystalgui.mc.forge` / `.neoforge` / `.fabric` for the entry points.
+> root.** `com.crystalgui.mc.v1710`, `com.crystalgui.mc.modern`, and `com.crystalgui.mc.forge` / `.neoforge` /
+> `.fabric` for the mod classes. 1.7.10 sat at `com.crystalgui.mc` itself until 2026-09-16: any relocation rule
+> anchored at `com/crystalgui/mc/` then rewrote 1.7.10 too.
 >
-> 1.7.10 was at `com.crystalgui.mc` itself until 2026-09-16, which made that package **both its own
-> and every other loader's parent** — and its `@Mod` class and generated `Tags` sat in
-> `com.crystalgui`, the engine's root, split across two jars. Nothing failed: the hazard is that any
-> relocation rule anchored at `com/crystalgui/mc/` rewrites 1.7.10 too, which J9 hit from the other
-> side and fixed by moving `modern` down rather than moving 1.7.10.
->
-> **What a rename here does not reach**: `@SidedProxy`'s two class strings, `mixins.crystalgui.json`'s
-> `package`/`plugin`, `mixinsPackage`/`mixinPlugin`/`generateGradleTokenClass` in the module's
-> `gradle.properties` (all relative to `modGroup`, which stays `com.crystalgui` — it is the maven
-> group), `ServerSmoke.Footprint`, and **the entry-class strings in
-> `cg-descriptors.gradle.kts`**. That last one is the merged jar's variant table and only `prodSmoke`
-> would catch it in the wild — but `checkSingleJar`'s `requiredEntries` names the same classes, so it
-> fails first and on a laptop. Keep those two lists in step.
+> **What a rename here does not reach**: **the class strings in `cg-descriptors.gradle.kts`**, the merged jar's variant table. `checkSingleJar`'s `requiredEntries` names the same
+> classes, so it fails first and on a laptop. Keep those two lists in step.

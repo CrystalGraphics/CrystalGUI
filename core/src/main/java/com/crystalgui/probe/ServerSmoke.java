@@ -28,7 +28,6 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.net.CgNetwork;
 import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.CgService;
 import com.crystalgraphics.platform.service.CgServers;
 import com.crystalgraphics.asset.kind.CgGameplayKinds;
 import com.crystalgraphics.asset.load.CgVfxAssets;
@@ -186,30 +185,9 @@ public final class ServerSmoke {
         }
     }
 
-    /**
-     * Where a platform's client-only classes are: what only it knows about its own jar. Provided once at init;
-     * the engine's smoke asks the server through {@code CgServers} for the rest.
-     *
-     * <pre>{@code
-     * CgPlatform.provide(ServerSmoke.FOOTPRINT, new ServerSmoke.Footprint(MyLifecycle.class,
-     *         Arrays.asList("com.me.mc.client", "com.me.mc.probe"), Arrays.asList("com.me.mc.ClientProxy")));
-     * }</pre>
-     *
-     * @param anchor         a class in the same container as the client packages
-     * @param clientPackages packages whose every class is client-only
-     * @param alsoNeverLoaded client-only classes outside those packages; each must still exist
-     */
-    public record Footprint(Class<?> anchor, List<String> clientPackages, List<String> alsoNeverLoaded) {
-    }
-
-    /** The slot a platform fills; absent, the smoke audits no client package of its own. */
-    public static final CgService<Footprint> FOOTPRINT = CgService.of("crystalgui:smoke_footprint",
-            new Footprint(ServerSmoke.class, Collections.emptyList(), Collections.emptyList()));
-
-    /** The smoke over the engine's own answers: {@link CgServers} for the server, the platform's {@link #FOOTPRINT}. */
+    /** The smoke over the engine's own answers, {@link CgServers}'s: no host module holds a class of CrystalGUI's. */
     public static Host engineHost() {
         return new Host() {
-            private final Footprint footprint = CgPlatform.get(FOOTPRINT);
 
             @Override
             public String label() {
@@ -228,12 +206,7 @@ public final class ServerSmoke {
 
             @Override
             public List<String> clientPackages() {
-                return footprint.clientPackages();
-            }
-
-            @Override
-            public List<String> alsoNeverLoaded() {
-                return footprint.alsoNeverLoaded();
+                return Collections.emptyList();
             }
 
             /** Naming this from a common path is the commonest spelling of the bug. */
@@ -245,11 +218,6 @@ public final class ServerSmoke {
             @Override
             public void halt() {
                 CgServers.halt();
-            }
-
-            @Override
-            public Class<?> anchor() {
-                return footprint.anchor();
             }
         };
     }

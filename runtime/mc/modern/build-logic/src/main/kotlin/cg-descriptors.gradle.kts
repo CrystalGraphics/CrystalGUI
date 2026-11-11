@@ -17,10 +17,8 @@ import cgbuildlogic.registerDescriptorTasks
 // describing four loaders. Hand-writing four files that have to agree is how a version gets bumped in
 // three of them; these are printed from the declaration below instead.
 //
-// The per-loader descriptors under each module's src/main/resources are still what those modules
-// ship, and `checkDescriptorsAgree` is what stops them drifting from this. They are replaced by
-// generated ones when the fat jars retire (J5) -- until then two jars per loader exist and both have
-// to keep working.
+// No loader module ships a descriptor of its own: every one is generated, so nothing is checked against this
+// (`checkShipped = false`, as the language mod's).
 
 val cgDescriptor = ModDescriptor(
     id = "crystalgui",
@@ -40,33 +38,21 @@ val cgDescriptor = ModDescriptor(
     variants = listOfNotNull(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
-            commonEntry = "com.crystalgui.mc.v1710.CrystalGUI",
-            mixinConfigs = listOf("mixins.crystalgui.json"),
+            commonEntry = "com.crystalgui.mc.forge.CrystalGUIForge",
             packFormat = 1,
         ).takeIf { has1710(project) },
-    ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy",
-        common = "com.crystalgui.mc.legacy.CrystalGUILegacy",
-        client = "com.crystalgui.mc.legacy.CrystalGUILegacyClient",
-    )) + modernVariants(project, mapOf(
-        "forge" to LoaderEntries("com.crystalgui.mc.forge", common = "com.crystalgui.mc.forge.CrystalGUIForge"),
-        "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge",
-            common = "com.crystalgui.mc.neoforge.CrystalGUINeoForge"),
-        "fabric" to LoaderEntries("com.crystalgui.mc.fabric",
-            common = "com.crystalgui.mc.fabric.CrystalGUIFabricCommon",
-            client = "com.crystalgui.mc.fabric.CrystalGUIFabric",
-            // No Fabric API entry: its id was `fabric` through 1.17, `fabric-api` providing `fabric` after,
-            // and `fabric-api` alone from 26.1, so no one id holds on every version. FabricBootstrap asks.
-            fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0")),
+    ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy")) + modernVariants(project, mapOf(
+        // No entry class: everything starts from the jar's lifecycle listeners, as the language mod's does. Each
+        // loader only needs to see a mod: 1.7.10's @Mod, CrystalGUIForge, CrystalGUINeoForge, and on Fabric the
+        // descriptor alone.
+        "forge" to LoaderEntries("com.crystalgui.mc.forge"),
+        "neoforge" to LoaderEntries("com.crystalgui.mc.neoforge"),
+        // No Fabric API entry: CrystalGraphics requires it, under whichever id the version uses.
+        "fabric" to LoaderEntries("com.crystalgui.mc.fabric", fabricDepends = linkedMapOf("fabricloader" to ">=0.15.0")),
     )),
-    // WHAT THE LOADER CONSTRUCTS, where that is not the variant itself. Fabric's descriptor names
-    // entry points and Fabric constructs EVERY one it names, so with more than one variant it would
-    // construct them all -- including the one compiled against a Minecraft that is not running. The
-    // bootstrapper reads variants.json and picks. Forge, NeoForge and FML need no entry here: they
-    // find their entry by scanning for @Mod, so moving the annotation is the whole of the change.
-    bootstrappers = mapOf("fabric" to "com.crystalgui.mc.fabric.FabricBootstrap"),
 )
 
-registerDescriptorTasks(cgDescriptor, "cgui")
+registerDescriptorTasks(cgDescriptor, "cgui", checkShipped = false)
 
 // ── And what the LANGUAGE mod says about itself (J8) ─────────────────────────────────────────────
 //
@@ -93,7 +79,7 @@ val cgLangDescriptor = ModDescriptor(
     variants = listOfNotNull(
         Variant(
             loader = "fml1710", minecraft = "[1.7.10]", era = "1710",
-            commonEntry = "com.crystalgui.mc.v1710.lang.CrystalGuiLanguage",
+            commonEntry = "com.crystalgui.mc.forge.lang.CrystalGUILangForge",
             packFormat = 1,
         ).takeIf { has1710(project) },
     ) + legacyVariants(project, LegacyEntries("com.crystalgui.mc.legacy")) + modernVariants(project, mapOf(

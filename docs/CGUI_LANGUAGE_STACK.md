@@ -39,10 +39,9 @@ jar carries both. Only the `@Mod` classes are source files; the descriptors are 
 
 | Loader | Descriptor (generated) | `@Mod` class (source) |
 |---|---|---|
-| 1.7.10 | `mcmod.info` | `runtime/mc/1710/src/lang/.../CrystalGuiLanguage.java` |
-| Forge 1.8.9–1.12.2 | `mcmod.info` | `runtime/mc/forge-bootstrap/src/lang/.../LanguageForgeBootstrap.java` |
-| Forge 1.13.2–26.3 | `META-INF/mods.toml` | the same `LanguageForgeBootstrap` |
-| NeoForge | `META-INF/neoforge.mods.toml` | `runtime/mc/modern/neoforge/src/lang/.../LanguageNeoForgeBootstrap.java` |
+| 1.7.10, Forge 1.8.9–1.12.2 | `mcmod.info` | `runtime/mc/forge-stubs/src/lang/.../CrystalGUILangForge.java`, carrying both eras' `@Mod` |
+| Forge 1.13.2–26.3 | `META-INF/mods.toml` | the same `CrystalGUILangForge` |
+| NeoForge | `META-INF/neoforge.mods.toml` | `runtime/mc/forge-stubs/src/lang/.../CrystalGUILangNeoForge.java` |
 | Fabric | `fabric.mod.json`, entrypoint lists empty | none: Fabric lists a mod from its descriptor alone |
 
 **There is no `mods.toml` or `fabric.mod.json` in the source tree.** They are generated, for this jar and the host
@@ -244,8 +243,7 @@ the same file went from sixteen errors to zero.
 
 **When this layer misbehaves, reach for that flag first.** "Live" and "file-based" agree nearly
 everywhere, so the one question worth asking early is which of the two is answering. It is forwarded by
-the modern dev runs; `ClientProbe` prints the analysed file's diagnostics as text, so the answer does
-not have to be read off a screenshot.
+the modern dev runs.
 
 ---
 

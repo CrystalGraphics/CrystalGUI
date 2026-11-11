@@ -4007,11 +4007,6 @@ com/crystalgui/core/provider/Providers
   access public,final
   extends java/lang/Object
   method public,static forEach (Ljava/lang/Class;Ljava/lang/ClassLoader;Ljava/util/function/Consumer;Ljava/util/function/Consumer;)V
-com/crystalgui/core/provider/Providers$Copies
-  access public,abstract,interface
-  extends java/lang/Object
-  field public,static,final SERVICE Lcom/crystalgraphics/platform/CgService;
-  method public,abstract of (Ljava/lang/String;)Ljava/util/List;
 com/crystalgui/core/search/SearchMatch
   access public,final,record
   extends java/lang/Record
@@ -4779,6 +4774,7 @@ com/crystalgui/desktop/host/DesktopHost
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT_THEME Ljava/lang/String;
+  field public,static,final UI_SCALE F
   implements com/crystalgui/core/dispose/Disposable
   method public cacheRoot ()Ljava/nio/file/Path;
   method public config ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
@@ -4792,7 +4788,7 @@ com/crystalgui/desktop/host/DesktopHost
   method public shown ()V
   method public windowMount ()Lcom/crystalgui/desktop/host/DesktopWindowMount;
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
-  method public,static create (Lcom/crystalgui/desktop/host/HostServices;)Lcom/crystalgui/desktop/host/DesktopHost;
+  method public,static create ()Lcom/crystalgui/desktop/host/DesktopHost;
 com/crystalgui/desktop/host/DesktopKeys
   access public,final
   extends java/lang/Object
@@ -4822,56 +4818,40 @@ com/crystalgui/desktop/host/HostInput
   method public consumeKeyboardEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
   method public consumeMouseEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;)Z
   method public pollUnhandledKey ()Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;
-com/crystalgui/desktop/host/HostServices
-  access public,abstract,interface
-  extends java/lang/Object
-  field public,static,final DEFAULT_UI_SCALE F
-  method public connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
-  method public desktopId ()Ljava/lang/String;
-  method public showDesktop ()V
-  method public,abstract reinjectKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)V
 com/crystalgui/desktop/host/HostSession
   access public,final
   extends java/lang/Object
   field public,static,final COMPOSITOR I
   field public,static,final ROOT_CLASS Ljava/lang/String;
   method public application ()Lcom/crystalgui/desktop/app/Application;
+  method public closeDesktop ()V
   method public desktop ()Lcom/crystalgui/desktop/Desktop;
   method public dispose ()V
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public frame (F)V
   method public hasPainted ()Z
-  method public hidden ()V
   method public inDocument (Ljava/lang/Runnable;)V
   method public input ()Lcom/crystalgui/desktop/host/HostInput;
   method public isBuilt ()Z
+  method public isOpen ()Z
   method public offerKey (ICZ)Z
   method public offerLeftKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
-  method public offerMouse (Lcom/crystalgui/desktop/host/HostSession$PaintHost;ZIIIZF)Z
+  method public offerMouse (ZIIIZF)Z
   method public onHotKey (Ljava/util/function/Predicate;)Ljava/lang/Runnable;
   method public onKeyLeft (Ljava/util/function/Predicate;)Ljava/lang/Runnable;
+  method public openApplication ()V
+  method public openBehindLoadingScreen ()V
+  method public openDesktop ()V
   method public postToDocument (Ljava/lang/Runnable;)V
   method public preload ()V
-  method public presentation (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)Lcom/crystalgui/core/window/DesktopPresentation;
+  method public presentation ()Lcom/crystalgui/core/window/DesktopPresentation;
   method public rehearseStep ()Z
   method public replaceNextPaint (Ljava/util/function/BiConsumer;)V
-  method public requestApplication ()V
-  method public requestHide (Ljava/lang/Runnable;)Z
-  method public services ()Lcom/crystalgui/desktop/host/HostServices;
-  method public shown ()V
   method public textInputArea ()[F
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
-  method public,static attachStages (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)V
-  method public,static install (Lcom/crystalgui/desktop/host/HostServices;Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/host/HostSession;
+  method public,static install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/host/HostSession;
   method public,static isInstalled ()Z
-  method public,static mayOpen ()Z
   method public,static session ()Lcom/crystalgui/desktop/host/HostSession;
-com/crystalgui/desktop/host/HostSession$PaintHost
-  access public,abstract,interface
-  extends java/lang/Object
-  method public beforePaint ()V
-  method public,abstract anyScreenUp ()Z
-  method public,abstract ownScreenUp ()Z
 com/crystalgui/desktop/host/ScreenOverlay
   access public,final
   extends java/lang/Object
@@ -8086,22 +8066,11 @@ com/crystalgui/probe/ServerSmoke
   extends java/lang/Object
   field public,static,final CLASSDIR_PROPERTY Ljava/lang/String;
   field public,static,final CLASSLOG_PROPERTY Ljava/lang/String;
-  field public,static,final FOOTPRINT Lcom/crystalgraphics/platform/CgService;
   field public,static,final PROPERTY Ljava/lang/String;
   field public,static,final REPORT_PROPERTY Ljava/lang/String;
   method public,static enabled ()Z
   method public,static engineHost ()Lcom/crystalgui/probe/ServerSmoke$Host;
   method public,static run (Lcom/crystalgui/probe/ServerSmoke$Host;)V
-com/crystalgui/probe/ServerSmoke$Footprint
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/lang/Class;Ljava/util/List;Ljava/util/List;)V
-  method public alsoNeverLoaded ()Ljava/util/List;
-  method public anchor ()Ljava/lang/Class;
-  method public clientPackages ()Ljava/util/List;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
 com/crystalgui/probe/ServerSmoke$Host
   access public,abstract,interface
   extends java/lang/Object

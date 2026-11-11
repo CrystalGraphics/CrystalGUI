@@ -25,8 +25,9 @@ examples) and `docs/CGUI_BUILD.md` (build, nodes, smoke tests).
    network → CrystalGraphics' `CgNetworkChannel` impls (`CrystalGraphicsForge.Network`,
    `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`,
    `NetworkChannel1710`) and their lifecycles (`NetworkModern`, `NetworkLegacy`, `Network1710`); game events →
-   `LifecycleCrystalGUI` + each loader's `Events`; permissions → `WorkspaceHostModern.McRoles`, legacy
-   `Game`; client input/HUD → `mc.modern.client`. `grep -n "//? if" <that file>` shows its breaks.
+   `core`'s declared `CgLifecycleListener`s (`CgUiCommonLifecycle`) and `CgEngineLifecycle`'s ticks; permissions →
+   CrystalGraphics' `CgPlayers.isOperator`; client input/HUD → CrystalGraphics' `CgInputStage`, `CgRenderStage`,
+   `CgScreens`. `grep -n "//? if" <that file>` shows its breaks.
 2. **Every node's API, in seconds**:
    ```bash
    python CrystalGraphics/singlejar-logic/mcapi.py <Class> [memberRegex]    # spellings + version runs
@@ -76,19 +77,21 @@ version add an enum constant, or make an attribute positional? One `javap` now s
 | core constructs the consumer | an interface passed in (`WorkspaceRoles`, `ServerSmoke.Host`) |
 | optional, read from many places | `CgService.of("crystalgui:x", X.NONE)`; `CgPlatform.provide` / `get` |
 | every host answers it | a static owner over a slot, `CgModLoader`'s shape: nested `Host` + `NONE` + `HOST`, provided from each era's install (`PlatformService1710`, `PlatformServiceLegacy`, `PlatformServiceModern`'s `install`/`installClient`), the harness's `PlatformServiceHarness` and the tests' `TestPlatformService` where they need it. The GL bundle `CgPlatformService` takes nothing new |
-| "when the game does X" | a `LifecycleCrystalGUI` method (+ legacy/1.7.10 lifecycles), called from every loader's event |
+| "when the game does X" | a `CgLifecycleListener` moment on `core`'s declared listeners; a moment CrystalGraphics does not fire yet is added there, fired by every era's host. CrystalGUI's runtimes hold no code |
 
 Reuse before adding: `CgNetworkChannel` for traffic, `net.window` (`Networked`) for server-driven UI.
 
 ## 6. Implement every era, in one pass, from the table
 
-| Era | Where |
+CrystalGUI's runtimes hold no source: only `runtime/mc/forge-stubs`'s `@Mod` classes. A per-era implementation is
+CrystalGraphics':
+
+| Era | Where (CrystalGraphics) |
 |---|---|
-| Modern shared (Forge+NeoForge+Fabric 1.13.2-26.2) | `runtime/mc/modern/common/src/main/java/com/crystalgui/mc/modern/` |
-| Modern registration | `runtime/mc/modern/{forge,neoforge,fabric}/src/...` entry classes — one-line forwards |
-| Legacy Forge 1.8.9/1.10.2/1.12.2 | `runtime/mc/legacy/forge/src/...`; renamed members via `Game` / `client.ClientGame` |
+| Modern shared (Forge+NeoForge+Fabric 1.13.2-26.3) | `runtime/mc/modern/common/src/main/java/com/crystalgraphics/mc/modern/` |
+| Modern per loader | `runtime/mc/modern/{forge,neoforge,fabric}/src/...` — one-line forwards |
+| Legacy Forge 1.8.9/1.10.2/1.12.2 | `runtime/mc/legacy/forge/src/...` |
 | 1.7.10 | `runtime/mc/1710/src/...` |
-| Language-mod half | the same trees' `src/lang` |
 
 - Directives only in `<branch>/src`. Sources are at the active node's spelling (1.20.1); other branches
   sit in `/* */` — edit them as carefully. **Never commit a switched active node.**

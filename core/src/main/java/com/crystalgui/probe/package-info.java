@@ -24,8 +24,9 @@
  *
  * <h2>Why they are here and not in a test source set</h2>
  *
- * <p>Because a loader module can only name what is on its compile classpath, and the thing that drives
- * these is a loader's own entry point — {@code ClientProxy}, {@code LifecycleCrystalGUI}. A dev-only
+ * <p>Because a loader module can only name what is on its compile classpath, and the thing that drove
+ * these was a loader's own entry point. The loaders hold no CrystalGUI class any more, so only {@link ServerSmoke}
+ * runs today (from {@code CgUiCommonLifecycle}); the client probes wait for a host to drive them. A dev-only
  * source set would mean a shipping class naming a class that is absent in production, which is a
  * {@code NoClassDefFoundError} at exactly the moment nobody is watching.</p>
  *

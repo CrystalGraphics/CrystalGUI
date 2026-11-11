@@ -13,6 +13,7 @@ import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
+import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.desktop.host.DesktopKeys;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.render.CgUiPaintContext;
@@ -108,11 +109,14 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     }
 
     /**
-     * CrystalGUI's start on a worker ({@link CgUiStart}), behind the rest of mod loading, and every UI shader named to the
-     * precache so the loading screen builds them; and its keys, before any loader registers keys. A client only.
+     * The client's desktop ({@link HostSession}, opening on {@link CrystalEditor}) and its keys, before any loader
+     * registers keys; then CrystalGUI's start on a worker ({@link CgUiStart}), behind the rest of mod loading, and every
+     * UI shader named to the precache so the loading screen builds them. A client only.
      */
     @Override
     public void onPreInit() {
+        // Before the keys: a key pressed before the session exists would open nothing.
+        HostSession.install(CrystalEditor.KIND);
         DesktopKeys.declare();
         startOnce();
     }

@@ -1,7 +1,6 @@
 package com.crystalgui.core.provider;
 
-import com.crystalgraphics.platform.CgPlatform;
-import com.crystalgraphics.platform.CgService;
+import com.crystalgraphics.platform.service.CgModLoader;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -9,7 +8,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
@@ -19,8 +17,9 @@ import java.util.Set;
 import java.util.function.Consumer;
 
 /**
- * Every provider of a service on this host: what {@link ServiceLoader} finds, plus what a loader's
- * {@link Copies} names where the classloader cannot list a resource across mod files.
+ * Every provider of a service on this host: what {@link ServiceLoader} finds, plus what each mod's root lists
+ * ({@link CgModLoader#roots()}), where the classloader cannot list a resource across mod files (ModLauncher 5,
+ * Forge 1.15 and 1.16).
  *
  * <pre>{@code
  * Providers.forEach(WorkbenchExtension.class, WorkbenchExtensions.class.getClassLoader(),
@@ -38,25 +37,6 @@ import java.util.function.Consumer;
 public final class Providers {
 
     private Providers() {}
-
-    /**
-     * Every copy of a resource across the host's mod files, for a host whose classloader answers
-     * {@code getResource} but not {@code getResources} -- ModLauncher 5 (Forge 29-31).
-     *
-     * <pre>{@code
-     * CgPlatform.provide(Providers.Copies.SERVICE, path -> pathsInEveryModFileHolding(path));
-     * }</pre>
-     *
-     * <p>Paths rather than URLs: Java 8's zip filesystem escapes a space twice when it makes one.</p>
-     */
-    public interface Copies {
-
-        /** @return the copy of {@code path} in each mod file holding one; empty when there is none */
-        List<Path> of(String path);
-
-        /** Absent on every host whose classloader lists resources itself. */
-        CgService<Copies> SERVICE = CgService.of("crystalgui:resource-copies", path -> Collections.emptyList());
-    }
 
     /**
      * Instantiates every provider of {@code service} and hands each to {@code each}.
@@ -81,7 +61,11 @@ public final class Providers {
             seen.add(provider.getClass().getName());
             each.accept(provider);
         }
-        for (Path file : CgPlatform.get(Copies.SERVICE).of("META-INF/services/" + service.getName())) {
+        String config = "META-INF/services/" + service.getName();
+        for (Path root : CgModLoader.roots()) {
+            // Paths rather than URLs: Java 8's zip filesystem escapes a space twice when it makes one.
+            Path file = root.resolve(config);
+            if (!Files.isRegularFile(file)) continue;
             for (String name : providerNames(file, broken)) {
                 if (!seen.add(name)) continue;
                 T provider;

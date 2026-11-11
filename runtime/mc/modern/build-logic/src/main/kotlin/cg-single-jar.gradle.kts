@@ -90,7 +90,7 @@ registerSingleJarPipeline(SingleJarSpec(
     // NO `:language` SINCE J8 -- it and everything under it ship as `crystalgui_language`, the second
     // pipeline registered below. That is 36 MB of the 68 this jar used to be, downloaded by everyone
     // and used by whoever writes a script.
-    libraryProjects = listOf(":core", ":taffy", ":runtime:mc:shared", ":runtime:mc:forge-bootstrap"),
+    libraryProjects = listOf(":core", ":taffy", ":runtime:mc:shared", ":runtime:mc:forge-stubs"),
 
     // One owner today, and the union is still the mechanism: the language jar ships its own
     // META-INF/services, and a second jar's providers never merge into this one's file.
@@ -166,21 +166,16 @@ registerSingleJarPipeline(SingleJarSpec(
         // strip gave `mc1710` and `mc/modern` six pairs sharing a name -- CgUiScreen among them -- and
         // this asked for 3 copies of CgUiScreen.class and found 4. `ClientProbe` has no twin of its simple
         // name in another tree, so it counts the relocation and nothing else.
-        relocatedClasses.set(mapOf(
-            "com/crystalgui/mc/modern/platform/LifecycleCrystalGUI.class" to modernCopies,
-            "com/crystalgui/mc/modern/probe/ClientProbe.class" to modernCopies,
-        ))
+        // No class of the host is per node any more: it starts from core's lifecycle listeners.
+        relocatedClasses.set(emptyMap())
         requiredEntries.set(listOf(
             "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
-            "mixins.crystalgui.json",
-            "com/crystalgui/mc/v1710/mixins/CrystalGuiMixins.class",
             // J11.0. The table decides which entry runs, and the three bootstrappers are what the
             // loaders actually construct -- the entries carry no annotation any more, so a jar missing
             // one of these loads nothing at all on that loader and says nothing about why.
             "META-INF/crystalgui/variants.json",
-            "com/crystalgui/mc/fabric/FabricBootstrap.class",
-            "com/crystalgui/mc/forge/ForgeBootstrap.class",
-            "com/crystalgui/mc/neoforge/NeoForgeBootstrap.class",
+            "com/crystalgui/mc/forge/CrystalGUIForge.class",
+            "com/crystalgui/mc/neoforge/CrystalGUINeoForge.class",
             // G7: the notice for what THIS jar carries, in the jar.
             "META-INF/NOTICE.md", "META-INF/COPYING", "META-INF/COPYING.LESSER",
             // Where every download comes from, beside core's DownloadLocations, which reads it.
@@ -255,7 +250,7 @@ registerSingleJarPipeline(SingleJarSpec(
 
     extraContent = {
         // The language mod's @Mod for every Forge: the bootstrap module's `lang` half.
-        val langBootstrap = project(":runtime:mc:forge-bootstrap").tasks.named<Jar>("langJar")
+        val langBootstrap = project(":runtime:mc:forge-stubs").tasks.named<Jar>("langJar")
         dependsOn(langBootstrap)
         from(langBootstrap.map { project.zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
 
@@ -311,8 +306,8 @@ registerSingleJarPipeline(SingleJarSpec(
             "META-INF/mods.toml", "META-INF/neoforge.mods.toml", "fabric.mod.json", "mcmod.info", "pack.mcmeta",
             // J11.0: the table, and the two mod classes Forge and NeoForge construct. Fabric constructs none.
             "META-INF/crystalgui_language/variants.json",
-            "com/crystalgui/mc/forge/lang/LanguageForgeBootstrap.class",
-            "com/crystalgui/mc/neoforge/lang/LanguageNeoForgeBootstrap.class",
+            "com/crystalgui/mc/forge/lang/CrystalGUILangForge.class",
+            "com/crystalgui/mc/neoforge/lang/CrystalGUILangNeoForge.class",
             // What starts the stack on every loader.
             "META-INF/crystalgraphics/listeners",
             // G7: the notice for what THIS jar carries, in the jar.

@@ -7,18 +7,18 @@ containers, events, a new platform service — so that it builds and runs on all
 
 ## The rule
 
-**`core` decides; a loader answers facts and does wiring.** Anything two loaders would both decide goes
-in `core` (or CrystalGraphics `core`), is headless-testable, and names no Minecraft type. A loader module
-only says how *its* Minecraft spells a fact or a registration. A decision made in one loader is one the
-others got wrong, and nothing detects it (`runtime/mc/CLAUDE.md`).
+**`core` decides; CrystalGraphics answers the game.** CrystalGUI holds no code per loader or version: it starts from
+its CrystalGraphics lifecycle listeners (`CgUiLifecycle`, `CgUiCommonLifecycle`) and reads every fact of the game
+through CrystalGraphics' services, whose hosts say how each Minecraft spells it. A fact CrystalGraphics does not answer
+yet is a service added there, in every era at once. A decision made in one loader is one the others got wrong, and
+nothing detects it (`runtime/mc/CLAUDE.md`).
 
 ```
-core (contract + logic, Java 25 → 8)      ←  the only place behaviour lives
-  └─ seam: an interface, Minecraft-free
-       ├─ runtime/mc/modern/common   one class, Forge + NeoForge + Fabric, 1.13.2–26.3, //? directives
-       │    └─ forge / neoforge / fabric branches: registration only, forward into common
-       ├─ runtime/mc/legacy/forge    Forge 1.8.9 · 1.10.2 · 1.12.2, directives in Game
-       └─ runtime/mc/1710            Forge 1.7.10, no directives
+CrystalGUI core (contract + logic, Java 25 → 8)    ←  the only place behaviour lives
+  └─ CrystalGraphics: CgLifecycleListener, CgEngineLifecycle's ticks, platform services (CgService slots)
+       ├─ runtime/mc/modern/common + forge / neoforge / fabric   1.13.2–26.3, //? directives
+       ├─ runtime/mc/legacy/forge                                Forge 1.8.9 · 1.10.2 · 1.12.2
+       └─ runtime/mc/1710                                        Forge 1.7.10
 ```
 
 ---
@@ -31,16 +31,16 @@ you need to, with its version boundaries worked out. Copy its shape before readi
 | You need | Copy |
 |---|---|
 | traffic between client and server | CrystalGraphics' `CgNetworkChannel` — `CrystalGraphicsForge.Network`, `CrystalGraphicsNeoForge.Network`, `CrystalGraphicsFabricCommon.Network`, `NetworkChannelLegacy`, `NetworkChannel1710` — and `CgNetwork`, the connections their lifecycles drive |
-| a game event (start, stop, tick, join, leave) | `LifecycleCrystalGUI` and each loader's `Events` forwarding into it; `CrystalGUILegacy`; 1.7.10 `CommonProxy` |
+| a game event (start, stop, tick, join, leave) | a `CgLifecycleListener` declared in `core`'s `META-INF/crystalgraphics/listeners` (`onServerStarting`, `onServerStopping`), `CgEngineLifecycle.onServerTick`/`onClientTick`, `CgNetwork.onPeerClosed`: `CgUiCommonLifecycle` |
 | a permission or "who is this player" | CrystalGraphics' `CgPlayers.isOperator` (`PlayersModern`, `PlayersLegacy`, `Players1710`) |
 | client input, a key binding | CrystalGraphics' `CgInputStage.SCREEN` (`docs/INPUT.md`) and `CgKeyBindings`, which every era's host fires and registers |
 | HUD, a screen | CrystalGraphics' `CgRenderStage.HUD`/`SCREEN` and `CgScreens` (`Screens<Era>`); CrystalGUI's desktop is `core`'s `HostSession` |
-| a member renamed across versions | legacy `Game`; the controller's `replacements.string` |
+| a member renamed across versions | CrystalGraphics' hosts (`CgMinecraftClient`); the controller's `replacements.string` |
 | a hook with no loader event | CrystalGraphics' node mixins (Forge 1.21.3+ render hooks) |
 
 ```bash
 grep -rn "RegisterCommandsEvent\|ServerStartingEvent" runtime/mc CrystalGraphics/runtime/mc --include=*.java
-grep -n "//? if" runtime/mc/modern/forge/src/main/java/com/crystalgui/mc/forge/CrystalGUIForge.java   # its breaks
+grep -n "//? if" CrystalGraphics/runtime/mc/modern/forge/src/main/java/com/crystalgraphics/mc/modern/forge/CrystalGraphicsForge.java   # its breaks
 ```
 
 **2. The API on every node, in seconds: `mcapi.py`.** It reads `stubs.zip` — every node's Minecraft and
@@ -158,25 +158,25 @@ Costs to plan around: `checkAllTargets` a minute or two (stubbed); `serverSmoke`
 | Kind | Use when | How | Examples |
 |---|---|---|---|
 | **Interface handed to a core object** | core constructs the thing that needs the answer | loader implements it, passes it in | `fs.server.WorkspaceRoles`, `ServerSmoke.Host` |
-| **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST`, `Providers.Copies.SERVICE` |
+| **`CgService` slot** (open) | optional, or read from many places; has a sensible do-nothing value | declare `CgService.of("crystalgui:x", X.NONE)` beside the contract; loader `CgPlatform.provide(SLOT, impl)`; readers `CgPlatform.get(SLOT)` | `CgNetworkChannel.SERVICE`, `CgGameClasses.HOST` |
 | **A static owner over a slot** (CrystalGraphics' shape) | a capability every host answers | a final class with a nested `Host`, its `NONE` and a `HOST` slot, read only through the owner's statics; each era provides it from its install (`platform/CLAUDE.md` § *The wiring standard*) | `CgModLoader`, `CgHostResources`, `CgInput`, `CgClipboard` |
-| **A hook into `LifecycleCrystalGUI`** (modern) / the legacy and 1.7.10 lifecycles | "when X happens in the game, run Y" | add a static method to the lifecycle; every loader's event forwards into it | `serverStarting`, `playerJoined`, `onServerTick` |
+| **A lifecycle moment** | "when X happens in the game, run Y" | a `CgLifecycleListener` method, or `CgEngineLifecycle.onServerTick`/`onClientTick`, on `core`'s declared listeners; a moment CrystalGraphics does not fire yet is added there, fired by every era's host | `CgUiCommonLifecycle.onServerStarting`, `CgUiLifecycle.onPreInit` |
 
 Never a second static registry beside `CgPlatform`, never `ServiceLoader` from host code (ModLauncher 5
 lists nothing inside a mod file — use `core.provider.Providers`).
 
 ## 3. Implement it per era
 
-| Era | Where | Entry points it hangs off |
-|---|---|---|
-| Modern, shared | `runtime/mc/modern/common/src/main/java/com/crystalgui/mc/modern/…` | `platform/LifecycleCrystalGUI` — the one class loaders talk to |
-| Modern, per loader | `runtime/mc/modern/{forge,neoforge,fabric}/src/main/java/com/crystalgui/mc/<loader>/` | `CrystalGUIForge`, `CrystalGUINeoForge`, `CrystalGUIFabricCommon` (+ client entries): events and channels, each body one forward |
-| Legacy Forge | `runtime/mc/legacy/forge/src/main/java/com/crystalgui/mc/legacy/` | `CrystalGUILegacy`, `CrystalGUILegacyClient`; renamed members through `Game`; the client's level and player through `CgWorldQueries` and `CgPlayers` |
-| 1.7.10 | `runtime/mc/1710/src/main/java/com/crystalgui/mc/v1710/` | `CrystalGUI` (`@Mod`), `CommonProxy`, `ClientProxy` |
-| Language mod | the same trees' `src/lang` | its own entry classes; never named from `main` |
+**In CrystalGraphics, never in CrystalGUI's runtimes**, which hold only what makes each jar a mod (`runtime/mc/CLAUDE.md`):
 
-CrystalGraphics has the same shape (`runtime/mc/modern/common/…/PlatformServiceModern`, `…/legacy/…`,
-`…/1710/…`). **CrystalGraphics first** if the contract is its.
+| Era | Where (CrystalGraphics) | Entry points it hangs off |
+|---|---|---|
+| Modern, shared | `runtime/mc/modern/common/…/mc/modern/platform/` | `PlatformServiceModern`, `LifecycleModern` |
+| Modern, per loader | `runtime/mc/modern/{forge,neoforge,fabric}/…` | each loader's events and channel, each body one forward |
+| Legacy Forge | `runtime/mc/legacy/forge/…` | `PlatformServiceLegacy` |
+| 1.7.10 | `runtime/mc/1710/…` | `PlatformService1710` |
+
+CrystalGUI's side is `core`: the contract's caller, from a declared listener.
 
 Worked examples to copy — each is the complete pattern:
 
@@ -206,7 +206,7 @@ return server.getPlayerList().isOp(player.getGameProfile());
   active node; if you must, switch back before committing.
 - **A rename used everywhere** is a `replacements.string` in the controller, not a thousand directives —
   and its target must never appear in the sources.
-- **Several renamed members** — put them behind one accessor per side (legacy `Game`)
+- **Several renamed members** — put them behind one accessor per side (CrystalGraphics' `CgMinecraftClient`)
   so the rest of the host reads the same on every version.
 - **Which spelling holds where**: the break table (§ *Plan it*), from `mcapi.py`.
 
@@ -229,7 +229,7 @@ return server.getPlayerList().isOp(player.getGameProfile());
 | **Commands** | the command tree as data + handlers taking a Minecraft-free source (id, name, reply) | Brigadier from 1.13, registered on Forge/NeoForge's command-registration event (Forge 1.13–1.15 used the server-starting event) and Fabric's command API (v1, then v2 from 1.19); `ICommand`/`CommandBase` in `FMLServerStartingEvent` on legacy and 1.7.10 |
 | **Entities** | behaviour as data and rules, keyed by id | registration (Forge/NeoForge deferred registers, Fabric registries; registries moved in 1.19.3 and builders changed again later); spawning; renderers in the client package; sync through our wire rather than data trackers where possible |
 | **Containers / menus** | the UI and its state — prefer `net.window` (`Networked`, `ServerWindow`), which needs no menu type at all | only for real slot inventories: menu/container type registration and opening, which differ per loader and changed payload encoding in 1.20.5 |
-| **Ticks, lifecycle, joins** | what happens | which event fires it — add a `LifecycleCrystalGUI` method and forward from each loader |
+| **Ticks, lifecycle, joins** | what happens | which event fires it — CrystalGraphics' `CgEngineLifecycle` and `CgNetwork`, fired by each era's host |
 | **Rendering, input, GL** | CrystalGraphics | loader events, or node mixins where no event exists (Forge 1.21.3+) — CrystalGraphics' `AGENTS.md` |
 
 ## 7. Prove it — a probe that is right the first time

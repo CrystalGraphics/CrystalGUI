@@ -70,8 +70,8 @@ public final class MachineDemo {
          * one -- the UI here, plus the workspace file protocol and a script runtime on a real
          * server -- which is why a session takes a connection rather than a transport.
          */
-        // ONE CALL, and it is what puts a host on every connection opened afterwards. In game this
-        // sits beside CgUiWorkspaceHost.register() in CommonProxy.init().
+        // ONE CALL, and it is what puts a host on every connection opened afterwards. In game it is
+        // CgUiCommonLifecycle.onInit's.
         WindowProtocol.register();
 
         CgInMemoryTransport<Object>[] link = CgInMemoryTransport.pair();

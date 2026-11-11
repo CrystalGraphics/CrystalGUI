@@ -39,7 +39,7 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 | `runtime/mc/1710/` | Forge 1.7.10 host (RetroFuturaGradle). A module of its own on purpose |
 | `runtime/mc/modern/` | Stonecutter tree — `common`, `forge`, `neoforge`, `fabric` branches; a node per version, each depending on CrystalGraphics' node of the same version |
 | `runtime/mc/legacy/` | Forge 1.8.9 / 1.10.2 / 1.12.2 tree |
-| `runtime/mc/shared/`, `forge-bootstrap/` | Java 8 pieces merged once: mixin plugin, the Forge `@Mod` classes |
+| `runtime/mc/shared/`, `forge-stubs/` | Java 8 pieces merged once: mixin plugin, the Forge and NeoForge `@Mod` classes |
 | `runtime/mc/modern/build-logic/` | convention plugins (`cg-java`, `cg-modern-loader`, `cg-modern-common`, `cg-legacy-loader`, `cg-single-jar`, `cg-descriptors`) and `cgbuildlogic/` (`ProdSmoke`, `uniminedDevRun`, `DevRunDowngrade`, `ShadowUtils`) |
 | `gradle/module_integration/` | how CrystalGraphics is wired in: `composite.settings` (substitutions), `integration` (compile deps), `crystalgraphics-run` (ModDevGradle dev runs) |
 | `download/locations.json` | every runtime download address — see `download/CLAUDE.md` |
@@ -47,7 +47,7 @@ prismInstanceJoml = 1710, 1165forge          # every label below Minecraft 1.19.
 
 **Two source sets per loader module**: `main` → the host jar, `lang` → the language jar. `:language` is
 on `langCompileOnly` only, so a host class naming it is a compile error. Where the host needs the other
-jar, it publishes a seam it cannot name (`CgUiAutoTest.onFrame`).
+jar, it publishes a seam it cannot name (`AutoTest.onFrame`).
 
 **Both jars' mod descriptors are generated, never checked in.** `mods.toml`, `neoforge.mods.toml`,
 `fabric.mod.json` and `mcmod.info` come from `cgDescriptor` and `cgLangDescriptor` in

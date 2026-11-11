@@ -22,7 +22,7 @@ import java.io.File
  * ```
  *
  * Unimined's own run names this project's source roots and nothing else, so it lacks both `@Mod` classes
- * (`runtime/mc/forge-bootstrap`) and CrystalGraphics as a mod. This groups each mod's roots in
+ * (`runtime/mc/forge-stubs`) and CrystalGraphics as a mod. This groups each mod's roots in
  * `MOD_CLASSES`, as `crystalgraphics-run.gradle.kts` does for ModDevGradle -- the common nodes included,
  * since a class that names Minecraft must be FML's to define -- and swaps every class root of
  * ours newer than Java 8 -- the nodes compile to 17 -- for its Java 8 copy. @see DevRunDowngrade
@@ -37,7 +37,7 @@ fun Project.uniminedDevRun() {
     val graphicsLoaderPath = sameVersionNodePath(modernLoader)
     val graphicsLoaderDir = sameVersionNodeDir(graphics.projectDir, modernLoader)
     val graphicsCommonDir = sameVersionNodeDir(graphics.projectDir, "common")
-    val bootstrap = project(":runtime:mc:forge-bootstrap")
+    val bootstrap = project(":runtime:mc:forge-stubs")
     val common = commonNode
     val withLanguage = !providers.gradleProperty("cgNoLanguage").isPresent
     val sourceSets = extensions.getByType<SourceSetContainer>()

@@ -700,6 +700,18 @@ if (!providers.gradleProperty("cgNoLanguage").isPresent) {
     }
 }
 
+// THE @Mod CLASSES, which are runtime/mc/forge-stubs's (CrystalGUIForge, CrystalGUILangForge): inside the dev jar for the same
+// reason, since FML finds a mod there by scanning for its annotation. Java 8, so FML's ASM reads them.
+evaluationDependsOn(":runtime:mc:forge-stubs")
+tasks.shadowJar {
+    val modJars = listOf("jar") + if (providers.gradleProperty("cgNoLanguage").isPresent) emptyList() else listOf("langJar")
+    for (name in modJars) {
+        val modJar = project(":runtime:mc:forge-stubs").tasks.named<Jar>(name)
+        dependsOn(modJar)
+        from(modJar.map { zipTree(it.archiveFile) }) { exclude("META-INF/MANIFEST.MF") }
+    }
+}
+
 /** The language host's own classes, the input to its thin jar. */
 val langJar = tasks.register<Jar>("langJar") {
     group = "language jar"

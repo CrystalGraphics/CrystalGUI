@@ -142,7 +142,7 @@ resolved to local source. Each row in full: [`docs/CGUI_ARCHITECTURE.md`](docs/C
 | `gl-debug-harness/`, `harness-scenes/` | The harness (CrystalGraphics and CrystalGUI as libraries) and CrystalGUI's scenes for it |
 | `CrystalGraphics/` | The rendering backend. Consumed, never reimplemented |
 | `runtime/mc/1710/`, `legacy/`, `modern/` | The hosts: Forge 1.7.10; Forge 1.8–1.12.2; Forge 1.13.2+, NeoForge 1.20.2+ and Fabric 1.14.4+ |
-| `runtime/mc/shared/`, `forge-bootstrap/` | What several hosts share, merged once |
+| `runtime/mc/shared/`, `forge-stubs/` | What several hosts share, merged once: `forge-stubs/` is every Forge and NeoForge `@Mod` class |
 
 ## Four test source sets, and they are not interchangeable
 

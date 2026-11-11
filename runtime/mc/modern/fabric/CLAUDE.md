@@ -11,22 +11,13 @@ draws no overlay over another mod's screen there. Fabric API for 26.1 renamed
 
 **Fabric API is required and is not in `fabric.mod.json`**: its id was `fabric` through 1.17, `fabric-api`
 providing `fabric` through 1.21.11, and `fabric-api` alone from 26.1, so no one id holds on every version.
-`FabricBootstrap` checks for either and refuses to start without one.
+CrystalGraphics' `FabricBootstrap` checks for either and refuses to start without one.
 
-## The loader is registration only
+## No class of CrystalGUI's
 
-**Two entry points, and both are needed**: `main` runs on both sides, `client` only on a client.
-`fabric.mod.json` names one class for both, `FabricBootstrap`, which hands off by the running version —
-Fabric constructs every entry point its descriptor names, so naming the variants there would construct
-one compiled against a Minecraft that is not running.
-
-`CrystalGUIFabricCommon` is the `main` one and carries the `Network` transport and the `Events`
-inner class, because a dedicated server needs the channel. `CrystalGUIFabric` is the `client` one
-and does nothing but call `Events.registerClient()` — the half that touches client-only Fabric APIs a
-server must never load.
-
-The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
+The generated `fabric.mod.json` lists the mod with empty entrypoint lists, as the language mod's does: Fabric lists
+a mod from its descriptor alone, and CrystalGraphics reads its lifecycle listeners from there
+(`runtime/mc/CLAUDE.md`). A node's `main` holds nothing.
 
 ## Input is CrystalGraphics'
 

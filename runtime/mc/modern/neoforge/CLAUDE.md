@@ -7,15 +7,12 @@
 (also 1.21.9), 1.21.11, 26.1.2 (also 26.1, 26.1.1), 26.2 and 26.3 (a beta, its only builds). NeoForge published nothing for 1.20.1;
 1.21.2, 1.21.6, 1.21.7, 1.21.9, 26.1 and 26.1.1 run its only builds, betas.
 
-## The loader is registration only
+## No class of CrystalGUI's
 
-`NeoForgeBootstrap` is the one `@Mod` class for every node, and constructs the running version's
-`CrystalGUINeoForge` (a `VariantEntry`). Its `Events` inner class registers every listener on
-`NeoForge.EVENT_BUS` by hand, and its `Network` inner class is the payload-based transport.
-`LanguageNeoForgeBootstrap` (`src/lang`) is the language mod's own `@Mod`.
-
-The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
+The one `@Mod` class for every NeoForge is `CrystalGUINeoForge` (`runtime/mc/forge-stubs`), compiled once: `NeoForgeStart`
+picks the running version's variant, which refuses an unsupported one, and constructs nothing. CrystalGraphics reads
+the mod's lifecycle listeners from its root (`runtime/mc/CLAUDE.md`). `CrystalGUILangNeoForge`, beside it, is the
+language mod's own `@Mod`.
 
 ## Toolchain, sources and checks
 

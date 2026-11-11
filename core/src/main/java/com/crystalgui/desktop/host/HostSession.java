@@ -43,7 +43,7 @@ import java.util.function.Predicate;
  * takes input at its {@code SCREEN} input stage, and puts its desktop up as the engine's screen ({@code CgScreens}):</p>
  *
  * <pre>{@code
- * HostSession.install(CrystalEditor.KIND);                 // a Minecraft client
+ * HostSession.install(CrystalEditor.KIND);                 // what CgUiLifecycle does on every Minecraft client
  * HostSession.install(null);                               // a host opening every application by its own keys
  *
  * HostSession.session().openDesktop();                     // a key: the desktop, nothing on it touched
@@ -189,7 +189,7 @@ public final class HostSession {
      *                    desktop; null for a host that opens every application itself, by its own keys,
      *                    whose empty desktop stays empty
      */
-    public static HostSession install(@Nullable ApplicationKind primaryKind) {
+    public static synchronized HostSession install(@Nullable ApplicationKind primaryKind) {
         if (current != null) return current;
         current = new HostSession(primaryKind);
         HostStages.attach();

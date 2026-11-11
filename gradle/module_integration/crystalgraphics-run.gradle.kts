@@ -153,7 +153,7 @@ val treeSitterJars: List<File> = rootProject.file("lib/tree-sitter").listFiles()
 val modClassesValue = (
     modClasses("crystalgui", listOf(devResourcesDir))
         + modClasses("crystalgui", mainSourceSet(project))
-        + modClasses("crystalgui", mainSourceSet(project(":runtime:mc:forge-bootstrap")).output.classesDirs.files)
+        + modClasses("crystalgui", mainSourceSet(project(":runtime:mc:forge-stubs")).output.classesDirs.files)
         + devRunClasses.flatMap { modClasses("crystalgui", it.files) }
         + modClasses("crystalgui", treeSitterJars)
         // The language mod's own entry classes and descriptors, which in `crystalgui` would have no
@@ -183,7 +183,7 @@ tasks.matching {
     dependsOn(crystalGraphics.task("$graphicsCommonPath:classes"))
     dependsOn(crystalGraphics.task("$graphicsLoaderPath:classes"))
     dependsOn(crystalGraphics.task(":runtime:mc:forge-bootstrap:classes"))
-    dependsOn(":runtime:mc:forge-bootstrap:classes")
+    dependsOn(":runtime:mc:forge-stubs:classes")
 
     // And the jars the runtime classpath is made of. These arrive as substituted coordinates, which
     // ModDevGradle resolves with nothing ordering them before the launch -- so a jar could still be

@@ -15,21 +15,12 @@ Forge published nothing for 1.17, 1.20.5 or 1.21.2. Forge 64 (26.1) moved its mo
 so the client tick watches `getConnection()` come and go instead; those nodes compile against Mojang names
 carried back from 1.14.4 (`CrystalGraphics/runtime/mc/modern/mappings/`).
 
-**Three API eras below 1.19**, each a directive in `CrystalGUIForge`: Forge 37 (1.17.1) names screen
-events `GuiScreenEvent.*Event` and keeps servers and networking in `fmlserverevents`/`fmllegacy`;
-Forge 38-40 (1.18.x) name them `ScreenEvent.*Event`; both register keys through `ClientRegistry` in
-client setup. The HUD and screen hooks are CrystalGraphics' (`CgRenderStage.HUD`, `SCREEN`). From 1.21.6 Forge
-is EventBus 7: every subscription in `CrystalGUIForge` has a `>=1.21.6` twin.
+## No class of CrystalGUI's
 
-## The loader is registration only
-
-`CrystalGUIForge` is a `VariantEntry`, constructed by the one `@Mod` class for every Forge
-(`ForgeBootstrap`, `runtime/mc/forge-bootstrap`). Its `Events` inner class registers every listener by
-hand — the mod bus for key mappings, the Forge bus for both sides, input and paint on the client — and
-its `Network` inner class is the `SimpleChannel` transport.
-
-The engine's own render, reload and shutdown hooks are **not** here: CrystalGraphics ships as its own
-mod and owns them. Everything this loader forwards to lives in the common branch's `LifecycleCrystalGUI`.
+The one `@Mod` class for every Forge is `CrystalGUIForge` (`runtime/mc/forge-stubs`): it picks the running
+version's variant, which refuses an unsupported one, and constructs nothing. CrystalGraphics reads the mod's
+lifecycle listeners from its root (`runtime/mc/CLAUDE.md`). A node's `main` holds nothing: the shipped jar's
+`pack.mcmeta` is generated with its descriptors (`cg-descriptors.gradle.kts`).
 
 ## Toolchain, sources and checks
 

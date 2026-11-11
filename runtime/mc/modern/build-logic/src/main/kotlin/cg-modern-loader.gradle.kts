@@ -187,20 +187,16 @@ cgbuildlogic.configureShadowJarBundling(project)
 // the loader's own classes to `<node>` itself. `mc.modern.probe.ClientProbe` ships as
 // `mc.fabric.v1204.common.probe.ClientProbe`, `mc.fabric.CrystalGUIFabric` as `mc.fabric.v1204.CrystalGUIFabric`.
 //
-// EXCEPT THE BOOTSTRAPPERS: each is the one class its loader constructs whatever version is running --
-// named by the descriptor, or found by its @Mod -- so every node ships it at one name and the merge
-// keeps a single copy. They name no Minecraft class, which is what makes one copy right for all nodes.
-// The variant table names the relocated entries (cgbuildlogic.ModernVariants).
+// The @Mod classes are no node's: `runtime/mc/forge-stubs` holds one per loader, compiled once and merged once,
+// never relocated. The variant table names the relocated entries (cgbuildlogic.ModernVariants).
 val cgCommonRoot = "com.crystalgui.mc.modern"
 val loaderPackage = "com.crystalgui.mc.$modernLoader"
 val nodeRoot = nodePackage(loaderPackage, project.name)
 val cgThinRoot = "$nodeRoot.common"
-val loaderTitle = mapOf("forge" to "Forge", "neoforge" to "NeoForge", "fabric" to "Fabric").getValue(modernLoader)
 
 /** CrystalGraphics' common package, and where its thin jar for this loader and version ships it. */
 val graphicsCommonRoot = "com.crystalgraphics.mc.modern.platform"
 val graphicsNodeCommon = nodePackage("com.crystalgraphics.mc.modern.$modernLoader", project.name) + ".common.platform"
-val bootstrappers = listOf("$loaderPackage.${loaderTitle}Bootstrap", "$loaderPackage.lang.Language${loaderTitle}Bootstrap")
 
 /** The descriptors every merged jar is printed from, and the variant each node's dev run reads. */
 @Suppress("UNCHECKED_CAST")
@@ -222,7 +218,7 @@ val thinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shadow.ta
     dependsOn(commonJar)
     from(commonJar.map { zipTree(it.archiveFile) })
     relocate(cgCommonRoot, cgThinRoot)
-    relocate(loaderPackage, nodeRoot) { bootstrappers.forEach { exclude(it) } }
+    relocate(loaderPackage, nodeRoot)
     // REFERENCES into CrystalGraphics' common node, which ships relocated in ITS thin jar by the same
     // rule -- so a class here naming `ResourceIds` must name it where that jar puts it. Nothing of
     // CrystalGraphics' is bundled; only the names in our bytecode move.
@@ -248,11 +244,12 @@ registerNodeVariants(modDescriptors.getValue("main"))
 // A node that pins `variant.mixinPlugin` ships its config beside its classes, at the shipped package.
 registerNodeMixins(modDescriptors.getValue("main"), "thinShadowJar")
 // NeoForge the same way: its merged mods.toml AND neoforge.mods.toml, the only file NeoForge 20.5+ reads.
-// Forge takes the merged mods.toml too, whose hull covers every Forge node.
+// Forge takes the merged mods.toml too, whose hull covers every Forge node. Both take the merged pack.mcmeta:
+// Minecraft drops a mod's resource pack that has none ("Missing metadata in pack mod:crystalgui").
 val mergedDevDescriptors = mapOf(
     "fabric" to listOf("fabric.mod.json"),
-    "forge" to listOf("META-INF/mods.toml"),
-    "neoforge" to listOf("META-INF/mods.toml", "META-INF/neoforge.mods.toml"),
+    "forge" to listOf("META-INF/mods.toml", "pack.mcmeta"),
+    "neoforge" to listOf("META-INF/mods.toml", "META-INF/neoforge.mods.toml", "pack.mcmeta"),
 )[modernLoader]
 if (mergedDevDescriptors != null) {
     tasks.named<ProcessResources>("processResources") {
@@ -277,7 +274,7 @@ val langThinShadowJar = tasks.register<com.github.jengelman.gradle.plugins.shado
     dependsOn(commonLangJar)
     from(commonLangJar.map { zipTree(it.archiveFile) })
     relocate("$cgCommonRoot.lang", "$cgThinRoot.lang")
-    relocate(loaderPackage, nodeRoot) { bootstrappers.forEach { exclude(it) } }
+    relocate(loaderPackage, nodeRoot)
 }
 
 // Nothing in the common node may be NAMED from a descriptor or a service file: the relocation above
@@ -392,12 +389,12 @@ extra["cgDevRunClasses"] = cgDevRunClasses
 // crystalgui_language's roots, a mod of its own as in the shipped jar -- uniminedDevRun's list. Empty
 // with -PcgNoLanguage. `:language` itself stays in cgBundledProjects: no package of it is split.
 // Resources first: FML reads a mod's mods.toml from the first root named for it.
-evaluationDependsOn(":runtime:mc:forge-bootstrap")
+evaluationDependsOn(":runtime:mc:forge-stubs")
 val cgLangDevRunRoots: FileCollection = if (providers.gradleProperty("cgNoLanguage").isPresent) files() else files(
     lang.output.resourcesDir,
     lang.output,
     common.extensions.getByType<SourceSetContainer>()["lang"].output,
-    project(":runtime:mc:forge-bootstrap").extensions.getByType<SourceSetContainer>()["lang"].output.classesDirs,
+    project(":runtime:mc:forge-stubs").extensions.getByType<SourceSetContainer>()["lang"].output.classesDirs,
 )
 extra["cgLangDevRunRoots"] = cgLangDevRunRoots
 
