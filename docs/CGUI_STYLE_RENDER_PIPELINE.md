@@ -239,11 +239,11 @@ UIDocument.paintFrame()
     animation().tick(deltaSeconds)               // smooth scrolls + every registered UIFrameTicker
     calculateLayout()                          // Taffy computeLayout(), while dirty
   document.paintContext()                          // the document's own CgUiPaintContext
-  paintContext.beginFrame(actualScreenW, actualScreenH)  // GL save, ortho, bind canvas box, reset scissor
+  paintContext.recordFrame(actualScreenW, actualScreenH)  // the frame target, its ortho, the scissor reset
     pose.pushPose(); pose.mulPoseMatrix(rootTransform)   // rootTransform = the ONE definition of uiScale
       ui.rootElement.the paint walk(paintContext) // paintContent → children (z-sorted) → paintDecoration → paintOutline
     pose.popPose()
-  paintContext.endFrame()                      // GL state restore
+  paintContext.seal()                          // built: a UiFrame its presenter shows at a GUI stage
   inputHandler.beginFrame()/endFrame()         // hover cache invalidation + hit-test + event dispatch
 ```
 

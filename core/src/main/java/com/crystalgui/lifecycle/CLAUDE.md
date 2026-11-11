@@ -14,10 +14,10 @@ so cannot be enumerated in `CgGraphicsLifecycle`'s own teardown. The seam is
 | Moment | What CrystalGUI does |
 |---|---|
 | `onPreInit` | `CgUiStart.ahead()`: style properties, widget kinds, the user-agent sheet, the built-in themes, the desktop record's codecs and the frame profiler's settings on a worker, the load task `crystalgui:start` — half a second to two the first UI paid on the render thread. The harness also starts it through `HarnessExtension.start()` and holds a scene's `init` behind it |
-| `onContextInit` | The disposal GL gate, and makes `CgUiPaintContext.warm()` |
-| `onLoad` | The warm-up as the load task `crystalgui:paint`, held until `CgUiStart.done()`: a render part stepped in the frame tick's host section (which `onContextInit` from a late registrant is not: 26.x's GUI extraction is outside one), its compiles spread over frames within `CgWarmBudget`, then the sheets' font families at every size they use (their glyphs generate behind the first frames); tracked and named on the loading screen. Then `crystalgui:desktop`: `HostSession.preload()` builds the desktop and runs its first cascade and layout, so the first open is a resume |
-| `onFrame` | Drains queued GL disposals, then the `atFrameEnd` paints. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), not global |
-| `onContextDestroy` | `UiGpu.destroy()`, and nothing else |
+| `onContextInit` | The disposal GL gate |
+| `onLoad` | Three load tasks, tracked and named on the loading screen. `crystalgui:paint` (`UiPaintWarmup`), held until `CgUiStart.done()`: the default font, then the shipped icons and the sheets' font families at every size they use, each on a worker (their glyphs generate behind the first frames). `crystalgui:desktop`: `HostSession.preload()` builds the desktop and runs its first cascade and layout, so the first open is a resume. `crystalgui:desktop-warm`, after the engine's programs: `HostSession.rehearseStep()` rehearses the desktop on CrystalGraphics' `SCREEN` stage (`CgRehearsal`, `DesktopRehearsal`) until the JIT settles, a few passes a frame within `CgWarmBudget`. The UI's pipelines are the precache's (`CgUiPaintContext.precache`) |
+| `onFrame` | Drains queued GL disposals. Per-frame UI work is per-`UIDocument` (`frame`, and the `Animation` hooks it ticks), painted at CrystalGraphics' GUI stages, never here |
+| `onContextDestroy` | `CgUiPaintContext.releaseAll()`, and nothing else |
 
 > **`onContextInit` reaches late registrants.** A process the discovery missed registers at its first paint, after
 > the context started; `addListener` delivers every moment it missed, so each fires **exactly once per context,

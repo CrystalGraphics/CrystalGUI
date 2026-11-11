@@ -36,7 +36,7 @@ import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.render.UiFrame;
-import com.crystalgui.render.UiGpu;
+import com.crystalgui.render.UiPresenter;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.box.Box;
@@ -430,12 +430,12 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (NODES_SHOT) driveNodesShot(ctx, frame.getFrameNumber(), w, h);
         if (PRESENT_AGAIN && frame.getFrameNumber() > 60 && frame.getFrameNumber() % 2 == 1) {
             long n = frame.getFrameNumber();
-            ui.replaceNextFrame(() -> {
+            ui.replaceNextFrame((stage, presenter) -> {
                 driver.run(() -> {
                     float scale = document.boxes().uiScale();
                     document.frame(delta, w / scale, h / scale);
                 });
-                UiGpu.presentAgain(w, h);
+                presenter.presentAgain(stage);
                 if (n == 101) ctx.getArtifactService().requestCapture("present-again");
             });
         }
@@ -586,7 +586,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /**
      * {@code -Dcrystalgui.harness.desktop.presentAgain=true}: from frame 61 every odd frame paints nothing and shows the
-     * last frame again ({@link UiGpu#presentAgain}). {@code present-again} (frame 101) must match {@code presented}.
+     * last frame again ({@link UiPresenter#presentAgain}). {@code present-again} (frame 101) must match {@code presented}.
      */
     private static final boolean PRESENT_AGAIN = Boolean.getBoolean("crystalgui.harness.desktop.presentAgain");
 
@@ -600,7 +600,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /**
      * At frame 91, moves a window and scrolls a box by writing the presented frame's values and executing it again
-     * ({@link UiGpu#redraw}), with nothing recorded or built: {@code nodes-redraw}. At frame 92, makes the same changes
+     * ({@link UiPresenter#redraw}), with nothing recorded or built: {@code nodes-redraw}. At frame 92, makes the same changes
      * in the document and photographs the frame it records: {@code nodes-recorded}. The two must match but for the
      * band the scroll revealed, which the first recording never held. Prints {@code [nodes-probe]} lines. Inline only:
      * run with {@code -Dcrystalgui.ui.async=false}.
@@ -650,7 +650,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
         if (frameNumber == 90) ctx.getArtifactService().requestCapture("nodes-before");
         if (frameNumber == 91) {
-            UiFrame shown = UiGpu.presented();
+            UiFrame shown = driver.presenter().presented();
             if (shown == null || driver.isAsync()) {
                 System.out.println("[nodes-probe] SKIPPED: needs a presented frame, inline (-Dcrystalgui.ui.async=false)");
                 return;
@@ -669,13 +669,13 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 System.out.println("[nodes-probe] SKIPPED: window " + nodesWindow + ", scroller " + nodesScroller);
                 return;
             }
-            ui.replaceNextFrame(() -> {
+            ui.replaceNextFrame((stage, presenter) -> {
                 int moved = nodesWindow.box().movedNode(id), scrolled = nodesScroller.scrolledNode(id);
                 float scale = document.boxes().uiScale();
                 shown.values().translate(moved, NODES_MOVE_X * scale, NODES_MOVE_Y * scale);
                 shown.values().translate(scrolled, 0f, -NODES_SCROLL * scale);
                 // NOT KEEPING requested textures: the scroll may be inside the window's surface, whose pass must run again.
-                UiGpu.redraw(w, h, false);
+                presenter.redraw(stage, false);
                 ctx.getArtifactService().requestCapture("nodes-redraw");
                 System.out.println("[nodes-probe] frame " + id + " redrawn: window node " + moved + " ('" + nodesWindow.getTitle()
                         + "' at " + nodesWindow.left() + "," + nodesWindow.top() + "), scroll node " + scrolled + " ("
@@ -686,7 +686,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             return;
         }
         if (frameNumber == 92 && nodesWindow != null && nodesScroller != null) {
-            long before = UiGpu.presented() == null ? -1 : UiGpu.presented().frameId();
+            UiFrame presented = driver.presenter().presented();
+            long before = presented == null ? -1 : presented.frameId();
             driver.run(() -> {
                 nodesWindow.moveTo(nodesWindow.left() + NODES_MOVE_X, nodesWindow.top() + NODES_MOVE_Y);
                 nodesScroller.setScroll(nodesScroller.scrollLeft(), nodesScroller.scrollTop() + NODES_SCROLL);

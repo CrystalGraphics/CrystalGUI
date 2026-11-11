@@ -26,11 +26,6 @@ public class ExtractTest {
     private static DocumentDriver.Painter<Void> framesOnly(UIDocument document) {
         return new DocumentDriver.Painter<>() {
             @Override
-            public void paint(float deltaSeconds, int width, int height) {
-                document.frame(deltaSeconds, width, height);
-            }
-
-            @Override
             public UiFrame record(float deltaSeconds, int width, int height) {
                 document.frame(deltaSeconds, width, height);
                 return null;
@@ -105,7 +100,7 @@ public class ExtractTest {
                     },
                     value -> usedOnSequence.add(sequence.isCurrent())));
 
-            driver.frame(0.016f, 100, 100, framesOnly(document));
+            driver.frame(null, 0.016f, 100, 100, framesOnly(document));
 
             assertEquals(List.of(false), readOnSequence);
             assertEquals(List.of(true), usedOnSequence);

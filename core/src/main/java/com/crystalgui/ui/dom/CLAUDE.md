@@ -54,8 +54,9 @@ tree observer, and document-level `DataProvider`s.
 **`DocumentDriver` is how a host runs one** — recording on a sequence while the render thread presents (the
 default), on a sequence in lockstep (`-Dcrystalgui.ui.sequence=true`), or inline on the host's thread
 (`-Dcrystalgui.ui.async=false`). Threading is the engine's: a host attaches the driver to an empty
-document, builds the tree through `driver.run`, and sends its frame (`driver.frame(delta, w, h, painter)`),
-its input and anything else that touches the tree through it, running the same code in every mode.
+document, builds the tree through `driver.run`, and frames it from a renderer at a GUI stage (`driver.frame(stage, painter)`,
+which takes the stage's size and target and `CgFrameClock`'s time, and shows the frame through `driver.presenter()`),
+and sends its input and anything else that touches the tree through it, running the same code in every mode.
 `HostSession` (the game's desktop) and the harness scenes are its hosts, all async by default. Four scenes pin `Mode.INLINE` because they measure or
 photograph exact frames: `cgui-text-stress`, `cgui-timeline`, `cgui-text-gamma`, `cgui-visual-layers`. A
 capture or script counts `driver.presentedFrames()`, not frame numbers: async presents nothing until the

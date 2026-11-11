@@ -2,7 +2,8 @@ package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.UiSequence;
-import com.crystalgui.render.UiGpu;
+import com.crystalgraphics.render.stage.CgStageFrame;
+import com.crystalgui.render.UiPresenter;
 
 import javax.annotation.Nullable;
 import java.util.ArrayDeque;
@@ -14,14 +15,14 @@ import java.util.function.Supplier;
  * asks for the next with at most one in flight (plan engine-threaded-ui §2.4).
  *
  * <pre>{@code
- * // the render thread, once a host frame, inside the host's draw bracket
- * UiCommit shown = compositor.present(width, height);
+ * // the render thread, once a host frame, in a renderer's turn at a GUI stage
+ * UiCommit shown = compositor.present(stage, presenter, commit -> false);
  * compositor.requestFrame(() -> recordOnTheSequence());   // runs on the sequence; its commit shows next frame
  * }</pre>
  *
  * <ul>
  *   <li>A frame committed is presented exactly once; a host frame with nothing new re-presents the last
- *       ({@link UiGpu#presentAgain}), so a busy document shows its previous picture rather than nothing.</li>
+ *       ({@link UiPresenter#presentAgain}), so a busy document shows its previous picture rather than nothing.</li>
  *   <li>{@link #requestFrame} refuses while a frame is in flight or one waits to be presented.</li>
  *   <li>A recording longer than a host frame chains the next at once, on the sequence, rather than waiting a host
  *       frame to be asked: a document at 9 ms a frame then shows 110 frames a second where it showed 60. At most two
@@ -50,20 +51,14 @@ final class SurfaceCompositor<F> {
     }
 
     /**
-     * Draws the newest commit onto the bound host target, or the last one again when nothing new arrived, and answers
-     * the commit shown. Render thread. Null until the first commit.
+     * Shows the newest commit at {@code stage} through {@code presenter}, or the last one again when nothing new
+     * arrived, and answers the commit shown; null until the first. {@code move} writes a commit's property values first:
+     * given the commit about to be drawn, it answers whether it changed them. A fresh commit is presented with them; an
+     * older one is executed again ({@link UiPresenter#redraw}) when they changed, and composited again as it was
+     * otherwise. With no stage nothing is drawn. Render thread.
      */
     @Nullable
-    UiCommit<F> present(int width, int height) {
-        return present(width, height, commit -> false);
-    }
-
-    /**
-     * {@link #present(int, int)}, letting {@code move} write a commit's property values first: given the commit about to
-     * be drawn, it answers whether it changed them. A fresh commit is presented with them; an older one is executed again
-     * ({@link UiGpu#redraw}) when they changed, and shown again as it was otherwise.
-     */
-    UiCommit<F> present(int width, int height, Predicate<UiCommit<F>> move) {
+    UiCommit<F> present(@Nullable CgStageFrame stage, UiPresenter presenter, Predicate<UiCommit<F>> move) {
         long now = System.nanoTime();
         long gap = now - lastPresentNanos;
         if (lastPresentNanos != 0L && gap > 0L && gap < 100_000_000L) hostFrameNanos = (hostFrameNanos * 7L + gap) / 8L;
@@ -76,12 +71,12 @@ final class SurfaceCompositor<F> {
             active = fresh;
             if (fresh.frame() != null) {
                 move.test(fresh);
-                UiGpu.present(fresh.frame());
+                if (stage != null) presenter.present(stage, fresh.frame());
             }
         } else if (active != null && active.frame() != null) {
             // What moves is a window's node or a drag's: what the layers under it drew holds still, so not again.
-            if (move.test(active)) UiGpu.redraw(width, height, true);
-            else UiGpu.presentAgain(width, height);
+            boolean moved = move.test(active);
+            if (stage != null && !(moved && presenter.redraw(stage, true))) presenter.presentAgain(stage);
         }
         return active;
     }

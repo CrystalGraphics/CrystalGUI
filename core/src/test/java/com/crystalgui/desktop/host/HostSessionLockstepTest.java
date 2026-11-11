@@ -34,8 +34,6 @@ public class HostSessionLockstepTest {
     private static final HostSession.PaintHost NO_SCREEN = new HostSession.PaintHost() {
         @Override public boolean ownScreenUp() { return true; }
         @Override public boolean anyScreenUp() { return true; }
-        @Override public void enter() { }
-        @Override public void leave() { }
     };
 
     /**

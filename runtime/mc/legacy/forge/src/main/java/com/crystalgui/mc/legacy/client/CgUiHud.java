@@ -1,6 +1,5 @@
 package com.crystalgui.mc.legacy.client;
 
-import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 
@@ -9,11 +8,8 @@ import net.minecraftforge.fml.relauncher.Side;
 import net.minecraftforge.fml.relauncher.SideOnly;
 
 /**
- * Pinned windows wherever the desktop is not. They paint on
- * CrystalGraphics' HUD and screen stages ({@link HostSession#attachStages}), with this class's bracket.
- *
- * <p>GL: Minecraft has just drawn through {@code GlStateManager} without telling CrystalGraphics' shadow,
- * so the bracket drops the shadow on both sides. A stale shadow is a missing GL call, not an error.</p>
+ * Whether a screen is up and whose: what the desktop's paints on CrystalGraphics' HUD and screen stages
+ * ({@link HostSession#attachStages}) ask this Minecraft. Each stage's firing is a host section of its own.
  */
 @SideOnly(Side.CLIENT)
 public final class CgUiHud {
@@ -36,15 +32,6 @@ public final class CgUiHud {
             return Minecraft.getMinecraft().currentScreen != null;
         }
 
-        @Override
-        public void enter() {
-            CgHostPaint.enter();
-        }
-
-        @Override
-        public void leave() {
-            CgHostPaint.leave();
-        }
     };
 
     /** Idempotent. */

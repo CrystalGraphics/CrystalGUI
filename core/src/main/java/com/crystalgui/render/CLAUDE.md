@@ -7,34 +7,37 @@
 **The V3.1 draw-list design is gone.** `CgUiDrawList`, `CgUiDrawListExecutor`, `CgUiDrawState`,
 `CgUiBatchSlots`, and `CgScissorRect` do not exist. Do not reference them.
 
-### `CgUiPaintContext` — one per document, and `UiGpu`
+### `CgUiPaintContext` and `UiPresenter` — one each per document
 
 `document.paintContext()` gives a document its own. **It records** (`render-graph` G4): every draw of a frame is a
-chunk in one `CgRecording`; `seal()` builds it into a `UiFrame` that refers back to nothing, and `UiGpu` — the render
-thread's half, one per process — executes it and composites it onto the host's target. A layer is a pass on a texture
+chunk in one `CgRecording`; `seal()` builds it into a `UiFrame` that refers back to nothing. **A `UiPresenter` shows it
+at a CrystalGraphics GUI stage** (`SCREEN` or `HUD`), from a renderer's turn: the frame executes at its place in the
+firing (`CgStageFrame.include`, at depth 0, timed as `gpu:ui`), and its picture is composited with the stage's canvas
+under the stage's camera. The stage gives the size, the target, the host section and the clock; nothing paints a UI
+outside a firing. A layer is a pass on a texture
 the executor lends for the frame; the target around it ends its pass at the layer and continues in another after, so
 passes run in the order they were made and a read follows the write it sees. `flush()` lands what is drawn into the
 recording and executes nothing; order never needs it. **CrystalGUI holds no GL state and makes no GL call** (`rhi` H3): a texture paint keeps across
 frames is `requestLayer`'s — made when the frame executes, freed by `releaseTexture` — its pixels written by
 `ctx.update`, and the scene behind the UI is `CgGraphTexture.current()`, copied (`recordCopy`). The executor takes
-and gives back the host's state round every execution, inside the host's section (`CgHostPaint`, a stage's firing).
-Drawing outside a frame throws.
+and gives back the host's state round every execution, inside the stage's host section. Drawing outside a frame throws.
 
 ```java
 CgUiPaintContext ctx = document.paintContext();   // first call on the render thread
-ctx.beginFrame(w, h);                             // inline: recording starts
-document.paint(ctx);
-ctx.endFrame();                                   // sealed, executed, composited
-
-ctx.recordFrame(w, h);                            // split: no GL from here...
+ctx.recordFrame(w, h);                            // no GPU from here: any thread the document is framed on...
 document.paint(ctx);
 UiFrame frame = ctx.seal();                       // ...to here
-UiGpu.present(frame);                             // render thread
+
+CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage ->
+        presenter.present(stage, frame));         // render thread: included in the firing, composited
 ```
+
+A host never writes that by hand: `DocumentDriver.frame(stage, painter)` records (on the document's sequence, or at
+the firing inline) and shows through its `presenter()`, and `HostSession` paints the desktop on both GUI stages.
 
 | Group | Methods |
 |---|---|
-| Frame | `beginFrame(w,h)` / `endFrame()` inline, or `recordFrame(w,h)` / `seal()` and `UiGpu.present(frame)` split, with `UiGpu.presentAgain(w,h)` showing the last frame again when no new one was sealed — the whole tree records into the context's frame target, composited onto the host's once |
+| Frame | `recordFrame(w,h)` / `seal()`, and `abortFrame()` for a paint that threw; then `UiPresenter.present(stage, frame)`, with `presentAgain(stage)` compositing the last picture again when no new frame was sealed and `redraw(stage, keepRequested)` executing it again under its values now — the whole tree records into the context's frame target, composited onto the stage's once |
 | Draw | `fillRect`, `drawImage`, `quad()` (the box material) and `quad(material)` (a drawable's own), `rect()`, `curve()`, `triangle()`, `filledCell()`, `text()`: each a `CgCanvas` item with the context's pose, clip entry, nodes and layer opacity already stamped (text takes its text gamma, and no opacity) |
 
 > **Every item names its material; the context holds no current material, texture or path.** A quad's texture is
@@ -64,10 +67,10 @@ UiGpu.present(frame);                             // render thread
 | Opacity | `pushLayerOpacity`/`popLayerOpacity` and `withLayerOpacity(opacity, body)`: composed with the opacity in force and stamped on every quad and curve after (`CG_QUAD_OPACITY`, `CG_CURVE_OPACITY`). No flush, no material written, no batch broken. Distinct from `getColor()`'s alpha, which a box applies to its fill alone; text takes none |
 | Layers | `beginLayerFbo(region)` / `endLayerFbo()`, `blitLayer(fbo, opacity, region)`, `requestLayer(name, w, h)` / `releaseTexture(texture)` and `drawLayer(texture, x, y, w, h)` for a picture kept across frames, `compositeMask(subtreeFbo, maskFbo, region)`, `layerRegion(...)`, `surface(key, region)` |
 | Pixels | `update(texture, x, y, w, h, rgba)` into a requested texture, recorded |
-| Lifecycle | `UiGpu.destroy()`, `UiGpu.hasInstance()` |
+| Lifecycle | `CgUiPaintContext.releaseAll()`, `UiPresenter.release()` |
 
-> **`UiGpu.destroy()` must be called on GL-context destruction** (`CgUiLifecycle.onDestroy` does). It frees
-> what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
+> **`CgUiPaintContext.releaseAll()` must be called on GL-context destruction** (`CgUiLifecycle.onContextDestroy` does).
+> It frees what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
 > requested from the graph, which no registry holds (`CgExecutor.freeStorage`) — and the contexts' renderers. Not
 > what is borrowed from CrystalGraphics' registries (materials, the fallback white pixel, font atlases):
 > `destroyContext()` sweeps those, and freeing them here would be a double free.
@@ -99,7 +102,7 @@ UiGpu.present(frame);                             // render thread
 > `will-change: transform` box (every desktop window) draw in their own space under a spatial node — a translation by
 > whole device pixels, with `uiScale` left in the pose so text still snaps to the pixel grid — and a layer composited
 > below full opacity under an effect node. `Box.movedNode`/`scrolledNode`/`fadedNode(frameId)` name them;
-> `UiFrame.values()` moves them and `UiGpu.redraw` draws the last frame again with nothing recorded — with
+> `UiFrame.values()` moves them and `UiPresenter.redraw` draws the last frame again with nothing recorded — with
 `keepRequested`, leaving every requested texture (a surface, a shader-graph preview) as the first execution
 did. Under a node the
 > pose stack is node-local: a decision about pixels asks `ctx.targetPose()`, never the stack. What a recording decided
@@ -124,7 +127,7 @@ did. Under a node the
 > **A box the compositor moves draws into a surface of its own** (render-graph G7): a `will-change: transform` box
 > (every window), one following the pointer and one the compositor animates paints its subtree into a kept texture
 > (`Surface`, `ctx.surface`), composited under its node with its opacity and fade -- so a move or a fade leaves the
-> texture as it is, and `UiGpu.redraw` executes none. **A surface nothing changed inside is composited and not
+> texture as it is, and `UiPresenter.redraw` executes none. **A surface nothing changed inside is composited and not
 > walked**: kept against the box's `innerRevision` (what changed or moved inside it, never where it is), its region in
 > its node and the replay and stacking epochs, and only while nothing in it paints dynamically. **A surface walked
 > again executes only its damage**: each segment places what it drew (`ctx.segmentDrawn`, the bounds of its draws)
@@ -139,11 +142,13 @@ did. Under a node the
 > frame; `-Dcrystalgui.paint.damageCheck=true` paints each window again, whole, beside its surface and logs
 > `[damage-check]` where the two differ.
 
-> **The pinned windows draw at CrystalGraphics' GUI stages**: `CgRenderStage.HUD` over the in-game HUD and
+> **Every arm of the desktop draws at CrystalGraphics' GUI stages**: `CgRenderStage.HUD` over the in-game HUD and
 > `CgRenderStage.SCREEN` over a screen, which CrystalGraphics' hosts fire once a frame. `HostSession.attachStages` puts
-> the compositor on both at `HostSession.COMPOSITOR`, its frame executed in a callback at its place: the HUD arm on
-> `HUD`, the overlay arm on `SCREEN`, each painting only when it is the presentation. Our own screen paints its desktop
-> itself (`HostSession.paint`), and `SCREEN` fires after it (`docs/CGUI_BUILDING_UIS.md` § 11b). In an unattended run
+> the compositor on both at `HostSession.COMPOSITOR`, its frame included in the firing at its place: the HUD arm on
+> `HUD`; on `SCREEN` whichever arm is current -- our own screen's desktop (which draws nothing itself), the overlay
+> over somebody else's, or the HUD arm on the frame a screen closed itself while it drew. One arm a frame. While the
+> loading screen is up, `SCREEN` rehearses a throwaway desktop (`DesktopRehearsal`, `docs/CGUI_BUILDING_UIS.md` § 11b).
+> In an unattended run
 > `StageProbe` draws a mark on both the way a mod does, and `prodSmoke` fails a client whose screen stage never drew.
 
 > **A rounded `overflow: hidden` is a per-draw clip, not a layer** (`pushRoundedClip`): geometric, as in CSS,

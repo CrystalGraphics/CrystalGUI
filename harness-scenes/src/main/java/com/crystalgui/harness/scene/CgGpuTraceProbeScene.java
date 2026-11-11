@@ -3,7 +3,9 @@ package com.crystalgui.harness.scene;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
+import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiPresenter;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
 import com.crystalgraphics.harness.config.HarnessContext;
@@ -118,17 +120,28 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
         if (painted >= WARM + 3 * PHASE + DRAIN) finish();
     }
 
+    /** The load, executed before this returns: fired on a stage of its own, so a wait for the GPU after covers it. */
     private static void paint(HarnessContext ctx, int quads) {
-        int w = ctx.getScreenWidth();
-        int h = ctx.getScreenHeight();
-        CgUiPaintContext paint = paintContext();
-        paint.beginFrame(w, h);
-        paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
-        for (int i = quads; i > 1; i--) {
-            paint.quad().at(0, 0).size(w, h).color((i & 1) == 0 ? 0x08FF8040 : 0x084080FF).submit();
-        }
-        paint.flush();
-        paint.endFrame();
+        loadQuads = quads;
+        LOAD.fireOverlay(ctx.getScreenWidth(), ctx.getScreenHeight(), 1f, ctx.getTargetFramebuffer());
+    }
+
+    /** Where the load draws: a stage of this scene's, fired from {@link #render}, not the harness's SCREEN. */
+    private static final CgRenderStage LOAD = CgRenderStage.define("crystalgui:gpu_trace_probe");
+    private static final UiPresenter PRESENTER = new UiPresenter();
+    private static int loadQuads;
+
+    static {
+        LOAD.register(stage -> {
+            int w = stage.host().width(), h = stage.host().height();
+            CgUiPaintContext paint = paintContext();
+            paint.recordFrame(w, h);
+            paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
+            for (int i = loadQuads; i > 1; i--) {
+                paint.quad().at(0, 0).size(w, h).color((i & 1) == 0 ? 0x08FF8040 : 0x084080FF).submit();
+            }
+            PRESENTER.present(stage, paint.seal());
+        });
     }
 
     private void pollFences(long boundary) {

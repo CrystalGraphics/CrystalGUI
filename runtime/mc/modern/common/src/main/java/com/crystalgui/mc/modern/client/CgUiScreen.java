@@ -1,24 +1,17 @@
 package com.crystalgui.mc.modern.client;
 
-import com.crystalgraphics.platform.service.CgHostPaint;
-import com.crystalgraphics.mc.modern.platform.HostGlHandoff;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgraphics.platform.service.CgHostWindow;
 import com.crystalgui.app.crystaleditor.CrystalEditor;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostServices;
 import com.crystalgui.desktop.host.HostSession;
-//? if >=26.1 {
-/*import com.crystalgui.lifecycle.CgUiLifecycle;
-*///?}
 import com.crystalgui.probe.ConnectionProbe;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.Workbench;
@@ -49,9 +42,10 @@ import net.minecraft.client.input.PreeditEvent;
 /**
  * The CrystalGUI desktop as a 1.20.x {@link Screen} — <b>and nothing more than that</b>.
  *
- * <p>Minecraft's screen lifecycle mapped onto {@link HostSession}'s, plus the GL handoff this version of the
- * game needs. What opens, how big it is and when it is raised are {@code HostSession}'s and are the same answer
- * on every loader. Its input reaches the desktop through CrystalGraphics' {@code SCREEN} input stage.</p>
+ * <p>Minecraft's screen lifecycle mapped onto {@link HostSession}'s. What opens, how big it is and when it is raised
+ * are {@code HostSession}'s and are the same answer on every loader. It draws nothing itself: the desktop paints on
+ * CrystalGraphics' {@code SCREEN} stage, which fires once this screen has drawn (at the frame's end from 26.1), and its
+ * input reaches the desktop through the {@code SCREEN} input stage.</p>
  */
 public final class CgUiScreen extends Screen {
 
@@ -148,64 +142,30 @@ public final class CgUiScreen extends Screen {
         *///?}
     }
 
-    // DRAIN MINECRAFT'S OWN BATCH FIRST. GuiGraphics queues its geometry into a BufferSource that is
-    // flushed only after render() returns, so anything Minecraft still had pending would composite ON TOP
-    // of the immediate-mode GL below rather than under it. The symptom is the whole UI reading one shade
-    // darker, with nothing in the UI itself to blame. Before 1.20 the batch is the game's own buffer
-    // source, which GuiGraphics.flush wraps. 1.21.6 records GUI draws and renders them at the end of the
-    // frame, so there is no batch to drain. 26.1 EXTRACTS the GUI before it draws the level at all, so a
-    // paint there lands under the world: the desktop paints at the frame end instead, over everything.
-    //? if >=26.1 {
+    // NOTHING DRAWN HERE: the desktop is the SCREEN stage's, which fires after this screen renders, Minecraft's own
+    // batch drawn first. Overridden so the default draws no widgets and, before 1.21.6, no background under it.
+    //? if >=26.3 {
     /*@Override
     public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
-        CgUiLifecycle.atFrameEnd(DesktopPresentation.DESKTOP, CgUiScreen::paintDesktop);
+        placeTextInputArea();
     }
-    *///?} elif >=1.21.6 {
+    *///?} elif >=26.1 {
     /*@Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        paintDesktop();
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
     }
     *///?} elif >=1.20 {
     @Override
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
-        graphics.flush();
-        paintDesktop();
     }
     //?} elif >=1.16 {
     /*@Override
     public void render(PoseStack poseStack, int mouseX, int mouseY, float partialTick) {
-        Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
-        paintDesktop();
-    }
-    *///?} elif >=1.15 {
-    /*@Override
-    public void render(int mouseX, int mouseY, float partialTick) {
-        Minecraft.getInstance().renderBuffers().bufferSource().endBatch();
-        paintDesktop();
     }
     *///?} else {
     /*@Override
     public void render(int mouseX, int mouseY, float partialTick) {
-        paintDesktop();
     }
     *///?}
-
-    private static void paintDesktop() {
-        HostSession session = HostSession.session();
-        if (!session.isBuilt()) return;
-        // The engine initialises on the first WORLD render and this screen also opens over the title
-        // screen, where there is none. @see HostGlHandoff#ensureContext
-        HostGlHandoff.ensureContext(surfaceWidth(), surfaceHeight());
-        if (!HostGlHandoff.contextIsLive()) return;
-
-        float delta = session.frameDelta();
-
-        session.frame(delta);
-        session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
-        //? if >=26.3 {
-        /*placeTextInputArea();
-        *///?}
-    }
 
     // An input method's run in progress, and where its candidate list opens: 26.3's SDL reports both and
     // Minecraft hands the first to the screen, drawing nothing itself. The engine's side is CompositionEvent.
@@ -253,32 +213,6 @@ public final class CgUiScreen extends Screen {
     }
     *///?}
 
-    /** The screen's own bracket. */
-    private static final HostSession.PaintHost PAINT_HOST = new HostSession.PaintHost() {
-
-        @Override
-        public boolean ownScreenUp() {
-            Minecraft mc = Minecraft.getInstance();
-            return mc != null && CgMinecraftClient.screen(mc) instanceof CgUiScreen;
-        }
-
-        @Override
-        public boolean anyScreenUp() {
-            Minecraft mc = Minecraft.getInstance();
-            return mc != null && CgMinecraftClient.screen(mc) != null;
-        }
-
-        @Override
-        public void enter() {
-            CgHostPaint.enter();
-        }
-
-        @Override
-        public void leave() {
-            CgHostPaint.leave();
-        }
-    };
-
     @Override
     public void removed() {
         HostSession.session().hidden();
@@ -304,14 +238,6 @@ public final class CgUiScreen extends Screen {
     /** Frees the compositor at game shutdown. Not called on close -- see {@link #removed()}. */
     public static void disposeAll() {
         if (HostSession.isInstalled()) HostSession.session().dispose();
-    }
-
-    private static int surfaceWidth() {
-        return CgHostWindow.width();
-    }
-
-    private static int surfaceHeight() {
-        return CgHostWindow.height();
     }
 
     // ── Input ───────────────────────────────────────────────────────────────────────────────────

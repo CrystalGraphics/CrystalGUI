@@ -3,7 +3,10 @@ package com.crystalgui.harness.scene;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
+import com.crystalgraphics.render.stage.CgRenderStage;
+import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.UiPresenter;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -163,6 +166,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (study != null) study.setVariantOverride(FileIconTheme.Variant.DARK);
         applyStartupOverrides(ctx.getScreenWidth(), ctx.getScreenHeight());
         panY += stripHeight();
+        screen = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, this::paint);
         // Enabled BEFORE the first frame: the profiler is a no-op behind a volatile flag, so turning it on
         // mid-run would leave the warm-up frames uninstrumented and the totals unattributable.
         profileFrames = Integer.getInteger("crystalgui.svgicon.profile", 0);
@@ -224,9 +228,14 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public void render(HarnessContext ctx, FrameInfo frame) {
+        afterPaint(ctx, frame);
+    }
 
+    /** The scene's picture, on the SCREEN stage the harness fires over a 2D scene. */
+    private void paint(CgStageFrame stage) {
+        int screenHeight = stage.host().height();
         CgUiPaintContext paint = paintContext();
-        paint.beginFrame(ctx.getScreenWidth(), ctx.getScreenHeight());
+        paint.recordFrame(stage.host().width(), screenHeight);
 
         drawStudyStrip(paint);
 
@@ -276,14 +285,17 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
                     .font(paint.getFont().atSize((int) labelPx)).submit();
         }
 
-        paint.text().at(MARGIN, ctx.getScreenHeight() - 16f)
+        paint.text().at(MARGIN, screenHeight - 16f)
                 .text(String.format("%d icons  --  %d missing (red)  %d blank (amber)  "
                                 + "%d cells  %d segments  --  drag to pan, scroll to zoom (%.2fx)",
                         entries.size(), missing, blank, cells, segments, zoom))
                 .font(paint.getFont().atSize(12)).submit();
 
-        paint.endFrame();
+        presenter.present(stage, paint.seal());
+    }
 
+    /** What follows the frame: its captures, the one-shot's end and the profile. */
+    private void afterPaint(HarnessContext ctx, FrameInfo frame) {
         if (frame.getFrameNumber() == 5) {
             ctx.getArtifactService().requestCapture(System.getProperty("crystalgui.svgicon.capture", "startup"));
         }
@@ -411,6 +423,8 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public void dispose() {
+        if (screen != null) screen.close();
+        presenter.release();
         if (profileInteractive && profileCtx != null) {
             java.io.File out = TraceDump.dump(
                     new java.io.File(profileCtx.getOutputDir()), "svg-lod-live", 0L);
@@ -418,8 +432,10 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
     }
 
-    /** This scene's paint context: it has no document to ask for one. */
+    /** This scene's paint context: it has no document to ask for one; and what shows its frames. */
     private CgUiPaintContext paintContext;
+    private final UiPresenter presenter = new UiPresenter();
+    private CgRenderStage.Registration screen;
 
     private CgUiPaintContext paintContext() {
         if (paintContext == null) paintContext = CgUiPaintContext.create();

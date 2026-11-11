@@ -161,31 +161,25 @@ public class CgUiTextStressScene extends UiDocumentScene {
     protected DocumentDriver.Painter<Void> painter() {
         return new DocumentDriver.Painter<>() {
             @Override
-            public void paint(float deltaSeconds, int width, int height) {
+            public UiFrame record(float deltaSeconds, int width, int height) {
                 UIDocument document = document();
                 CgUiPaintContext context = document.paintContext();
                 try (CgTrace.Zone ignored = CgTrace.zone(CgChannels.MISC, "document.paintFrame")) {
                     float scale = document.boxes().uiScale();
                     if (DRAW_LABELS) {
                         document.frame(deltaSeconds, width / scale, height / scale);
-                        context.beginFrame(width, height);
+                        context.recordFrame(width, height);
                         document.paint(context);
                     } else {
                         document.update(width / scale, height / scale);
-                        context.beginFrame(width, height);
+                        context.recordFrame(width, height);
                     }
                 }
                 context.text().at(0, 0)
                         .text(mode.name() + (DRAW_LABELS ? " (painted) — " : " (layout only) — ") + mode.description
                                 + String.format(Locale.ROOT, "  [%.1f/%.1fs]", elapsed, TOTAL_SECONDS))
                         .font(context.getFont().atSize(14)).submit();
-                context.endFrame();
-            }
-
-            /** Never asked: the scene runs inline. */
-            @Override
-            public UiFrame record(float deltaSeconds, int width, int height) {
-                return null;
+                return context.seal();
             }
         };
     }

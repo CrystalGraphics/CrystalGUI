@@ -2,9 +2,12 @@ package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.platform.input.CgInputStage;
 import com.crystalgraphics.render.stage.CgRenderStage;
-import com.crystalgui.core.window.DesktopPresentation;
 
-/** {@link HostSession}'s renderers on CrystalGraphics' GUI stages: the HUD arm on {@code HUD}, the overlay arm on {@code SCREEN}. */
+/**
+ * {@link HostSession}'s renderers on CrystalGraphics' GUI stages: the HUD arm on {@code HUD}; our own screen's desktop
+ * or the overlay over somebody else's on {@code SCREEN}, which rehearses the desktop too. Its input on {@code SCREEN}'s
+ * input stage.
+ */
 final class HostStages {
 
     private static boolean attached;
@@ -17,10 +20,10 @@ final class HostStages {
         attached = true;
         CgInputStage.SCREEN.register(HostSession.COMPOSITOR, new HostInputListener(host));
         CgRenderStage.HUD.register(HostSession.COMPOSITOR, frame -> {
-            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, DesktopPresentation.HUD, host);
+            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, false, host);
         });
         CgRenderStage.SCREEN.register(HostSession.COMPOSITOR, frame -> {
-            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, DesktopPresentation.OVERLAY, host);
+            if (HostSession.isInstalled()) HostSession.session().paintAt(frame, true, host);
         });
     }
 }

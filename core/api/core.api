@@ -4581,7 +4581,6 @@ com/crystalgui/desktop/Desktop
   method public moveModifier ()I
   method public openStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public overlayLayer ()Lcom/crystalgui/ui/dom/UIElement;
-  method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FII)V
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public persistTo (Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public pins ()Lcom/crystalgui/desktop/taskbar/TaskbarPins;
@@ -4841,7 +4840,6 @@ com/crystalgui/desktop/host/HostSession
   method public dispose ()V
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public frame (F)V
-  method public frameDelta ()F
   method public hasPainted ()Z
   method public hidden ()V
   method public inDocument (Ljava/lang/Runnable;)V
@@ -4852,16 +4850,16 @@ com/crystalgui/desktop/host/HostSession
   method public offerMouse (Lcom/crystalgui/desktop/host/HostSession$PaintHost;ZIIIZF)Z
   method public onHotKey (Ljava/util/function/Predicate;)Ljava/lang/Runnable;
   method public onKeyLeft (Ljava/util/function/Predicate;)Ljava/lang/Runnable;
-  method public paint (Lcom/crystalgui/core/window/DesktopPresentation;FLcom/crystalgui/desktop/host/HostSession$PaintHost;)V
   method public postToDocument (Ljava/lang/Runnable;)V
   method public preload ()V
   method public presentation (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)Lcom/crystalgui/core/window/DesktopPresentation;
+  method public rehearseStep ()Z
+  method public replaceNextPaint (Ljava/util/function/BiConsumer;)V
   method public requestApplication ()V
   method public requestHide (Ljava/lang/Runnable;)Z
   method public services ()Lcom/crystalgui/desktop/host/HostServices;
   method public shown ()V
   method public textInputArea ()[F
-  method public warmStep ()Z
   method public workspace ()Lcom/crystalgui/fs/client/Workspace;
   method public,static attachStages (Lcom/crystalgui/desktop/host/HostSession$PaintHost;)V
   method public,static install (Lcom/crystalgui/desktop/host/HostServices;Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/host/HostSession;
@@ -4873,8 +4871,6 @@ com/crystalgui/desktop/host/HostSession$PaintHost
   extends java/lang/Object
   method public beforePaint ()V
   method public,abstract anyScreenUp ()Z
-  method public,abstract enter ()V
-  method public,abstract leave ()V
   method public,abstract ownScreenUp ()Z
 com/crystalgui/desktop/host/ScreenOverlay
   access public,final
@@ -7329,7 +7325,6 @@ com/crystalgui/lifecycle/CgUiLifecycle
   method public onLoad (Lcom/crystalgraphics/loading/task/CgLoadPlan;)V
   method public onPreInit ()V
   method public onReload ()V
-  method public,static atFrameEnd (Ljava/lang/Object;Ljava/lang/Runnable;)V
   method public,static register ()V
   method public,static reload ()V
   method public,static unregister ()V
@@ -8132,11 +8127,11 @@ com/crystalgui/render/CgUiPaintContext
   field public,static,final REPLAY_CHECK Z
   field public,static,final ROUNDED_CLIP Z
   field public,static,final SURFACES Z
+  method public abortFrame ()V
   method public addNode (Lorg/joml/Matrix4f;Z)I
   method public backdropFor (FFFFF)Lcom/crystalgui/render/CgUiPaintContext$Backdrop;
   method public backdropFor (FFFFFF)Lcom/crystalgui/render/CgUiPaintContext$Backdrop;
   method public beginDamageCheck (Lcom/crystalgui/render/Surface;Lcom/crystalgui/render/LayerRegion;)V
-  method public beginFrame (II)V
   method public beginLayerFbo (Lcom/crystalgraphics/render/graph/CgGraphTexture;Lcom/crystalgui/render/LayerRegion;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public beginLayerFbo (Lcom/crystalgraphics/render/graph/CgGraphTexture;Z)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public beginLayerFbo (Lcom/crystalgui/render/LayerRegion;)Lcom/crystalgraphics/render/graph/CgGraphTexture;
@@ -8157,7 +8152,6 @@ com/crystalgui/render/CgUiPaintContext
   method public drawLayer (Lcom/crystalgraphics/render/graph/CgGraphTexture;FFFFFFFF)V
   method public drawToTarget ()Lorg/joml/Matrix4f;
   method public effectNode ()I
-  method public endFrame ()V
   method public endLayerFbo ()V
   method public endPasses ()V
   method public endSegment ()V
@@ -8229,7 +8223,7 @@ com/crystalgui/render/CgUiPaintContext
   method public,static create ()Lcom/crystalgui/render/CgUiPaintContext;
   method public,static parseAhead ()V
   method public,static precache ()V
-  method public,static warm ()Lcom/crystalgui/render/CgUiPaintContext$Warm;
+  method public,static releaseAll ()V
 com/crystalgui/render/CgUiPaintContext$Backdrop
   access public,final
   extends java/lang/Object
@@ -8240,12 +8234,6 @@ com/crystalgui/render/CgUiPaintContext$Backdrop
   method public x1 ()I
   method public y0 ()I
   method public y1 ()I
-com/crystalgui/render/CgUiPaintContext$Warm
-  access public,final
-  extends java/lang/Object
-  method public cancel ()V
-  method public progress ()F
-  method public step (II)Z
 com/crystalgui/render/InkOverflow
   access public,final,record
   extends java/lang/Record
@@ -8348,19 +8336,24 @@ com/crystalgui/render/UiFrame
   extends java/lang/Object
   method public frameId ()J
   method public height ()I
+  method public picture ()Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public values ()Lcom/crystalgraphics/render/property/CgPropertyValues;
   method public width ()I
-com/crystalgui/render/UiGpu
+com/crystalgui/render/UiPaintWarmup
   access public,final
   extends java/lang/Object
-  method public,static destroy ()V
-  method public,static hasInstance ()Z
-  method public,static intoWarmTarget (II)Lcom/crystalgraphics/render/graph/CgExecutor$Into;
-  method public,static present (Lcom/crystalgui/render/UiFrame;)V
-  method public,static presentAgain (II)V
-  method public,static presented ()Lcom/crystalgui/render/UiFrame;
-  method public,static redraw (IIZ)V
-  method public,static warm (Lcom/crystalgui/render/UiFrame;)V
+  implements com/crystalgraphics/loading/task/CgLoadStep
+  method public step (Lcom/crystalgraphics/loading/task/CgLoadTask;)Z
+  method public,static preload ()Lcom/crystalgui/render/UiPaintWarmup;
+com/crystalgui/render/UiPresenter
+  access public,final
+  extends java/lang/Object
+  method public <init> ()V
+  method public present (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/render/UiFrame;)V
+  method public presentAgain (Lcom/crystalgraphics/render/stage/CgStageFrame;)Z
+  method public presented ()Lcom/crystalgui/render/UiFrame;
+  method public redraw (Lcom/crystalgraphics/render/stage/CgStageFrame;Z)Z
+  method public release ()V
 com/crystalgui/render/text/CssTextStyle
   access public,final
   extends java/lang/Object
@@ -13147,9 +13140,11 @@ com/crystalgui/ui/dom/DocumentDriver
   access public,final
   extends java/lang/Object
   field public,static,final ASYNC Ljava/lang/String;
+  field public,static,final MAX_FRAME_SECONDS F
   field public,static,final SEQUENCED Ljava/lang/String;
   implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
   implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
+  method public advance ()F
   method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public close ()V
   method public compositesMotion ()Z
@@ -13157,7 +13152,8 @@ com/crystalgui/ui/dom/DocumentDriver
   method public consumeKeyboardEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
   method public consumeMouseEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;)Z
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
-  method public frame (FIILcom/crystalgui/ui/dom/DocumentDriver$Painter;)Z
+  method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;FLcom/crystalgui/ui/dom/DocumentDriver$Painter;)Z
+  method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/ui/dom/DocumentDriver$Painter;)Z
   method public hasCommitted ()Z
   method public isAsync ()Z
   method public mode ()Lcom/crystalgui/ui/dom/DocumentDriver$Mode;
@@ -13167,6 +13163,7 @@ com/crystalgui/ui/dom/DocumentDriver
   method public pollUnhandledKey ()Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;
   method public post (Ljava/lang/Runnable;)V
   method public presentedFrames ()J
+  method public presenter ()Lcom/crystalgui/render/UiPresenter;
   method public run (Ljava/lang/Runnable;)V
   method public sequence ()Lcom/crystalgui/core/async/UiSequence;
   method public shownFacts ()Ljava/lang/Object;
@@ -13187,7 +13184,6 @@ com/crystalgui/ui/dom/DocumentDriver$Painter
   access public,abstract,interface
   extends java/lang/Object
   method public facts ()Ljava/lang/Object;
-  method public,abstract paint (FII)V
   method public,abstract record (FII)Lcom/crystalgui/render/UiFrame;
 com/crystalgui/ui/dom/GlyphRole
   access public,final,enum

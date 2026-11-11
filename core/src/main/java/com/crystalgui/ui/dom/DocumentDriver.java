@@ -1,6 +1,8 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.render.CgFrameClock;
+import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.data.ReadOnlyVec2f;
@@ -8,6 +10,7 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.UiFrame;
+import com.crystalgui.render.UiPresenter;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.service.CompositorAnimation;
@@ -31,8 +34,8 @@ import java.util.function.Supplier;
  * // once, after the tree is built on the host's thread
  * DocumentDriver<Void> driver = DocumentDriver.attach(document);
  *
- * // every host frame, on the render thread, with the host's target bound
- * driver.frame(delta, width, height, DocumentDriver.whole(document));
+ * // every host frame: a renderer at a GUI stage, which gives it the size, the target and the clock
+ * CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> driver.frame(stage, painter));
  *
  * // input, and anything else that touches the tree
  * driver.consumeMouseEvent(event);
@@ -46,8 +49,7 @@ import java.util.function.Supplier;
  * boolean ours = driver.offerKey(event, () -> myKeys(event) || document.input().consumeKeyboardEvent(event));
  *
  * Painter<Facts> painter = new Painter<>() {
- *     public void paint(float d, int w, int h) { ... draw onto the bound target ... }
- *     public UiFrame record(float d, int w, int h) { ... the same, recorded ... }
+ *     public UiFrame record(float d, int w, int h) { ... frame the document, record it, seal it ... }
  *     public Facts facts() { return new Facts(desktop.hasPinnedWindows()); }
  * };
  * Facts shown = driver.shownFacts();   // of the frame on screen, null before the first or when not async
@@ -63,6 +65,8 @@ import java.util.function.Supplier;
  *       a host that hands the document events some other way leaves it a stale picture of the keyboard.</li>
  *   <li>{@link #run} waits for the sequence, and so for a frame being recorded. For a probe or a script, never per
  *       frame.</li>
+ *   <li>Every mode records the same way and shows its frame through the document's {@link #presenter()} at the stage:
+ *       inline the frame is recorded at the firing, asynchronously the last one committed is shown.</li>
  * </ul>
  */
 public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInput.Keyboard {
@@ -90,16 +94,13 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         }
     }
 
-    /**
-     * One frame of a document, as the host draws it. {@link #paint} runs inline and in lockstep, {@link #record}
-     * asynchronously; both on the document.
-     */
+    /** One frame of a document, as the host shows it: recorded on the document, in every mode. */
     public interface Painter<F> {
 
-        /** Frames the document and draws it onto the bound target. */
-        void paint(float deltaSeconds, int width, int height);
-
-        /** Frames the document and records it, for the render thread to present; null when nothing paints. */
+        /**
+         * Frames the document and records it, for the render thread to present; null when nothing paints. A throw
+         * leaves the paint context open: abort its frame ({@link CgUiPaintContext#abortFrame}).
+         */
         @Nullable
         UiFrame record(float deltaSeconds, int width, int height);
 
@@ -126,20 +127,16 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
                                        @Nullable Consumer<CgUiPaintContext> overlay) {
         return new Painter<>() {
             @Override
-            public void paint(float deltaSeconds, int width, int height) {
-                CgUiPaintContext ctx = frame(deltaSeconds, width, height);
-                ctx.beginFrame(width, height);
-                document.paint(ctx);
-                if (overlay != null) overlay.accept(ctx);
-                ctx.endFrame();
-            }
-
-            @Override
             public UiFrame record(float deltaSeconds, int width, int height) {
                 CgUiPaintContext ctx = frame(deltaSeconds, width, height);
                 ctx.recordFrame(width, height);
-                document.paint(ctx);
-                if (overlay != null) overlay.accept(ctx);
+                try {
+                    document.paint(ctx);
+                    if (overlay != null) overlay.accept(ctx);
+                } catch (RuntimeException | Error failed) {
+                    ctx.abortFrame();
+                    throw failed;
+                }
                 return ctx.seal();
             }
 
@@ -166,6 +163,11 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
     @Nullable
     private final PostedPlatformPort port;
     private final Queue<CgSystemInput.Keyboard.Event> unhandledKeys = new ConcurrentLinkedQueue<>();
+
+    /** Shows what this document records, at the stage that frames it. */
+    private final UiPresenter presenter = new UiPresenter();
+    /** {@link CgFrameClock}'s seconds at this document's last frame; NaN before the first. Render thread. */
+    private double lastFrameSeconds = Double.NaN;
 
     /** Commits built so far. The sequence's. */
     private long commits;
@@ -319,28 +321,60 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
 
     // ── The frame ───────────────────────────────────────────────────────────────────────────────
 
+    /** The longest step a frame takes: a stall reaches the document as one slow frame, never as a jump. */
+    public static final float MAX_FRAME_SECONDS = 0.25f;
+
     /**
-     * One host frame, on the render thread with the host's target bound: paints the document, or presents what it last
-     * recorded and asks for the next frame with at most one in flight.
+     * One host frame at a GUI stage, from a renderer's turn: frames the document at the stage's size and shows it there,
+     * or shows what it last recorded and asks for the next frame with at most one in flight. Its delta is
+     * {@link #advance()}'s.
+     *
+     * <pre>{@code
+     * CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> driver.frame(stage, painter));
+     * }</pre>
      *
      * @return whether anything was drawn: asynchronously, false until the first frame has been recorded
      */
-    public boolean frame(float deltaSeconds, int width, int height, Painter<F> painter) {
+    public boolean frame(CgStageFrame stage, Painter<F> painter) {
+        return frame(stage, advance(), painter);
+    }
+
+    /** {@link #frame(CgStageFrame, Painter)} with a delta already read from {@link #advance()}, for a host that ticks with it too. */
+    public boolean frame(CgStageFrame stage, float deltaSeconds, Painter<F> painter) {
+        return frame(stage, deltaSeconds, stage.host().width(), stage.host().height(), painter);
+    }
+
+    /**
+     * Seconds of rendered time since this document last framed, on {@link CgFrameClock}, at most
+     * {@link #MAX_FRAME_SECONDS}; zero the first time. Rendered rather than wall: frames nobody saw are not charged to a
+     * gesture, and zero first holds every animation at its start rather than finishing it before anything was drawn.
+     * Advances the document's clock: once a frame, by whoever frames it. Render thread.
+     */
+    public float advance() {
+        double now = CgFrameClock.seconds(), last = lastFrameSeconds;
+        lastFrameSeconds = now;
+        if (Double.isNaN(last) || now <= last) return 0f;
+        return (float) Math.min(now - last, MAX_FRAME_SECONDS);
+    }
+
+    /** {@link #frame(CgStageFrame, float, Painter)} at a given size; with no stage it records and shows nothing. Tests. */
+    boolean frame(@Nullable CgStageFrame stage, float deltaSeconds, int width, int height, Painter<F> painter) {
         // This thread is where documents are framed: work and answers queued for it run first.
         CgHostThread.drainFrames();
         if (compositor == null) {
             Runnable delivery = document.readExtracts();
-            run(() -> {
+            UiFrame recorded = ask(() -> {
                 if (delivery != null) delivery.run();
-                painter.paint(deltaSeconds, width, height);
+                return painter.record(deltaSeconds, width, height);
             });
+            if (recorded != null && stage != null) presenter.present(stage, recorded);
             presented++;
             return true;
         }
         // Made here, on the render thread, before the sequence first records: fonts and the text renderer.
         document.paintContext();
         port.service();
-        boolean shown = compositor.present(width, height, commit -> followPointer(commit) | animate(commit)) != null;
+        boolean shown = compositor.present(stage, presenter, commit -> followPointer(commit) | animate(commit)) != null;
         lastPresentNanos = System.nanoTime();
         lastPainter = painter;
         lastWidth = width;
@@ -357,6 +391,11 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
         }
         if (shown) presented++;
         return shown;
+    }
+
+    /** What shows this document's frames: the last presented, which a host may move and draw again. Render thread. */
+    public UiPresenter presenter() {
+        return presenter;
     }
 
     /** What a recording chained behind a slow one records: the painter and size the host last framed with. */
@@ -573,6 +612,7 @@ public final class DocumentDriver<F> implements CgSystemInput.Mouse, CgSystemInp
      * the host may free what its frames use. The document is not touched; dispose it first, through {@link #run}.
      */
     public void close() {
+        presenter.release();
         if (sequence == null || closed) return;
         closed = true;
         sequence.runNow(() -> { });

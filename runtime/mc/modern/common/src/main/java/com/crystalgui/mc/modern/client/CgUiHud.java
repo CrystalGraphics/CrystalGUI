@@ -1,6 +1,5 @@
 package com.crystalgui.mc.modern.client;
 
-import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgraphics.mc.modern.platform.CgMinecraftClient;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
@@ -14,8 +13,8 @@ import net.minecraft.client.Minecraft;
  * <p>Every arbitration decision — which UI gets a click, who owns the keyboard, when ownership is
  * released, whether the pointer may reach a window at all — is {@link HostSession}'s and
  * {@link ScreenOverlay}'s, in {@code core/}. What is left here is what only this Minecraft can answer:
- * whether a screen is up and whose it is, where the pointer is and whether it is grabbed, and how to
- * bracket a draw.</p>
+ * whether a screen is up and whose it is, and where the pointer is and whether it is grabbed. The desktop paints on
+ * CrystalGraphics' HUD and screen stages, each firing a host section of its own.</p>
  *
  * <p><b>No mixin.</b> 1.7.10's Forge has no screen input event at all, which is why 1.7.10 needs one;
  * every version from 1.8 has a cancellable one.</p>
@@ -39,15 +38,6 @@ public final class CgUiHud {
             return mc != null && CgMinecraftClient.screen(mc) != null;
         }
 
-        @Override
-        public void enter() {
-            CgHostPaint.enter();
-        }
-
-        @Override
-        public void leave() {
-            CgHostPaint.leave();
-        }
     };
 
     /** What the desktop should be showing. @see HostSession#presentation */

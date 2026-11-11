@@ -1,6 +1,5 @@
 package com.crystalgui.mc.v1710.client;
 
-import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.host.HostSession;
 
@@ -14,13 +13,8 @@ import net.minecraft.client.Minecraft;
  *
  * <h3>Painting</h3>
  *
- * <p>The pinned windows paint on CrystalGraphics' HUD and screen stages ({@link HostSession#attachStages}), with
- * this class's bracket; {@link HostSession} decides which arm each paints, so neither stage decides for itself.</p>
- *
- * <h3>GL state</h3>
- *
- * <p>{@code CgUiScreen}'s bracket, a host section: Minecraft has just drawn its HUD (or a whole screen) straight
- * through {@code GL11}/{@code OpenGlHelper}, and the section's opening drops the state shadow that never saw it.</p>
+ * <p>The desktop paints on CrystalGraphics' HUD and screen stages ({@link HostSession#attachStages}), each firing a
+ * host section of its own; {@link HostSession} decides which arm each paints, so neither stage decides for itself.</p>
  */
 @SideOnly(Side.CLIENT)
 public final class CgUiHud {
@@ -30,14 +24,7 @@ public final class CgUiHud {
     private CgUiHud() {
     }
 
-    /**
-     * What only this Minecraft can answer about a paint.
-     *
-     * <p>The bracket is a host section, opened here: there is no earlier point that stays true, since Minecraft's
-     * own GUI pass runs between frames.</p>
-     *
-     * @see HostSession.PaintHost
-     */
+    /** What only this Minecraft can answer about a paint. @see HostSession.PaintHost */
     static final HostSession.PaintHost HOST = new HostSession.PaintHost() {
 
         @Override
@@ -50,15 +37,6 @@ public final class CgUiHud {
             return Minecraft.getMinecraft().currentScreen != null;
         }
 
-        @Override
-        public void enter() {
-            CgHostPaint.enter();
-        }
-
-        @Override
-        public void leave() {
-            CgHostPaint.leave();
-        }
     };
 
     /** Idempotent, like every other handler registration in this package. */

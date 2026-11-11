@@ -306,9 +306,9 @@ public final class UIDocument extends UIElement {
      *
      * <pre>{@code
      * CgUiPaintContext ctx = document.paintContext();
-     * ctx.beginFrame(width, height);
+     * ctx.recordFrame(width, height);
      * document.paint(ctx);
-     * ctx.endFrame();
+     * UiFrame frame = ctx.seal();         // a DocumentDriver's presenter shows it at a GUI stage
      * }</pre>
      */
     public CgUiPaintContext paintContext() {

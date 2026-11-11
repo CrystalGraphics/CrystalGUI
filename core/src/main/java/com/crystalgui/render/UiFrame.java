@@ -2,31 +2,33 @@ package com.crystalgui.render;
 
 import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
+import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.property.CgPropertyValues;
 
 /**
- * One UI frame, recorded and built: what {@link UiGpu#present} executes. It refers to no paint-context state — the
- * context records its next frame at once — so it may be built on one thread and presented on the render thread.
+ * One UI frame, recorded and built: the passes that paint the document into its picture, a texture of the paint
+ * context's, which a {@link UiPresenter} executes at a GUI stage and composites there. It refers to no paint-context
+ * state, so it may be built on the document's thread and presented on the render thread.
  *
  * <pre>{@code
- * ctx.recordFrame(width, height);            // the document's thread; no GL
+ * ctx.recordFrame(width, height);            // the document's thread; no GPU
  * document.paint(ctx);
  * UiFrame frame = ctx.seal();                // ordered, batched and packed here
  *
- * UiGpu.present(frame);                      // render thread, inside the host's frame
+ * presenter.present(stage, frame);           // render thread, in a SCREEN or HUD renderer's turn
  * }</pre>
  *
  * <p>Its spatial and effect nodes are drawn with its {@link #values()}: a compositor moves what the frame recorded by
- * writing them and calling {@link UiGpu#redraw}, with nothing recorded or built again.</p>
+ * writing them and asking the presenter to {@linkplain UiPresenter#redraw redraw}, with nothing recorded or built
+ * again.</p>
  *
  * <pre>{@code
- * int window = windowBox.movedNode(frame.frameId());
- * frame.values().translate(window, dx, dy);
- * UiGpu.redraw(width, height, true);         // the last presented frame, executed again
+ * frame.values().translate(window.movedNode(frame.frameId()), dx, dy);
+ * presenter.redraw(stage, true);             // the last presented frame, executed again
  * }</pre>
  *
  * <ul>
- *   <li>Present each frame once: presenting hands its buffers back to the context's builder.</li>
+ *   <li>Present each frame once: its presenter hands its buffers back to the context's builder when the next replaces it.</li>
  *   <li>Two frames of one context may be in flight at once; a context whose frames are never presented keeps
  *       building new buffers.</li>
  * </ul>
@@ -34,17 +36,17 @@ import com.crystalgraphics.render.property.CgPropertyValues;
 public final class UiFrame {
 
     final CgFrame frame;
-    final CgFrame present;
     final CgFrameBuilder builder;
+    private final CgGraphTexture picture;
     private final CgPropertyValues values;
     private final long frameId;
     private final int width, height;
 
-    UiFrame(CgFrame frame, CgFrame present, CgFrameBuilder builder, CgPropertyValues values, long frameId, int width,
-            int height) {
+    UiFrame(CgFrame frame, CgFrameBuilder builder, CgGraphTexture picture, CgPropertyValues values, long frameId,
+            int width, int height) {
         this.frame = frame;
-        this.present = present;
         this.builder = builder;
+        this.picture = picture;
         this.values = values;
         this.frameId = frameId;
         this.width = width;
@@ -59,6 +61,11 @@ public final class UiFrame {
     /** The paint context's frame it was recorded as: what a box's node ids are asked by. @see CgUiPaintContext#frameId */
     public long frameId() {
         return frameId;
+    }
+
+    /** The texture it paints into, premultiplied, its row 0 at the bottom: what the presenter composites. */
+    public CgGraphTexture picture() {
+        return picture;
     }
 
     /** The surface size it was recorded at, in pixels. */

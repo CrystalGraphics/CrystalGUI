@@ -2066,7 +2066,14 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Paints one frame in {@code presentation} — <b>the one paint entry a host calls</b>.
+     * Records one frame in {@code presentation} — <b>the one paint entry a host calls</b>, through its
+     * {@code DocumentDriver}, which shows it at a GUI stage. Null when the presentation paints nothing. On the document's
+     * thread.
+     *
+     * <pre>{@code
+     * UiFrame frame = desktop.record(presentation, delta, width, height);   // the document's thread
+     * if (frame != null) presenter.present(stage, frame);                   // the render thread, at the stage
+     * }</pre>
      *
      * <p>Folding the arms together is not tidiness: it is what stops two callers each deciding
      * whether it is their turn, which is what dropped a frame every time the screen closed.</p>
@@ -2077,32 +2084,18 @@ public class Desktop extends UIElement implements DataProvider {
      * a new path. The root transform is the box tree's in every arm, which is what makes a pinned
      * window pixel-identical on the desktop, over a foreign GUI and on the HUD.</p>
      */
-    public void paint(DesktopPresentation presentation, float deltaSeconds,
-                      int surfaceWidth, int surfaceHeight) {
-        UIDocument document = prepare(presentation, deltaSeconds, surfaceWidth, surfaceHeight);
-        if (document == null) return;
-        CgUiPaintContext ctx = document.paintContext();
-        ctx.beginFrame(surfaceWidth, surfaceHeight);
-        paintInto(presentation, document, ctx);
-        ctx.endFrame();
-    }
-
-    /**
-     * {@link #paint}, recorded rather than drawn: the frame {@code UiGpu.present} draws later, on the render thread.
-     * Null when the presentation paints nothing. On the document's own thread.
-     *
-     * <pre>{@code
-     * UiFrame frame = desktop.record(presentation, delta, width, height);   // the document's sequence
-     * if (frame != null) UiGpu.present(frame);                              // the render thread
-     * }</pre>
-     */
     @Nullable
     public UiFrame record(DesktopPresentation presentation, float deltaSeconds, int surfaceWidth, int surfaceHeight) {
         UIDocument document = prepare(presentation, deltaSeconds, surfaceWidth, surfaceHeight);
         if (document == null) return null;
         CgUiPaintContext ctx = document.paintContext();
         ctx.recordFrame(surfaceWidth, surfaceHeight);
-        paintInto(presentation, document, ctx);
+        try {
+            paintInto(presentation, document, ctx);
+        } catch (RuntimeException | Error failed) {
+            ctx.abortFrame();
+            throw failed;
+        }
         return ctx.seal();
     }
 

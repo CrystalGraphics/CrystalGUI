@@ -2,9 +2,12 @@ package com.crystalgui.desktop.host;
 
 import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgraphics.render.CgFrameClock;
+import com.crystalgraphics.render.graph.CgRehearsal;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.UiFrame;
+import com.crystalgui.render.UiPresenter;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.desktop.motion.WindowAnimator;
@@ -23,6 +26,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import javax.annotation.Nullable;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.function.BiConsumer;
 import java.util.function.Predicate;
 
 /**
@@ -39,16 +43,15 @@ import java.util.function.Predicate;
  * HostSession.install(new MyHostServices(), CrystalEditor.KIND);
  * }</pre>
  *
- * <p>Then a host's screen is five calls and owns nothing:</p>
+ * <p>Then the desktop paints itself at CrystalGraphics' GUI stages, every arm of it, and a host's screen is four calls
+ * and owns nothing:</p>
  *
  * <pre>{@code
+ * HostSession.attachStages(myPaintHost);   // once, on a client: HUD and SCREEN, input included
+ *
  * void onScreenShown()  { HostSession.session().shown(); }
  * void onEscape()       { if (!HostSession.session().requestHide(() -> closeLater = true)) closeNow(); }
  * void onScreenHidden() { HostSession.session().hidden(); }
- * void onFrame() {
- *     HostSession.session().frame(HostSession.session().frameDelta());
- *     // ...then paint through desktop()
- * }
  * void onGameShutdown() { HostSession.session().dispose(); }
  * }</pre>
  *
@@ -68,7 +71,8 @@ import java.util.function.Predicate;
  *       re-raise a window on the next resize, which is how a window the player put away comes back.</li>
  *   <li>{@link #hidden()} destroys nothing. Only {@link #dispose()} does, and only at shutdown.</li>
  *   <li>{@link #frame(float)} must run before anything reads {@link #workspace()} — it is what binds a
- *       workspace to a live connection.</li>
+ *       workspace to a live connection. The desktop's arm runs it each frame; a host opening an application before
+ *       the first paint calls it once itself.</li>
  * </ul>
  *
  * <h3>Why a host may not own any of this</h3>
@@ -93,15 +97,6 @@ public final class HostSession {
      */
     public static final String ROOT_CLASS = "__host-root__";
 
-
-    /**
-     * Longest delta reported, whatever the wall clock says.
-     *
-     * <p>The first windows of a session open into the worst stall there is — 398 ms and 282 ms between
-     * consecutive frames, measured — and an unclamped delta hands a whole animation its duration on one
-     * frame, which lands it at its end state having drawn nothing in between.</p>
-     */
-    private static final float MAX_FRAME_SECONDS = 0.25f;
 
     private static final boolean TRACE = Boolean.getBoolean("crystalgui.startup.trace");
 
@@ -191,7 +186,6 @@ public final class HostSession {
     /** What the last frame saw, so a screen opening or closing is noticed exactly once. */
     private boolean foreignScreenWasUp;
 
-    private long lastFrameNanos;
     private long traceNanos;
     private boolean painted;
 
@@ -266,7 +260,7 @@ public final class HostSession {
      * compositor, taskbar and arrangement, and their first cascade and layout. The loading screen runs it, as the load
      * task {@code crystalgui:desktop}. Render thread; does nothing once built.
      *
-     * <p>Nothing presents it until a screen is up; {@link #warmStep} draws a throwaway one meanwhile.</p>
+     * <p>Nothing presents it until a screen is up; {@link #rehearseStep} draws a throwaway one meanwhile.</p>
      */
     public void preload() {
         if (host != null) return;
@@ -276,25 +270,23 @@ public final class HostSession {
         post(() -> built.document().update(snapshot.surfaceWidth(), snapshot.surfaceHeight()));
     }
 
-    private DesktopWarmup warmup;
-    private boolean warmed;
+    @Nullable
+    private DesktopRehearsal rehearsal;
+    private boolean rehearsed;
 
     /**
-     * Draws one frame of a throwaway desktop that nothing composites, so the first open finds its GPU work done. The
-     * loading screen calls it as the load task {@code crystalgui:desktop-warm} until it answers true. Render thread.
+     * Rehearses the desktop behind the loading screen: {@link CgRenderStage#SCREEN} fired into a hidden target with a
+     * throwaway desktop on it, until the JIT, the pipelines, the blur targets and the rasters a first open needs have
+     * settled. The load task {@code crystalgui:desktop-warm} calls it once a frame until it answers true. Render thread.
      *
-     * @return whether the warm-up is over: finished, failed (logged), or there is no desktop to warm
+     * @return whether the rehearsal is over: settled, failed (logged), or there is no desktop to rehearse
      */
-    public boolean warmStep() {
-        if (warmed || host == null) return true;
-        try {
-            if (warmup == null) warmup = new DesktopWarmup();
-            if (!warmup.step(Math.max(1, snapshot.surfaceWidth()), Math.max(1, snapshot.surfaceHeight()))) return false;
-        } catch (RuntimeException | LinkageError failed) {
-            CrystalGuiCore.LOGGER.error("[cgui] the desktop warm-up failed; the first open pays for it", failed);
-        }
-        warmup = null;
-        warmed = true;
+    public boolean rehearseStep() {
+        if (rehearsed || host == null) return true;
+        if (rehearsal == null) rehearsal = new DesktopRehearsal();
+        if (!rehearsal.step()) return false;
+        rehearsal = null;
+        rehearsed = true;
         return true;
     }
 
@@ -382,20 +374,6 @@ public final class HostSession {
             if (launchPending) bringForward();
             built.frame(deltaSeconds);
         });
-    }
-
-    /**
-     * Seconds of <b>rendered</b> time since the previous frame, clamped. Zero on the first.
-     *
-     * <p>Rendered rather than wall: frames nobody saw must not be charged to a gesture. Zero first
-     * holds every animation at its start value rather than completing it before anything was drawn.</p>
-     */
-    public float frameDelta() {
-        long now = System.nanoTime();
-        long previous = lastFrameNanos;
-        lastFrameNanos = now;
-        if (previous == 0L) return 0f;
-        return Math.min((now - previous) / 1_000_000_000f, MAX_FRAME_SECONDS);
     }
 
     /** Takes the desktop down. Game shutdown only — never a surface close. @see #hidden() */
@@ -494,21 +472,15 @@ public final class HostSession {
     // ── Painting over the game ──────────────────────────────────────────────────────────────────
 
     /**
-     * What a host's paint has to answer, and the bracket it paints inside.
+     * What only the host can answer about a paint: whether a screen is up, and whose. The stage's firing is the
+     * bracket: CrystalGraphics takes the host's state and gives it back.
      *
      * <pre>{@code
-     * // once, on a client: the pinned windows over the HUD and over somebody else's screen
-     * HostSession.attachStages(myPaintHost);
-     *
-     * // our own screen, which also runs the host tick: one read, both uses
-     * float delta = session.frameDelta();
-     * session.frame(delta);
-     * session.paint(DESKTOP, delta, myPaintHost);
+     * HostSession.attachStages(new HostSession.PaintHost() {
+     *     public boolean ownScreenUp() { return mc.screen instanceof MyDesktopScreen; }
+     *     public boolean anyScreenUp() { return mc.screen != null; }
+     * });
      * }</pre>
-     *
-     * <p>A stage passes no delta: {@link #frameDelta()} advances the clock, and an arm that read it and then
-     * stood down would leave the arm that does paint a delta of nearly zero. Every animation then stalls,
-     * a smooth scroll included, and its timeline writes the old offset back over a thumb drag.</p>
      */
     public interface PaintHost {
 
@@ -517,12 +489,6 @@ public final class HostSession {
 
         /** Whether <b>any</b> screen is up, ours or somebody else's. */
         boolean anyScreenUp();
-
-        /** Hand the compositor a context it can draw in. */
-        void enter();
-
-        /** Always runs, pass or throw — hand the game back whatever its own renderer assumes. */
-        void leave();
 
         /** Once per painted frame, before the compositor draws. For a host that must offer the pointer. */
         default void beforePaint() {}
@@ -651,34 +617,29 @@ public final class HostSession {
     }
 
     /**
-     * Paints {@code arm} in {@code stage}'s frame, at {@link #COMPOSITOR}, <b>only when the compositor is actually in
-     * it</b>: from {@link CgRenderStage#HUD} the HUD arm, from {@link CgRenderStage#SCREEN} the overlay arm, which our
-     * own screen's desktop never is.
+     * Paints the desktop in {@code stage}'s firing, at {@link #COMPOSITOR}, <b>only when the compositor is actually in
+     * it</b>: from {@link CgRenderStage#HUD} the HUD arm, from {@link CgRenderStage#SCREEN} whichever arm is current --
+     * our own screen's desktop, the overlay over somebody else's, or the HUD arm on the frame a screen closed itself
+     * while it drew. One arm a frame: a frame with a screen up fires both stages, and painting the compositor twice
+     * lets the second pass win the hit test's localToWorld. The desktop's arm runs the host tick ({@link #frame})
+     * first, with the same delta.
      *
-     * <p><b>A fault here must not take the game down.</b> This runs inside the game's own render loop
-     * every frame, and unlike a screen there is nothing the player can close to escape it. The mode is
-     * dropped instead, which puts them back in a working game with their windows intact on the desktop.
-     * Deciding what to present is inside the guard too: it reads the compositor and can throw for the
-     * same reasons painting it can.</p>
+     * <p><b>A fault here must not take the game down.</b> This runs inside the game's own render loop every frame, and
+     * unlike a screen there is nothing the player can close to escape it. The mode is dropped instead, which puts them
+     * back in a working game with their windows intact on the desktop. Deciding what to present is inside the guard
+     * too: it reads the compositor and can throw for the same reasons painting it can.</p>
      */
-    void paintAt(CgStageFrame stage, DesktopPresentation arm, PaintHost host) {
-        paint(arm, host, false, 0f, stage);
-    }
-
-    /**
-     * Paints {@code arm} now, with a delta already read this frame, for a caller that also handed it to
-     * {@link #frame}: our own screen's desktop, and the HUD arm on the frame a screen closed itself after the HUD drew.
-     */
-    public void paint(DesktopPresentation arm, float deltaSeconds, PaintHost host) {
-        paint(arm, host, true, deltaSeconds, null);
-    }
-
-    private void paint(DesktopPresentation arm, PaintHost host, boolean deltaRead, float deltaSeconds,
-                       @Nullable CgStageFrame stage) {
+    void paintAt(CgStageFrame stage, boolean screenStage, PaintHost host) {
+        if (CgRehearsal.active()) {
+            DesktopRehearsal playing = rehearsal;
+            if (screenStage && playing != null) playing.paint(stage);
+            return;
+        }
         // EVERY ARM, painted or not: work and answers for the frame thread must not wait for a desktop to show.
         CgHostThread.drainFrames();
         Desktop desktop = desktop();
-        if (desktop == null || document() == null || driver == null) return;
+        DocumentDriver<DesktopFacts> owner = driver;
+        if (desktop == null || document() == null || owner == null) return;
         DesktopPresentation now;
         try {
             now = presentation(host);
@@ -687,57 +648,60 @@ public final class HostSession {
             post(desktop::exitHudMode);
             return;
         }
-        // NONE paints nothing, and the other arm's stage owns the rest. One arm per stage: a frame with a screen up
-        // fires both, and painting the compositor twice lets the second pass win the hit test's localToWorld.
-        if (now != arm) return;
-        if (!deltaRead) deltaSeconds = frameDelta();
+        // SCREEN paints whatever arm is current, HUD only its own; once a frame. A screen that closed itself while it
+        // drew left the HUD stage's turn already past: SCREEN, firing after that draw, paints the HUD arm in its place.
+        long frameIndex = CgFrameClock.frameIndex();
+        if (now == DesktopPresentation.NONE || paintedFrame == frameIndex
+                || !screenStage && now != DesktopPresentation.HUD) {
+            return;
+        }
+        paintedFrame = frameIndex;
         refreshHost();
         returnUnhandledKeys();
         host.beforePaint();
-        stagedPresentation = now;
-        stagedDelta = deltaSeconds;
-        stagedHost = host;
-        if (stage != null) stage.callback("crystalgui", paintStaged);
-        else paintStaged.run();
-    }
-
-    /** What {@link #paintStaged} draws: the presentation and delta of the paint under way. */
-    private DesktopPresentation stagedPresentation = DesktopPresentation.NONE;
-    private float stagedDelta;
-    @Nullable
-    private PaintHost stagedHost;
-
-    /** The compositor, at its place in the arm's stage. Held, so a frame allocates no callback. */
-    private final Runnable paintStaged = this::paintCompositor;
-
-    private void paintCompositor() {
-        Desktop desktop = desktop();
-        UIDocument document = document();
-        DocumentDriver<DesktopFacts> owner = driver;
-        PaintHost host = stagedHost;
-        if (desktop == null || document == null || owner == null || host == null) return;
-        host.enter();
+        BiConsumer<CgStageFrame, UiPresenter> replaced = replacement;
+        if (replaced != null) {
+            replacement = null;
+            replaced.accept(stage, owner.presenter());
+            return;
+        }
         try {
-            if (owner.frame(stagedDelta, snapshot.surfaceWidth(), snapshot.surfaceHeight(),
-                    new DesktopPainter(desktop, document, stagedPresentation))) {
-                painted = true;
-            }
+            // Advanced by the arm that paints alone: one that read it and stood down would leave this one a delta of
+            // nearly zero, stalling every animation, a smooth scroll's included.
+            float delta = owner.advance();
+            if (now == DesktopPresentation.DESKTOP) frame(delta);
+            if (owner.frame(stage, delta, painters[now.ordinal()])) painted = true;
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] overlay paint failed; leaving HUD mode", failed);
             post(desktop::exitHudMode);
-        } finally {
-            host.leave();
         }
     }
+
+    @Nullable
+    private BiConsumer<CgStageFrame, UiPresenter> replacement;
+
+    /**
+     * Runs {@code paint} once, at the next frame the desktop paints and in place of that paint, with the frame's stage
+     * and the document's presenter: a probe presenting a frame itself. The host tick does not run that frame. Render
+     * thread.
+     *
+     * <pre>{@code
+     * session.replaceNextPaint((stage, presenter) -> presenter.presentAgain(stage));   // the last frame, as it was
+     * }</pre>
+     */
+    public void replaceNextPaint(BiConsumer<CgStageFrame, UiPresenter> paint) {
+        replacement = paint;
+    }
+
+    /** {@link CgFrameClock#frameIndex()} of the last frame an arm painted in: one arm a frame. Render thread. */
+    private long paintedFrame = -1L;
+
+    /** The desktop in each presentation, by ordinal: made once it is built, so a frame allocates none. */
+    private DesktopPainter[] painters = new DesktopPainter[0];
 
     /** The desktop in one presentation, and what the host reads back about each recorded frame. */
     private record DesktopPainter(Desktop desktop, UIDocument document, DesktopPresentation presentation)
             implements DocumentDriver.Painter<DesktopFacts> {
-
-        @Override
-        public void paint(float deltaSeconds, int width, int height) {
-            desktop.paint(presentation, deltaSeconds, width, height);
-        }
 
         @Override
         @Nullable
@@ -827,6 +791,11 @@ public final class HostSession {
         built.document().addClass(ROOT_CLASS);
         host = built;
         driver = DocumentDriver.attach(built.document(), DocumentDriver.Mode.fromFlags(), "desktop");
+        DesktopPresentation[] presentations = DesktopPresentation.values();
+        painters = new DesktopPainter[presentations.length];
+        for (DesktopPresentation presentation : presentations) {
+            painters[presentation.ordinal()] = new DesktopPainter(built.desktop(), built.document(), presentation);
+        }
         trace("DesktopHost");
     }
 

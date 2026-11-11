@@ -1356,8 +1356,9 @@ the question gets answered while it is still cheap.
 
 Something that is not a widget -- a badge over the HUD, a crosshair effect, a picture behind every screen -- draws
 at one of CrystalGraphics' **GUI stages**, `CgRenderStage.SCREEN` (over a screen, CrystalGUI's or any other) and
-`CgRenderStage.HUD` (over the in-game HUD). CrystalGUI's pinned windows are a renderer on each at
-`HostSession.COMPOSITOR`, so the order you register at says which side of them you land on.
+`CgRenderStage.HUD` (over the in-game HUD). CrystalGUI's desktop -- its own screen, and the pinned windows over the HUD
+and over other screens -- is a renderer on each at `HostSession.COMPOSITOR`, so the order you register at says which
+side of it you land on.
 
 ```java
 CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // declares #pragma cg_use quad
@@ -1367,16 +1368,20 @@ CgRenderStage.Registration badge = CgRenderStage.HUD.register(HostSession.COMPOS
 badge.close();   // and it stops
 ```
 
-- **Coordinates** are the GUI's logical pixels (Minecraft's GUI scale), origin top left: `frame.constants()` is that
-  camera. `frame.host().width()`/`height()` are the surface's device pixels.
+- **Coordinates** are the window's device pixels, origin top left: `frame.canvas()` draws under that camera, and
+  `frame.guiScaledCanvas()` in the GUI's pixels (Minecraft's GUI scale). `frame.host().width()`/`height()` are the
+  surface's size.
 - **Once a frame each**, on the render thread, from the game's own screen and HUD hooks. `SCREEN` fires once whoever's
   screen is up; neither fires on a server, and Fabric below 1.16 has no `SCREEN`.
 - **Below `COMPOSITOR` is under the pinned windows**, above it over them; ties draw in registration order.
   `COMPOSITOR` is CrystalGraphics' `CgRenderStage.VIEWPORT_WIDGETS`. Anything that follows a point in the world (a
-  damage number, a name plate) registers at `CgRenderStage.WORLD_WIDGETS`, under every window. Over
-  CrystalGUI's own screen the desktop is drawn by the screen, before `SCREEN` fires: everything there is over it.
+  damage number, a name plate) registers at `CgRenderStage.WORLD_WIDGETS`, under every window. CrystalGUI's own
+  screen draws nothing itself: its desktop is the same renderer on `SCREEN`, so the same order holds over it.
 - **What you record executes at once**, onto the game's target, after the renderers before you. Nothing is kept:
   record every frame.
+- **`SCREEN` is rehearsed behind the loading screen**: CrystalGUI fires it into a hidden target with a throwaway
+  desktop until the JIT settles (`CgRehearsal`), and your renderer runs in each pass too. Record what you would in
+  play; `CgRehearsal.active()` says when it is one.
 - Everything a stage's canvas draws (images, lines, text, world-following widgets): CrystalGraphics'
   [`docs/CANVAS.md`](../CrystalGraphics/docs/CANVAS.md).
 - A world-space effect belongs on CrystalGraphics' world stages instead (`CgRenderStage.WORLD_OPAQUE`, or

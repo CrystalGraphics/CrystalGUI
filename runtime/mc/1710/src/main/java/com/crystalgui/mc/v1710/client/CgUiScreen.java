@@ -1,12 +1,10 @@
 package com.crystalgui.mc.v1710.client;
 
-import com.crystalgraphics.platform.service.CgHostPaint;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.crystaleditor.CrystalEditor;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.host.HostSession;
@@ -128,11 +126,12 @@ public final class CgUiScreen extends GuiScreen {
         HostSession.session().shown();
     }
 
+    /**
+     * Draws nothing: the desktop is CrystalGraphics' {@code SCREEN} stage's, which fires once this has drawn, and runs
+     * the host tick. Its input arrived before this, through the {@code SCREEN} input stage.
+     */
     @Override
     public void drawScreen(int mouseX, int mouseY, float partialTicks) {
-        HostSession session = HostSession.session();
-        float delta = session.frameDelta();
-
         if (closeRequested) {
             closeRequested = false;
             mc.displayGuiScreen(null);
@@ -142,29 +141,10 @@ public final class CgUiScreen extends GuiScreen {
             // Asking directly is idempotent when it already happened and is the difference between the
             // world coming back and the cursor still floating over an unresponsive game.
             if (mc.theWorld != null && mc.thePlayer != null) mc.setIngameFocus();
-
-            // AND THE LAST FRAME OF THE FLICKER GOES HERE. Minecraft renders the overlay BEFORE it draws
-            // the current screen, so on the frame this method closes itself the overlay hook has already
-            // run and stood down -- returning here leaves that frame painted by nobody at all. By this
-            // point displayGuiScreen has run onGuiClosed and nulled the current screen, so the
-            // presentation is already HUD and the pinned windows can simply be painted now.
-            session.paint(DesktopPresentation.HUD, delta, CgUiHud.HOST);
+            // The HUD's turn has passed this frame: SCREEN, firing after this, paints the pinned windows instead.
             return;
         }
-
-        if (!session.isBuilt()) return;
-
-        // Input arrived before this, through CrystalGraphics' SCREEN input stage, drained on the frame clock.
-
-        // ONE HOST TICK, before anything reads the workspace: the client is repaired if the wire moved,
-        // and the mount is re-asked.
-        session.frame(delta);
-
-        // NAMED AS AN ARM, not painted straight at the compositor. It resolves to DESKTOP for as long as
-        // this screen is the current one, so nothing about what is drawn changes -- what changes is that
-        // no caller decides for itself whether it is its turn. @see DesktopPresentation
-        session.paint(DesktopPresentation.DESKTOP, delta, PAINT_HOST);
-
+        if (!HostSession.session().isBuilt()) return;
         framesPainted++;
         // THE SETTLING CLOCK ON THIS ERA. Painted frames, not ticks: layout is what settles. The
         // captures hang off this, and so do the language jar's own steps -- since J8 the scripting
@@ -172,46 +152,6 @@ public final class CgUiScreen extends GuiScreen {
         // able to name them. @see CgUiAutoTest#onPainted
         CgUiAutoTest.onPainted(framesPainted);
     }
-
-    /**
-     * The screen's own bracket. Differs from the HUD's in what it hands back on the way out.
-     *
-     * <p><b>A host section</b> ({@code CgHostPaint}): its opening drops CrystalGraphics' state shadow, which
-     * Minecraft's own writes through {@code GL11}/{@code OpenGlHelper} never reach, and its close is the host's
-     * repair.</p>
-     *
-     * <p><b>And on the way out Minecraft gets back the state its own renderer assumes.</b> It presents by
-     * drawing one fixed-function quad — {@code Framebuffer.framebufferRender}: {@code glEnable(TEXTURE_2D)},
-     * {@code bindFramebufferTexture()}, a Tessellator quad, and no {@code glUseProgram(0)} anywhere.
-     * Fixed-function samples unit 0, but {@code bindFramebufferTexture} binds to whatever unit is
-     * <em>currently</em> active — so if the UI leaves the active unit elsewhere, Minecraft binds its
-     * screen texture where nothing reads it and the quad falls back to its vertex colour: a pure WHITE
-     * window. The editor is sitting correctly in Minecraft's framebuffer the whole time, which is why a
-     * {@code glReadPixels} capture shows a perfect UI while the screen shows nothing — the drawing was
-     * never the broken part, the presenting was.</p>
-     */
-    private static final HostSession.PaintHost PAINT_HOST = new HostSession.PaintHost() {
-
-        @Override
-        public boolean ownScreenUp() {
-            return Minecraft.getMinecraft().currentScreen instanceof CgUiScreen;
-        }
-
-        @Override
-        public boolean anyScreenUp() {
-            return Minecraft.getMinecraft().currentScreen != null;
-        }
-
-        @Override
-        public void enter() {
-            CgHostPaint.enter();
-        }
-
-        @Override
-        public void leave() {
-            CgHostPaint.leave();
-        }
-    };
 
     @Override
     public void onGuiClosed() {

@@ -16,10 +16,8 @@ import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgui.desktop.host.DesktopKeys;
 import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.UiGpu;
+import com.crystalgui.render.UiPaintWarmup;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
@@ -129,7 +127,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         CgUiPaintContext.precache();
     }
 
-    /** Installs the GL gate for disposals and makes the paint context's warm-up, which {@link #onLoad} steps. */
+    /** Installs the GL gate for disposals. */
     @Override
     public void onContextInit(int width, int height) {
         startOnce();
@@ -148,31 +146,24 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         // thread for the same reason.
         Thread glThread = Thread.currentThread();
         Disposer.setGlGate(() -> Thread.currentThread() == glThread, pending::add);
-
-        // The paint context's warm-up, about a second of compiles on first init: a load task's render part (onLoad),
-        // stepped a budget of it a frame, so the loading screen keeps drawing while it runs.
-        if (warm != null) warm.cancel();
-        warm = CgUiPaintContext.warm();
-        warmWidth = width;
-        warmHeight = height;
     }
 
-    /** The paint context's warm-up as a load task: tracked, named on the loading screen, stepped in its budget. */
+    /**
+     * What painting loads before the first frame, then the desktop built and rehearsed behind the screen: load tasks,
+     * tracked and named on the loading screen, each stepped in its budget.
+     */
     @Override
     public void onLoad(CgLoadPlan plan) {
+        // The default font, the icons and the sheets' glyphs, each on a worker. The pipelines are the precache's
+        // (CgUiPaintContext.precache), the GPU's first-frame work the rehearsal's below.
+        UiPaintWarmup preload = UiPaintWarmup.preload();
         plan.task("crystalgui:paint").render(task -> {
             // Behind the start: a paint class initialising beside its style classes could wait on one it holds.
             if (!CgUiStart.done()) {
                 task.nextFrame();
                 return false;
             }
-            if (warm != null) {
-                stepWarm();
-                if (warm != null) task.progress(warm.progress());
-            }
-            // Unfinished, it waits on its font, its programs or its glyphs: once a frame
-            if (warm != null) task.nextFrame();
-            return warm == null;
+            return preload.step(task);
         }).start();
         // THE DESKTOP BUILT BEHIND THE SCREEN, after the fonts and shaders its first frame needs, so opening it is
         // a resume. A client whose host installed no session has none to build.
@@ -180,23 +171,15 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
             if (HostSession.isInstalled()) HostSession.session().preload();
             return true;
         }).start();
-        // THE DESKTOP DRAWN ONCE BEHIND THE SCREEN, into targets of its own: its first paint is hundreds of ms of
-        // pipelines, blur targets and rasters that would otherwise land inside the open animation. After the engine's
-        // programs, which build its canvas's glass and text: drawn before them, it built them at its draw.
+        // THE DESKTOP REHEARSED BEHIND THE SCREEN, on the SCREEN stage into its hidden target: its first paint is
+        // hundreds of ms of pipelines, blur targets, rasters and cold code that would otherwise land inside the open
+        // animation. After the engine's programs, which build its canvas's glass and text: rehearsed before them, it
+        // built them at its draw.
         plan.task("crystalgui:desktop-warm").after("crystalgui:desktop", "crystalgraphics:programs").render(task -> {
-            return !HostSession.isInstalled() || HostSession.session().warmStep();
+            return !HostSession.isInstalled() || HostSession.session().rehearseStep();
         }).start();
     }
 
-    /** The paint context's warm-up, until it finishes, and the size onContextInit gave. */
-    private CgUiPaintContext.Warm warm;
-    private int warmWidth, warmHeight;
-
-    /** A load task's render part: inside the frame's host section, whose close is the host's repair. */
-    private void stepWarm() {
-        if (warm.step(warmWidth, warmHeight)) warm = null;
-    }
-    
     /**
      * Disposals that arrived off the GL thread, waiting for {@link #onFrame}.
      *
@@ -219,41 +202,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
     public void onFrame(long frame) {
         Runnable due;
         while ((due = pending.poll()) != null) due.run();
-
-        if (atFrameEnd.isEmpty()) return;
-        Runnable[] paints = atFrameEnd.values().toArray(new Runnable[0]);
-        atFrameEnd.clear();
-        for (Runnable paint : paints) paint.run();
     }
-
-    /** Render thread only; keyed so an arm recorded twice in one frame paints once. */
-    private static final Map<Object, Runnable> atFrameEnd = new LinkedHashMap<>();
-
-    /**
-     * Paints at this frame's end instead of now: once the host has drawn its own GUI, the last point to
-     * draw over its picture. For a host whose GUI hook runs before the frame is drawn — Minecraft 26.1
-     * extracts its GUI before it renders the level, so painting there lands under the world.
-     *
-     * <pre>{@code
-     * // a screen's extraction hook, every frame the screen is up
-     * CgUiLifecycle.atFrameEnd(DesktopPresentation.DESKTOP, this::paintDesktop);
-     * }</pre>
-     *
-     * <p>Runs from {@link #onFrame}, so registers CrystalGUI first: the usual registration is the paint
-     * context's first use, which would never come. Nothing runs after the engine stands down.</p>
-     *
-     * @param key   one paint per key per frame — the arm
-     * @param paint the paint, on the render thread
-     */
-    public static void atFrameEnd(Object key, Runnable paint) {
-        if (!registeredForFrameEnd) {
-            register();
-            registeredForFrameEnd = true;
-        }
-        atFrameEnd.put(key, paint);
-    }
-
-    private static boolean registeredForFrameEnd;
 
     /**
      * Releases the GL resources CrystalGUI owns outright.
@@ -288,7 +237,7 @@ public final class CgUiLifecycle implements CgLifecycleListener, CgReloadListene
         //
         // What stays below is the one thing nobody else frees.
         try {
-            UiGpu.destroy();
+            CgUiPaintContext.releaseAll();
         } catch (Throwable t) {
             CrystalGuiCore.LOGGER.warn("CgUiLifecycle: failed to tear down the paint context", t);
         }

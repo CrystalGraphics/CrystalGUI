@@ -5,6 +5,8 @@ import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontStyle;
 import com.crystalgraphics.job.CgJob;
 import com.crystalgraphics.job.CgJobLane;
+import com.crystalgraphics.loading.task.CgLoadStep;
+import com.crystalgraphics.loading.task.CgLoadTask;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
@@ -25,10 +27,20 @@ import java.util.List;
 import java.util.Set;
 
 /**
- * What a paint context loads before its first frame: the default font, the stylesheets' glyphs and the shipped icons,
- * each off the render thread. {@link CgUiPaintContext.Warm} drives it.
+ * What painting loads before the first frame, each off the render thread: the default font, then the shipped icons and
+ * the stylesheets' glyphs. A load task's step, waiting a frame at a time; the GPU half is the desktop's rehearsal.
+ *
+ * <pre>{@code
+ * plan.task("crystalgui:paint").render(UiPaintWarmup.preload()).start();   // CgUiLifecycle.onLoad
+ * }</pre>
+ *
+ * <ul>
+ *   <li>A failure is logged and the step finishes: whatever did not load loads where it is first drawn.</li>
+ *   <li>The glyphs are waited for {@link #GLYPH_WAIT_NANOS} at most, so a font that never settles cannot hold the
+ *       loading screen.</li>
+ * </ul>
  */
-final class UiPaintWarmup {
+public final class UiPaintWarmup implements CgLoadStep {
 
     /**
      * The {@code uiScale} glyphs are warmed at: the host's (Minecraft sets 2). A glyph is keyed by the size it is
@@ -48,7 +60,40 @@ final class UiPaintWarmup {
     @Nullable
     private static volatile CgFont defaultFont;
 
+    @Nullable
+    private CgJob<CgFont> font;
+    @Nullable
+    private CgJob<?> glyphs;
+    private long glyphsDeadline;
+
     private UiPaintWarmup() {}
+
+    /** A fresh step: the font, then the icons and glyphs. One per load. */
+    public static UiPaintWarmup preload() {
+        return new UiPaintWarmup();
+    }
+
+    @Override
+    public boolean step(CgLoadTask task) {
+        if (font == null) {
+            font = CgJob.lane(CgJobLane.BACKGROUND).named("cgui default font").run(UiPaintWarmup::defaultFont);
+        }
+        if (!font.isDone()) {
+            task.nextFrame();
+            return false;
+        }
+        if (glyphsDeadline == 0L) {
+            preloadIcons();
+            glyphs = warmGlyphs(UI_SCALE);
+            glyphsDeadline = System.nanoTime() + GLYPH_WAIT_NANOS;
+            task.progress(0.5f);
+        }
+        if (glyphs != null && !glyphs.isDone() && System.nanoTime() <= glyphsDeadline) {
+            task.nextFrame();
+            return false;
+        }
+        return true;
+    }
 
     /** The default font, read once for every context: on a worker by the warm, else by the first context made. */
     static CgFont defaultFont() {

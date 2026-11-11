@@ -50,25 +50,23 @@ import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
 /**
  * A document's paint context: it records a frame of the document onto a {@link CgCanvas}, touching no GPU, and hands
- * back a sealed {@link UiFrame} that {@link UiGpu} executes. One per document, from
- * {@link com.crystalgui.ui.dom.UIDocument#paintContext()}.
+ * back a sealed {@link UiFrame} that a {@link UiPresenter} shows at a GUI stage. One per document, from
+ * {@link com.crystalgui.ui.dom.UIDocument#paintContext()}; a {@code DocumentDriver} drives it.
  *
  * <pre>{@code
  * CgUiPaintContext ctx = document.paintContext();
- *
- * ctx.beginFrame(w, h);              // inline: recording, on the render thread
+ * ctx.recordFrame(w, h);             // any thread the document is framed on
  * document.paint(ctx);
- * ctx.endFrame();                    // sealed, executed, composited
+ * UiFrame frame = ctx.seal();
  *
- * ctx.recordFrame(w, h);             // or split: record on the document's thread...
- * document.paint(ctx);
- * UiGpu.present(ctx.seal());         // ...execute on the render thread
+ * presenter.present(stage, frame);   // render thread, at CgRenderStage.SCREEN or HUD
  * }</pre>
  *
  * <p>Everything drawn is a canvas item stamped with the context's state as it is built: the pose on
@@ -98,99 +96,31 @@ import java.util.List;
  */
 public final class CgUiPaintContext {
 
-    // ── Warm-up ──────────────────────────────────────────────────────────────
-
     /**
-     * A warm-up of the shipped materials and of everything a first frame builds, so the first real frame does not:
-     * polled once a frame, its compiles spread over frames within CrystalGraphics' {@code CgWarmBudget}.
-     *
-     * <pre>{@code
-     * CgUiPaintContext.Warm warm = CgUiPaintContext.warm();   // once a context exists
-     * if (warm != null && warm.step(w, h)) warm = null;        // each frame, inside a host section
-     * warm.cancel();                                           // the context going first
-     * }</pre>
-     *
-     * <ul>
-     *   <li>A real frame painted before it finishes compiles what is left itself.</li>
-     *   <li>Failures are swallowed: a warm-up must not be what fails a context, and the first real frame reports them.</li>
-     * </ul>
-     */
-    public static Warm warm() {
-        return new Warm();
-    }
-
-    /** {@link #warm()}'s state: one per context. Render thread. */
-    public static final class Warm {
-
-        private static final CgMaterial[] MATERIALS = {
-                CgCanvasMaterials.SCREEN.box(), CgCanvasMaterials.SCREEN.curve()};
-
-        @Nullable
-        private CgUiPaintContext context;
-        private int built;
-        @Nullable
-        private CgJob<CgFont> font;
-        @Nullable
-        private CgJob<?> glyphs;
-        private long glyphsDeadline;
-
-        private Warm() {}
-
-        /** One frame of it; true once it has finished. Inside a host section. */
-        public boolean step(int width, int height) {
-            if (context == null) {
-                if (font == null) {
-                    font = CgJob.lane(CgJobLane.BACKGROUND).named("cgui default font").run(UiPaintWarmup::defaultFont);
-                }
-                if (!font.isDone()) return false;
-                context = create();
-                UiPaintWarmup.preloadIcons();
-                glyphs = UiPaintWarmup.warmGlyphs(UiPaintWarmup.UI_SCALE);
-                glyphsDeadline = System.nanoTime() + UiPaintWarmup.GLYPH_WAIT_NANOS;
-            }
-            built = 0;
-            for (CgMaterial material : MATERIALS) {
-                try {
-                    if (material.precache()) built++;
-                } catch (RuntimeException | LinkageError ignored) {
-                    built++;   // an optimisation that fails is silent
-                }
-            }
-            if (built < MATERIALS.length) return false;
-            // The sheets' fonts loaded before the desktop opens, so its first frame loads none.
-            if (System.nanoTime() <= glyphsDeadline && glyphs != null && !glyphs.isDone()) return false;
-            try (CgExecutor.Into ignored = UiGpu.intoWarmTarget(width, height)) {
-                context.beginFrame(Math.max(1, width), Math.max(1, height));
-                context.endFrame();
-            } catch (RuntimeException | LinkageError e) {
-                context.abortFrame();   // a frame left open would refuse every later one
-                CrystalGuiCore.LOGGER.warn("[cgui] paint warm-up failed; the first real frame builds it instead", e);
-            } finally {
-                cancel();
-            }
-            return true;
-        }
-
-        /** How far along, 0 to 1: the materials built, then the empty frame. */
-        public float progress() {
-            return context == null ? 0f : built / (MATERIALS.length + 1f);
-        }
-
-        /** Releases what it holds, finished or not. */
-        public void cancel() {
-            if (context != null) context.release();
-            context = null;
-        }
-    }
-
-    /**
-     * A paint context for one document; {@link com.crystalgui.ui.dom.UIDocument#paintContext()} makes it. On the render
-     * thread, inside the host's section.
+     * A paint context for one document; {@link com.crystalgui.ui.dom.UIDocument#paintContext()} makes it. Render thread:
+     * it loads the default font.
      */
     public static CgUiPaintContext create() {
         CgUiPaintContext context = new CgUiPaintContext();
-        context.gpu.track(context);
+        LIVE.removeIf(ref -> ref.get() == null);
+        LIVE.add(new WeakReference<>(context));
         return context;
+    }
+
+    /** Every context made, for {@link #releaseAll()}: what each requested, no registry holds. Render thread. */
+    private static final List<WeakReference<CgUiPaintContext>> LIVE = new ArrayList<>();
+
+    /**
+     * Frees what every paint context made: frame targets, surfaces, backdrop and icon-raster textures, requested from
+     * the graph, which no registry sweeps. At GL context destruction ({@code CgUiLifecycle.onContextDestroy}), before
+     * CrystalGraphics frees its own. Render thread; idempotent.
+     */
+    public static void releaseAll() {
+        for (WeakReference<CgUiPaintContext> ref : LIVE) {
+            CgUiPaintContext context = ref.get();
+            if (context != null) context.release();
+        }
+        LIVE.clear();
     }
 
     /**
@@ -227,7 +157,6 @@ public final class CgUiPaintContext {
     static final CgFrameBufferFormat LAYER_FORMAT = CgFrameBufferFormat.builder("cgui_layer")
             .color(0, CgTextureType.RGBA8).build();
 
-    private final UiGpu gpu;
     private final CgUiBackdrop backdrop;
     private final SvgRasterCache svgRaster;
     private final PaintSegments segments;
@@ -280,10 +209,8 @@ public final class CgUiPaintContext {
     // order they run and every read follows the write it sees.
 
     private final CgRecording recording = new CgRecording();
-    /** What this context draws into: the passes of {@link #recording} or {@link #present}. */
+    /** What this context draws into: the passes of {@link #recording}. */
     private final CgCanvas recorder = new CgCanvas();
-    /** The finished frame onto the host's target: a recording of its own, executed once the host's target is bound. */
-    private final CgRecording present = new CgRecording();
     /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
     private final CgPassConstants passConstants = new CgPassConstants();
     private final CgFrameBuilder builder = new CgFrameBuilder();
@@ -309,7 +236,6 @@ public final class CgUiPaintContext {
     private final List<CgGraphTexture> pendingReleases = new ArrayList<>();
 
     private CgUiPaintContext() {
-        this.gpu = UiGpu.get();
         this.backdrop = new CgUiBackdrop(this);
         this.svgRaster = new SvgRasterCache(this);
         this.segments = new PaintSegments(this, recorder, recording);
@@ -360,16 +286,9 @@ public final class CgUiPaintContext {
         return mirrorDepth > 0;
     }
 
-    /** Starts a frame inline, on the render thread: {@link #recordFrame} with the GPU's frame time counted. Pair with {@link #endFrame}. */
-    public void beginFrame(int screenWidth, int screenHeight) {
-        if (frameActive) throw new IllegalStateException("beginFrame() called without matching endFrame()");
-        gpu.beginFrame();
-        recordFrame(screenWidth, screenHeight);
-    }
-
     /**
      * Starts recording a frame of {@code screenWidth x screenHeight} into the frame's own target. Touches no GPU. Pair
-     * with {@link #seal}, which hands back what {@link UiGpu#present} executes.
+     * with {@link #seal}, which hands back what a {@link UiPresenter} shows.
      */
     public void recordFrame(int screenWidth, int screenHeight) {
         if (frameActive) throw new IllegalStateException("recordFrame() called without matching seal()");
@@ -405,12 +324,6 @@ public final class CgUiPaintContext {
         frameActive = true;
     }
 
-    /** Seals the frame {@link #beginFrame} started and presents it. Once, after the whole tree has painted. */
-    public void endFrame() {
-        if (!frameActive) return;
-        gpu.endFrame(seal());
-    }
-
     /**
      * Ends the frame {@link #recordFrame} started and builds it: ordered, batched and packed, with nothing left that
      * refers to this context, which may record its next frame at once. Touches no GPU.
@@ -420,19 +333,17 @@ public final class CgUiPaintContext {
         surfaces.sweep();
         long timed = CgTrace.stamp(UiTrace.FRAME);
         recorder.stop();
-        recordPresent();
         CgTrace.zoneDone(UiTrace.FRAME, "glend:flush", timed);
 
         timed = CgTrace.stamp(UiTrace.FRAME);
         UiFrame frame;
         try {
             CgPropertyValues values = new CgPropertyValues();
-            CgFrame drawn = build(recording, values), shown = build(present, null);
-            CgTrace.add(UiTrace.FRAME, "drawcalls", drawn.batches() + shown.batches());   // after batching: the real count
-            frame = new UiFrame(drawn, shown, builder, values, frameId, screenWidth, screenHeight);
+            CgFrame drawn = build(recording, values);
+            CgTrace.add(UiTrace.FRAME, "drawcalls", drawn.batches());   // after batching: the real count
+            frame = new UiFrame(drawn, builder, frameTarget, values, frameId, screenWidth, screenHeight);
         } finally {
             recording.reset();
-            present.reset();
         }
         CgTrace.zoneDone(UiTrace.FRAME, "glend:build", timed);
 
@@ -452,25 +363,30 @@ public final class CgUiPaintContext {
         }
     }
 
-    /** Leaves a frame that threw part-way: what it drew discarded, and no frame open. */
-    private void abortFrame() {
+    /**
+     * Leaves a frame that threw part-way: what it drew discarded, and no frame open, so the next {@link #recordFrame}
+     * starts clean. A no-op with no frame open.
+     *
+     * <pre>{@code
+     * ctx.recordFrame(w, h);
+     * try {
+     *     document.paint(ctx);
+     * } catch (RuntimeException failed) {
+     *     ctx.abortFrame();
+     *     throw failed;
+     * }
+     * return ctx.seal();
+     * }</pre>
+     */
+    public void abortFrame() {
+        if (!frameActive) return;
         recorder.abandon();
         recording.reset();
-        present.reset();
         surfaces.abort();
         Arrays.fill(layers, 0, layerDepth, null);
         layerDepth = 0;
-        gpu.abortFrame();
+        while (!poseStack.clear()) poseStack.popPose();   // what the frame and the throw left pushed
         frameActive = false;
-    }
-
-    /** The finished frame onto the host's target, the one bound when it executes, and the trace's photograph when due. */
-    private void recordPresent() {
-        targetConstants(screenWidth, screenHeight);
-        recorder.recordInto(present, CgGraphTexture.current(), CgLoad.load(), passConstants);
-        blitLayer(frameTarget, 1f, new LayerRegion(0, 0, screenWidth, screenHeight));
-        recorder.stop();
-        UiPhotograph.recordIfDue(present, frameTarget);
     }
 
     // ── Drawing ──────────────────────────────────────────────────────────────
@@ -1803,7 +1719,7 @@ public final class CgUiPaintContext {
 
     /**
      * Frees what this context made: its surfaces, frame target, and the backdrop's and icon raster's textures.
-     * {@link UiGpu#destroy} calls it at context destruction. Materials, fonts and the fallback textures are
+     * {@link #releaseAll} calls it at context destruction. Materials, fonts and the fallback textures are
      * CrystalGraphics' registries', swept there; freeing them here would be a double free.
      */
     void release() {
