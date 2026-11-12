@@ -45,6 +45,8 @@ final class PopupPortal extends UIElement {
         this.layer = layer;
         layout(l -> l.width(0f).height(0f));
         setFocusPolicy(FocusPolicy.NONE);
+        // A press on a popup is a press in the application: the shell must not clear the focus its window holds.
+        setRetainsFocus(true);
         layer.onChanged(() -> {
             UIDocument shell = document();
             if (shell != null) shell.execute(this::repaint);
@@ -57,7 +59,11 @@ final class PopupPortal extends UIElement {
         onMouseDown.attachListener((element, event) -> {
             pointer(event.getPosition(), event.getButtonId(), true, 0f);
             UIDocument shell = document();
-            if (shell != null) shell.input().setPointerCapture(this);
+            if (shell == null) return;
+            // Keys follow the window the popups belong to, wherever the shell's focus was.
+            ClientPortal window = appDocument.active();
+            if (window != null) shell.focus().requestPointerFocus(window);
+            shell.input().setPointerCapture(this);
         }, false, true);
         onMouseUp.attachListener((element, event) -> {
             pointer(event.getPosition(), event.getButtonId(), false, 0f);

@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.app;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +25,7 @@ public class PopupPlacementTest extends UiDocumentTestBase {
 
     private static final class Stub implements AppDocument.Backend {
         final List<CgSystemInput.Mouse.Event> mouse = new ArrayList<>();
+        final List<CgSystemInput.Keyboard.Event> keys = new ArrayList<>();
 
         @Override
         public boolean consumeMouseEvent(CgSystemInput.Mouse.Event event) {
@@ -34,6 +35,7 @@ public class PopupPlacementTest extends UiDocumentTestBase {
 
         @Override
         public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
+            keys.add(event);
             return true;
         }
 
@@ -137,6 +139,20 @@ public class PopupPlacementTest extends UiDocumentTestBase {
                 shown.worldY() + (centre[1] / scale - occupied[1]) * scale, 2f);
         assertEquals("across", window.worldX() + centre[0],
                 shown.worldX() + (centre[0] / scale - occupied[0]) * scale, 2f);
+    }
+
+    @Test
+    public void aPressOnAMenuLeavesKeysGoingToTheApplication() {
+        openMenu();
+        Box window = application.active().box();
+        document.focus().requestPointerFocus(application.active());
+        float[] centre = menuCentrePixels();
+        click(window.worldX() + centre[0], window.worldY() + centre[1]);
+        frame();
+        assertEquals("the window keeps focus", application.active(), document.focus().focused());
+        int before = backend.keys.size();
+        keyPress(65);
+        assertTrue("a key reaches the application", backend.keys.size() > before);
     }
 
     @Test
