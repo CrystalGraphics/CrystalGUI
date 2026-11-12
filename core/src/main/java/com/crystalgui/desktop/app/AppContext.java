@@ -88,6 +88,36 @@ public record AppContext(ApplicationKind kind,
         return new AppWindows(desktop, kind, document);
     }
 
+    /**
+     * Gives the desktop the state this application wants back after a restart; call it when the state changes. Any thread.
+     *
+     * <pre>{@code
+     * context.saveState(layout.toJson());        // the next session starts the application with this
+     * }</pre>
+     *
+     * <p>The desktop writes it with the session, never reads it. The last string wins; a restart with none starts clean.</p>
+     */
+    public void saveState(String state) {
+        desktop.applications().rememberState(kind.id(), state);
+        desktop.saveSoon();
+    }
+
+    /**
+     * Hands {@code apply} the state the last session left, if there was one, before the application's first frame.
+     *
+     * <pre>{@code
+     * context.restoreState(json -> layout.load(json));    // in the constructor
+     * }</pre>
+     *
+     * @return whether there was state to apply
+     */
+    public boolean restoreState(java.util.function.Consumer<String> apply) {
+        String state = desktop.applications().stateOf(kind.id());
+        if (state == null || state.isEmpty()) return false;
+        apply.accept(state);
+        return true;
+    }
+
     /** The one resource this launch was asked to open, or null. */
     @Nullable
     public Resource first() {

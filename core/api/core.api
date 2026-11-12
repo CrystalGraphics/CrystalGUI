@@ -4718,6 +4718,7 @@ com/crystalgui/desktop/Desktop
   method public resetWindowPlacements ()V
   method public resume ()V
   method public savePersistedState ()V
+  method public saveSoon ()V
   method public service (Ljava/lang/Class;Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public setCoversSurface (Z)V
   method public setMoveModifier (I)Lcom/crystalgui/desktop/Desktop;
@@ -4762,34 +4763,6 @@ com/crystalgui/desktop/DesktopKinds
   implements com/crystalgui/ui/dom/NodeKinds
   method public <init> ()V
   method public register ()V
-com/crystalgui/desktop/DesktopSession
-  access public,final
-  extends java/lang/Object
-  field public,static,final VERSION I
-  method public <init> (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
-  method public read (Ljava/lang/String;)Ljava/util/List;
-  method public readMruOrder (Ljava/lang/String;)Ljava/util/List;
-  method public readPins (Ljava/lang/String;)Ljava/util/List;
-  method public save (Ljava/lang/String;)V
-  method public toJson ()Ljava/lang/String;
-  method public,static ahead ()V
-  method public,static fileNameFor (Ljava/lang/String;)Ljava/lang/String;
-com/crystalgui/desktop/DesktopSession$Placement
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/lang/String;FFFFZZLjava/lang/String;)V
-  method public app ()Ljava/lang/String;
-  method public height ()F
-  method public hidden ()Z
-  method public isUsable ()Z
-  method public key ()Ljava/lang/String;
-  method public left ()F
-  method public maximized ()Z
-  method public top ()F
-  method public width ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
 com/crystalgui/desktop/DesktopSettings
   access public,final
   extends java/lang/Object
@@ -4835,6 +4808,8 @@ com/crystalgui/desktop/app/AppContext
   method public first ()Lcom/crystalgui/fs/Resource;
   method public kind ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public open ()Ljava/util/List;
+  method public restoreState (Ljava/util/function/Consumer;)Z
+  method public saveState (Ljava/lang/String;)V
   method public storage ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public windows ()Lcom/crystalgui/desktop/app/AppWindows;
   method public withDocument (Lcom/crystalgui/desktop/app/AppDocument;)Lcom/crystalgui/desktop/app/AppContext;
@@ -4973,6 +4948,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public dispose (Lcom/crystalgui/desktop/app/Application;)V
   method public documentOf (Lcom/crystalgui/desktop/app/Application;)Lcom/crystalgui/desktop/app/AppDocument;
+  method public expect (Ljava/util/List;)V
   method public forget (Lcom/crystalgui/desktop/app/Application;)V
   method public handlerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;
@@ -4987,8 +4963,10 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
   method public openPrimary (Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
   method public primary ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public restoreSession (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public running ()Ljava/util/List;
   method public running (Lcom/crystalgui/desktop/app/ApplicationKind;)Ljava/util/List;
+  method public sessionApps ()Ljava/util/List;
   method public useDocuments (Lcom/crystalgui/desktop/app/AppDocuments;)V
 com/crystalgui/desktop/app/ClientPortal
   access public,final
@@ -5092,6 +5070,47 @@ com/crystalgui/desktop/launcher/LauncherButton
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V
+com/crystalgui/desktop/manager/SessionRecord
+  access public,final
+  extends java/lang/Object
+  field public,static,final VERSION I
+  method public <init> (Lcom/crystalgui/desktop/manager/WindowManager;Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
+  method public read (Ljava/lang/String;)Ljava/util/List;
+  method public readApplications (Ljava/lang/String;)Ljava/util/List;
+  method public readMruOrder (Ljava/lang/String;)Ljava/util/List;
+  method public readPins (Ljava/lang/String;)Ljava/util/List;
+  method public save (Ljava/lang/String;Ljava/util/Collection;Ljava/util/List;Ljava/util/List;)V
+  method public toJson (Ljava/util/Collection;Ljava/util/List;Ljava/util/List;)Ljava/lang/String;
+  method public,static ahead ()V
+  method public,static fileNameFor (Ljava/lang/String;)Ljava/lang/String;
+  method public,static isPersistable (Lcom/crystalgui/desktop/window/WindowFrame;)Z
+com/crystalgui/desktop/manager/SessionRecord$App
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;Ljava/lang/String;)V
+  method public id ()Ljava/lang/String;
+  method public state ()Ljava/lang/String;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/desktop/manager/SessionRecord$Placement
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;FFFFZZLjava/lang/String;)V
+  method public app ()Ljava/lang/String;
+  method public height ()F
+  method public hidden ()Z
+  method public isUsable ()Z
+  method public key ()Ljava/lang/String;
+  method public left ()F
+  method public maximized ()Z
+  method public shown ()Lcom/crystalgui/desktop/manager/SessionRecord$Placement;
+  method public top ()F
+  method public width ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static of (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/manager/SessionRecord$Placement;
 com/crystalgui/desktop/manager/WindowManager
   access public,final
   extends java/lang/Object

@@ -5,7 +5,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
 
@@ -21,6 +23,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
@@ -417,6 +420,65 @@ public final class ApplicationRegistry {
         AppDocument document = documentsOf.get(application);
         if (document == null) application.dispose();
         else document.run(application::dispose);
+    }
+
+    // ── The session ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /** What each application last gave {@code AppContext.saveState}, by kind id; the last session's until then. */
+    private final Map<String, String> states = new ConcurrentHashMap<>();
+    /** The applications the last session left running, not yet relaunched. */
+    private List<SessionRecord.App> awaiting = List.of();
+
+    /** The desktop hands over what the last session recorded: the state each application left, and which were running. */
+    public void expect(List<SessionRecord.App> recorded) {
+        awaiting = List.copyOf(recorded);
+        for (SessionRecord.App app : recorded) {
+            if (!app.state().isEmpty()) states.put(app.id(), app.state());
+        }
+    }
+
+    /**
+     * Relaunches every application the last session left running, once, each into its own document and with the state
+     * it left. One that is not installed, is running already or refuses to launch is skipped.
+     *
+     * <pre>{@code
+     * desktop.applications().restoreSession(workspace);    // when the desktop is first shown
+     * }</pre>
+     */
+    public void restoreSession(@Nullable WorkspaceClient workspace) {
+        List<SessionRecord.App> todo = awaiting;
+        awaiting = List.of();
+        for (SessionRecord.App app : todo) {
+            ApplicationKind kind = byId(app.id());
+            if (kind == null || !running(kind).isEmpty()) continue;
+            try {
+                launch(kind, workspace);
+            } catch (RuntimeException refused) {
+                CrystalGuiCore.LOGGER.debug("[cgui] '{}' cannot be restored yet", kind.id(), refused);
+            }
+        }
+    }
+
+    /** Records the state {@code kindId}'s application gave. Any thread. */
+    void rememberState(String kindId, String state) {
+        states.put(kindId, state);
+    }
+
+    /** What {@code kindId}'s application last gave {@code saveState}, or null. */
+    @Nullable
+    String stateOf(String kindId) {
+        return states.get(kindId);
+    }
+
+    /** The running applications, one per kind, with their state: what the session records. The shell's thread. */
+    public List<SessionRecord.App> sessionApps() {
+        List<SessionRecord.App> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Application live : running) {
+            String id = live.kind().id();
+            if (seen.add(id)) out.add(new SessionRecord.App(id, states.getOrDefault(id, "")));
+        }
+        return out;
     }
 
     /** The document {@code application} runs in, or null when it runs in the shell's. */

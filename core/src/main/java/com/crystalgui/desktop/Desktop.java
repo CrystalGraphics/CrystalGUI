@@ -19,6 +19,7 @@ import com.crystalgui.desktop.taskbar.TaskbarPins;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowKeyboardMove;
+import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgraphics.storage.config.CgConfigStorage;
@@ -47,7 +48,6 @@ import javax.annotation.Nullable;
 import java.nio.file.Path;
 import java.util.function.Supplier;
 import java.util.ArrayList;
-import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
@@ -573,7 +573,7 @@ public class Desktop extends UIElement implements DataProvider {
     // ── Persistence — CrystalOS W12 ─────────────────────────────────────────────────────────────
 
     @Nullable
-    private DesktopSession persistence;
+    private SessionRecord persistence;
     @Nullable
     private String persistenceId;
 
@@ -586,7 +586,7 @@ public class Desktop extends UIElement implements DataProvider {
     private Path cacheRoot;
 
     /** Recorded placements not yet claimed by a window, by key. @see #persistTo */
-    private final Map<String, DesktopSession.Placement> pendingPlacements = new HashMap<>();
+    private final Map<String, SessionRecord.Placement> pendingPlacements = new HashMap<>();
     private List<String> pendingMru = List.of();
     private boolean restorePassArmed;
 
@@ -602,13 +602,14 @@ public class Desktop extends UIElement implements DataProvider {
         this.config = storage;
         desktopSettings.useStorage(storage);
         applications().autostart();
-        persistence = new DesktopSession(this, storage);
+        persistence = new SessionRecord(windowManager, storage);
         persistenceId = id;
         pendingPlacements.clear();
-        for (DesktopSession.Placement placement : persistence.read(id)) {
+        for (SessionRecord.Placement placement : persistence.read(id)) {
             pendingPlacements.put(placement.key(), placement);
         }
         pendingMru = persistence.readMruOrder(id);
+        applications().expect(persistence.readApplications(id));
         restoringPins = true;
         try {
             pins.restore(persistence.readPins(id));
@@ -802,7 +803,15 @@ public class Desktop extends UIElement implements DataProvider {
      * tears down some other way calls this itself.</p>
      */
     public void savePersistedState() {
-        if (persistence != null && persistenceId != null) persistence.save(persistenceId);
+        if (persistence != null && persistenceId != null) {
+            persistence.save(persistenceId, pendingPlacements.values(), pins.ids(), applications().sessionApps());
+        }
+    }
+
+    /** Writes the arrangement on the shell's thread, from any: what an application's {@code saveState} asks for. */
+    public void saveSoon() {
+        UIDocument shell = document();
+        if (shell != null) shell.execute(this::savePersistedState);
     }
 
     /** @return whether a recorded placement was applied */
@@ -810,10 +819,10 @@ public class Desktop extends UIElement implements DataProvider {
         String key = frame.key();
         // A TOOL WINDOW IS PLACED BY WHATEVER OWNS IT, per project -- and this record is per host. It is
         // no longer written here, but a record from before that was, so this has to refuse to apply one
-        // rather than merely stop producing them. @see DesktopSession#isPersistable
+        // rather than merely stop producing them. @see SessionRecord#isPersistable
         if (frame.isToolWindow()) return false;
         if (key == null || pendingPlacements.isEmpty()) return false;
-        DesktopSession.Placement placement = pendingPlacements.remove(key);
+        SessionRecord.Placement placement = pendingPlacements.remove(key);
         if (placement == null) return false;
         frame.resizeTo(placement.width(), placement.height());
         frame.moveTo(placement.left(), placement.top());
@@ -878,7 +887,7 @@ public class Desktop extends UIElement implements DataProvider {
         frame.setApplication(kind).markApplicationMain();
         frame.content().addClass(STARTING_CLASS);
         frame.content().append(new StartingMark(kind.icon(), kind.displayName()));
-        DesktopSession.Placement remembered = placementOfApplication(kind.id());
+        SessionRecord.Placement remembered = placementOfApplication(kind.id());
         if (remembered != null && remembered.isUsable()) {
             frame.resizeTo(remembered.width(), remembered.height());
             frame.moveTo(remembered.left(), remembered.top());
@@ -1005,8 +1014,8 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** The waiting placement an application's main window last had, or null. */
     @Nullable
-    private DesktopSession.Placement placementOfApplication(String applicationId) {
-        for (DesktopSession.Placement placement : pendingPlacements.values()) {
+    private SessionRecord.Placement placementOfApplication(String applicationId) {
+        for (SessionRecord.Placement placement : pendingPlacements.values()) {
             if (applicationId.equals(placement.app())) return placement;
         }
         return null;
@@ -1014,13 +1023,8 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** A closing window's geometry, for the next window under its key. @see WindowFrame#dispose */
     public void rememberPlacement(WindowFrame frame) {
-        if (!DesktopSession.isPersistable(frame)) return;
-        pendingPlacements.put(frame.key(), DesktopSession.Placement.of(frame).shown());
-    }
-
-    /** Geometry waiting for a window: read from the record or left by one that closed. Saved with the rest. */
-    Collection<DesktopSession.Placement> waitingPlacements() {
-        return pendingPlacements.values();
+        if (!SessionRecord.isPersistable(frame)) return;
+        pendingPlacements.put(frame.key(), SessionRecord.Placement.of(frame).shown());
     }
 
     /**

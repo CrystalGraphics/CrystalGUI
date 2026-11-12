@@ -443,7 +443,7 @@ public final class WorkbenchSession {
     private record TornOutWindow(String title, float left, float top, float width, float height,
                                  DockLayout layout) {
 
-        /** @see com.crystalgui.ui.elements.desktop.DesktopSession.Placement#isUsable() */
+        /** @see com.crystalgui.ui.elements.desktop.SessionRecord.Placement#isUsable() */
         boolean isUsable() {
             return width > 0f && height > 0f;
         }

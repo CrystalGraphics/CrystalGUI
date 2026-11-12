@@ -1,59 +1,49 @@
-package com.crystalgui.desktop;
+package com.crystalgui.desktop.manager;
 
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.taskbar.TaskbarPins;
+import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgraphics.serialization.format.CgFiles;
 
 import javax.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.List;
 import java.util.Locale;
 
 /**
- * The desktop as it was left — CrystalOS <b>W12</b>, geometry persistence and session restore.
+ * The session the window manager records and the desktop puts back: which windows were open, where each one was, which
+ * were put away, in what order, which applications were running and what each said of itself.
  *
- * <p>W8 persisted exactly one thing, a floating tool window's rect, because a float's frame is destroyed
- * on every hide and nothing else could say where it had been. This is the general case: which windows
- * were open, where each one was, which were put away, and in what order.</p>
+ * <pre>{@code
+ * SessionRecord record = new SessionRecord(manager, storage);
+ * record.save("main", waiting, pins, apps);              // when the desktop leaves the screen
+ * for (SessionRecord.Placement p : record.read("main"))  // when it comes back: applied to windows as they open
+ *     pending.put(p.key(), p);
+ * for (SessionRecord.App app : record.readApplications("main")) relaunch(app);
+ * }</pre>
  *
- * <h3>The INTENT pair, never the placement</h3>
- *
- * <p>{@link WindowFrame#getWantedLeft} is what was asked for; {@code getX()} is where it ended up after
- * clamping. Saving the placement writes the clamp into the record permanently — restore on a smaller
- * desktop, save again, and every launch pulls the window a little further in with nothing to attribute
- * the drift to. The frame's own javadoc says so, and this is the caller it was written for.</p>
- *
- * <h3>Two orders, because neither is derivable from the other</h3>
- *
- * <p>The taskbar reads open order and the switcher reads MRU, and a minimised window has left the
- * stacking order while keeping its place in the sequence. A record that kept only one would either move
- * every entry on the taskbar or offer the wrong window first after a restart. The pinned applications'
- * order is the third, and the only one the user arranges by hand.</p>
- *
- * <h3>A window with no key is not persisted, and that is not a limitation</h3>
- *
- * <p>A key is what a record can NAME a window by. {@link Desktop#persistTo} applies a placement to a
- * window as it opens, by matching {@link WindowFrame#key()} — so a frame nobody gave a key to can never
- * be matched to anything, and recording its geometry would produce a file full of rectangles that are
- * read on every launch and applied to nothing.</p>
- *
- * <h3>An old record is discarded, never migrated</h3>
- *
- * <p>{@code WorkbenchSession}'s policy and its reasoning: a layout record describes an arrangement, and
- * an arrangement invented by a migration is one nobody chose. Losing it costs a re-arrange; getting it
- * wrong is a desktop that looks broken.</p>
+ * <ul>
+ *   <li><b>The intent pair, never the placement.</b> {@code getWantedLeft} is what was asked for; saving the clamped
+ *       placement would pull a window further in on every launch.</li>
+ *   <li><b>Two orders.</b> The taskbar reads open order, the switcher MRU; neither derives from the other. The pinned
+ *       applications' order is the third, the only one the user arranges by hand.</li>
+ *   <li><b>A window with no key is not persisted</b>: a record can only name a window by its key.</li>
+ *   <li><b>An application's own state</b> is the string it last gave {@code AppContext.saveState}; the record never reads it.</li>
+ *   <li><b>An old record is discarded, never migrated</b>: an arrangement invented by a migration is one nobody chose.</li>
+ * </ul>
  */
-public final class DesktopSession {
+public final class SessionRecord {
 
-    /** Bump on any change that makes an older record mean something different. @see DesktopSession */
-    public static final int VERSION = 1;
+    /** Bump on any change that makes an older record mean something different. */
+    public static final int VERSION = 2;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_WINDOWS = "windows";
@@ -67,12 +57,17 @@ public final class DesktopSession {
     private static final String KEY_MAXIMIZED = "maximized";
     private static final String KEY_HIDDEN = "hidden";
     private static final String KEY_APP = "app";
+    private static final String KEY_APPS = "apps";
+    private static final String KEY_ID = "id";
+    private static final String KEY_STATE = "state";
 
-    private final Desktop desktop;
+    @Nullable
+    private final WindowRegistry registry;
     private final CgConfigStorage storage;
 
-    public DesktopSession(Desktop desktop, CgConfigStorage storage) {
-        this.desktop = desktop;
+    /** @param manager the window manager whose windows are recorded; null for a record that is only read */
+    public SessionRecord(@Nullable WindowManager manager, CgConfigStorage storage) {
+        this.registry = manager == null ? null : manager.registry();
         this.storage = storage;
     }
 
@@ -95,35 +90,49 @@ public final class DesktopSession {
 
     // ── Saving ──────────────────────────────────────────────────────────────────────────────────
 
-    public void save(String desktopId) {
+    /**
+     * Writes the record.
+     *
+     * @param waiting placements recorded but not yet claimed by a window: kept, or a window not reopened before the
+     *                next save would lose its size for good
+     * @param pins    the pinned application ids, in the bar's order
+     * @param apps    the running applications and their state
+     */
+    public void save(String desktopId, Collection<Placement> waiting, List<String> pins, List<App> apps) {
         if (!storage.isWritable()) return;
-        storage.write(fileNameFor(desktopId), toJson());
+        storage.write(fileNameFor(desktopId), toJson(waiting, pins, apps));
     }
 
-    /** The record as text, without writing it — what a test asserts on. */
-    public String toJson() {
+    /** The record as text, without writing it: what a test asserts on. */
+    public String toJson(Collection<Placement> waiting, List<String> pins, List<App> apps) {
         List<Placement> windows = new ArrayList<>();
         Set<String> open = new HashSet<>();
-        for (WindowFrame frame : desktop.windowManager().registry().windows()) {
+        for (WindowFrame frame : registry.windows()) {
             if (!isPersistable(frame)) continue;
             windows.add(Placement.of(frame));
             open.add(frame.key());
         }
-        // AND THE CLOSED ONES, which open again where they were. A placement never applied this session is kept
-        // too, or a window not reopened before the next save would lose its size for good.
-        for (Placement waiting : desktop.waitingPlacements()) {
-            if (open.add(waiting.key())) windows.add(waiting);
+        for (Placement placement : waiting) {
+            if (open.add(placement.key())) windows.add(placement);
         }
         List<String> mru = new ArrayList<>();
-        for (WindowFrame frame : desktop.windowManager().registry().mruOrder()) {
+        for (WindowFrame frame : registry.mruOrder()) {
             if (isPersistable(frame)) mru.add(frame.key());
         }
-        List<String> pins = new ArrayList<>(desktop.pins().ids());
-        return CgFiles.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, pins));
+        return CgFiles.JSON.toText(Saved.CODEC, new Saved(VERSION, windows, mru, List.copyOf(pins), List.copyOf(apps)));
+    }
+
+    /** A running application at the time of the record, and the state it last gave to {@code saveState}; empty for none. */
+    public record App(String id, String state) {
+
+        static final CgCodec<App> CODEC = CgCodecs.record(
+                CgCodecs.fieldOr(KEY_ID, CgCodecs.STRING, App::id, ""),
+                CgCodecs.optionalField(KEY_STATE, CgCodecs.STRING, App::state, ""),
+                App::new);
     }
 
     /** The whole file. */
-    private record Saved(int version, List<Placement> windows, List<String> mru, List<String> pins) {
+    private record Saved(int version, List<Placement> windows, List<String> mru, List<String> pins, List<App> apps) {
 
         private static final CgCodec<String> MRU_ENTRY = CgCodecs.record(
                 CgCodecs.fieldOr(KEY_KEY, CgCodecs.STRING, (String key) -> key, ""), (String key) -> key);
@@ -134,6 +143,7 @@ public final class DesktopSession {
                 CgCodecs.fieldOr(KEY_MRU, CgCodecs.listOf(MRU_ENTRY), Saved::mru, List.of()),
                 // A record from before pins were saved reads as none pinned, which is what it meant
                 CgCodecs.fieldOr(KEY_PINS, CgCodecs.listOf(CgCodecs.STRING), Saved::pins, List.of()),
+                CgCodecs.fieldOr(KEY_APPS, CgCodecs.listOf(App.CODEC), Saved::apps, List.of()),
                 Saved::new);
     }
 
@@ -153,7 +163,7 @@ public final class DesktopSession {
      * because {@code attachOwned} never reaches {@code addWindow} at all — so it presented as only some
      * of them being wrong, which reads as a placement bug rather than as a duplicated record.</p>
      */
-    static boolean isPersistable(WindowFrame frame) {
+    public static boolean isPersistable(WindowFrame frame) {
         return frame.key() != null && !frame.key().isEmpty()
                 && frame.state() != WindowState.DESTROYED
                 && !frame.isToolWindow();
@@ -200,11 +210,11 @@ public final class DesktopSession {
          * minimum is idempotent, so asking for it again gives the same answer rather than compounding.</p>
          */
         /** The same geometry, shown rather than minimised: a closed window reopens on screen. */
-        Placement shown() {
+        public Placement shown() {
             return new Placement(key, left, top, width, height, maximized, false, app);
         }
 
-        static Placement of(WindowFrame frame) {
+        public static Placement of(WindowFrame frame) {
             boolean maximized = frame.isMaximized();
             // recordedWidth, never the measured box: a HIDDEN window is detached, so its box is zero -- and
             // a 0x0 rect is refused on the way back in, so the window would simply not come back.
@@ -233,7 +243,7 @@ public final class DesktopSession {
     /**
      * What the record says was there, in OPEN order — the reading half, with nothing applied.
      *
-     * <p>This class is the RECORD and {@link Desktop} is the policy: reading, applying and writing all
+     * <p>This class is the RECORD and {@code Desktop} is the policy: reading, applying and writing all
      * belong to the compositor, which is what lets a host supply a storage and an id and nothing else.
      * Separating the two is what makes the record assertable — a test can ask what was written without
      * standing a desktop up to receive it, and the version and zero-rect gates below both live here for
@@ -255,6 +265,15 @@ public final class DesktopSession {
     public List<String> readMruOrder(String desktopId) {
         Saved saved = saved(desktopId);
         return saved == null ? List.of() : saved.mru();
+    }
+
+    /** The applications that were running, in the order they started. Empty when there is no record. */
+    public List<App> readApplications(String desktopId) {
+        Saved saved = saved(desktopId);
+        if (saved == null) return List.of();
+        List<App> out = new ArrayList<>();
+        for (App app : saved.apps()) if (!app.id().isEmpty()) out.add(app);
+        return out;
     }
 
     /** The pinned application ids, in the bar's order. Empty when there is no record. @see TaskbarPins */

@@ -10,7 +10,7 @@ import com.crystalgui.core.window.WindowClamp;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.DesktopSession;
+import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.ui.box.Box;
@@ -1885,7 +1885,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /**
      * The rect a maximised window goes back to. Meaningless while it is not maximised.
      *
-     * <p>Package-private: this is state {@link DesktopSession} has to be able to read and write in order
+     * <p>Package-private: this is state {@link SessionRecord} has to be able to read and write in order
      * to survive a restart, and nothing outside the compositor has any business with it.</p>
      */
     public float restoreLeft() {

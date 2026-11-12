@@ -170,6 +170,8 @@ public final class CgUiScreen {
     private static volatile boolean raiseOnShow;
     /** A launch was wanted and could not be done; retried each host frame until a window exists. */
     private static volatile boolean launchPending;
+    /** Whether the last session's applications were relaunched. On the document. */
+    private static boolean sessionRestored;
 
     /** The close waiting for the desktop to play itself off, and since when. */
     @Nullable
@@ -466,6 +468,12 @@ public final class CgUiScreen {
      */
     private static void bringForward() {
         Desktop shown = desktop;
+        if (shown != null && !sessionRestored) {
+            // THE LAST SESSION'S APPLICATIONS, once the desktop is first shown: each in its own document, with its state.
+            sessionRestored = true;
+            connection.bind(game.connection());
+            shown.applications().restoreSession(connection.workspace());
+        }
         if (shown == null || !raiseOnShow) return;
         if (shown.applications().primary() == null) {
             raiseOnShow = false;
@@ -543,6 +551,7 @@ public final class CgUiScreen {
         foreignScreenWasUp = false;
         raiseOnShow = false;
         launchPending = false;
+        sessionRestored = false;
         closing = null;
         left = false;
         onScreen = true;

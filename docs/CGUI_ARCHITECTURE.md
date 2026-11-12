@@ -173,8 +173,8 @@ com.crystalgui.widget.texteditor  THE EDITOR ON THE NEW ENGINE (M6.5) — TextEd
 com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (the compositor, found with
                                `Desktop.of(document)` and never built by a caller: the engine may not
                                name a compositor, so the compositor names the document), DesktopCommands,
-                               DesktopSession, DesktopKinds (the layer's NodeKinds service). FOUR classes
-                               at the root, which is the whole of what a layer root is for.
+                               DesktopKinds (the layer's NodeKinds service), DesktopWindowMount, SnapPreview.
+                               The session record is `.manager.SessionRecord`.
   .window                      WindowFrame and everything a window IS: WindowChrome, WindowCommands,
                                WindowRegistry, WindowIcon, WindowMove, WindowKeyboardMove, SnapZones,
                                SystemMenu
