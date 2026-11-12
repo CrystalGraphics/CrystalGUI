@@ -248,7 +248,7 @@ probe's, not the hosts'. Before the first run:
    second for a player looking down. Apply one change per measurement (yaw, then roll), so each is one
    rotation. Before blaming a host for a failed check, ask whether the check's assumption holds there
    (1.7.10's player stands at `posY - yOffset`, its `posY` at eye level).
-3. **Declare, then skip.** A host declares what its hook *visibly* delivers (`CgHostCamera.capabilities()`,
+3. **Declare, then skip.** A host declares what its hook *visibly* delivers (`CgCameraManager.capabilities()`,
    `CgWorldEvents.declare`), and the probe skips the rest with a reason. A node that cannot deliver says so
    in its declaration and its javadoc — it does not fail, and it does not declare a hook that changes
    nothing seen.
