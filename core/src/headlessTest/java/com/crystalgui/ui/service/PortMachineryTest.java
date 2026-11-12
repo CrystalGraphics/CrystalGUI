@@ -73,11 +73,11 @@ public class PortMachineryTest {
     }
 
     /**
-     * Hiding is a STRUCTURE change, not merely an attribute change.
+     * Hiding reaches the box tree, not merely the attribute.
      *
      * <p>The box tree walks the composed tree only on frames the node tree reported one — so an
-     * attribute that decides whether a box exists must say so, or the hidden node keeps its box until
-     * something unrelated dirties the structure. Silent, and it presents as hiding working
+     * attribute that decides whether a box exists must say so (a toggled node re-syncs its own subtree), or the
+     * hidden node keeps its box until something unrelated dirties the structure. Silent, and it presents as hiding working
      * "sometimes".</p>
      */
     @Test
@@ -91,8 +91,9 @@ public class PortMachineryTest {
         a.setDisplayed(false);
         document.layout(100f, 100f);
 
-        assertTrue("hiding must dirty the structure, or the box outlives the hide",
-                document.boxes().syncPasses() > syncsBefore);
+        assertNull("hiding must reach the box tree, or the box outlives the hide", document.boxes().boxOf(a));
+        assertEquals("and only the node's own subtree is re-synced, not the document", syncsBefore,
+                document.boxes().syncPasses());
     }
 
     // ── scroll-exempt ────────────────────────────────────────────────────────

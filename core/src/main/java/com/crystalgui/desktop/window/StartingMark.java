@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.easing.CgEasing;
 import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.desktop.motion.BoxFlights;
@@ -33,6 +34,8 @@ import javax.annotation.Nullable;
  * </ul>
  */
 public final class StartingMark extends UIElement {
+
+    public static final Name NAME = Name.of("startingmark");
 
     /** On the mark; its icon is the {@code __window-icon__} child. */
     public static final String MARK_CLASS = "__starting-mark__";
@@ -84,6 +87,7 @@ public final class StartingMark extends UIElement {
     }
 
     private StartingMark(@Nullable String icon, @Nullable String title, boolean settles) {
+        super(NAME);
         this.icon = icon;
         this.title = title;
         addClass(MARK_CLASS);

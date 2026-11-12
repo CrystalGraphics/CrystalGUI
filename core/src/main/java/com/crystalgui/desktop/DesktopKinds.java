@@ -5,6 +5,8 @@ import com.crystalgui.desktop.launcher.LauncherButton;
 import com.crystalgui.desktop.window.WindowIcon;
 import com.crystalgui.desktop.taskbar.WindowThumbnail;
 import com.crystalgui.desktop.taskbar.WindowPreview;
+import com.crystalgui.desktop.taskbar.WindowPreviewRow;
+import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.switcher.WindowSwitcher;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.taskbar.Taskbar;
@@ -52,6 +54,8 @@ public final class DesktopKinds implements NodeKinds {
         UIElementRegistry.register(WindowSwitcher.NAME, () -> new WindowSwitcher(null), NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(WindowPreview.NAME, WindowPreview::new, NodeContract.INERT, KindInfo.hidden());
         UIElementRegistry.register(WindowThumbnail.NAME, WindowThumbnail::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(WindowPreviewRow.NAME, WindowPreviewRow::new, NodeContract.INERT, KindInfo.hidden());
+        UIElementRegistry.register(StartingMark.NAME, () -> new StartingMark(null, null), NodeContract.INERT, KindInfo.hidden());
         // A RESIZE HANDLE IS NOT A KIND. It is built by `Resizer.install` for a resizable node and never
         // decoded from a description, and no shipped rule names the tag -- the sheet keys on
         // `.__resizer-*__` classes. Registering one with a factory that throws is a registration whose
