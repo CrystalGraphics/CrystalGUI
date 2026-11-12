@@ -588,7 +588,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         WindowFrame other = Desktop.of(document).addWindow(new WindowFrame("Other"));
         other.resizeTo(300, 200).moveTo(360, 40);
         settle();
-        Desktop.of(document).activate(frame);
+        Desktop.of(document).windowManager().activate(frame);
         settle();
 
         Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);

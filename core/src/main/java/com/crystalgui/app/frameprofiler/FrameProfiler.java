@@ -65,8 +65,8 @@ public final class FrameProfiler {
                     UIElement source = UIElement.sourceOf(context);
                     Desktop desktop = source == null ? null : Desktop.ifPresent(source.document());
                     if (desktop == null) return;
-                    WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
-                    if (existing != null && existing == desktop.activeWindow()) existing.requestClose();
+                    WindowFrame existing = desktop.windowManager().registry().byKey(WINDOW_KEY);
+                    if (existing != null && existing == desktop.windowManager().activeWindow()) existing.requestClose();
                     else openOn(desktop);
                 })
                 .enabledWhen(context -> {
@@ -143,11 +143,11 @@ public final class FrameProfiler {
         // THE SAME FILE A LAUNCH READS, for a window opened by key rather than through the registry.
         // A no-op when the desktop's autostart already loaded it.
         ProfilerSettings settings = ProfilerSettings.of(desktop);
-        WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
+        WindowFrame existing = desktop.windowManager().registry().byKey(WINDOW_KEY);
         if (existing != null) {
             // ACTIVATE, not raise: a minimised profiler is hidden, and raising a hidden window reorders it and
             // leaves it hidden -- the second F9 did nothing at all.
-            desktop.activate(existing, true);
+            desktop.windowManager().activate(existing, true);
             return existing;
         }
         long opening = CgTrace.stamp(UiTrace.FLOW);
@@ -197,7 +197,7 @@ public final class FrameProfiler {
         public void activate() {
             // The window's own desktop: a minimised one is detached, and has no document to find it by
             Desktop desktop = window.desktop();
-            if (desktop != null) desktop.activate(window, true);
+            if (desktop != null) desktop.windowManager().activate(window, true);
         }
 
         @Override

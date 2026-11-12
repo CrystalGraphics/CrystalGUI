@@ -27,7 +27,7 @@ public class CgUiScreenTest {
     }
 
     private static CgUiScreen.Mode modeOf(Desktop desktop, boolean anyScreenUp) {
-        return CgUiScreen.Mode.of(false, anyScreenUp, desktop.parent() != null, desktop.hasPinnedWindows());
+        return CgUiScreen.Mode.of(false, anyScreenUp, desktop.parent() != null, desktop.windowManager().hasPinnedWindows());
     }
 
     /** Closing the screen with something pinned goes to the HUD, not to a suspend, which would answer NONE. */
@@ -39,7 +39,7 @@ public class CgUiScreenTest {
         CgUiScreen.hidden();
 
         assertFalse("still on the tree, or the mode is NONE", desktop.isSuspended());
-        assertTrue(desktop.isHudMode());
+        assertTrue(desktop.windowManager().isHudMode());
         assertEquals(CgUiScreen.Mode.HUD, modeOf(desktop, false));
         assertEquals("and over somebody else's screen", CgUiScreen.Mode.OVERLAY, modeOf(desktop, true));
     }
@@ -53,7 +53,7 @@ public class CgUiScreenTest {
         CgUiScreen.hidden();
 
         assertTrue(desktop.isSuspended());
-        assertFalse(desktop.isHudMode());
+        assertFalse(desktop.windowManager().isHudMode());
         assertEquals(CgUiScreen.Mode.NONE, modeOf(desktop, false));
     }
 

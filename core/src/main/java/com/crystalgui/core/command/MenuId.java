@@ -107,7 +107,7 @@ public final class MenuId {
     /**
      * An installed application's menu, wherever one is offered without a window: a taskbar pin that is not
      * running, a row of the launcher. A command placed here reads the application from
-     * {@code UiDataKeys.APPLICATION_KIND}.
+     * {@code ApplicationKind.DATA_KEY}.
      */
     public static final MenuId APPLICATION = of("application");
 

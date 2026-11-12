@@ -531,7 +531,7 @@ public class DockArea extends UIElement implements MinimumSize {
         if (surface == null) return;
         Desktop desktop = Desktop.of(surface);
         for (DockWindow window : home.windows) {
-            if (window.area() == this && desktop.activeWindow() != window) desktop.activate(window);
+            if (window.area() == this && desktop.windowManager().activeWindow() != window) desktop.windowManager().activate(window);
         }
     }
 

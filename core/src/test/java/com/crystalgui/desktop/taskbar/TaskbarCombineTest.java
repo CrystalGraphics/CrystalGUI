@@ -168,7 +168,7 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
         frame();
         frame();
         frame();
-        WindowFrame window = desktop.registry().windows().get(1);
+        WindowFrame window = desktop.windowManager().registry().windows().get(1);
         assertEquals("the launched pin went back to the end", List.of(taskbar.entryFor(window), taskbar.entryFor(one)),
                 taskbar.entryRow());
     }

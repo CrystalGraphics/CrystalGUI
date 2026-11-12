@@ -163,7 +163,7 @@ final class WindowMove {
             event.stopPropagation();
             // Raised first, because a press that never reaches the frame's own activation would
             // otherwise move a window without bringing it forward.
-            desktop.activate(frame);
+            desktop.windowManager().activate(frame);
             beginMove(event.getPosition().x(), event.getPosition().y(), 1);
         }, true, false);
     }
@@ -366,7 +366,7 @@ final class WindowMove {
         }
         // THROUGH THE DESKTOP, which owns where the group's dividers currently are -- computing the rect
         // here would tile against halves and silently undo a layout somebody had dragged to 3:1.
-        desktop.snapFrameTo(frame, zone);
+        desktop.windowManager().snapFrameTo(frame, zone);
     }
 
     /**

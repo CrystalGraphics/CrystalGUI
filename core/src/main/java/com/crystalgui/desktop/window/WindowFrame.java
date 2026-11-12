@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgui.widget.layout.LayoutMinimum;
 import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -363,7 +364,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     @Nullable
     private UIElement lastFocused;
 
-    /** This window's place in the stack, as last assigned. @see Desktop#raise */
+    /** This window's place in the stack, as last assigned. @see WindowManager#raise */
     private int stackOrder;
     /** @see #isPinned() */
     private boolean pinned;
@@ -665,7 +666,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
                 // documented to hand over to nobody, which is exactly why it cannot afford to take the
                 // foreground with it.
                 if (!pressedOver(event.getPosition().x(), event.getPosition().y(), minimizeButton)) {
-                    desktop.activate(this, false, !inContent);
+                    desktop.windowManager().activate(this, false, !inContent);
                 }
                 return;
             }
@@ -971,7 +972,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         this.iconName = namespacedIcon;
         refreshIcon();
         Desktop desktop = owner;
-        if (desktop != null) desktop.registry().changed();
+        if (desktop != null) desktop.windowManager().registry().changed();
         return this;
     }
 
@@ -1003,7 +1004,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         titleLabel.setText(titleShown ? this.title : "");
         // The monogram is the title's initial, and the taskbar entry carries the title too.
         refreshIcon();
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
@@ -1077,7 +1078,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      *
      * <p>So this is the same relationship without the parenting: the frame stays top-level in the
      * desktop's window layer — free to be dragged anywhere, its own entry, its own stacking slot — and
-     * the ONE thing it inherits is that {@link Desktop#raise} keeps it above its owner. Raising the
+     * the ONE thing it inherits is that {@link WindowManager#raise} keeps it above its owner. Raising the
      * owner carries its owned windows up with it, which is the whole of "clicking the editor must not
      * bury the panel I pulled out of it".</p>
      *
@@ -1121,7 +1122,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
             if (walk == this) return this;
         }
         this.ownerWindow = owner;
-        if (owner != null && desktop() != null) desktop().raise(this);
+        if (owner != null && desktop() != null) desktop().windowManager().raise(this);
         return this;
     }
 
@@ -1191,7 +1192,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         refreshIcon();
         // The taskbar and the switcher are built from filtered views, so flipping this changes what they
         // should be showing and nothing else would tell them.
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
@@ -1254,14 +1255,14 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     public void requestAttention() {
         if (demandingAttention) return;
         demandingAttention = true;
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
     }
 
     /** @see #isDemandingAttention() */
     public void clearAttention() {
         if (!demandingAttention) return;
         demandingAttention = false;
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
     }
 
     private boolean demandingAttention;
@@ -1284,7 +1285,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         String cleaned = nowBadge == null || nowBadge.isEmpty() ? null : nowBadge;
         if (java.util.Objects.equals(badge, cleaned)) return this;
         this.badge = cleaned;
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
@@ -1313,7 +1314,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         float cleaned = !(nowProgress >= 0f) ? -1f : Math.min(1f, nowProgress);
         if (progress == cleaned) return this;
         this.progress = cleaned;
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
@@ -1375,7 +1376,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // hidePanel and its destroy() are never reached -- but that is a coupling between two files, not
         // a property of this loop, and the failure would be a ConcurrentModificationException from
         // minimising a window.
-        for (WindowFrame candidate : new ArrayList<>(owner.registry().windows())) {
+        for (WindowFrame candidate : new ArrayList<>(owner.windowManager().registry().windows())) {
             if (candidate == this || !candidate.isToolWindow()) continue;
             // ALREADY ON ITS WAY OUT WITH US -- an animated cascade started at gesture time, and this is
             // the owner's own hide() landing afterwards. Hiding it again would cut its flight short at
@@ -1461,7 +1462,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         return hasClass(ACTIVE_CLASS);
     }
 
-    /** Driven by {@link Desktop#activate}, which is the only thing that may decide this. */
+    /** Driven by {@link WindowManager#activate}, which is the only thing that may decide this. */
     public void setActive(boolean active) {
         // Brought back before its minimise landed
         if (active) {
@@ -1472,7 +1473,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         else removeClass(ACTIVE_CLASS);
     }
 
-    /** Where this window's stacking order currently sits. @see Desktop#raise */
+    /** Where this window's stacking order currently sits. @see WindowManager#raise */
     public int stackOrder() {
         return stackOrder;
     }
@@ -1491,9 +1492,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * <p>One toggle, two effects — Win32's {@code WS_EX_TOPMOST} and EWMH's
      * {@code _NET_WM_STATE_ABOVE}, plus the thing those cannot express because they have no desktop to
      * close: a pinned window keeps rendering on the HUD after the screen is put away. @see
-     * Desktop#enterHudMode</p>
+     * WindowManager#enterHudMode</p>
      *
-     * <p>The band itself is one line in {@link Desktop#raise} — an offset on the same monotonic
+     * <p>The band itself is one line in {@link WindowManager#raise} — an offset on the same monotonic
      * counter — which is exactly what the band model predicted when always-on-top was refused for
      * having no consumer.</p>
      */
@@ -1537,7 +1538,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         if (pinned) addClass(PINNED_CLASS); else removeClass(PINNED_CLASS);
         pinTooltip.setText(pinned ? UNPIN_TOOLTIP : PIN_TOOLTIP);
         Desktop desktop = desktop();
-        if (desktop != null) desktop.raise(this);
+        if (desktop != null) desktop.windowManager().raise(this);
         return this;
     }
 
@@ -1690,7 +1691,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         if (application != null) addClass(applicationClass(application.id()));
         // A window with no icon of its own is drawn with the kind's. @see #iconName
         refreshIcon();
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
@@ -1865,7 +1866,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         //
         // exitHudMode clears hudMode BEFORE it restores what it hid, so a restore never lands here.
         Desktop attached = desktop();
-        if (attached != null && attached.isHudMode() && !isPinned()) {
+        if (attached != null && attached.windowManager().isHudMode() && !isPinned()) {
             setPinned(true);
             addClass(HUD_CLASS);
         }
@@ -1906,7 +1907,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         //
         // Also false for a window that was already hidden -- eviction destroys those, and evicting
         // something the user put away must not reach in and change what they are looking at.
-        boolean wasActive = owner != null && owner.activeWindow() == this;
+        boolean wasActive = owner != null && owner.windowManager().activeWindow() == this;
 
         hide();
         // ITS SIZE AND PLACE OUTLIVE IT: the next window under its key opens there, as an application
@@ -1916,8 +1917,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         Desktop desktop = owner;
         owner = null;
         if (desktop != null) {
-            desktop.registry().destroyed(this);
-            if (wasActive) desktop.activateTopmost();
+            desktop.windowManager().registry().destroyed(this);
+            if (wasActive) desktop.windowManager().activateTopmost();
         }
         onDestroyed.emit();
     }
@@ -2097,7 +2098,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         fullscreen = true;
         addClass(FULLSCREEN_CLASS);
         maximize();
-        if (owner != null) owner.fullscreenChanged();
+        if (owner != null) owner.windowManager().fullscreenChanged();
     }
 
     public void exitFullscreen() {
@@ -2106,7 +2107,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         removeClass(FULLSCREEN_CLASS);
         if (!maximizedBeforeFullscreen) restore();
         else shrinkIntoWorkArea();
-        if (owner != null) owner.fullscreenChanged();
+        if (owner != null) owner.windowManager().fullscreenChanged();
     }
 
     /**
@@ -2424,7 +2425,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     public void onUserResize(int handleDx, int handleDy, float width, float height) {
         Desktop desktop = desktop();
         if (desktop == null || snappedZone == null) return;
-        desktop.jointResize(this, handleDx, handleDy, width, height);
+        desktop.windowManager().jointResize(this, handleDx, handleDy, width, height);
     }
 
     /**
@@ -2472,7 +2473,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         //
         // Guarded on being the active window, or minimising a background one would deactivate the
         // foreground.
-        if (owner != null && owner.activeWindow() == this) owner.deactivate();
+        if (owner != null && owner.windowManager().activeWindow() == this) owner.windowManager().deactivate();
         // THE PANELS GO NOW, WITH IT -- same reason the deactivation above moved to the press. hide() is
         // this animation's continuation, so a cascade left to it starts when the flight LANDS: the window
         // sails into the taskbar and its tool windows blink out afterwards, which reads as them not being
@@ -2729,7 +2730,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
             return;
         }
         Desktop desktop = desktop();
-        if (desktop != null) desktop.placeByCascade(this);
+        if (desktop != null) desktop.windowManager().placeByCascade(this);
     }
 
     @Override
@@ -2761,7 +2762,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     @Override
     public void pressBlocked(UIElement modal) {
         Desktop desktop = desktop();
-        if (desktop != null) desktop.activate(this, false, true);
+        if (desktop != null) desktop.windowManager().activate(this, false, true);
         // THE FRAME KNOWS WHAT A DIALOG IS and the engine does not -- `desktop` sits above
         // `widget.overlay`, so this is the legal direction for the type check, and it is why the hook
         // is on the SCOPE rather than on the modal.

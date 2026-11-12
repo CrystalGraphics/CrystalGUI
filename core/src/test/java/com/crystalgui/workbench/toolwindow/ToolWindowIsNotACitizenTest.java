@@ -93,7 +93,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
     @Test
     public void aWindowedToolWindowIsLiveButIsNotAnEntry() {
         ToolWindowFrame frame = openWindowed();
-        var registry = Desktop.of(document).registry();
+        var registry = Desktop.of(document).windowManager().registry();
 
         assertTrue("a tool document is still a live document", registry.windows().contains(frame));
         assertFalse("a tool document must not have a taskbar entry",
@@ -123,7 +123,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
 
         assertFalse("the fixture accidentally made it a tool document", torn.isToolWindow());
         assertTrue("an owned NON-tool document must keep its taskbar entry",
-                Desktop.of(document).registry().taskbarOrder().contains(torn));
+                Desktop.of(document).windowManager().registry().taskbarOrder().contains(torn));
     }
 
     // ── The hide cascade ────────────────────────────────────────────────────────────────────────

@@ -168,7 +168,7 @@ public class ApplicationRetentionTest {
         counts.put("WorkspaceClient.presence().onDidChange", workspace.presence().onDidChange.connectionCount());
         counts.put("Workspace clients", workspace.service().clientCount());
         counts.put("applications running", desktop.applications().running().size());
-        counts.put("desktop windows", desktop.registry().size());
+        counts.put("desktop windows", desktop.windowManager().registry().size());
         return counts;
     }
 

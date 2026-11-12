@@ -72,11 +72,11 @@ public class LauncherClickTest extends UiDocumentTestBase {
         Launcher launcher = start.launcher();
         launcher.search("Alpha");
         for (int i = 0; i < 5; i++) frame();
-        int before = desktop.windows().size();
+        int before = desktop.windowManager().windows().size();
         int[] p = at(launcher.list().box(), 0.5f, 0.2f);
         click(p[0], p[1]);
         for (int i = 0; i < 60; i++) frame();
-        assertTrue("a press on the row opened no window", desktop.windows().size() > before);
+        assertTrue("a press on the row opened no window", desktop.windowManager().windows().size() > before);
         assertFalse("the menu stayed open over what it launched", launcher.isOpen());
     }
 
@@ -143,13 +143,13 @@ public class LauncherClickTest extends UiDocumentTestBase {
     @Test
     public void openingStartDeactivatesTheActiveWindow() {
         WindowFrame window = desktop.addWindow(new WindowFrame("Window"));
-        desktop.activate(window);
+        desktop.windowManager().activate(window);
         for (int i = 0; i < 4; i++) frame();
         assertTrue(window.isActive());
         start.toggle();
         for (int i = 0; i < 4; i++) frame();
         assertFalse("the window stayed active under the open menu", window.isActive());
-        assertEquals(null, desktop.activeWindow());
+        assertEquals(null, desktop.windowManager().activeWindow());
     }
 
     /** Right-click opens the row's menu; pressing its Pin item pins and must not launch. */

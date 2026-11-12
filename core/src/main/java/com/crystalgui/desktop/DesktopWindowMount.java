@@ -229,7 +229,7 @@ public final class DesktopWindowMount implements WindowMount {
         public void focus() {
             if (frame.state() == WindowState.DESTROYED) return;
             if (frame.state() == WindowState.HIDDEN) frame.show(false);
-            Desktop.of(document).activate(frame);
+            Desktop.of(document).windowManager().activate(frame);
         }
 
         /**

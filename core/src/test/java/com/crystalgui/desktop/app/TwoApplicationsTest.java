@@ -258,7 +258,7 @@ public class TwoApplicationsTest {
         WindowFrame secondGraphWindow = desktop.addWindow(new WindowFrame("Graph 2"));
         secondGraphWindow.setApplication(GRAPHS_ONLY);
 
-        List<WindowFrame> strip = desktop.registry().taskbarOrder();
+        List<WindowFrame> strip = desktop.windowManager().registry().taskbarOrder();
         assertEquals(List.of(graphs.mainWindow(), secondGraphWindow, bare.mainWindow()), strip);
     }
 
@@ -274,11 +274,11 @@ public class TwoApplicationsTest {
         WorkbenchApplication graphs = launch(GRAPHS_ONLY);
         graphs.mainWindow().hide();
 
-        desktop.registry().setHiddenCap(0);
-        desktop.registry().evictIfNeeded();
+        desktop.windowManager().registry().setHiddenCap(0);
+        desktop.windowManager().registry().evictIfNeeded();
 
         assertTrue("the application's main window was evicted, which quit a product silently",
-                desktop.registry().windows().contains(graphs.mainWindow()));
+                desktop.windowManager().registry().windows().contains(graphs.mainWindow()));
         assertEquals("...and the application went with it", 1, desktop.applications().running().size());
     }
 

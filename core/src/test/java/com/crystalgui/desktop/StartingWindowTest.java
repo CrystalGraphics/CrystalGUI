@@ -66,13 +66,13 @@ public class StartingWindowTest extends UiDocumentTestBase {
         desktop.applications().launchInStartingWindow(kind, null);
         assertTrue("no window on the frame it was asked for", desktop.isStarting(kind));
         assertEquals("built before its window showed", 0, built);
-        WindowFrame starter = desktop.registry().windows().get(0);
+        WindowFrame starter = desktop.windowManager().registry().windows().get(0);
 
         frames(4);
         assertEquals(1, built);
         assertFalse("the starting window outlived its application's", desktop.isStarting(kind));
-        assertEquals("two windows for one launch", 1, desktop.registry().windows().size());
-        WindowFrame main = desktop.registry().windows().get(0);
+        assertEquals("two windows for one launch", 1, desktop.windowManager().registry().windows().size());
+        WindowFrame main = desktop.windowManager().registry().windows().get(0);
         assertEquals("test:slow", main.key());
         assertEquals("it moved on the swap", starter.getWantedLeft(), main.getWantedLeft(), 0.5f);
         assertEquals(400f, main.recordedWidth(), 0.5f);
@@ -87,25 +87,25 @@ public class StartingWindowTest extends UiDocumentTestBase {
         // A record for the application: it opened and closed once
         desktop.applications().launchInStartingWindow(kind, null);
         frames(4);
-        desktop.registry().windows().get(0).requestClose();
+        desktop.windowManager().registry().windows().get(0).requestClose();
         frames(2);
-        assertTrue(desktop.registry().windows().isEmpty());
+        assertTrue(desktop.windowManager().registry().windows().isEmpty());
 
         desktop.applications().launchInStartingWindow(kind, null);
-        WindowFrame starter = desktop.registry().windows().get(0);
+        WindowFrame starter = desktop.windowManager().registry().windows().get(0);
         starter.resizeTo(300f, 220f);
         frame();
         frames(4);
-        WindowFrame main = desktop.registry().windows().get(0);
+        WindowFrame main = desktop.windowManager().registry().windows().get(0);
         assertEquals("test:slow", main.key());
         assertEquals("the record put back the size it had before the resize", 300f, main.recordedWidth(), 0.5f);
         main.requestClose();
         frames(2);
 
         desktop.applications().launchInStartingWindow(kind, null);
-        desktop.registry().windows().get(0).maximize();
+        desktop.windowManager().registry().windows().get(0).maximize();
         frames(4);
-        main = desktop.registry().windows().get(0);
+        main = desktop.windowManager().registry().windows().get(0);
         assertEquals("test:slow", main.key());
         assertTrue("the record put back the window it had before the maximise", main.isMaximized());
     }
@@ -120,7 +120,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
         assertTrue("it built before its mark had come in", desktop.isStarting(kind));
         Thread.sleep(2150);   // the mark is in whole, settled, 1.43 s after its first frame
         frames(3);
-        WindowFrame main = desktop.registry().windows().get(0);
+        WindowFrame main = desktop.windowManager().registry().windows().get(0);
         assertEquals("test:slow", main.key());
         assertFalse("a second mark left over the first", hasCover(main));
         Thread.sleep(850);   // past the 700 ms fade
@@ -138,10 +138,10 @@ public class StartingWindowTest extends UiDocumentTestBase {
     @Test
     public void closingTheStartingWindowCancelsTheLaunch() {
         desktop.applications().launchInStartingWindow(kind, null);
-        desktop.registry().windows().get(0).destroy();
+        desktop.windowManager().registry().windows().get(0).destroy();
         frames(4);
         assertEquals("it built an application nobody wanted any more", 0, built);
-        assertTrue(desktop.registry().windows().isEmpty());
+        assertTrue(desktop.windowManager().registry().windows().isEmpty());
     }
 
     /** The application is built behind the mark, which is still on screen: closing the mark closes the application. */
@@ -154,7 +154,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
         frames(2);
         assertEquals(1, built);
         WindowFrame starter = null;
-        for (WindowFrame window : desktop.registry().windows()) {
+        for (WindowFrame window : desktop.windowManager().registry().windows()) {
             if (window.content().hasClass(Desktop.STARTING_CLASS)) starter = window;
         }
         assertTrue("the mark was gone before it could be closed", starter != null && !starter.isClosing());
@@ -164,7 +164,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
             Thread.sleep(40);
             frame();
         }
-        assertTrue("its application opened under the window that was closed", desktop.registry().windows().isEmpty());
+        assertTrue("its application opened under the window that was closed", desktop.windowManager().registry().windows().isEmpty());
         assertTrue("its application kept running", desktop.applications().running(kind).isEmpty());
     }
 
@@ -184,7 +184,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
     public void closedWhileItsMarkComesInItGoesAndBuildsNothing() throws InterruptedException {
         Desktop.setAnimationsEnabled(true);
         desktop.applications().launchInStartingWindow(kind, null);
-        WindowFrame starter = desktop.registry().windows().get(0);
+        WindowFrame starter = desktop.windowManager().registry().windows().get(0);
         frames(3);
         UIElement close = null;
         for (UIElement control : starter.controls().children()) {
@@ -197,14 +197,14 @@ public class StartingWindowTest extends UiDocumentTestBase {
             frame();
         }
         assertEquals("it built an application its window was closed on", 0, built);
-        assertTrue("the starting window would not close", desktop.registry().windows().isEmpty());
+        assertTrue("the starting window would not close", desktop.windowManager().registry().windows().isEmpty());
     }
 
     @Test
     public void minimisedWhileItsMarkComesInItBuildsAndWaitsMinimised() throws InterruptedException {
         Desktop.setAnimationsEnabled(true);
         desktop.applications().launchInStartingWindow(kind, null);
-        WindowFrame starter = desktop.registry().windows().get(0);
+        WindowFrame starter = desktop.windowManager().registry().windows().get(0);
         frames(3);
         starter.minimize();
         // The build replaces the window, so it waits for the flight to land rather than cutting it
@@ -220,7 +220,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
             frame();
         }
         assertEquals("it waited on a mark nobody can see", 1, built);
-        WindowFrame main = desktop.registry().windows().get(0);
+        WindowFrame main = desktop.windowManager().registry().windows().get(0);
         assertEquals("test:slow", main.key());
         assertEquals("the application opened over the minimise", WindowState.HIDDEN, main.state());
     }
@@ -229,7 +229,7 @@ public class StartingWindowTest extends UiDocumentTestBase {
     public void aStartingWindowClosingIsNoLongerStarting() {
         Desktop.setAnimationsEnabled(true);
         desktop.applications().launchInStartingWindow(kind, null);
-        WindowFrame starter = desktop.registry().windows().get(0);
+        WindowFrame starter = desktop.windowManager().registry().windows().get(0);
         frames(3);
         starter.requestClose();
         // Its mark may settle over the close's 125 ms, and a launch still waiting would build into it
@@ -240,16 +240,16 @@ public class StartingWindowTest extends UiDocumentTestBase {
     public void anApplicationThatDoesNotOptInOpensWithNoStartingWindow() {
         desktop.applications().launchInStartingWindow(quick, null);
         assertFalse("a starting window it never asked for", desktop.isStarting(quick));
-        assertEquals("test:quick", desktop.registry().windows().get(0).key());
+        assertEquals("test:quick", desktop.windowManager().registry().windows().get(0).key());
     }
 
     @Test
     public void aSecondClickWhileStartingOpensNoSecondWindow() {
         desktop.applications().launchInStartingWindow(kind, null);
-        WindowFrame starter = desktop.registry().windows().get(0);
+        WindowFrame starter = desktop.windowManager().registry().windows().get(0);
         desktop.applications().launchInStartingWindow(kind, null);
-        assertSame(starter, desktop.registry().windows().get(0));
-        assertEquals(1, desktop.registry().windows().size());
+        assertSame(starter, desktop.windowManager().registry().windows().get(0));
+        assertEquals(1, desktop.windowManager().registry().windows().size());
     }
 
     private record Running(ApplicationKind kind, WindowFrame window) implements Application {

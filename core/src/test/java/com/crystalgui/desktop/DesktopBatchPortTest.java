@@ -459,17 +459,17 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         frame();
         frame();
 
-        desktop().activate(other, true);
+        desktop().windowManager().activate(other, true);
         frame();
         assertSame("the fixture did not manage to activate the other window",
-                other, desktop().activeWindow());
+                other, desktop().windowManager().activeWindow());
 
         Box caption = boxOf(blocked.titleBar());
         press(caption.worldX() + caption.width() / 2f, caption.worldY() + caption.height() / 2f);
         frame();
 
         assertSame("pressing a blocked window's caption did not bring it forward",
-                blocked, desktop().activeWindow());
+                blocked, desktop().windowManager().activeWindow());
     }
 
     /**
@@ -681,10 +681,10 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         Desktop d = desktop();
         WindowFrame first = open("First");
         WindowFrame second = open("Second");
-        d.activate(first);
+        d.windowManager().activate(first);
         frame();
 
-        WindowRegistry registry = d.registry();
+        WindowRegistry registry = d.windowManager().registry();
         assertEquals("open order is not insertion order",
                 java.util.List.of(first, second), registry.windows());
         assertSame("the most recently activated is not first in MRU",
@@ -699,7 +699,7 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
         Desktop d = desktop();
         WindowFrame first = open("First");
         WindowFrame second = open("Second");
-        d.activate(second);
+        d.windowManager().activate(second);
         frame();
 
         Taskbar taskbar = d.taskbar();
@@ -854,18 +854,18 @@ public class DesktopBatchPortTest extends UiDocumentTestBase {
     public void minimisingABackgroundWindowLeavesTheForegroundActive() {
         WindowFrame back = open("Background");
         WindowFrame front = open("Front");
-        assertSame("the newest window is active", front, desktop().activeWindow());
+        assertSame("the newest window is active", front, desktop().windowManager().activeWindow());
 
         UIElement button = findByClass(back, WindowFrame.MINIMIZE_CLASS);
         assertNotNull("the frame has a minimise control", button);
         Box box = button.box();
         press(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
         assertSame("pressing a background window's minimise must not raise it",
-                front, desktop().activeWindow());
+                front, desktop().windowManager().activeWindow());
 
         release(box.worldX() + box.width() / 2f, box.worldY() + box.height() / 2f);
         frame();
-        assertSame("and the foreground keeps the keyboard", front, desktop().activeWindow());
+        assertSame("and the foreground keeps the keyboard", front, desktop().windowManager().activeWindow());
     }
 
     private static UIElement findByClass(UINode at, String cls) {

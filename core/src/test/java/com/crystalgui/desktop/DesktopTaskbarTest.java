@@ -145,7 +145,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         WindowFrame second = open("Two");
         WindowFrame third = open("Three");
 
-        desktop.activate(first);
+        desktop.windowManager().activate(first);
         settle();
 
         assertEquals(0, entry(first).parent().indexOf(entry(first)));
@@ -165,9 +165,9 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         Button before = entry(first);
 
         open("Two");
-        desktop.activate(first);
+        desktop.windowManager().activate(first);
         first.hide();
-        desktop.activate(first);
+        desktop.windowManager().activate(first);
         settle();
 
         assertSame("the entry survived four refreshes", before, taskbar.entryFor(first));
@@ -182,7 +182,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         assertTrue(entry(second).hasClass(Taskbar.ACTIVE_CLASS));
         assertFalse(entry(first).hasClass(Taskbar.ACTIVE_CLASS));
 
-        desktop.activate(first);
+        desktop.windowManager().activate(first);
         settle();
 
         assertTrue(entry(first).hasClass(Taskbar.ACTIVE_CLASS));
@@ -202,7 +202,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         settle();
 
         assertEquals(WindowState.VISIBLE, frame.state());
-        assertSame(frame, desktop.activeWindow());
+        assertSame(frame, desktop.windowManager().activeWindow());
     }
 
     @Test
@@ -210,12 +210,12 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         build();
         WindowFrame first = open("One");
         WindowFrame second = open("Two");
-        assertSame(second, desktop.activeWindow());
+        assertSame(second, desktop.windowManager().activeWindow());
 
         entry(first).onPressed.emit();
         settle();
 
-        assertSame(first, desktop.activeWindow());
+        assertSame(first, desktop.windowManager().activeWindow());
         assertEquals(WindowState.VISIBLE, first.state());
     }
 
@@ -228,7 +228,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
     public void clickingTheActiveWindowsEntryMinimisesIt() {
         build();
         WindowFrame frame = open("One");
-        assertSame(frame, desktop.activeWindow());
+        assertSame(frame, desktop.windowManager().activeWindow());
 
         entry(frame).onPressed.emit();
         settle();
@@ -251,7 +251,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
     public void theTaskbarMinimisesWithTheSameAnimationTheCaptionButtonUses() {
         build();
         WindowFrame frame = open("One");
-        assertSame(frame, desktop.activeWindow());
+        assertSame(frame, desktop.windowManager().activeWindow());
 
         Desktop.setAnimationsEnabled(true);
         try {
@@ -297,7 +297,7 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         input.endFrame();
         settle();
 
-        assertSame("the press reached the entry and activated its document", first, desktop.activeWindow());
+        assertSame("the press reached the entry and activated its document", first, desktop.windowManager().activeWindow());
         assertFalse(second.isActive());
     }
 
@@ -318,19 +318,19 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
 
         second.hide();
         settle();
-        assertNull("minimising hands activation to nobody", desktop.activeWindow());
+        assertNull("minimising hands activation to nobody", desktop.windowManager().activeWindow());
         assertFalse("so the entry of the document put away goes quiet",
                 entry(second).hasClass(Taskbar.ACTIVE_CLASS));
         assertFalse("...and the one behind is not promoted into the highlight",
                 entry(first).hasClass(Taskbar.ACTIVE_CLASS));
 
-        desktop.activate(first);
+        desktop.windowManager().activate(first);
         settle();
         assertTrue(entry(first).hasClass(Taskbar.ACTIVE_CLASS));
 
         first.hide();
         settle();
-        assertNull("nothing left to be active", desktop.activeWindow());
+        assertNull("nothing left to be active", desktop.windowManager().activeWindow());
         assertFalse("so nothing is highlighted", entry(first).hasClass(Taskbar.ACTIVE_CLASS));
         assertFalse(entry(second).hasClass(Taskbar.ACTIVE_CLASS));
     }
@@ -343,10 +343,10 @@ public class DesktopTaskbarTest extends UiDocumentTestBase {
         WindowFrame frame = open("One");
         assertTrue(entry(frame).hasClass(Taskbar.ACTIVE_CLASS));
 
-        desktop.deactivate();
+        desktop.windowManager().deactivate();
         settle();
 
-        assertNull(desktop.activeWindow());
+        assertNull(desktop.windowManager().activeWindow());
         assertFalse(entry(frame).hasClass(Taskbar.ACTIVE_CLASS));
     }
 

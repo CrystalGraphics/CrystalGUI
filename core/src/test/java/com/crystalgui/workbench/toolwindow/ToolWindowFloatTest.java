@@ -212,7 +212,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
                 workbenchWindow.overlaySlot(), frame.parent());
         assertTrue("and the owner knows it is there", workbenchWindow.hasOwnedWindows());
         assertFalse("it is not a taskbar citizen",
-                Desktop.of(document).registry().windows().contains(frame));
+                Desktop.of(document).windowManager().registry().windows().contains(frame));
     }
 
     /**
@@ -264,7 +264,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         assertEquals(ToolWindowType.WINDOWED, manager.typeOf(INSPECTOR));
         assertFalse("it should not be owned by the editor", workbenchWindow.hasOwnedWindows());
         assertTrue("and it is a taskbar citizen of its own",
-                Desktop.of(document).registry().windows().contains(frame));
+                Desktop.of(document).windowManager().registry().windows().contains(frame));
     }
 
     /**
@@ -503,7 +503,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         assertSame("the float should be owned by the workbench's document",
                 workbenchWindow, floated.ownerWindow());
 
-        Desktop.of(document).raise(workbenchWindow);
+        Desktop.of(document).windowManager().raise(workbenchWindow);
         settle();
 
         assertTrue("clicking the editor buried the panel torn out of it",
@@ -518,12 +518,12 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         settle();
         ToolWindowFrame floated = manager.frameOf(INSPECTOR);
 
-        Desktop.of(document).raise(other);
+        Desktop.of(document).windowManager().raise(other);
         settle();
         assertTrue("setup: the unrelated document is on top",
                 z(other) > z(floated));
 
-        Desktop.of(document).raise(floated);
+        Desktop.of(document).windowManager().raise(floated);
         settle();
 
         assertTrue("the panel did not come forward", z(floated) > z(other));

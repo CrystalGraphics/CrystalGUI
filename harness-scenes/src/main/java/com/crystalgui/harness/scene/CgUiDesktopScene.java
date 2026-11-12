@@ -529,9 +529,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private void driveFollowShot(HarnessContext ctx) {
         long n = viewport.presentedFrames();
         if (n == 60) viewport.run(() -> {
-            for (WindowFrame window : desktop.windows()) {
+            for (WindowFrame window : desktop.windowManager().windows()) {
                 if (!window.isMaximized() && window.box() != null) {
-                    desktop.activate(window);
+                    desktop.windowManager().activate(window);
                     // FROM ONE PLACE EVERY RUN: the session keeps where the last drag left it.
                     window.moveTo(24f, 24f);
                     followWindow = window;
@@ -654,9 +654,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // The window to move goes on top first: one behind the maximised editor would move unseen.
         if (frameNumber == 30) {
             viewport.run(() -> {
-                for (WindowFrame window : desktop.windows()) {
+                for (WindowFrame window : desktop.windowManager().windows()) {
                     if (!window.isMaximized() && window.box() != null) {
-                        desktop.activate(window);
+                        desktop.windowManager().activate(window);
                         break;
                     }
                 }
@@ -670,7 +670,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 return;
             }
             long id = shown.frameId();
-            for (WindowFrame window : desktop.windows()) {
+            for (WindowFrame window : desktop.windowManager().windows()) {
                 Box box = window.box();
                 if (box != null && box.movedNode(id) != 0 && !window.isMaximized()) {
                     nodesWindow = window;
@@ -752,10 +752,10 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         int n = (int) viewport.presentedFrames();
         if (n == 99) {
             minimiseTarget = viewport.ask(() -> {
-                for (WindowFrame window : desktop.windows()) {
+                for (WindowFrame window : desktop.windowManager().windows()) {
                     if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
                 }
-                return desktop.activeWindow();
+                return desktop.windowManager().activeWindow();
             });
         }
         if (minimiseTarget == null) return;
@@ -1058,7 +1058,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /** What {@code profiler.open} does: close the profiler if it is in front, else open it. */
     private void toggleProfiler() {
-        if (profilerWindow == desktop.activeWindow()) profilerWindow.requestClose();
+        if (profilerWindow == desktop.windowManager().activeWindow()) profilerWindow.requestClose();
         else FrameProfiler.openOn(desktop);
     }
     private boolean profilerShotDone;
@@ -1692,9 +1692,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             FrameStatsOverlay.toggleOn(document);
         // profiler.open toggles: run with the profiler in front it closes it; again, it comes back.
         } else if (at == 397) {
-            desktop.raise(profilerWindow);
+            desktop.windowManager().raise(profilerWindow);
         } else if (at == 399) {
-            log("profiler.open with the profiler in front (active " + (desktop.activeWindow() == profilerWindow) + ")");
+            log("profiler.open with the profiler in front (active " + (desktop.windowManager().activeWindow() == profilerWindow) + ")");
             toggleProfiler();
         } else if (at == 420) {
             // A CLOSE ANIMATES before the window hides: read it well after the press.
@@ -1933,7 +1933,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private void refreshReadout() {
         UIElement area = desktop.windowLayer();
-        WindowFrame active = desktop.activeWindow();
+        WindowFrame active = desktop.windowManager().activeWindow();
         Box areaBox = area == null ? null : area.box();
         StringBuilder text = new StringBuilder();
         text.append("work area  ")
@@ -1944,7 +1944,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // THE REGISTRY, not the layer -- so hidden windows are listed too. A minimised window that
         // appears nowhere is a minimised window with no way back, which is the failure W4's taskbar
         // exists to prevent.
-        for (WindowFrame window : desktop.windows()) {
+        for (WindowFrame window : desktop.windowManager().windows()) {
             boolean hidden = window.state() == WindowState.HIDDEN;
             Box box = window.box();
             text.append(window == active ? "> " : "  ")
@@ -1976,7 +1976,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 windowKey(key);
                 return;
             }
-            WindowFrame existing = desktop.registry().byKey("taskbar-designer");
+            WindowFrame existing = desktop.windowManager().registry().byKey("taskbar-designer");
             if (existing != null) existing.requestClose();
             else TaskbarDesigner.open(document);
         });

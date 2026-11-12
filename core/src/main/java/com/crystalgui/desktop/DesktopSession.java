@@ -104,7 +104,7 @@ public final class DesktopSession {
     public String toJson() {
         List<Placement> windows = new ArrayList<>();
         Set<String> open = new HashSet<>();
-        for (WindowFrame frame : desktop.registry().windows()) {
+        for (WindowFrame frame : desktop.windowManager().registry().windows()) {
             if (!isPersistable(frame)) continue;
             windows.add(Placement.of(frame));
             open.add(frame.key());
@@ -115,7 +115,7 @@ public final class DesktopSession {
             if (open.add(waiting.key())) windows.add(waiting);
         }
         List<String> mru = new ArrayList<>();
-        for (WindowFrame frame : desktop.registry().mruOrder()) {
+        for (WindowFrame frame : desktop.windowManager().registry().mruOrder()) {
             if (isPersistable(frame)) mru.add(frame.key());
         }
         List<String> pins = new ArrayList<>(desktop.pins().ids());

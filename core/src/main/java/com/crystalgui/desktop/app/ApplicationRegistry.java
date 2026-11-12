@@ -342,7 +342,7 @@ public final class ApplicationRegistry {
             return;
         }
         if (desktop.isStarting(kind)) {
-            desktop.activate(desktop.openStartingWindow(kind));
+            desktop.windowManager().activate(desktop.openStartingWindow(kind));
             return;
         }
         WindowFrame starter = desktop.openStartingWindow(kind);
@@ -448,7 +448,7 @@ public final class ApplicationRegistry {
     public Application activateOrLaunch(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         Application recent = null;
         int best = Integer.MAX_VALUE;
-        List<WindowFrame> mru = desktop.registry().mruOrder();
+        List<WindowFrame> mru = desktop.windowManager().registry().mruOrder();
         for (Application live : running(kind)) {
             int at = mru.indexOf(live.mainWindow());
             if (recent == null || (at >= 0 && at < best)) {

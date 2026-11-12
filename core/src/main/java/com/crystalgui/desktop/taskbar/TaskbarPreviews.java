@@ -170,7 +170,7 @@ public final class TaskbarPreviews {
             Desktop desktop = taskbar.desktop();
             dismiss();
             // POINTER activation, so focus lands without a ring: the user pointed at this.
-            if (frame != null && desktop != null) desktop.activateByUser(frame);
+            if (frame != null && desktop != null) desktop.windowManager().activateByUser(frame);
         });
         preview.onClosed.connect(this::dismiss);
 
@@ -187,7 +187,7 @@ public final class TaskbarPreviews {
         row.onPicked.connect(frame -> {
             Desktop desktop = taskbar.desktop();
             dismiss();
-            if (desktop != null) desktop.activateByUser(frame);
+            if (desktop != null) desktop.windowManager().activateByUser(frame);
         });
     }
 

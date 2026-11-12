@@ -226,7 +226,7 @@ public final class DesktopScriptTest extends CgGauntletController {
                 }
                 if (frame.state() == WindowState.HIDDEN) frame.show(true);
                 Desktop desktop = desktop();
-                if (desktop != null) desktop.activate(frame);
+                if (desktop != null) desktop.windowManager().activate(frame);
                 step = Step.SHOOT_RESTORE_MID;
                 waitTicks = 3;
                 break;
@@ -393,7 +393,7 @@ public final class DesktopScriptTest extends CgGauntletController {
     private static WindowFrame mainWindow() {
         Desktop desktop = desktop();
         if (desktop == null) return null;
-        List<WindowFrame> windows = desktop.registry().taskbarOrder();
+        List<WindowFrame> windows = desktop.windowManager().registry().taskbarOrder();
         return windows.isEmpty() ? null : windows.get(0);
     }
 

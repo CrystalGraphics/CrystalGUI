@@ -97,6 +97,9 @@ public class EngineBoundaryTest {
             // CRYSTALGUI'S LIFECYCLE LISTENERS: where it starts, so they install the desktop and register the run's
             // tests. Classified old, every line of that start reads as the old engine reaching into the new one.
             "com/crystalgui/lifecycle/",
+            // THE CLIENT'S ENTRY POINT AND THE DOCUMENT'S VIEWPORT: both drive a document and its desktop.
+            "com/crystalgui/screen/",
+            "com/crystalgui/viewport/",
             // THE WORKED EXAMPLES, for the same reason as the applications below: a `DocumentEditor`
             // is made of widgets, so an example classified as old-engine reads as the old engine
             // reaching into the new one -- which is the opposite of what it is.
@@ -138,7 +141,9 @@ public class EngineBoundaryTest {
      */
     private static final List<String> NEW_CLASSES = List.of(
             "com/crystalgui/net/mirror/UIElementMirror",
-            "com/crystalgui/net/mirror/UIElementMirror$Companion");
+            "com/crystalgui/net/mirror/UIElementMirror$Companion",
+            // Reads the held modifiers from the new input service.
+            "com/crystalgui/ui/input/DragScrub");
 
     /** What the new engine must never name. */
     private static final List<String> OLD_ENGINE = List.of(

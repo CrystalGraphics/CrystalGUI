@@ -363,7 +363,7 @@ public class WorkbenchApplication extends UIElement
         // needs showing, visible-but-behind needs raising, in-front needs only the keyboard. `show`
         // covers the first two and `activate` the last, so asking for both is correct rather than lazy.
         window.show(true);
-        desktop.activate(window);
+        desktop.windowManager().activate(window);
     }
 
     public Workbench workbench() {

@@ -22,6 +22,7 @@ import com.crystalgui.desktop.window.SnapZones;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowKeyboardMove;
+import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -61,60 +62,21 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * The compositor host — CrystalOS's desktop, and the parent of every {@link WindowFrame}.
+ * The compositor host: CrystalOS's desktop and the parent of every {@link WindowFrame}. One per
+ * {@code UIDocument}, found with {@link #of(UIDocument)}; nobody constructs one. Opening a UI is
+ * {@code desktop.addWindow(frame)}.
  *
- * <p><b>Nobody constructs one.</b> Every {@code UIDocument} owns a desktop, found with
- * {@link #of(UIDocument)}; opening a UI is {@code desktop.addWindow(frame)} and nothing else. That
- * is the same ownership {@code UIDocument.windowOverlayLayer()} already has — an engine-owned layer built
- * on first use, which is observably "always there" while costing nothing to a window that never opens
- * one. A compositor that each application had to assemble for itself would be a compositor each
- * application assembled slightly differently.</p>
+ * <p>It is an internal child of the root, above the root's own content and below the top layer, written
+ * from Java at IMPORTANT so a stylesheet cannot move it. Full size when it is the surface, zero-sized and
+ * hit-transparent when laid over a game screen with no window, so it cannot swallow clicks. A window
+ * <em>exists</em> or not; a desktop whose windows are all minimised keeps its taskbar.</p>
  *
- * <p>One desktop per {@code UIDocument}, which is the display surface rather than a window
- * ({@code plan/shell-windowing.md}, Design B). Everything a window manager needs already existed at the
- * element layer — stacking that paint and hit-testing agree on, clipping, focus, drag, pointer capture —
- * so what is genuinely new is this: somewhere for frames to live, a work area to bound them, and a
- * placement rule for a window nobody positioned.</p>
+ * <p>The window layer is internal while the frames on it are public children, so a frame can remove itself;
+ * it is added in the constructor, before the document attaches this desktop, because
+ * {@code markAsInternal()} recurses into existing children. The layer's box is the work area: the taskbar
+ * is laid out below it, so maximise fills the layer and fullscreen re-flows it to full height.</p>
  *
- * <h3>It sits over the root, in the windows band</h3>
- * <p>The desktop is an internal child of the window's root element, filling it, above whatever the root
- * already held. That IS the band model: <i>desktop content</i> (the root's own children) &lt;
- * <i>windows</i> (this) &lt; <i>pinned</i> (W14) &lt; the global top layer, which paints after the whole
- * main tree by construction. Its geometry is written from Java at <b>IMPORTANT</b> for the same reason
- * the overlay layer's is: the surface the compositor draws on must not be movable by a stylesheet.</p>
- *
- * <p><b>Full size when it is the surface, zero-sized when laid over someone else's screen with no window.</b>
- * The surface's desktop always fills it: the taskbar, with its start button, is never empty. Laid over a
- * game screen it takes no space and hit-tests nothing until a window exists, or it would swallow every
- * click that missed one.</p>
- *
- * <p><b>A window exists, not is visible.</b> A desktop whose every window is minimised keeps its taskbar,
- * the way those windows come back — see {@code syncPresence}.</p>
- *
- * <h3>The window layer is internal; the frames on it are public</h3>
- * <p>Exactly {@code UIDocument.windowOverlayLayer}'s arrangement, and for the same reason: a layer added
- * with {@code addInternalChild} may live under a root that accepts no children, while the frames added
- * to <em>it</em> stay ordinary public children — so a window can still remove itself
- * ({@code removeChild} silently refuses an internal child, and returns a boolean nobody checks).</p>
- *
- * <p>That relies on an ordering the engine states as a trap: {@code markAsInternal()} <b>recurses</b>,
- * so children a container already had when it was made internal become internal too. The window layer
- * is added in the constructor — before {@code UIDocument} attaches this desktop — and every frame arrives
- * afterwards, which is exactly the side of that rule a frame needs to be on.</p>
- *
- * <h3>The layer's box IS the work area</h3>
- * <p>The taskbar (W4) is <b>laid out</b> as a bottom bar rather than overlaid, so the space left for
- * windows needs no bar-shaped special case anywhere: maximise fills the layer, drags clamp at it, and
- * W13's fullscreen hiding the bar simply re-flows the layer to full height. Windows' own model —
- * maximise respects the taskbar, fullscreen covers it — falls out of the flex column.</p>
- *
- * <h3>What is deliberately not here yet</h3>
- * <p>Raise-on-click, the active window and empty-desktop blur are W2; the taskbar is W4. <b>When raise
- * arrives it must be a {@code z-index} assignment and never a child-list move</b>: {@code removeChild}/
- * {@code addChild} run {@code unregisterElement}/{@code registerElement} over the whole frame subtree —
- * session capture, modal and popover stack pops, every Taffy node destroyed and rebuilt — and a raise
- * happens on a click, which is precisely when a widget must never rebuild the elements it is being
- * clicked on. {@code sortedChildren} already keeps paint order and hit-testing agreeing by z.</p>
+ * <p>Stacking, activation, placement and snapping are the {@link WindowManager}'s.</p>
  */
 public class Desktop extends UIElement implements DataProvider {
 
@@ -133,31 +95,9 @@ public class Desktop extends UIElement implements DataProvider {
     public static final String OVERLAY_LAYER_CLASS = "__overlays__";
 
     /**
-     * How many windows the cascade has placed since it last wrapped — Win32's {@code CW_USEDEFAULT},
-     * which offsets each successive window by a caption height and starts over when it walks off.
-     */
-    private int cascadeStep;
-
-    /**
-     * The one compositor on {@code document}, attaching it on first use.
-     *
-     * <p><b>The engine no longer owns this, and the inversion is the point.</b> On the old engine
-     * {@code UIWindow.desktop()} built it, which meant the engine's own document class named a widget:
-     * fine there, and the exact coupling the three-tree design removed. Here the compositor names the
-     * document instead, so {@code ui.dom} stays free of it and the rule the invariant table states —
-     * "the desktop is engine-owned and nothing else may build one" — is enforced by there being ONE
-     * factory rather than by a comment.</p>
-     *
-     * <p><b>And there is no cached field, which retires a documented trap.</b> The old version kept the
-     * desktop in a {@code UIWindow} field and put it back with {@code addInternalChild} after a suspend
-     * — which re-declared it internal and RECURSED, marking every window that had arrived since as an
-     * internal child, so {@code hide()} silently detached nothing and windows could not be closed. The
-     * tree is the record now: a desktop is on screen exactly when it is a child of the document.</p>
-     *
-     * <p>It sits <em>over</em> the document's own content, which is the band model: the root's other
-     * children are the desktop-content band, the desktop is the windows band above it, and the top
-     * layer is above both by construction. Over a screen that is not ours, with no window open, it is
-     * zero-sized and hit-tests nothing, so it cannot swallow clicks meant for the screen underneath.</p>
+     * The one compositor on {@code document}, attached on first use. The compositor names the document, never
+     * the reverse, so {@code ui.dom} stays free of widgets. There is no cached field: a desktop is on screen
+     * exactly when it is a child of the document (a re-added internal child once marked every window internal).
      */
     public static Desktop of(UIDocument document) {
         Desktop existing = ifPresent(document);
@@ -171,30 +111,15 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * <b>Which compositor belongs to which document, held so it survives a SUSPEND.</b>
-     *
-     * <p>Suspending takes the desktop out of the tree — that is what makes the freeze real — and
-     * {@link #ifPresent} looked for it by walking the document's children. So while suspended a
-     * document appeared to have no compositor at all, and {@link #of} answered by building a SECOND
-     * one: a fresh, empty desktop, with every retained window still held by the first and reachable
-     * from nothing. Nothing throws; a window opened in that state simply appears on a desktop that
-     * is not the one about to be resumed.</p>
-     *
-     * <p>The map is here rather than a field on {@code UIDocument} for the standing reason the engine
-     * may not name a compositor: the compositor names the document. Weak keys, so a document that
-     * goes away takes its entry with it.</p>
+     * Which compositor belongs to which document, kept so it survives a suspend: a suspended desktop is out of
+     * the tree, and {@link #of} would build a second one. Weak keys.
      */
     // Threads: guarded by its own monitor.
     private static final java.util.Map<UIDocument, Desktop> BY_DOCUMENT = new java.util.WeakHashMap<>();
 
     /**
-     * The compositor <b>only if one is already on screen</b> — never the call that puts it there.
-     *
-     * <p>{@link #of} attaches on first use, which is right for opening a window and wrong for every
-     * question <em>about</em> windows. A command's {@code enabledWhen} runs whenever a menu is drawn or
-     * the palette is filtered, so routing one through the building accessor would grow a desktop on an
-     * application that has never opened a window — and a desktop that is present but empty is precisely
-     * what the zero-size rule exists to keep harmless.</p>
+     * The compositor only if one is already on screen. Questions about windows (a command's {@code enabledWhen})
+     * use this, since {@link #of} would grow a desktop on an application that never opened a window.
      */
     @Nullable
     public static Desktop ifPresent(@Nullable UIDocument document) {
@@ -227,18 +152,12 @@ public class Desktop extends UIElement implements DataProvider {
         // failing: no clamp, no cascade, windows written wherever they were asked to go.
         windows.addClass(WINDOW_LAYER_CLASS);
         append(windows);
-        // INSIDE THE WORK AREA, ABOVE EVERY WINDOW IN IT. A free dialog needs three things at once and
-        // this is the one place all three are true: the work area's geometry, so it clamps where a
-        // window clamps; a paint position after every frame, which is a z-index because that is how
-        // windows stack (@see #raise); and still UNDER the taskbar, which follows from being in the
-        // layer the bar is laid out below rather than in the top layer, which paints after everything.
-        //
-        // Hit-transparent, so it is a stacking context and not a full-size sheet over the work area --
-        // the codebase's most-repeated failure, and the reason the snap preview beside it is too.
+        // Inside the work area so a free dialog clamps where a window does, above every window by z-index, and
+        // below the taskbar. Hit-transparent: a full-size sheet over the work area swallows clicks.
         overlayLayer.addClass(OVERLAY_LAYER_CLASS);
         overlayLayer.set(Attribute.HIT_TRANSPARENT, true);
         StyleGroup.defaultPipeline(overlayLayer.getStyle().getGeneralGroup(),
-                g -> g.zIndex(DIALOG_BAND));
+                g -> g.zIndex(WindowManager.DIALOG_BAND));
         windows.hostOverlays(overlayLayer);
         // THE TOASTS ARE THE SHELL'S: one place above every window, whichever application said it (Windows'
         // notification centre). An application's own list is a view of the same service.
@@ -277,37 +196,24 @@ public class Desktop extends UIElement implements DataProvider {
         // DRIVEN BY THE REGISTRY, not by the layer. The layer never sees a window destroyed while it was
         // already hidden, and it sees a hide as a removal -- so hanging presence off it both missed the
         // moment the surface should be given back and gave it back while windows were still retained.
-        registry.onDidChange.connect(this::syncPresence);
+        windowManager.registry().onDidChange.connect(this::syncPresence);
         syncPresence();
 
         // A PRESS ON BARE DESKTOP DEACTIVATES. Target-only on both elements, so a press inside a window
         // never reaches it -- and both are needed rather than one: the window layer covers the desktop
         // entirely, so bare background is nearly always the LAYER's hit, while the desktop itself is
         // what remains once the taskbar (W4) shortens the layer.
-        onMouseDown.attachListener((element, event) -> deactivate(), false, false);
-        windows.onMouseDown.attachListener((element, event) -> deactivate(), false, false);
+        onMouseDown.attachListener((element, event) -> windowManager.deactivate(), false, false);
+        windows.onMouseDown.attachListener((element, event) -> windowManager.deactivate(), false, false);
 
         // THE USER WORKING IN A WINDOW ENDS ITS ATTENTION FLASH: a press or a key landing anywhere inside it.
         // Capture, so nothing in the content can swallow it first.
         windows.onMouseDown.attachListener((element, event) -> seen(event.getTarget()), true, false);
         windows.onKeyDown.attachListener((element, event) -> seen(event.getTarget()), true, false);
 
-        // AND A RIGHT-CLICK ON BARE DESKTOP OPENS THE DESKTOP MENU -- the only affordance left once
-        // every window is minimised, since the taskbar's menu needs the strip and a system menu needs a
-        // window. Attached to BOTH for the same reason the deactivate listeners above are: the window
-        // layer covers the desktop entirely, so bare background is nearly always the LAYER's hit, and
-        // the desktop itself is only what remains once the taskbar has shortened the layer.
-        //
-        // GUARDED ON THE TARGET BEING THE SURFACE ITSELF, because ContextMenu.attach subscribes the
-        // BUBBLE phase: without this, a right-click on a window's bare content -- anything inside it with
-        // no menu of its own to consume the press -- would bubble out here and open the DESKTOP's menu
-        // on top of the window. A builder answering null is the seam for exactly that; attach returns
-        // before it builds or consumes anything, so the press carries on as if nothing were attached.
-        // ATTACHED TO THE DESKTOP AND NOT THE LAYER, though the layer is what a press on bare background
-        // usually hits. `present` parents the menu at the attachment site, and WindowLayer refuses any
-        // child that is not a WindowFrame -- so attaching there throws the moment somebody right-clicks.
-        // The bubble phase carries the layer's press out to here anyway, which is why the guard names
-        // both: this fires for a press on either surface and for nothing inside a window.
+        // A right-click on bare desktop opens the desktop menu, the only affordance once every window is minimised.
+        // Attached to the desktop, not the layer (which refuses non-frame children), and guarded on the target being
+        // the surface itself: the bubble phase would otherwise open it for a click inside a window.
         ContextMenu.attach(this, Commands.process(),
                 pressed -> pressed == this || pressed == windows
                         ? ContextMenu.of(MenuId.DESKTOP_CONTEXT) : null);
@@ -357,51 +263,48 @@ public class Desktop extends UIElement implements DataProvider {
         else node.removeClass(className);
     }
 
-    /** Whether any window <b>exists</b>, visible or hidden — i.e. whether the compositor is the surface. */
-    public boolean isLive() {
-        return !registry.windows().isEmpty();
+    /** The window manager: stacking, the active window, placement, snapping, the HUD. */
+    public WindowManager windowManager() {
+        return windowManager;
     }
 
-    // ── Stacking and activation ─────────────────────────────────────────────
+    /** Whether any window <b>exists</b>, visible or hidden — i.e. whether the compositor is the surface. */
+    public boolean isLive() {
+        return !windowManager.registry().windows().isEmpty();
+    }
 
-    /**
-     * The offset the pinned band (W14) sits at, and therefore the ceiling the normal band renormalises
-     * below. Always-on-top is <b>one addition</b> in this scheme — which is what "the band model absorbs
-     * it without redesign" meant when always-on-top was refused for having no consumer.
-     */
-    static final int PINNED_BAND = 1 << 20;
+    // ── The window manager ──────────────────────────────────────────────────
 
-    /**
-     * Above every window, pinned ones included. A dialog is transient and asked for; an always-on-top
-     * window is a standing preference, and a preference does not outrank a question being put.
-     */
-    static final int DIALOG_BAND = PINNED_BAND << 1;
+    /** The windows as a set: stacking, activation, placement, snapping. */
+    private final WindowManager windowManager = new WindowManager(new WindowManager.Shell() {
+        @Override
+        public Box workArea() {
+            return windows.box();
+        }
 
-    /** Hands out stacking order. Monotonic, so a raise is O(1) and never touches another window. */
-    private int raiseCounter;
+        @Override
+        public List<WindowFrame> visibleFrames() {
+            return windows.frames();
+        }
 
-    /** Every live window, visible or hidden. @see WindowRegistry */
-    private final WindowRegistry registry = new WindowRegistry();
+        @Override
+        public UIDocument document() {
+            return Desktop.this.document();
+        }
+
+        @Override
+        public void setTaskbarVisible(boolean visible) {
+            taskbar.setBarVisible(visible);
+        }
+    });
 
     /** The strip along the bottom. @see Taskbar */
     private final Taskbar taskbar;
     private final WindowSwitcher switcher;
 
-    @Nullable
-    private WindowFrame activeWindow;
-
-    /** The window the keyboard is talking to, or null when the desktop itself has the press. */
-    @Nullable
     /**
-     * Turns window open/close/minimise/maximise animations on or off, for the whole process.
-     *
-     * <p>Every desktop offers this — Windows' "Animate windows when minimizing and maximizing", macOS's
-     * Reduce Motion — for motion sensitivity and for remote sessions where the frames cost bandwidth.
-     * <b>Off means off, including the waiting</b>: a close takes effect on the same call rather than
-     * three frames later, so nothing downstream has to know which mode it is in.</p>
-     *
-     * <p>Static rather than per-desktop because it is a user preference about motion, not a property of
-     * one screen — and because a process has one user.</p>
+     * Turns window animations on or off for the whole process (Windows' "Animate windows", macOS Reduce Motion).
+     * Off means off, including the waiting: a close takes effect on the same call.
      */
     public static void setAnimationsEnabled(boolean enabled) {
         WindowAnimator.setEnabled(enabled);
@@ -412,216 +315,6 @@ public class Desktop extends UIElement implements DataProvider {
         return WindowAnimator.isEnabled();
     }
 
-    public WindowFrame activeWindow() {
-        return activeWindow;
-    }
-
-    /**
-     * Brings a window to the front — <b>by assigning a {@code z-index}, never by moving it in the child
-     * list.</b>
-     *
-     * <p>This is the rule the whole design rests on, and the obvious implementation is the trap. Moving
-     * a frame to the end of the layer's children runs {@code removeChild}/{@code addChild}, which is
-     * {@code unregisterElement}/{@code registerElement} over the <b>entire frame subtree</b>: session
-     * state captured and re-applied, modal, popover and close-watcher stacks popped, every Taffy node
-     * destroyed and rebuilt. Per click. And a widget must never rebuild the elements it is being clicked
-     * on — the invariant that froze the table header — which is precisely what a raise is.</p>
-     *
-     * <p>{@code sortedChildren} then does the rest with no new machinery: it orders by z descending and
-     * painting walks it reversed, so paint order and hit-testing cannot disagree about which window is
-     * on top. That agreement is the invariant this must not re-implement.</p>
-     */
-    public void raise(WindowFrame frame) {
-        if (frame == null || frame.desktop() != this) return;
-
-        // THE WHOLE OWNER GROUP MOVES, owner first and its owned windows immediately above it — Win32's
-        // rule, and the reason a torn-out tool window does not fall behind the editor the moment the
-        // editor is clicked. Raising an OWNED window raises its owner too rather than lifting it out of
-        // the group: on every desktop, clicking a palette brings its document forward with it.
-        //
-        // Expressed as z-index over a group, not as a band. A band ("always on top") is a bigger claim
-        // than the one wanted here -- it would put a panel above windows it has nothing to do with, and
-        // PINNED_BAND above is reserved for the case where that IS the point.
-        WindowFrame root = frame;
-        for (WindowFrame walk = frame.ownerWindow(); walk != null; walk = walk.ownerWindow()) root = walk;
-
-        List<WindowFrame> group = new ArrayList<>();
-        for (WindowFrame candidate : windows.frames) {
-            if (candidate != root && ownedBy(candidate, root)) group.add(candidate);
-        }
-        // Their existing order is kept, except that the one actually raised ends up on top of its group.
-        group.sort(Comparator.comparingInt(WindowFrame::stackOrder));
-        if (frame != root && group.remove(frame)) group.add(frame);
-
-        if (raiseCounter >= PINNED_BAND - 2 - group.size()) renormaliseStack();
-
-        // THE BAND IS AN OFFSET ON THE SAME COUNTER, and that is the entire implementation of
-        // always-on-top -- exactly what was predicted when the feature was refused for having no
-        // consumer. `sortedChildren` then keeps paint order and hit-testing agreeing with no new
-        // machinery, which is the invariant that must never be re-implemented.
-        //
-        // Asked of the ROOT of the owner group, not of each frame: an owner group moves as a unit, so a
-        // pinned window's owned palette must ride into the band with it rather than being left below
-        // every unpinned window on the desktop.
-        int band = root.isPinned() ? PINNED_BAND : 0;
-        root.setStackOrder(band + ++raiseCounter);
-        for (WindowFrame owned : group) owned.setStackOrder(band + ++raiseCounter);
-    }
-
-    /** Whether {@code frame} is owned by {@code root}, directly or through a chain of owners. */
-    private static boolean ownedBy(WindowFrame frame, WindowFrame root) {
-        for (WindowFrame walk = frame.ownerWindow(); walk != null; walk = walk.ownerWindow()) {
-            if (walk == root) return true;
-        }
-        return false;
-    }
-
-    /**
-     * Re-spreads the stack over 1..n in its current order, so the counter cannot climb into the pinned
-     * band above it.
-     *
-     * <p>Unreachable by hand — nobody raises a window a million times — which is exactly why it is
-     * written to be called directly by a test rather than only by the counter. A renormalisation that
-     * has never run is a renormalisation that reorders the desktop the first time it does. Public for
-     * that reason and for the same one the constructor is, rather than because an application has any
-     * business calling it.</p>
-     */
-    public void renormaliseStack() {
-        List<WindowFrame> byDepth = new ArrayList<>(windows.frames);
-        byDepth.sort(Comparator.comparingInt(WindowFrame::stackOrder));
-        raiseCounter = 0;
-        for (WindowFrame frame : byDepth) frame.setStackOrder(++raiseCounter);
-    }
-
-    /**
-     * Makes a window the active one: raised, marked, and given its focus back.
-     *
-     * <p>Idempotent, because it is called from two directions that legitimately overlap — a press in the
-     * capture phase of a frame, and the focus owner moving into one (Tab, a command, W10's switcher).
-     * Neither is sufficient alone: a right-click moves no focus at all ({@code emitMouseDown} keeps the
-     * focus owner for a non-primary button), and Tab moves focus without any press.</p>
-     */
-    public void activate(WindowFrame frame) {
-        activate(frame, false);
-    }
-
-    /**
-     * Activates {@code frame} for something the user did (a taskbar click, the switcher, a preview) and ends its
-     * attention flash, which only user interaction does.
-     */
-    public void activateByUser(WindowFrame frame) {
-        if (frame == null || frame.desktop() != this) return;
-        frame.clearAttention();
-        activate(frame, false);
-    }
-
-    /** @param programmatic see {@link WindowFrame#restoreFocus} — it decides whether focus rings. */
-    public void activate(WindowFrame frame, boolean programmatic) {
-        activate(frame, programmatic, true);
-    }
-
-    /**
-     * @param restoreFocus whether to put focus back where this window last had it. False for a press in
-     *                     the window's content, which has already decided where focus goes -- see
-     *                     {@code WindowFrame.installActivation}; true for everything else, which is
-     *                     what activation has always meant.
-     */
-    public void activate(WindowFrame frame, boolean programmatic, boolean restoreFocus) {
-        if (frame == null || frame.desktop() != this) return;
-        // ACTIVATING A HIDDEN WINDOW RESTORES IT, which is what a taskbar entry does (W4) and what a
-        // switcher does (W10) -- both of them "activate", and a minimised window has to come back for
-        // that to mean anything. Restored as PERSISTED: it is coming out of retention, which is exactly
-        // the distinction the flag carries.
-        if (frame.state() == WindowState.HIDDEN) frame.show(true);
-        // Attention is NOT cleared here: code activates freshly opened windows too, which would end the
-        // flash before anyone saw it. @see #activateByUser, WindowFrame#isDemandingAttention()
-        // THE SHOW-DESKTOP MEMORY IS DROPPED HERE. Once a window has been used, "put it back how it was"
-        // no longer describes anything the user would recognise, and a second Win+D should mean a fresh
-        // minimise-all. Windows drops its own on exactly this event. @see #toggleShowDesktop()
-        //
-        // Cleared rather than checked for membership: restoring a window FROM the show-desktop set also
-        // counts, because at that point the set no longer describes the screen either.
-        minimizedByShowDesktop.clear();
-        raise(frame);
-        if (activeWindow != frame) {
-            if (activeWindow != null) setGroupActive(activeWindow, false);
-            activeWindow = frame;
-            setGroupActive(frame, true);
-        }
-        // AFTER the assignment above, not before it. This emits, and what listens re-renders the whole
-        // model -- so announcing while `activeWindow` still points at the previous window highlights the
-        // wrong entry until the next unrelated change happens to correct it.
-        registry.activated(frame);
-        if (restoreFocus) frame.restoreFocus(programmatic);
-    }
-
-    /**
-     * Marks a window active, <b>and the window it belongs to with it</b>.
-     *
-     * <p>A tool window is part of another window rather than a window of its own — that is the whole of
-     * what {@link WindowFrame#isToolWindow()} means — so focusing one must not take the active look away
-     * from the thing it came out of. Click into a floating Run panel and the editor's caption went grey
-     * with the panel plainly in front of it, which reads as having lost the application.</p>
-     *
-     * <p>Both desktops this borrows from agree: Windows leaves an owner's title bar active while its
-     * {@code WS_EX_TOOLWINDOW} palette has focus, and macOS does not deactivate a document window when a
-     * panel takes the keyboard. {@link WindowFrame#taskbarSubject()} is the same walk the strip uses, so
-     * the caption and the entry cannot disagree about which application is in front.</p>
-     *
-     * <p>Deactivating runs the same walk, which is what keeps it symmetric: the group goes dark together
-     * when something outside it is activated, and the order in {@link #activate} — old group off, then new
-     * group on — is what lets a window and its own panel hand over without a flicker.</p>
-     */
-    private void setGroupActive(WindowFrame frame, boolean active) {
-        frame.setActive(active);
-        WindowFrame subject = frame.taskbarSubject();
-        if (subject != frame) subject.setActive(active);
-    }
-
-    /**
-     * No window is active — the state a press on bare desktop leaves behind.
-     *
-     * <p>A legal state, not a degenerate one: {@code emitMouseDown} blurs before it dispatches and
-     * nothing on the desktop takes the focus it gave up, so "clicking the background deselects" is
-     * already what the input layer does. This is the chrome catching up with it.</p>
-     */
-    public void deactivate() {
-        if (activeWindow == null) return;
-        setGroupActive(activeWindow, false);
-        activeWindow = null;
-        // AND SAY SO. Everything that renders the registry renders the active window as part of it, and
-        // this is the one mutation that used to happen in silence -- so the taskbar went on highlighting
-        // the last window to have been active after it was minimised or the desktop was clicked. A
-        // highlight is a claim about where the keyboard is going; a stale one is a lie that persists,
-        // because nothing else was going to re-render the strip.
-        registry.changed();
-    }
-
-    /**
-     * Activates whatever is now in front, or nothing if the desktop is empty.
-     *
-     * <p>Called when the active window was <b>destroyed</b> and only then — see the note in the layer's
-     * {@code removeChild}. A minimised window is still there to go back to; a destroyed one leaves the
-     * keyboard with nowhere to be.</p>
-     */
-    public void activateTopmost() {
-        WindowFrame front = null;
-        for (WindowFrame frame : windows.frames) {
-            if (front == null || frame.stackOrder() >= front.stackOrder()) front = frame;
-        }
-        if (front != null) activate(front, true);
-    }
-
-    /**
-     * Activation follows the focus owner, wherever it came from.
-     *
-     * <p>The press half is handled by each frame's own capture listener; this is the half that covers
-     * everything else — Tab crossing from one window into another, a command focusing a control, the
-     * switcher (W10). Both funnel into the same idempotent {@link #activate}.</p>
-     *
-     * <p>Subscribed only while attached, {@code StatusBarView}'s pattern: the signal lives on the input
-     * handler, which outlives any desktop that has left the tree.</p>
-     */
     /**
      * <p>{@code onWindowChanged(previous, current)} has no counterpart — the node tree reports connect
      * and disconnect separately — and the split is faithful, because the old hook did two unrelated
@@ -661,15 +354,7 @@ public class Desktop extends UIElement implements DataProvider {
         current.addDataProvider(this);
     }
 
-    /**
-     * The document this was last connected to.
-     *
-     * <p><b>Remembered because {@code disconnected()} runs when there is no longer one to ask.</b> The
-     * old two-argument hook was handed the previous window; here the node is already off the tree by
-     * the time it is told, and a provider left registered on a document the desktop has left goes on
-     * answering "the active window" for a compositor that is not on screen. Same shape as the standing
-     * rule that a window's geometry must be captured BEFORE it leaves the tree.</p>
-     */
+    /** The document last connected to: {@code disconnected()} runs when there is no longer one to ask. */
     @Nullable
     private UIDocument lastDocument;
 
@@ -677,7 +362,7 @@ public class Desktop extends UIElement implements DataProvider {
     @Override
     @Nullable
     public Object getData(DataKey<?> key) {
-        return key == WindowFrame.WINDOW_FRAME ? activeWindow : null;
+        return key == WindowFrame.WINDOW_FRAME ? windowManager.activeWindow() : null;
     }
 
     private void seen(@Nullable Object target) {
@@ -693,17 +378,8 @@ public class Desktop extends UIElement implements DataProvider {
     private void focusMoved(@Nullable UIElement focused) {
         for (UIElement walk = focused; walk != null; walk = walk.parentElement()) {
             if (walk instanceof WindowFrame && ((WindowFrame) walk).desktop() == this) {
-                // ONLY A WINDOW THAT IS ON SCREEN. Focus landing inside a HIDDEN one is never the user
-                // working in it: a hidden window is DETACHED, so it cannot be clicked, cannot be tabbed
-                // into, and matches no selector. What reaches here instead is stale -- input state still
-                // naming an element in the subtree that has just left, or a promoted popover whose DOM
-                // parent is still the frame it was opened from.
-                //
-                // Activating on that UN-HIDES the window the user has just put away, which is what made
-                // minimise, hide and close all read as "the window will not close". Restoring a window IS
-                // activate's job, but through the routes that MEAN it -- a taskbar entry, the switcher, a
-                // command -- each of which calls activate directly. This one is incidental by
-                // construction, so it is the one that must not.
+                // Only a window on screen: focus inside a hidden one is stale input state, and activating it would
+                // un-hide a window the user just put away. Taskbar and switcher activate directly.
                 if (((WindowFrame) walk).state() != WindowState.VISIBLE) return;
                 // MINIMISING IS NOT WORKING IN A WINDOW. Click-focus lands on the minimise BUTTON, so
                 // this route brought a background window forward on the way to putting it away -- and it
@@ -719,7 +395,7 @@ public class Desktop extends UIElement implements DataProvider {
                 // bare content -- which click-focus lands on the frame -- into a restore: a field you had
                 // just clicked away from took focus straight back. The one route that legitimately
                 // restores is a press on CHROME, and the frame's own press listener does that itself.
-                activate((WindowFrame) walk, false, false);
+                windowManager.activate((WindowFrame) walk, false, false);
                 return;
             }
         }
@@ -732,41 +408,19 @@ public class Desktop extends UIElement implements DataProvider {
     /** A desktop owns its chrome; windows go through {@link #addWindow}. */
 
     /**
-     * Puts a window on the desktop, cascading it into place unless it already has one.
-     *
-     * <p>Placement is <b>deferred to the frame's first layout</b> rather than computed here: the offset
-     * needs the caption's measured height and the work area's measured box, and at this point neither
-     * exists. {@code WindowFrame.onLayoutChanged} calls back into {@link #placeByCascade} once they do.</p>
-     *
-     * <p>The new window is raised and activated, which is right for every opener there is today — every
-     * one of them is a user gesture. <b>W12 is where that stops being true</b>: a server may open a
-     * window mid-keystroke, and every OS converged on the same answer for that case (Windows'
-     * foreground lock plus {@code FlashWindowEx}, X11's urgency hint, macOS's bouncing icon) — appear,
-     * but take no focus and ask for attention instead.</p>
+     * Puts a window on the desktop, raised and activated, and cascades it into place unless it has one.
+     * Placement waits for the first layout, when the caption and the work area are measured.
      */
     public <T extends WindowFrame> T addWindow(T frame) {
         return addWindow(frame, true);
     }
 
     /**
-     * Puts a window on the desktop, optionally <b>without taking focus</b> — the no-steal rule (W12).
-     *
-     * <h3>Every OS converged on the same answer, and it is not "don't open the window"</h3>
-     *
-     * <p>A window opened by something other than a user gesture — a server pushing a UI, a background
-     * job finishing — must not take the keyboard out from under whatever is being typed. Windows has a
-     * foreground lock plus {@code FlashWindowEx}, X11 has the urgency hint, macOS bounces the dock icon:
-     * <em>appear, take no focus, and ask for attention instead</em>. So the window is registered,
-     * attached and animated exactly as any other, and only the raise and the activation are skipped.</p>
-     *
-     * <p>It goes in at the <b>back</b> of the MRU as well, which {@code WindowRegistry.opened} already
-     * arranges and states the reason for: a window that never took focus must not become the switcher's
-     * first offer, or the attention flash becomes a focus steal with one keystroke of delay.</p>
-     *
-     * <p>Asking for attention is part of appearing in the background rather than a second call the
-     * caller has to remember. A window that appears with no focus and no announcement is a window nobody
-     * knows opened, which is worse than either alternative — and clearing it is one line
-     * ({@link WindowFrame#clearAttention()}) for the rare caller that genuinely wants silence.</p>
+     * Puts a window on the desktop, optionally without taking focus (the no-steal rule): a window opened by a
+     * server or a background job must not take the keyboard mid-keystroke. It is registered, attached and
+     * animated like any other; only the raise and the activation are skipped, and it asks for attention
+     * instead (Windows' foreground lock and {@code FlashWindowEx}). It joins the back of the MRU, so it is not the
+     * switcher's first offer.
      */
     public <T extends WindowFrame> T addWindow(T frame, boolean activate) {
         if (frame.state() == WindowState.DESTROYED) {
@@ -777,7 +431,7 @@ public class Desktop extends UIElement implements DataProvider {
             return attach(frame, activate);
         } catch (RuntimeException failed) {
             // Registered but never attached would be a taskbar entry for a window that is not there.
-            registry.withdrawn(frame);
+            windowManager.registry().withdrawn(frame);
             frame.setOwner(null);
             try {
                 if (frame.parent() != null) frame.parent().remove(frame);
@@ -789,7 +443,7 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     private <T extends WindowFrame> T attach(T frame, boolean activate) {
-        registry.opened(frame);
+        windowManager.registry().opened(frame);
         windows.append(frame);
         // BEFORE the animation and the activation below: a window restored from a record should open AT
         // the size and place it is meant to be, not fly in at a default and jump. @see #persistTo
@@ -801,7 +455,7 @@ public class Desktop extends UIElement implements DataProvider {
             if (frame.key() != null) pendingPlacements.remove(frame.key());
             takeGeometry(frame, starter);
         } else if (!applyPersistedGeometry(frame) && !frame.isSized() && frame.isApplicationMain()) {
-            sizeByDefault(frame);
+            windowManager.sizeByDefault(frame);
         }
         // A FIRST OPEN DOES NOT GO THROUGH show(), so the entry animation has to be played here as well.
         // The two paths are genuinely different -- this one registers the window and hands it an owner,
@@ -820,7 +474,7 @@ public class Desktop extends UIElement implements DataProvider {
         // PROGRAMMATIC, so focus rings: nobody pointed at this window, so a keyboard user needs to be
         // told where focus went. The ring lands on whatever inside it takes focus -- never on the frame,
         // which ua/core.css exempts along with every other pane-sized widget.
-        activate(frame, true);
+        windowManager.activate(frame, true);
         return frame;
     }
 
@@ -865,7 +519,7 @@ public class Desktop extends UIElement implements DataProvider {
         Runnable show = () -> {
             WindowFrame open = applicationId == null ? null : failureWindows.get(applicationId);
             if (open != null && open.state() != WindowState.DESTROYED && !open.isClosing()) {
-                activateByUser(open);
+                windowManager.activateByUser(open);
                 return;
             }
             ApplicationKind kind = applicationId == null ? null : applications().byId(applicationId);
@@ -884,8 +538,8 @@ public class Desktop extends UIElement implements DataProvider {
     /** Puts a hidden window back on the layer. Driven by {@link WindowFrame#show}, which owns the state. */
     public void reattach(WindowFrame frame) {
         if (frame.parent() == null) windows.append(frame);
-        raise(frame);
-        registry.changed();
+        windowManager.raise(frame);
+        windowManager.registry().changed();
     }
 
     /** The strip along the bottom — the registry, rendered. @see Taskbar */
@@ -894,35 +548,9 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * The strip follows whether <b>any</b> window is fullscreen — W13b.
-     *
-     * <p>Asked of the whole set rather than tracked as one window, because two can be fullscreen at once
-     * (one behind the other) and the bar must not come back when the front one exits. A field holding
-     * "the fullscreen window" would need every exit to know whether it was the one being remembered,
-     * which is a bookkeeping question the registry can simply be asked.</p>
-     *
-     * <p>Nothing else has to move: a frame is placed against the window layer and the layer's box IS the
-     * work area, so hiding the bar re-flows the layer to full height and every maximised window follows
-     * it. That is the same property that makes maximise need no taskbar special case.</p>
-     */
-    /**
-     * The modifier that turns a press anywhere inside a window into a move — W13b's Alt-drag.
-     *
-     * <h3>Why this is a setting and not a keymap binding</h3>
-     *
-     * <p>{@code plan/shell-windowing.md} asks for the chord to be keymap-resolved, "never a hardcoded Alt",
-     * and the reason is sound: Alt is contested territory here — {@code TextField} refuses Alt chords and
-     * {@code MenuBarView} claims Alt+letter mnemonics, and both of those were paid for.</p>
-     *
-     * <p>It cannot literally be a binding, and that is a fact about the keymap rather than a shortcut:
-     * a {@link com.crystalgui.ui.input.keymap.KeyStroke} is a <em>key</em> plus modifiers, and
-     * {@code parse("Alt")} reads "Alt" as the key name and fails. There is no way to spell a
-     * modifier-only binding, and inventing one for a single gesture would mean teaching the resolver,
-     * the palette and the accelerator renderer about a stroke that can never be pressed.</p>
-     *
-     * <p>So this is the substance of the requirement without the letter: <b>one place</b>, changeable at
-     * runtime, and nothing in {@code WindowFrame} naming a modifier. GNOME keeps the same thing as a
-     * setting for the same reason — {@code org.gnome.desktop.wm.preferences.mouse-button-modifier}.</p>
+     * The modifier that turns a press anywhere inside a window into a move (Alt-drag). A setting rather than a
+     * keymap binding: a {@code KeyStroke} is a key plus modifiers and cannot spell a modifier alone. One
+     * place, changeable at runtime, as GNOME's {@code mouse-button-modifier}.
      */
     public int moveModifier() {
         return moveModifier;
@@ -938,25 +566,9 @@ public class Desktop extends UIElement implements DataProvider {
     private int moveModifier = CgModifiers.ALT;
 
     /**
-     * Shows — or re-aims — the rect a window would land in, <b>animating between shapes</b>.
-     *
-     * <h3>It morphs from the WINDOW, which is what makes it a proposal rather than a label</h3>
-     *
-     * <p>A preview that simply appeared at its destination states the answer; one that grows out of the
-     * window being dragged states the <em>change</em>, which is the question the user is actually asking.
-     * It also means both ends of every animation are a real place on screen, so nothing has to fade or
-     * pop: the first show morphs from the window's own rect, a change of zone morphs from wherever the
-     * preview currently is, and an animated hide morphs back to the window.</p>
-     *
-     * <p>Through {@link WindowGeometryAnimation} — the same driver a maximise uses — and not a CSS
-     * transition, for the reason the whole compositor follows: an animation is a <b>timeline</b>, and
-     * the cascade is for rest states. Layout rather than a transform costs nothing here that it costs a
-     * window, because this element has no content to reflow. It is an empty box.</p>
-     *
-     * <p><b>Called every frame of a drag while the pointer stays in one zone</b>, so it must be a no-op
-     * for an unchanged zone. Restarting the timeline per frame would ease from the live rect toward the
-     * same target for ever — approaching it and never arriving, which reads as a sluggish preview
-     * rather than as an animation being re-armed sixty times a second.</p>
+     * Shows or re-aims the rect a window would land in, animating between shapes. It morphs from the dragged
+     * window, so it reads as a proposed change. Called every frame of a drag, so a no-op for an unchanged zone:
+     * restarting the timeline per frame would ease toward the target without arriving.
      */
     public void showSnapPreview(SnapZones.Zone zone, WindowFrame source) {
         Box box = windows.box();
@@ -965,7 +577,7 @@ public class Desktop extends UIElement implements DataProvider {
 
         // AT THE GROUP'S LIVE CUTS, not at halves: the preview promises where the window will land,
         // and snapping into an occupied zone gives it that zone's CURRENT size.
-        float[] to = SnapZones.rectFor(zone, box.width(), box.height(), splitX, splitY);
+        float[] to = SnapZones.rectFor(zone, box.width(), box.height(), windowManager.splitX(), windowManager.splitY());
         float[] from = snapShowing ? livePreviewRect() : frameRect(source);
 
         snapSource = source;
@@ -983,32 +595,13 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Puts the preview <b>above every other window and below the one being dragged</b>.
-     *
-     * <h3>A decoration with no z is a decoration at z = 0, which is behind everything</h3>
-     *
-     * <p>{@link #raise} gives every window a {@code z-index} from a counter that only ever goes up, so
-     * a window that has been clicked even once sits above a preview that was never given one. That was
-     * survivable while the preview was larger than the windows it was under — you saw it around them and
-     * it read as working. Put a window in the very half being previewed and the preview is <b>entirely
-     * behind it</b>: no highlight, no feedback, and the gesture reads as refusing an occupied zone.
-     * It is not refusing anything; the snap lands correctly, which is what made the report so specific.
-     * </p>
-     *
-     * <p><b>Below the dragged window, not above it.</b> Above is one line and looks fine until you watch
-     * it: the wash is drawn over the window in your hand, so the thing you are holding greys out and
-     * reads as disabled at the exact moment it is being acted on. Windows draws its preview behind the
-     * dragged window for the same reason.</p>
-     *
-     * <p>The preview takes the slot the dragged window currently holds and the window moves up one, so
-     * the two can never tie — {@code raiseCounter} hands out each value once, so nothing else is left at
-     * the value being vacated. (If that raise happens to trip {@code renormaliseStack}, the preview ends
-     * up above everything for that one drag, which is the mild version of the artefact and is not worth
-     * a second mechanism to avoid.)</p>
+     * Puts the preview above every other window and below the dragged one. A preview with no z sits behind any
+     * window raised once, hiding the feedback for an occupied zone; above the dragged window it would grey out
+     * the window in hand. It takes the dragged window's slot and the window moves up one.
      */
     private void stackPreviewUnder(WindowFrame source) {
-        int previewZ = raiseCounter;
-        raise(source);
+        int previewZ = windowManager.stackTop();
+        windowManager.raise(source);
         // INLINE, not IMPORTANT: a stacking order computed per gesture is exactly the "geometry a
         // caller wrote" slot, and the engine may no longer write above an author's sheet anyway.
         StyleGroup.inlinePipeline(snapPreview.getStyle().getGeneralGroup(),
@@ -1031,12 +624,8 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Takes it off screen at once — for a snap that was <b>accepted</b>.
-     *
-     * <p>Not symmetrical with {@link #hideSnapPreview}, and deliberately: on release the window itself
-     * animates into the very rect the preview is occupying, so contracting the preview back to where the
-     * window <em>used</em> to be would play the gesture backwards beside the thing doing it forwards.
-     * The window is the animation once there is a window to watch.</p>
+     * Takes it off screen at once, for an accepted snap: the window animates into the rect itself, so
+     * contracting the preview back would play the gesture backwards beside it.
      */
     public void hideSnapPreviewNow() {
         cancelSnapMotion();
@@ -1122,163 +711,6 @@ public class Desktop extends UIElement implements DataProvider {
                 : new float[] {frame.left(), frame.top(), box.width(), box.height()};
     }
 
-    // ── HUD: pinned windows over the running game ───────────────────────────────────────────────
-
-    /** What {@link #enterHudMode} put away, so {@link #exitHudMode} can put it back. */
-    private final List<WindowFrame> hiddenForHud = new ArrayList<>();
-    private boolean hudMode;
-
-    /**
-     * Puts the desktop on the HUD: every unpinned window goes away, pinned ones keep running.
-     *
-     * <p>What a host calls instead of taking the compositor off screen when something is pinned —
-     * Discord's and Steam's in-game overlays are the precedent, and live debugging is the use case: pin
-     * the Run console, close the screen, play, and watch it stream.</p>
-     *
-     * <p><b>Unpinned windows are HIDDEN, not merely unpainted</b>, which is what makes the freeze
-     * contract hold unchanged: hiding detaches, so nothing matches a selector, nothing lays out, an
-     * owned per-frame hook is dropped and the input service forgets every node in the subtree. It is
-     * also why the set has to be REMEMBERED rather than inferred on the way out — a window the user had
-     * already minimised must stay minimised when the screen comes back.</p>
-     *
-     * <p><b>Visible stays live.</b> The freeze contract keys on <em>hidden</em>, not on the screen being
-     * closed, so a pinned window keeps its hooks, its transitions and its connections. Watching live
-     * data is the entire point; a frozen HUD would be a screenshot.</p>
-     *
-     * <p><b>On the compositor rather than on the document, which is where the old engine had it.</b>
-     * Every line of it is about this desktop's own windows, and {@code ui.dom} may not name one — the
-     * same inversion {@link #of} makes for the compositor itself.</p>
-     */
-    public void enterHudMode() {
-        if (hudMode) return;
-        hudMode = true;
-        hiddenForHud.clear();
-        for (WindowFrame frame : new ArrayList<>(registry.windows())) {
-            if (frame.isPinned() || frame.state() != WindowState.VISIBLE) continue;
-            hiddenForHud.add(frame);
-            frame.hide();
-        }
-        for (WindowFrame frame : registry.windows()) {
-            if (frame.isPinned()) frame.addClass(WindowFrame.HUD_CLASS);
-        }
-    }
-
-    /** Takes the desktop off the HUD, restoring exactly what {@link #enterHudMode} put away. */
-    public void exitHudMode() {
-        if (!hudMode) return;
-        hudMode = false;
-        for (WindowFrame frame : registry.windows()) {
-            frame.removeClass(WindowFrame.HUD_CLASS);
-        }
-        // persisted: a restore of a window that WAS on screen, never a first show.
-        for (WindowFrame frame : hiddenForHud) frame.show(true);
-        hiddenForHud.clear();
-    }
-
-    /** @see #enterHudMode */
-    public boolean isHudMode() {
-        return hudMode;
-    }
-
-    // ── Joint resize — the tiled group ──────────────────────────────────────────────────────────
-
-    /**
-     * Snaps {@code frame} into {@code zone}, at the group's <b>current</b> divider positions.
-     *
-     * <p>The one entry point, so the split state and the rect can never disagree. A caller computing
-     * the rect itself would tile against halves and undo whatever the group had been dragged to — which
-     * is exactly what {@code commitSnap} used to do.</p>
-     */
-    public void snapFrameTo(WindowFrame frame, SnapZones.Zone zone) {
-        Box area = windows.box();
-        if (frame == null || zone == null || area == null
-                || area.width() <= 0f || area.height() <= 0f) return;
-
-        // A FRESH GROUP STARTS AT HALVES. The divider belongs to the GROUP and must not outlive one:
-        // closing a pair that had been dragged to 3:1 and then snapping a single window left would
-        // otherwise hand it that ratio, with nothing left on screen to explain where it came from.
-        if (!anySnappedBesides(frame)) {
-            splitX = SnapZones.CENTRE_SPLIT;
-            splitY = SnapZones.CENTRE_SPLIT;
-        }
-        float[] rect = SnapZones.rectFor(zone, area.width(), area.height(), splitX, splitY);
-        frame.snapTo(zone, rect[0], rect[1], rect[2], rect[3]);
-    }
-
-    /**
-     * Moves a shared divider and re-tiles everything it separates — Windows' {@code JointResize}.
-     *
-     * <h3>The state is the CUT, not the pair</h3>
-     *
-     * <p>Two windows sharing an edge are {@code n} and {@code 1 − n} of one axis, so the group keeps the
-     * fraction and every member's rect is derived from it. That is what makes them unable to drift
-     * apart, and it is why a four-window layout needs no extra machinery: the vertical cut is shared by
-     * both rows, so dragging it between the top pair moves the bottom pair too and the grid stays a
-     * grid. Windows 11 describes exactly that — <i>"the rest of the windows will be adapted to maintain
-     * the design"</i> — where Windows 10 could pair two windows and no more.</p>
-     *
-     * <p><b>One grid, not a cut per row.</b> Independent cuts per row would be more general and are not
-     * what a tiled desktop means: the moment the two rows disagree, the layout is no longer a grid and
-     * the corner where four windows meet stops being one place. Dragging that corner here is a single
-     * gesture moving both cuts, which falls out of a corner handle reporting both axes.</p>
-     *
-     * <p>Applied INSTANTLY, never through {@link WindowFrame#snapTo}: this runs once per frame of a
-     * hand-driven drag, and a 250ms ease per frame would leave every window trailing the pointer.</p>
-     */
-    public void jointResize(WindowFrame frame, int handleDx, int handleDy, float width, float height) {
-        SnapZones.Zone zone = frame == null ? null : frame.snappedZone();
-        Box area = windows.box();
-        if (zone == null || area == null || area.width() <= 0f || area.height() <= 0f) return;
-
-        boolean moved = false;
-        if (zone.movesVerticalDivider(handleDx)) {
-            splitX = SnapZones.splitFor(zone.xSide, frame.left(), width, area.width());
-            moved = true;
-        }
-        if (zone.movesHorizontalDivider(handleDy)) {
-            splitY = SnapZones.splitFor(zone.ySide, frame.top(), height, area.height());
-            moved = true;
-        }
-        // AN OUTER EDGE MOVES NOTHING ELSE. Dragging the left edge of a left-snapped window resizes one
-        // window; it is not repartitioning the screen, and treating it as a divider would make the far
-        // side of the desktop jump whenever somebody pulled a window off its own border.
-        if (moved) applySnapLayout();
-    }
-
-    /**
-     * Re-tiles every snapped window from the current cuts.
-     *
-     * <p>Includes the window being dragged, which is what makes {@link SnapZones#MIN_SPLIT} hold: the
-     * resizer has already written an unclamped size, and this writes the clamped one into the same
-     * INLINE slot afterwards.</p>
-     */
-    private void applySnapLayout() {
-        Box area = windows.box();
-        if (area == null || area.width() <= 0f || area.height() <= 0f) return;
-        for (WindowFrame frame : registry.windows()) {
-            SnapZones.Zone zone = frame.snappedZone();
-            if (zone == null || frame.state() != WindowState.VISIBLE) continue;
-            float[] rect = SnapZones.rectFor(zone, area.width(), area.height(), splitX, splitY);
-            frame.resizeTo(rect[2], rect[3]);
-            frame.moveTo(rect[0], rect[1]);
-        }
-    }
-
-    /** Whether any window other than {@code except} is currently tiled. */
-    private boolean anySnappedBesides(WindowFrame except) {
-        for (WindowFrame frame : registry.windows()) {
-            if (frame != except && frame.snappedZone() != null
-                    && frame.state() == WindowState.VISIBLE) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    /** Where the work area is cut, as a fraction. @see #jointResize */
-    private float splitX = SnapZones.CENTRE_SPLIT;
-    private float splitY = SnapZones.CENTRE_SPLIT;
-
     /** @see #showSnapPreview */
     public static final String SNAP_PREVIEW_CLASS = "__snap-preview__";
 
@@ -1322,65 +754,12 @@ public class Desktop extends UIElement implements DataProvider {
     @Nullable
     private WindowMotion snapMotion;
 
-    /**
-     * Minimise everything, or put back exactly what was minimised — Windows' {@code Win+D}, W13c.
-     *
-     * <h3>A toggle with a memory, and the memory is what makes it a toggle</h3>
-     *
-     * <p>"Restore everything" would be wrong: a desktop where three windows were already minimised
-     * before the gesture would come back with three windows nobody asked for. So it puts back
-     * <em>exactly the set it took down</em> — which is also the only definition under which pressing it
-     * twice is a no-op.</p>
-     *
-     * <p><b>And it forgets the moment anything is activated in between.</b> Once the user has gone and
-     * used a window, "put it back how it was" no longer describes anything they would recognise, and a
-     * second press should mean a fresh minimise-all rather than resurrecting a set from before whatever
-     * they just did. Windows drops its own memory on exactly the same event.</p>
-     */
-    public void toggleShowDesktop() {
-        if (!minimizedByShowDesktop.isEmpty()) {
-            List<WindowFrame> putBack = new ArrayList<>(minimizedByShowDesktop);
-            minimizedByShowDesktop.clear();
-            for (WindowFrame frame : putBack) {
-                if (frame.state() == WindowState.HIDDEN) frame.show(true);
-            }
-            return;
-        }
-        for (WindowFrame frame : registry.windows()) {
-            // TOOL WINDOWS RIDE WITH THEIR OWNER and are not taken down separately -- a WINDOWED one
-            // hides when its owner does, so minimising it here would put it in the memory twice and
-            // bring it back on its own. @see WindowFrame#isToolWindow()
-            if (frame.isToolWindow() || frame.state() != WindowState.VISIBLE) continue;
-            minimizedByShowDesktop.add(frame);
-            frame.minimize();
-        }
-    }
-
-    /** Whether the last thing this desktop did was a show-desktop that has not been undone. */
-    public boolean isShowingDesktop() {
-        return !minimizedByShowDesktop.isEmpty();
-    }
-
-    /** @see #toggleShowDesktop() */
-    private final List<WindowFrame> minimizedByShowDesktop = new ArrayList<>();
-
     /** Keyboard Move/Size — W13c. @see WindowKeyboardMove */
     public WindowKeyboardMove keyboardMove() {
         return keyboardMove;
     }
 
     private final WindowKeyboardMove keyboardMove = new WindowKeyboardMove();
-
-    public void fullscreenChanged() {
-        boolean anyFullscreen = false;
-        for (WindowFrame frame : registry.windows()) {
-            if (frame.isFullscreen() && frame.state() == WindowState.VISIBLE) {
-                anyFullscreen = true;
-                break;
-            }
-        }
-        taskbar.setBarVisible(!anyFullscreen);
-    }
 
     /** The MRU switcher. @see WindowSwitcher */
     public WindowSwitcher switcher() {
@@ -1408,28 +787,9 @@ public class Desktop extends UIElement implements DataProvider {
     private boolean restorePassArmed;
 
     /**
-     * Remembers this desktop's arrangement, and puts back the one it finds — CrystalOS <b>W12</b>.
-     *
-     * <h3>A platform says WHERE, and nothing else</h3>
-     *
-     * <p>The compositor is engine-owned, and so is everything about it that survives a restart. A host
-     * supplies a {@link CgConfigStorage} and an id — where the record lives and which desktop it is — and
-     * gets the rest for nothing. The alternative was tried and is the reason this note exists: the same
-     * read-apply-write orchestration written once in the Minecraft screen and once in the harness scene,
-     * which is two copies of a policy that has to agree, in two places nobody reads together.</p>
-     *
-     * <h3>Geometry is APPLIED TO WINDOWS AS THEY OPEN, never used to build them</h3>
-     *
-     * <p>The obvious design hands core a factory — key in, window out — and it cannot work: only the
-     * application knows what its windows contain, so the factory is a second thing every host must write,
-     * and a host that forgets one silently loses that window. Inverting it removes the question. A host
-     * opens whatever it opens, however it likes; a window that carries a {@link WindowFrame#key()} this
-     * record names is placed where it was, and one it does not is left alone. Nothing is constructed
-     * here, so nothing needs to be known here.</p>
-     *
-     * <p>The cost is honest and worth stating: a window the host does <em>not</em> reopen does not come
-     * back. Core cannot invent it, and a record that claimed otherwise would be describing windows that
-     * cannot exist.</p>
+     * Remembers this desktop's arrangement and puts back the one it finds. A host says where and which desktop;
+     * geometry is applied to windows as they open, matched by {@link WindowFrame#key()}, and nothing is
+     * constructed from the record, so a window the host does not reopen does not come back.
      */
     public Desktop persistTo(CgConfigStorage storage, String id) {
         // AND IT BECOMES THIS DESKTOP'S STORE, which is what an application launched onto it is given.
@@ -1453,28 +813,20 @@ public class Desktop extends UIElement implements DataProvider {
         }
         // Windows already open when a host installs this are placed too -- a host that opens its editor
         // and then asks for persistence is doing nothing wrong.
-        for (WindowFrame frame : registry.windows()) applyPersistedGeometry(frame);
+        for (WindowFrame frame : windowManager.registry().windows()) applyPersistedGeometry(frame);
         armRestorePass();
         return this;
     }
 
     /**
-     * <b>Where this desktop keeps everything</b> — under the game's directory
-     * ({@code CgGameDirectory.game()}).
-     *
-     * <p>One call, before anything is launched onto this desktop: it derives the config store and the
-     * cache root from {@link CrystalGuiStorage}, so nothing else spells those segments. Applications
-     * launched afterwards need no storage argument at all.</p>
+     * Where this desktop keeps everything, under the game's directory: its config store and cache root come from
+     * {@link CrystalGuiStorage}. Call once, before launching anything; there is no default.
      *
      * <pre>{@code
      * desktop.useStorage(gameDir);                 // where crystalgui/ goes
      * desktop.applications().launch(kind, workspace);
-     * desktop.persistAs("client");                 // …and start recording the arrangement
+     * desktop.persistAs("client");                 // and start recording the arrangement
      * }</pre>
-     *
-     * <p><b>There is no default.</b> A desktop nobody has told simply has nowhere to write, and says so
-     * when asked to launch something — an
-     * answer chosen for a host that never saw the question is indistinguishable from one it meant.</p>
      */
     private final ConcurrentHashMap<Class<?>, Object> services = new ConcurrentHashMap<>();
 
@@ -1589,7 +941,7 @@ public class Desktop extends UIElement implements DataProvider {
     private static String[] focusedApplicationOfRunningDocument() {
         UIDocument running = UIDocument.current();
         Desktop in = running == null ? null : ifPresent(running);
-        WindowFrame front = in == null ? null : in.activeWindow;
+        WindowFrame front = in == null ? null : in.windowManager.activeWindow();
         ApplicationKind kind = front == null ? null : front.application();
         return kind == null ? null : new String[] {kind.id(), kind.displayName()};
     }
@@ -1601,23 +953,9 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Where one workspace's own state goes — its session, its backups, its local history.
-     *
-     * <p><b>Beside the world when this process is serving it</b>, so deleting the save takes them with
-     * it. Anything remote goes in this installation's tree instead, keyed by the identity the server
-     * greeted with — a client cannot write to a server's disk, and would not want its arrangement
-     * living there.</p>
-     *
-     * <p>Asked once the greeting has supplied an identity, which is the first moment either half of
-     * that answer is known.</p>
-     *
-     * <p><b>This holds while a client talks to one source, and W3b is where it stops.</b> The rule
-     * wanted is "beside the projects it is about"; what is implemented is "beside the world, when this
-     * process serves one", and the two part as soon as the client also serves its own GLOBAL root.
-     * A global project's state would then be filed under whichever world happened to be open — its
-     * session lost on the next world, and its unsaved backups not offered. Placing by workspace rather
-     * than by process needs the root a workspace belongs to, which only its server knows: the greeting
-     * is where it would arrive.</p>
+     * Where one workspace's own state goes: its session, backups and local history. Beside the world when this
+     * process serves it; otherwise in this installation's tree, keyed by the identity the server greeted with.
+     * Placement by process stops being right once a client also serves its own global root.
      */
     public CgConfigStorage workspaceStore(String identity) {
         Path world = localWorld == null ? null : localWorld.get();
@@ -1687,13 +1025,6 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * How much of the work area a window takes when nothing sized it and nothing recorded it: Windows'
-     * {@code CW_USEDEFAULT}. Large enough to work in, small enough that the desktop shows underneath; the record
-     * takes over once it has closed once.
-     */
-    private static final float DEFAULT_WINDOW_FRACTION = 0.8f;
-
-    /**
      * Forgets every saved window size and position, and puts each open application's main window back at its default
      * size ({@link ApplicationKind#windowSize}, else most of the screen). The next launch of anything opens at its default.
      *
@@ -1705,38 +1036,10 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public void resetWindowPlacements() {
         pendingPlacements.clear();
-        for (WindowFrame frame : new ArrayList<>(registry.windows())) {
-            if (frame.isApplicationMain() && !frame.isMaximized()) sizeByDefault(frame);
+        for (WindowFrame frame : new ArrayList<>(windowManager.registry().windows())) {
+            if (frame.isApplicationMain() && !frame.isMaximized()) windowManager.sizeByDefault(frame);
         }
         savePersistedState();
-    }
-
-    /**
-     * An application's main window that nobody sized and nothing recorded: its kind's
-     * {@link ApplicationKind#windowSize}, else {@link #DEFAULT_WINDOW_FRACTION} of the desktop. The size only; the
-     * cascade places it, as Windows' default position does. Any other window keeps fitting its content. On the first
-     * layout when the desktop has no size yet, since a size against nothing is no size.
-     */
-    private void sizeByDefault(WindowFrame frame) {
-        Box area = windows.box();
-        if (area != null && area.width() > 0f && area.height() > 0f) {
-            ApplicationKind kind = frame.application();
-            boolean named = kind != null && kind.windowWidth() > 0f && kind.windowHeight() > 0f;
-            float fraction = kind != null && kind.windowFraction() > 0f ? kind.windowFraction() : DEFAULT_WINDOW_FRACTION;
-            float width = Math.round(Math.min(area.width(), named ? kind.windowWidth() : area.width() * fraction));
-            float height = Math.round(Math.min(area.height(), named ? kind.windowHeight() : area.height() * fraction));
-            frame.resizeTo(width, height);
-            return;
-        }
-        UIDocument document = document();
-        if (document == null) return;
-        document.animation().afterLayout(frame, delta -> {
-            if (frame.isSized() || frame.state() == WindowState.DESTROYED) return false;
-            Box laidOut = windows.box();
-            if (laidOut == null || laidOut.width() <= 0f) return true;
-            sizeByDefault(frame);
-            return false;
-        });
     }
 
     private final List<WindowFrame> hideAfterRestore = new ArrayList<>();
@@ -1814,7 +1117,7 @@ public class Desktop extends UIElement implements DataProvider {
     /** {@code successor} where {@code starter} was on the taskbar, then the starter gone. */
     private void replaceStarting(WindowFrame starter, WindowFrame successor) {
         boolean minimised = starter.state() == WindowState.HIDDEN || starter.isMinimizing();
-        registry.takePlace(successor, starter);
+        windowManager.registry().takePlace(successor, starter);
         Taskbar bar = taskbar();
         if (bar != null) bar.takePlace(successor, starter);
         // NO CUT TO THE APPLICATION. Minimised, it waits minimised (the build finished in the background, and a
@@ -1835,7 +1138,7 @@ public class Desktop extends UIElement implements DataProvider {
         }
         // ABOVE EVERY ORDINARY WINDOW, NOW: the application's activation raises it over the starter a frame later, and
         // a raise-after hid the starter for those frames. Raises hand out values below the pinned band.
-        starter.setStackOrder(PINNED_BAND - 1);
+        starter.setStackOrder(WindowManager.PINNED_BAND - 1);
         // THE APPLICATION IS NOT SEEN UNTIL THE VIEW COMES UP: beneath the glass it showed through as a dark ghost from the
         // swap, a crossfade begun long before the mark had moved. Owned by it, so a starter closed first cannot leave it hidden.
         successor.addClass(WindowFrame.HANDOVER_CLASS);
@@ -1917,12 +1220,8 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Replays activation and minimisation once the host has finished opening windows.
-     *
-     * <p>Deferred by exactly one frame rather than done per window, because both are statements about the
-     * SET: the front window is whichever was activated last, and hiding one during {@code addWindow} would
-     * fight the open animation and the activation that follows it. A host opens its windows in one go
-     * during setup, so the next frame is when the set is complete.</p>
+     * Replays activation and minimisation once the host has finished opening windows, one frame later: both are
+     * statements about the set, and hiding one during {@code addWindow} would fight its open animation.
      */
     private void armRestorePass() {
         if (restorePassArmed) return;
@@ -1940,10 +1239,10 @@ public class Desktop extends UIElement implements DataProvider {
         // LEAST RECENT FIRST, so the most recently used window is activated last and ends in front.
         // Forwards would leave the desktop showing whatever had been looked at least recently.
         for (int index = pendingMru.size() - 1; index >= 0; index--) {
-            WindowFrame frame = registry.byKey(pendingMru.get(index));
+            WindowFrame frame = windowManager.registry().byKey(pendingMru.get(index));
             if (frame != null && frame.state() == WindowState.VISIBLE
                     && !hideAfterRestore.contains(frame)) {
-                activate(frame, true);
+                windowManager.activate(frame, true);
             }
         }
         pendingMru = List.of();
@@ -1958,30 +1257,15 @@ public class Desktop extends UIElement implements DataProvider {
     private static final AtomicBoolean SWITCHER_ANNOUNCED = new AtomicBoolean();
 
     /**
-     * Tells the user how to switch windows, the first time one is put away.
-     *
-     * <p><b>A keybinding nobody can discover is a keybinding that does not exist.</b> The taskbar is the
-     * safety net and is visible; the switcher is the fast path and is invisible until you already know
-     * about it, so the moment a window first disappears is the one moment the offer is both relevant and
-     * unmissable. Windows makes the same offer with its "your window is here" taskbar bubble.</p>
-     *
-     * <p><b>The chord is read from the keymap, never spelled.</b> A literal is a promise the widget cannot
-     * keep the moment anything rebinds the command, and it fails silently — the notification goes on
-     * confidently naming a key that does nothing. {@code Keymap.acceleratorFor} is what every menu item
-     * and tooltip in the engine already uses, and it falls back to the command's declared default, so this
-     * is correct before anybody has installed a keymap at all. If the command is genuinely unbound there
-     * is nothing to advertise and nothing is said.</p>
-     *
-     * <p>Once per process, and separately suppressible for good: the static flag stops it repeating in a
-     * session, and {@code neverShowAgain} is the user's own switch, which {@code Notifications} persists
-     * by id. Two mechanisms because they answer different questions — "have I said this yet" and "does
-     * this person want to be told".</p>
+     * Tells the user how to switch windows, the first time one is put away. The chord is read from the keymap,
+     * never spelled, and nothing is said when the command is unbound. Once per process, and suppressible for
+     * good through {@code neverShowAgain}.
      */
     private void announceTheSwitcherOnce() {
         if (SWITCHER_ANNOUNCED.get()) return;
         // NOT WORTH SAYING WITH ONE WINDOW. Advertising a switcher on a desktop that has nothing to switch
         // between teaches a chord that will appear broken the first time it is pressed.
-        if (registry.size() < 2) return;
+        if (windowManager.registry().size() < 2) return;
         KeyChord chord = Keymap.acceleratorFor(this, DesktopCommands.SWITCH_WINDOW);
         if (chord == null || !SWITCHER_ANNOUNCED.compareAndSet(false, true)) return;
         notifications().show(Notification.info("Window minimised")
@@ -2002,31 +1286,15 @@ public class Desktop extends UIElement implements DataProvider {
     // document's -- the engine may not name a desktop, which is why `Desktop.of` names the document
     // and not the reverse.
 
-    /** Whether anything is pinned — what a host asks to choose between a suspend and a HUD. */
-    public boolean hasPinnedWindows() {
-        for (WindowFrame frame : registry().windows()) {
-            if (frame.isPinned()) return true;
-        }
-        return false;
-    }
-
     /** @see #suspend() */
     public boolean isSuspended() {
         return suspended;
     }
 
     /**
-     * Takes the compositor off the tree — what a host calls when its screen closes.
-     *
-     * <p>Detaching is the same mechanism a hidden window uses one level down and buys the same
-     * things: nothing matches a selector, nothing lays out, nothing paints, and the services are
-     * told to forget every node in the subtree, so the hover, the press target and any live drag
-     * are dropped rather than left describing a screen that is no longer up.</p>
-     *
-     * <p><b>The windows themselves are untouched.</b> Their states stay {@code VISIBLE}, their
-     * positions and their z-order stay exactly as they were, and {@link #resume} puts the desktop
-     * back with everything where it was left. Hiding each window instead would lose which of them
-     * were on screen, which is the thing a resume has to know.</p>
+     * Takes the compositor off the tree, as a host does when its screen closes. Nothing matches, lays out or
+     * paints, and the services drop every node in the subtree. The windows are untouched: states, positions and
+     * z-order stay, so {@link #resume} puts everything back.
      */
     public void suspend() {
         if (suspended) return;
@@ -2054,7 +1322,7 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public void leave(Runnable done) {
         List<WindowFrame> going = new ArrayList<>();
-        for (WindowFrame frame : registry.windows()) {
+        for (WindowFrame frame : windowManager.registry().windows()) {
             if (frame.state() == WindowState.VISIBLE && !frame.isPinned()) going.add(frame);
         }
         int[] left = {going.size() + 1};
@@ -2071,7 +1339,7 @@ public class Desktop extends UIElement implements DataProvider {
      */
     public void arrive() {
         taskbar.comeOnScreen();
-        for (WindowFrame frame : registry.windows()) {
+        for (WindowFrame frame : windowManager.registry().windows()) {
             if (frame.state() != WindowState.VISIBLE) continue;
             WindowAnimator animator = frame.animator();
             animator.releaseLeave();
@@ -2122,11 +1390,6 @@ public class Desktop extends UIElement implements DataProvider {
         return overlayLayer;
     }
 
-    /** Every live window, visible or hidden — the model, not the tree. @see WindowRegistry */
-    public WindowRegistry registry() {
-        return registry;
-    }
-
     /**
      * What is installed on this desktop and what is running — the shell's side of an application.
      *
@@ -2149,95 +1412,10 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     /**
-     * Every live window in open order, <b>including hidden ones</b>.
-     *
-     * <p>The registry's list rather than the layer's children, and the difference is the whole of W3: a
-     * minimised window is still a window, and anything offering a way back to it — the taskbar, the
-     * switcher — has to see it. {@link #visibleWindows()} is the other question.</p>
-     */
-    public List<WindowFrame> windows() {
-        return registry.windows();
-    }
-
-    /**
-     * Just the windows currently on the desktop, in child order.
-     *
-     * <p>A live view of the layer's own typed list, not a copy and not a filtered scan — see
-     * {@link WindowLayer}. Iterating it while adding or removing a window is the usual
-     * {@code ConcurrentModificationException}; copy first if a caller needs that.</p>
-     */
-    public List<WindowFrame> visibleWindows() {
-        return windows.frames();
-    }
-
-    /**
-     * Places a window nobody positioned, one caption height further down and across than the last —
-     * Win32's cascade, wrapping back to the origin when the next step would put the window's own body
-     * off the work area.
-     *
-     * <p>Reads only measured values, and does nothing while any of them is zero: a box measuring zero
-     * carries no information about where anything belongs, and the frame will ask again on the layout
-     * pass that gives it one.</p>
-     */
-    public void placeByCascade(WindowFrame frame) {
-        float step = frame.captionHeight();
-        // A NULL BOX IS A ZERO ONE HERE. The guard below already refuses a non-positive size -- the
-        // first window on an empty desktop cannot be placed because nothing has been measured yet --
-        // and a node that has not been laid out has no box at all, which is the same statement.
-        Box area = windows.box();
-        Box frameBox = frame.box();
-        float areaWidth = area == null ? 0f : area.width();
-        float areaHeight = area == null ? 0f : area.height();
-        float frameWidth = frameBox == null ? 0f : frameBox.width();
-        float frameHeight = frameBox == null ? 0f : frameBox.height();
-        if (step <= 0f || areaWidth <= 0f || areaHeight <= 0f || frameWidth <= 0f || frameHeight <= 0f) {
-            return;
-        }
-
-        // CENTRED, and cascading FROM the centre. Every GuiContainer in Minecraft opens centred, and a
-        // window in the top-left corner reads as unplaced -- because that is exactly where an unplaced
-        // one is drawn, so the two were indistinguishable on screen. Win32's CW_USEDEFAULT cascades
-        // from the corner; macOS and KDE centre; the game this runs inside has already decided.
-        //
-        // ALONE ON THE DESKTOP, THERE IS NOTHING TO CASCADE FROM. The counter only ever grew, so a
-        // window closed and reopened landed one step away from where it had been, and a third open one
-        // step further -- drifting across the screen a caption at a time, once per reopen.
-        if (windows.frames().size() <= 1) cascadeStep = 0;
-        float centreLeft = (areaWidth - frameWidth) / 2f;
-        float centreTop = (areaHeight - frameHeight) / 2f;
-        float offset = cascadeStep * step;
-        if (centreLeft + offset + frameWidth > areaWidth || centreTop + offset + frameHeight > areaHeight) {
-            cascadeStep = 0;
-            offset = 0f;
-        }
-        cascadeStep++;
-        frame.moveTo(Math.max(0f, centreLeft + offset), Math.max(0f, centreTop + offset));
-    }
-
-    /**
-     * The work area, as an element that tells its windows when it changed size.
-     *
-     * <p>A subclass for two overrides. The first is the layout callback: the alternative is a per-frame
-     * clamp ticker, which is what {@code Dialog} has to do, having no container it owns. Here the
-     * container is ours, and its own callback fires exactly when the work area changes and at no other
-     * time — a window moving inside the layer does not resize the layer.</p>
-     *
-     * <h3>The frame list is maintained, never derived</h3>
-     * <p>The obvious spelling of "tell every window" is a walk over {@code getChildren()} with an
-     * {@code instanceof} filter, and it is the wrong shape here for a reason that is not about how many
-     * windows there are: this runs inside a <b>layout callback</b>, which fires on every pass that
-     * resizes the work area, and a re-clamp writes style and re-dirties layout — so the walk repeats
-     * for as long as the geometry is settling. Anything on that path is worth keeping O(windows) with
-     * no per-element type test, and the list costs one {@code instanceof} per <em>mutation</em> instead.</p>
-     *
-     * <p>Both public mutation paths are covered and there are exactly two: {@code addChild} delegates to
-     * {@link #insertAt}, and {@code removeSelf}, {@code clearAllChildren} and a reparent to another
-     * parent all go through {@link #removeChild}. Internal children never reach either, which is why a
-     * resize handle or an overlay slot cannot desynchronise the list.</p>
-     *
-     * <p>And it <b>refuses anything that is not a window</b>. Not defensiveness: it is what makes the
-     * list provably the layer's children rather than a cache that could drift from them, so nothing
-     * downstream ever has to re-filter. {@code Desktop.addWindow} is the sanctioned way in.</p>
+     * The work area, as an element that tells its windows when it changed size. The frame list is maintained, not
+     * derived: it is read in a layout callback that repeats while geometry settles, so it costs one
+     * {@code instanceof} per mutation instead of a type test per element per pass. It refuses anything that is
+     * not a window, which is what makes the list provably its children; {@link Desktop#addWindow} is the way in.
      */
     private final class WindowLayer extends UIElement {
 
@@ -2248,15 +1426,8 @@ public class Desktop extends UIElement implements DataProvider {
         }
 
         /**
-         * Parks the compositor's own decoration on the layer — the snap preview.
-         *
-         * <p>An <b>internal</b> child, because the public door is deliberately shut: this layer holds
-         * {@code WindowFrame}s and says so by throwing. That refusal is worth keeping (it is what stops
-         * an application parenting content into the work area), so the one thing the compositor itself
-         * needs to put there goes in through a door of its own rather than by widening that one.</p>
-         *
-         * <p>It is still an ordinary child for layout and paint order, so a preview at stack order 0
-         * sits below every window that has ever been raised — which is every open window.</p>
+         * Parks the compositor's own decoration (the snap preview) on the layer as an internal child, through a door
+         * of its own so the refusal of non-window children stays shut to applications.
          */
         void hostDecoration(UIElement decoration) {
             if (decoration.parent() == this) return;
@@ -2264,16 +1435,7 @@ public class Desktop extends UIElement implements DataProvider {
             append(decoration);
         }
 
-        /**
-         * The one non-window this layer holds. @see #hostDecoration
-         *
-         * <p><b>A field where the old engine had a separate method.</b> There, {@code addInternalChild}
-         * bypassed the {@code addChildAt} override entirely, so the refusal and the exception could be
-         * written as one unconditional throw. Here there is no bypass — every insertion goes through
-         * {@code insertAt} — so the exemption has to be nameable, which is a small improvement: the
-         * layer now says exactly which node it is making an exception for instead of trusting that
-         * only the compositor knows the private door.</p>
-         */
+        /** The one non-window this layer holds. @see #hostDecoration */
         @Nullable
         private UIElement hosted;
 
@@ -2322,46 +1484,25 @@ public class Desktop extends UIElement implements DataProvider {
                 // still claims to be visible.
                 WindowFrame frame = (WindowFrame) child;
                 frame.markHidden();
-                // AND THE ACTIVE WINDOW CANNOT BE ONE THAT LEFT. Windows activates the next one down
-                // when you close the front one; leaving the field pointing at a detached frame would
-                // instead leave a desktop whose keyboard target is not in the tree.
-                //
-                // Through deactivate() rather than by clearing the field, because that is what announces
-                // it -- and BEFORE the announcement below, so anything rendering the registry only ever
-                // sees a settled state. Announcing first showed the strip a window that was already
-                // hidden and still marked active, and nothing came along afterwards to correct it.
-                //
-                // AND IT HANDS OVER TO NOBODY. Leaving the tree is what MINIMISING looks like from here,
-                // and minimising is "put this away", not "switch to that one" -- activation moves
-                // keyboard focus into whatever it lands on, so handing over drops the caret into a
-                // window the user was not asking for, once per minimise. Windows does hand over; ours
-                // does not, because ours carries focus with it. Destroying the active window is the
-                // case that genuinely has nowhere to leave the keyboard, and it hands over from
-                // WindowFrame.dispose() where that distinction can still be seen.
-                if (activeWindow == child) deactivate();
+                // The active window cannot be one that left. Through deactivate() so it announces, before the announcement
+                // below. It hands over to nobody: leaving the tree is also what minimising looks like, and handing over would
+                // drop the caret into a window the user did not ask for. Destroying the active window hands over from
+                // WindowFrame.dispose().
+                if (windowManager.activeWindow() == child) windowManager.deactivate();
                 announceTheSwitcherOnce();
-                registry.changed();
+                windowManager.registry().changed();
                 // LAST, and after the activation above rather than before it: eviction can destroy a
                 // window, and destroying one re-enters this method. Doing it while the active window is
                 // still the frame that just left would have activateTopmost() choosing between windows
                 // one of which is mid-removal.
-                registry.evictIfNeeded();
+                windowManager.registry().evictIfNeeded();
             }
             return removed;
         }
 
         /**
-         * Places what is unplaced and re-clamps what is not, once layout has settled.
-         *
-         * <p><b>An {@code afterLayout} hook where the old engine overrode {@code onLayoutChanged}.</b>
-         * Every line of it READS measured geometry — the work area's box and the frame's — and an
-         * ordinary per-frame hook runs BEFORE layout, so on the pass that first puts a window on an
-         * empty desktop it would measure the boxes from before the layer existed. That is the same
-         * frame the paragraph below is about, reached one step earlier.</p>
-         *
-         * <p>Registered from {@link #connected()} and never unregistered: the hook is OWNED by this
-         * layer, so freezing or detaching the compositor drops it, which is the whole point of
-         * ownership replacing the old one-way ticker.</p>
+         * Places what is unplaced and re-clamps what is not, once layout has settled. An {@code afterLayout} hook
+         * because it reads measured geometry, which a per-frame hook would read from before the layer existed.
          */
         @Override
         protected void connected() {
@@ -2376,23 +1517,11 @@ public class Desktop extends UIElement implements DataProvider {
         private void placeAndClamp() {
             for (int i = 0; i < frames.size(); i++) {
                 WindowFrame frame = frames.get(i);
-                // AN UNPLACED WINDOW IS PLACED HERE, because THIS is the moment it becomes possible.
-                //
-                // placeByCascade needs the work area AND the frame measured, and on the pass that first
-                // puts a window on an empty desktop neither is: the compositor deliberately takes up no
-                // space until a window exists, so the layer is 0x0 when the frame's own onLayoutChanged
-                // asks. It returns without placing and without marking the frame placed -- correct, and
-                // it leaves nobody to try again, because growing the work area does not resize a frame
-                // that has a width and a height of its own, so the frame's callback never fires a second
-                // time.
-                //
-                // The window is therefore DRAWN at its unplaced position -- hard against the left of the
-                // work area -- for as long as that lasts, and lands at its cascade offset whenever
-                // something else finally dirties layout. During an entry animation that reads as the
-                // window flying in from the left of the screen, and only ever on a window's FIRST open,
-                // which is exactly how it was reported.
+                // An unplaced window is placed here: on the pass that first puts a window on an empty desktop the layer is
+                // 0x0 and the frame's own callback places nothing, then never fires again. Without this the window draws
+                // at the left edge and flies in from there on its first open.
                 if (frame.isPlaced()) frame.reclamp();
-                else placeByCascade(frame);
+                else windowManager.placeByCascade(frame);
             }
         }
     }

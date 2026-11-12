@@ -4690,12 +4690,6 @@ com/crystalgui/desktop/Desktop
   method protected connected ()V
   method protected disconnected ()V
   method public <init> ()V
-  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;Z)V
-  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;ZZ)V
-  method public activateByUser (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public activateTopmost ()V
-  method public activeWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public addWindow (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public addWindow (Lcom/crystalgui/desktop/window/WindowFrame;Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public applications ()Lcom/crystalgui/desktop/app/ApplicationRegistry;
@@ -4703,23 +4697,15 @@ com/crystalgui/desktop/Desktop
   method public cacheRoot ()Ljava/nio/file/Path;
   method public config ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
-  method public deactivate ()V
   method public desktopSettings ()Lcom/crystalgui/desktop/DesktopSettings;
   method public endStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public enterHudMode ()V
-  method public exitHudMode ()V
   method public extensionStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
-  method public fullscreenChanged ()V
   method public getData (Lcom/crystalgui/core/data/DataKey;)Ljava/lang/Object;
-  method public hasPinnedWindows ()Z
   method public hideSnapPreview ()V
   method public hideSnapPreviewNow ()V
-  method public isHudMode ()Z
   method public isLive ()Z
-  method public isShowingDesktop ()Z
   method public isStarting (Lcom/crystalgui/desktop/app/ApplicationKind;)Z
   method public isSuspended ()Z
-  method public jointResize (Lcom/crystalgui/desktop/window/WindowFrame;IIFF)V
   method public keyboardMove ()Lcom/crystalgui/desktop/window/WindowKeyboardMove;
   method public leave (Ljava/lang/Runnable;)V
   method public moveModifier ()I
@@ -4729,12 +4715,8 @@ com/crystalgui/desktop/Desktop
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public persistTo (Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public pins ()Lcom/crystalgui/desktop/taskbar/TaskbarPins;
-  method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public reattach (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
   method public rememberPlacement (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public renormaliseStack ()V
   method public reportFailure (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)V
   method public reportFailure (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)V
   method public resetWindowPlacements ()V
@@ -4744,18 +4726,15 @@ com/crystalgui/desktop/Desktop
   method public setCoversSurface (Z)V
   method public setMoveModifier (I)Lcom/crystalgui/desktop/Desktop;
   method public showSnapPreview (Lcom/crystalgui/desktop/window/SnapZones$Zone;Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public snapFrameTo (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/SnapZones$Zone;)V
   method public suspend ()V
   method public switcher ()Lcom/crystalgui/desktop/switcher/WindowSwitcher;
   method public taskbar ()Lcom/crystalgui/desktop/taskbar/Taskbar;
-  method public toggleShowDesktop ()V
   method public useConnection (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public useLocalWorld (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public useStorage (Ljava/nio/file/Path;)Lcom/crystalgui/desktop/Desktop;
   method public useWorkspace (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
-  method public visibleWindows ()Ljava/util/List;
   method public windowLayer ()Lcom/crystalgui/ui/dom/UIElement;
-  method public windows ()Ljava/util/List;
+  method public windowManager ()Lcom/crystalgui/desktop/manager/WindowManager;
   method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public workspaceStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public,static animationsEnabled ()Z
@@ -4953,6 +4932,45 @@ com/crystalgui/desktop/launcher/LauncherButton
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V
+com/crystalgui/desktop/manager/WindowManager
+  access public,final
+  extends java/lang/Object
+  field public,static,final DIALOG_BAND I
+  field public,static,final PINNED_BAND I
+  method public <init> (Lcom/crystalgui/desktop/manager/WindowManager$Shell;)V
+  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;Z)V
+  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;ZZ)V
+  method public activateByUser (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public activateTopmost ()V
+  method public activeWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public deactivate ()V
+  method public enterHudMode ()V
+  method public exitHudMode ()V
+  method public fullscreenChanged ()V
+  method public hasPinnedWindows ()Z
+  method public isHudMode ()Z
+  method public isShowingDesktop ()Z
+  method public jointResize (Lcom/crystalgui/desktop/window/WindowFrame;IIFF)V
+  method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
+  method public renormaliseStack ()V
+  method public sizeByDefault (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public snapFrameTo (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/SnapZones$Zone;)V
+  method public splitX ()F
+  method public splitY ()F
+  method public stackTop ()I
+  method public toggleShowDesktop ()V
+  method public visibleWindows ()Ljava/util/List;
+  method public windows ()Ljava/util/List;
+com/crystalgui/desktop/manager/WindowManager$Shell
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract document ()Lcom/crystalgui/ui/dom/UIDocument;
+  method public,abstract setTaskbarVisible (Z)V
+  method public,abstract visibleFrames ()Ljava/util/List;
+  method public,abstract workArea ()Lcom/crystalgui/ui/box/Box;
 com/crystalgui/desktop/motion/BoxFlights
   access public,final
   extends java/lang/Object

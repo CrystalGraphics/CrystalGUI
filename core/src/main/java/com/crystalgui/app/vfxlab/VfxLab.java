@@ -275,9 +275,9 @@ public class VfxLab extends UIElement {
 
     /** Shows {@code lab} in its window on {@code desktop}, or raises the window already there. */
     public static WindowFrame openOn(Desktop desktop, VfxLab lab) {
-        WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
+        WindowFrame existing = desktop.windowManager().registry().byKey(WINDOW_KEY);
         if (existing != null) {
-            desktop.activate(existing, true);
+            desktop.windowManager().activate(existing, true);
             return existing;
         }
         WindowFrame frame = new WindowFrame("VFX Lab");
@@ -396,7 +396,7 @@ public class VfxLab extends UIElement {
         public void activate() {
             // The window's own desktop: a minimised one is detached, and has no document to find it by
             Desktop desktop = window.desktop();
-            if (desktop != null) desktop.activate(window, true);
+            if (desktop != null) desktop.windowManager().activate(window, true);
         }
 
         /** Stops playing and releases the lab: its window closed, or the host shutting down. */

@@ -332,7 +332,8 @@ com.crystalgui.widget          THE WIDGETS, layered so a build fails when a laye
 
 com.crystalgui.desktop         CRYSTALOS. Desktop (found with Desktop.of(document), never built by a
                                caller: the engine may not name a compositor, so the compositor names
-                               the document), .window, .motion, .taskbar, .switcher, .host.
+                               the document), .manager (WindowManager: stacking, the active window, placement, snapping, the HUD), .window,
+                               .motion, .taskbar, .switcher.
 com.crystalgui.workbench       The shell, and THE ROOT IS THE HUB ONLY. Everything whose imports
                                point at ONE sub-package now lives in it; what is left at the top is
                                Workbench plus what genuinely coordinates several of them, which is the

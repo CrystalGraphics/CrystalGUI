@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.fs.Resource;
 
@@ -45,6 +46,12 @@ import com.crystalgui.fs.Resource;
  * That is why {@link #launch} takes a factory rather than a class to extend.</p>
  */
 public final class ApplicationKind {
+
+    /**
+     * The application an element stands for: a taskbar entry, a pin, a launcher row. What a command placed in
+     * {@code MenuId.APPLICATION} or {@code MenuId.TASKBAR_ENTRY} acts on.
+     */
+    public static final DataKey<ApplicationKind> DATA_KEY = DataKey.create("applicationKind", ApplicationKind.class);
 
     private final String id;
     private final String displayName;

@@ -309,7 +309,7 @@ public final class CgUiScreen {
     private static void resumeDesktop() {
         Desktop shown = desktop;
         // exitHudMode FIRST: it puts back the windows the HUD hid, onto the desktop the resume brings back.
-        shown.exitHudMode();
+        shown.windowManager().exitHudMode();
         shown.resume();
         if (!onScreen) shown.arrive();
         onScreen = true;
@@ -319,7 +319,7 @@ public final class CgUiScreen {
     private static void putDesktopAway() {
         Desktop away = desktop;
         onScreen = false;
-        if (away.hasPinnedWindows()) away.enterHudMode();
+        if (away.windowManager().hasPinnedWindows()) away.windowManager().enterHudMode();
         else away.suspend();
     }
 
@@ -473,7 +473,7 @@ public final class CgUiScreen {
             trace("launch");
         }
         if (window.state() == WindowState.HIDDEN) window.show(true);
-        shown.activate(window);
+        shown.windowManager().activate(window);
     }
 
     // ── Rehearsing ──────────────────────────────────────────────────────────────────────────────
@@ -501,7 +501,7 @@ public final class CgUiScreen {
             // Every application quits, not the primary alone: one holding ticks or stage draws releases them here
             for (Application app : new ArrayList<>(gone.applications().running())) app.dispose();
             // A copy: destroying a window takes it out of the list being walked
-            for (WindowFrame frame : new ArrayList<>(gone.windows())) frame.destroy();
+            for (WindowFrame frame : new ArrayList<>(gone.windowManager().windows())) frame.destroy();
             gone.suspend();
         };
         CgUiViewport shown = viewport;
@@ -688,7 +688,7 @@ public final class CgUiScreen {
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] the desktop's paint failed; leaving HUD mode", failed);
             Desktop gone = desktop;
-            if (gone != null) execute(gone::exitHudMode);
+            if (gone != null) execute(gone.windowManager()::exitHudMode);
         }
     }
 

@@ -80,7 +80,7 @@ public final class OpenCloseTest extends DesktopRun {
         Desktop desktop = CgUiScreen.desktop();
         if (desktop == null) return null;
         String app = WindowFrame.applicationClass(KIND);
-        for (WindowFrame frame : desktop.windows()) if (frame.hasClass(app)) return frame;
+        for (WindowFrame frame : desktop.windowManager().windows()) if (frame.hasClass(app)) return frame;
         return null;
     }
 
@@ -121,7 +121,7 @@ public final class OpenCloseTest extends DesktopRun {
     /** {@code s} a starter showing its mark, {@code h} its successor waiting, {@code l} the mark leaving, {@code x} the crossfade. */
     private static char handoverPhase(Desktop desktop) {
         boolean starter = false, cover = false, handover = false;
-        for (WindowFrame frame : desktop.windows()) {
+        for (WindowFrame frame : desktop.windowManager().windows()) {
             if (frame.hasClass(WindowFrame.HANDOVER_CLASS)) handover = true;
             if (!frame.content().hasClass(Desktop.STARTING_CLASS)) continue;
             starter = true;
