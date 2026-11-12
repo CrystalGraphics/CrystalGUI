@@ -419,6 +419,12 @@ public final class ApplicationRegistry {
         else document.run(application::dispose);
     }
 
+    /** The document {@code application} runs in, or null when it runs in the shell's. */
+    @Nullable
+    public AppDocument documentOf(Application application) {
+        return documentsOf.get(application);
+    }
+
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
     private void quit(Application application) {
         if (!running.contains(application)) return;

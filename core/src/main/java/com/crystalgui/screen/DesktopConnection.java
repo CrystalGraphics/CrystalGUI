@@ -6,7 +6,6 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopWindowMount;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceClient;
-import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -24,7 +23,7 @@ final class DesktopConnection {
     private final UIDocument document;
     private final DesktopWindowMount mount;
     /** Where a server's window is offered first: the primary application's places, else null. On the document. */
-    private final Supplier<WindowMount> preferred;
+    private final Supplier<DesktopWindowMount.Preferred> preferred;
 
     /** What the render thread last posted. Render thread. */
     @Nullable
@@ -40,7 +39,8 @@ final class DesktopConnection {
     @Nullable
     private volatile CgProtocolConnection<Object> bound;
 
-    DesktopConnection(UIDocument document, DesktopWindowMount mount, Supplier<WindowMount> preferred) {
+    DesktopConnection(UIDocument document, DesktopWindowMount mount,
+                      Supplier<DesktopWindowMount.Preferred> preferred) {
         this.document = document;
         this.mount = mount;
         this.preferred = preferred;

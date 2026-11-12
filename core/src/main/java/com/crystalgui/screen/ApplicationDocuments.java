@@ -36,6 +36,7 @@ final class ApplicationDocuments implements AppDocuments {
         final Connection scale;
         final ApplicationDocuments owner;
         AppDocument document;
+        boolean first;
 
         Entry(ApplicationDocuments owner, CgUiViewport viewport, CgUiViewport.Content content, Connection scale) {
             this.owner = owner;
@@ -66,12 +67,21 @@ final class ApplicationDocuments implements AppDocuments {
 
     @Override
     public AppDocument open(ApplicationKind kind) {
+        return open("app:" + kind.id(), kind.threading() == ApplicationKind.Threading.INLINE
+                ? CgUiViewport.Threading.INLINE : CgUiViewport.Threading.fromFlags(), false);
+    }
+
+    @Override
+    public AppDocument openServer(String name) {
+        return open("server:" + name, CgUiViewport.Threading.fromFlags(), true);
+    }
+
+    /** {@code first}: framed before the applications', whose windows may show what it draws. */
+    private AppDocument open(String name, CgUiViewport.Threading threading, boolean first) {
         UIDocument document = CgUiScreen.newDocument();
         document.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET));
         document.useTopLayer(new PopupLayer());
-        CgUiViewport.Threading threading = kind.threading() == ApplicationKind.Threading.INLINE
-                ? CgUiViewport.Threading.INLINE : CgUiViewport.Threading.fromFlags();
-        CgUiViewport viewport = CgUiViewport.open(document, threading, "app:" + kind.id());
+        CgUiViewport viewport = CgUiViewport.open(document, threading, name);
         // Its frames execute and show nothing: the shell draws what they leave in the clients' surfaces.
         viewport.presenter().composites(false);
         AppDocument[] made = new AppDocument[1];
@@ -96,6 +106,7 @@ final class ApplicationDocuments implements AppDocuments {
         Connection scale = Preferences.PUBLISHED.changes().subscribe(
                 () -> document.execute(() -> document.boxes().setUiScale(Preferences.current().uiScale())));
         Entry entry = new Entry(this, viewport, content, scale);
+        entry.first = first;
         made[0] = new AppDocument(document, entry);
         entry.document = made[0];
         open.add(entry);
@@ -109,7 +120,13 @@ final class ApplicationDocuments implements AppDocuments {
             gone.scale.disconnect();
             gone.viewport.close();
         }
+        frameAll(stage, true);
+        frameAll(stage, false);
+    }
+
+    private void frameAll(CgStageFrame stage, boolean first) {
         for (Entry entry : open) {
+            if (entry.first != first) continue;
             entry.viewport.frame(stage, entry.content);
             // What the application left, such as an Escape nothing in it took, goes where the desktop's own go.
             CgUiScreen.input().returnUnhandledKeys(entry.viewport);

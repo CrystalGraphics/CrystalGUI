@@ -18,7 +18,9 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopWindowMount;
 import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.AppDocument;
 import com.crystalgui.desktop.app.ServerWindowHost;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.WorkspaceClient;
@@ -412,12 +414,16 @@ public final class CgUiScreen {
         Desktop made = Desktop.of(built).useStorage(state.installationDirectory());
         CrystalGuiDownloads.LOCATIONS.useCacheRoot(made.cacheRoot());
         made.useLocalWorld(state::localWorldDirectory);
-        DesktopWindowMount mount = new DesktopWindowMount(built);
+        DesktopWindowMount mount = new DesktopWindowMount(built, () -> appDocuments.openServer("connection"));
         // WHERE A SERVER'S WINDOW IS OFFERED FIRST: the primary application takes what it recognises and hands the
         // rest back, so a client with it closed still gets every window.
         DesktopConnection wire = new DesktopConnection(built, mount, () -> {
             Application app = primary;
-            return app instanceof ServerWindowHost host ? host.windowMount(mount) : null;
+            if (!(app instanceof ServerWindowHost host)) return null;
+            // Built on the application's own thread: the workbench's panels are its.
+            AppDocument home = made.applications().documentOf(app);
+            WindowMount offered = home == null ? host.windowMount(mount) : home.ask(() -> host.windowMount(mount));
+            return offered == null ? null : new DesktopWindowMount.Preferred(offered, home);
         });
         made.useWorkspace(wire::workspace);
         made.useConnection(wire::bound);

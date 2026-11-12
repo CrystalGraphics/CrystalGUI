@@ -4804,8 +4804,18 @@ com/crystalgui/desktop/DesktopWindowMount
   extends java/lang/Object
   implements com/crystalgui/net/window/WindowMount
   method public <init> (Lcom/crystalgui/ui/dom/UIDocument;)V
-  method public bind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/net/window/WindowMount;)V
+  method public <init> (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Supplier;)V
+  method public bind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/desktop/DesktopWindowMount$Preferred;)V
   method public mount (Lcom/crystalgui/net/window/ClientWindowContext;)Lcom/crystalgui/net/window/WindowMount$MountedWindow;
+com/crystalgui/desktop/DesktopWindowMount$Preferred
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Lcom/crystalgui/net/window/WindowMount;Lcom/crystalgui/desktop/app/AppDocument;)V
+  method public document ()Lcom/crystalgui/desktop/app/AppDocument;
+  method public mount ()Lcom/crystalgui/net/window/WindowMount;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/desktop/SnapPreview
   access public,final
   extends java/lang/Object
@@ -4838,13 +4848,18 @@ com/crystalgui/desktop/app/AppDocument
   extends java/lang/Object
   method public <init> (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/desktop/app/AppDocument$Backend;)V
   method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
+  method public callShell (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public close ()V
   method public committed ()V
   method public dismissPopups ()V
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public execute (Ljava/lang/Runnable;)V
+  method public openClient (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/ClientRoot;
   method public popups ()Lcom/crystalgui/desktop/app/PopupLayer;
+  method public portalTo (Lcom/crystalgui/desktop/app/ClientRoot;)Lcom/crystalgui/desktop/app/ClientPortal;
+  method public removeClient (Lcom/crystalgui/desktop/app/ClientRoot;)V
   method public run (Ljava/lang/Runnable;)V
+  method public showPopupsIn (Lcom/crystalgui/ui/dom/UIDocument;)V
 com/crystalgui/desktop/app/AppDocument$Backend
   access public,abstract,interface
   extends java/lang/Object
@@ -4854,6 +4869,7 @@ com/crystalgui/desktop/app/AppDocument$Backend
 com/crystalgui/desktop/app/AppDocuments
   access public,abstract,interface
   extends java/lang/Object
+  method public openServer (Ljava/lang/String;)Lcom/crystalgui/desktop/app/AppDocument;
   method public,abstract open (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/app/AppDocument;
 com/crystalgui/desktop/app/AppWindow
   access public,final
@@ -4956,6 +4972,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public dispose (Lcom/crystalgui/desktop/app/Application;)V
+  method public documentOf (Lcom/crystalgui/desktop/app/Application;)Lcom/crystalgui/desktop/app/AppDocument;
   method public forget (Lcom/crystalgui/desktop/app/Application;)V
   method public handlerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;

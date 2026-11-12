@@ -84,7 +84,7 @@ public final class AppDocument {
     }
 
     /** The shell's thread: shows the document's popups, once, in the shell's top layer. */
-    void showPopupsIn(UIDocument shell) {
+    public void showPopupsIn(UIDocument shell) {
         PopupLayer layer = popups();
         if (layer == null || popupPortal != null) return;
         popupPortal = new PopupPortal(this, layer);
@@ -153,7 +153,7 @@ public final class AppDocument {
      *
      * <p>Blocks the caller until then. A window is opened this way; nothing per frame is.</p>
      */
-    <T> T callShell(UIDocument shell, Supplier<T> work) {
+    public <T> T callShell(UIDocument shell, Supplier<T> work) {
         if (shell == null || shell.isCurrent()) return work.get();
         FutureTask<T> task = new FutureTask<>(work::get);
         if (waiting) pump.add(task);
@@ -205,6 +205,26 @@ public final class AppDocument {
         backend.consumeKeyboardEvent(event);
     }
 
+    /**
+     * Puts {@code content} in a client root of this document, as a window's client area. The document's thread.
+     *
+     * <pre>{@code
+     * ClientRoot client = document.openClient(tree);
+     * ClientPortal view = document.portalTo(client);    // shown by whichever document the window is in
+     * }</pre>
+     */
+    public ClientRoot openClient(UIElement content) {
+        ClientRoot client = new ClientRoot();
+        client.setContent(content);
+        addClient(client);
+        return client;
+    }
+
+    /** A portal that shows {@code client} in another document, and hands it that document's input. Built where it is shown. */
+    public ClientPortal portalTo(ClientRoot client) {
+        return new ClientPortal(this, client);
+    }
+
     /** Puts a client root in the document. The document's thread. */
     void addClient(ClientRoot client) {
         clients.add(client);
@@ -212,8 +232,8 @@ public final class AppDocument {
     }
 
     /** Takes a client root out of the document. The document's thread. */
-    void removeClient(ClientRoot client) {
-        clients.remove(client);
+    public void removeClient(ClientRoot client) {
+        if (!clients.remove(client)) return;
         if (aimed == client) aimed = null;
         document.remove(client);
     }
