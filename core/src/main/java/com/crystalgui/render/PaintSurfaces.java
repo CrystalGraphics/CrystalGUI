@@ -98,7 +98,7 @@ final class PaintSurfaces {
             walking = Arrays.copyOf(walking, walkingDepth * 2);
             walkingMarks = Arrays.copyOf(walkingMarks, walkingDepth * 2);
         }
-        walkingMarks[walkingDepth] = recording.operations();
+        walkingMarks[walkingDepth] = recording.passCount();
         walking[walkingDepth++] = surface;
         // Its own clip only: the window's whole picture, which the clip around it cuts as it is composited.
         ctx.beginLayer(surface.target(), true, region, false);
@@ -129,7 +129,7 @@ final class PaintSurfaces {
         }
         CgTrace.add(UiTrace.FRAME, w == 0 ? "surfaces-undamaged" : "surfaces-damaged", 1);
         CgTrace.add(UiTrace.FRAME, "surface-damage-kpx", (long) w * h / 1000L);
-        for (int i = walkingMarks[walkingDepth], n = recording.operations(); i < n; i++) {
+        for (int i = walkingMarks[walkingDepth], n = recording.passCount(); i < n; i++) {
             if (recording.pass(i) instanceof CgRasterPass raster && raster.target() == target) raster.damage(x, y, w, h);
         }
         return w != 0;
