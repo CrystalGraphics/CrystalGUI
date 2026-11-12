@@ -62,6 +62,7 @@ import java.util.Queue;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
+import com.crystalgraphics.api.material.CgMaterialInstance;
 
 /**
  * A workbench for effects: pick one from the {@link CgVfxRegistry}, play it in the lab's 3D viewport, and edit its
@@ -134,7 +135,7 @@ public class VfxLab extends UIElement {
     private final CgMesh floor = CgMesh.build(CgVertexFormat.SPATIAL, m -> CgMeshShapes.plane(m, 1, 1, FLOOR_FADE * 2.5f, FLOOR_FADE * 2.5f));
     private final CgMesh sky = CgMeshShapes.sphere(24, 32);
     @Nullable
-    private CgMaterial floorMaterial, skyMaterial;
+    private CgMaterialInstance floorMaterial, skyMaterial;
     private CgPipelinePrecache.Request stage;
 
     private final SearchField search = new SearchField();
@@ -312,8 +313,8 @@ public class VfxLab extends UIElement {
         vfx.submit(world);
         playing = live.size();
         if (floorMaterial == null) {
-            floorMaterial = CgMaterial.newInstance(FLOOR_SHADER).applyProperties(b -> b.set1f("_Fade", FLOOR_FADE));
-            skyMaterial = CgMaterial.newInstance(SKY_SHADER);
+            floorMaterial = CgMaterial.load(FLOOR_SHADER).instance().set1f("_Fade", FLOOR_FADE);
+            skyMaterial = CgMaterial.load(SKY_SHADER).instance();
             stage = CgPipelinePrecache.request(pipelines -> {
                 pipelines.add(floorMaterial, false);
                 pipelines.add(skyMaterial, false);
@@ -336,8 +337,8 @@ public class VfxLab extends UIElement {
         float step = elapsed * 2.5f;
         nightMix = Math.abs(to - nightMix) <= step ? to : nightMix + Math.signum(to - nightMix) * step;
         float mix = nightMix;
-        floorMaterial.applyProperties(b -> b.set1f("_Night", mix));
-        skyMaterial.applyProperties(b -> b.set1f("_Night", mix));
+        floorMaterial.set1f("_Night", mix);
+        skyMaterial.set1f("_Night", mix);
     }
 
     /**

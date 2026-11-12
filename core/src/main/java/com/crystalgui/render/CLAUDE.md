@@ -71,8 +71,8 @@ sequence, or at the firing inline) and shows through its `presenter()`, and `CgU
 > `with` methods each answer a copy, which is right for something the cascade shares and ruinous for a
 > painter that needs a rect per element per frame. `BoxPainter` composes the element's radii, its border
 > and the background's own `Fill` straight into this scratch, so a shaped element allocates nothing;
-> `CgUiRect.draw` does the same with its own fields. A drawable that writes properties through
-> `applyProperties` holds its writer as a field (`CgUiColorField`), since a lambda over the draw's values is a
+> `CgUiRect.draw` does the same with its own fields. A drawable that writes an instance's values
+> holds its writer as a field (`CgUiColorField`), since a lambda over the draw's values is a
 > capture per element per frame. Per-draw scratch is not part of a drawable's value: nothing in it is read by
 > `equals` and nothing survives the draw.
 | Clip | `pushScissor` / `popScissor` — a whole-pixel clip entry every draw is stamped with, no flush (a real scissor inside a snapshot or capture, under a node that is not a whole-pixel translation, or past the clip chain's depth; `-Dcrystalgui.paint.squareClips=false` everywhere) — and `pushRoundedClip` / `popRoundedClip`, a rounded rect stamped the same way (`CgClipTable`), no layer and no flush |

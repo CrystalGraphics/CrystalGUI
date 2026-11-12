@@ -73,11 +73,10 @@ public class ShippedShadersOnDeviceTest {
                         failures.add(path + " pass " + pass.name() + " " + keywords + ": did not build (see log)");
                 }
             }
-            CgMaterial material = CgMaterial.newInstance(path);
+            CgMaterial material = CgMaterial.load(path);
             if (parsed.renderQueue() < 3000 && forward != null && !CgMaterialProxy.of(material).hasDepthPass()
                     && !shader.hasCompiledPass(CgRenderPassVariant.DEPTH.lightModeName()))
                 failures.add(path + ": the generated depth pass did not build (see log)");
-            material.delete();
         }
         assertTrue(String.join(System.lineSeparator(), failures), failures.isEmpty());
         assertTrue("no program was built: the test proves nothing", !materials.isEmpty() && programs >= materials.size());

@@ -48,6 +48,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import com.crystalgraphics.platform.rhi.format.CgFormat;
+import com.crystalgraphics.api.material.CgMaterialInterface;
 
 /**
  * A document's paint context: it records a frame of the document onto a {@link CgCanvas}, touching no GPU, and hands
@@ -128,7 +129,7 @@ public final class CgUiPaintContext {
     /** Every Bézier stroke, triangle and cell, unless {@link #withCurveMaterial} names another. */
     private final CgMaterial curve = CgCanvasMaterials.SCREEN.curve();
     /** The curve material in force: {@link #curve}, or what {@link #withCurveMaterial} set. */
-    private CgMaterial curveMaterial = curve;
+    private CgMaterialInterface curveMaterial = curve;
 
     /** The opacity every item drawn now is stamped with: the folded layers' product, 1 outside one. */
     private float layerOpacity = 1f;
@@ -368,7 +369,7 @@ public final class CgUiPaintContext {
      * Its shader reads {@code CG_QUAD_OPACITY} and {@code CG_CLIP_QUAD_COVERAGE}, or the layer opacity and the
      * rounded clips do not reach it.
      */
-    public CgQuadBatch.Quad quad(CgMaterial material) {
+    public CgQuadBatch.Quad quad(CgMaterialInterface material) {
         requireFrame();
         return recorder.quad(material).pose(poseStack.last().pose()).clip(clipEntry).node(spatialNode, effectNode)
                 .opacity(layerOpacity);
@@ -439,8 +440,8 @@ public final class CgUiPaintContext {
      * Runs {@code body} with {@link #curve()}, {@link #triangle()} and {@link #filledCell()} drawing through
      * {@code material}: how the icon raster accumulates coverage through the same pose and clip as everything else.
      */
-    void withCurveMaterial(CgMaterial material, Runnable body) {
-        CgMaterial saved = curveMaterial;
+    void withCurveMaterial(CgMaterialInterface material, Runnable body) {
+        CgMaterialInterface saved = curveMaterial;
         curveMaterial = material;
         try {
             body.run();

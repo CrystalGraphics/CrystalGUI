@@ -3,6 +3,7 @@ package com.crystalgui.render.texture;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgMaterialValues;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgraphics.api.material.CgMaterialInstance;
 
 /**
  * The continuously-varying surfaces a colour picker is made of — a hue ring, a saturation/value
@@ -59,10 +60,10 @@ public final class CgUiColorField implements CgUiDrawable {
      *
      * @see CgUiRect for why this needs no {@code attachTo} — the shader declares its buffer
      */
-    private static CgMaterial material;
+    private static CgMaterialInstance material;
 
-    private static CgMaterial material() {
-        if (material == null) material = CgMaterial.load("crystalgui:shaders/gui_color_field.shader");
+    private static CgMaterialInstance material() {
+        if (material == null) material = CgMaterial.load("crystalgui:shaders/gui_color_field.shader").instance();
         return material;
     }
 
@@ -145,7 +146,7 @@ public final class CgUiColorField implements CgUiDrawable {
                      float x, float y, float width, float height) {
         drawWidth = width;
         drawHeight = height;
-        material().applyProperties(propertyWriter());
+        propertyWriter().accept(material());
         ctx.quad(material()).at(x, y).size(width, height).color(ctx.getColor()).submit();
     }
 
