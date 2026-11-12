@@ -4682,7 +4682,6 @@ com/crystalgui/desktop/Desktop
   field public,static,final LIVE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final OVERLAY_LAYER_CLASS Ljava/lang/String;
-  field public,static,final SNAP_PREVIEW_CLASS Ljava/lang/String;
   field public,static,final STARTING_CLASS Ljava/lang/String;
   field public,static,final WINDOW_LAYER_CLASS Ljava/lang/String;
   implements com/crystalgui/core/data/DataProvider
@@ -4700,8 +4699,6 @@ com/crystalgui/desktop/Desktop
   method public endStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public extensionStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public getData (Lcom/crystalgui/core/data/DataKey;)Ljava/lang/Object;
-  method public hideSnapPreview ()V
-  method public hideSnapPreviewNow ()V
   method public isLive ()Z
   method public isStarting (Lcom/crystalgui/desktop/app/ApplicationKind;)Z
   method public isSuspended ()Z
@@ -4724,7 +4721,7 @@ com/crystalgui/desktop/Desktop
   method public service (Ljava/lang/Class;Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public setCoversSurface (Z)V
   method public setMoveModifier (I)Lcom/crystalgui/desktop/Desktop;
-  method public showSnapPreview (Lcom/crystalgui/desktop/window/SnapZones$Zone;Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public snapPreview ()Lcom/crystalgui/desktop/SnapPreview;
   method public suspend ()V
   method public switcher ()Lcom/crystalgui/desktop/switcher/WindowSwitcher;
   method public taskbar ()Lcom/crystalgui/desktop/taskbar/Taskbar;
@@ -4809,6 +4806,14 @@ com/crystalgui/desktop/DesktopWindowMount
   method public <init> (Lcom/crystalgui/ui/dom/UIDocument;)V
   method public bind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/net/window/WindowMount;)V
   method public mount (Lcom/crystalgui/net/window/ClientWindowContext;)Lcom/crystalgui/net/window/WindowMount$MountedWindow;
+com/crystalgui/desktop/SnapPreview
+  access public,final
+  extends java/lang/Object
+  field public,static,final CLASS Ljava/lang/String;
+  method public hide ()V
+  method public hideNow ()V
+  method public isShowing ()Z
+  method public show (Lcom/crystalgui/desktop/window/SnapZones$Zone;Lcom/crystalgui/desktop/window/WindowFrame;)V
 com/crystalgui/desktop/app/AppContext
   access public,final,record
   extends java/lang/Record

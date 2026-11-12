@@ -12,13 +12,10 @@ import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.motion.WindowAnimator;
-import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.desktop.dialog.FailureWindow;
-import com.crystalgui.desktop.motion.WindowMotion;
 import com.crystalgui.desktop.switcher.WindowSwitcher;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.desktop.taskbar.TaskbarPins;
-import com.crystalgui.desktop.window.SnapZones;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.desktop.window.WindowKeyboardMove;
@@ -33,8 +30,6 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.style.StyleGroup;
-import com.crystalgraphics.easing.CgEasing;
-import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -177,15 +172,6 @@ public class Desktop extends UIElement implements DataProvider {
         // layer can take it. It is display:none until a gesture opens it, so it costs a layout skip.
         switcher = new WindowSwitcher(this);
         append(switcher);
-
-        // HIDDEN AND UNHITTABLE. A full-size element over the work area is this codebase's most-repeated
-        // failure, and the rule that makes one safe is that it takes no box at all while it is not on
-        // screen -- so it is display:none until a snap is being previewed. Unhittable regardless: it is
-        // shown only DURING a drag, which has pointer capture anyway, and a hittable preview would be
-        // one more thing for the drop to land on.
-        snapPreview.addClass(SNAP_PREVIEW_CLASS);
-        snapPreview.setHitTest(false);
-        snapPreview.setDisplayed(false);
 
         // THE WIDGET THAT OWNS THE COMMANDS REGISTERS THEM, as DockArea does for DockCommands. Registering
         // from anywhere else is how a command ends up existing only once something unrelated has been
@@ -565,194 +551,12 @@ public class Desktop extends UIElement implements DataProvider {
     /** GNOME's own default, and the one every Linux WM ships. */
     private int moveModifier = CgModifiers.ALT;
 
-    /**
-     * Shows or re-aims the rect a window would land in, animating between shapes. It morphs from the dragged
-     * window, so it reads as a proposed change. Called every frame of a drag, so a no-op for an unchanged zone:
-     * restarting the timeline per frame would ease toward the target without arriving.
-     */
-    public void showSnapPreview(SnapZones.Zone zone, WindowFrame source) {
-        Box box = windows.box();
-        if (box == null || box.width() <= 0f || box.height() <= 0f) return;
-        if (snapShowing && zone == snapZone) return;
-
-        // AT THE GROUP'S LIVE CUTS, not at halves: the preview promises where the window will land,
-        // and snapping into an occupied zone gives it that zone's CURRENT size.
-        float[] to = SnapZones.rectFor(zone, box.width(), box.height(), windowManager.splitX(), windowManager.splitY());
-        float[] from = snapShowing ? livePreviewRect() : frameRect(source);
-
-        snapSource = source;
-        snapZone = zone;
-        snapShowing = true;
-        windows.hostDecoration(snapPreview);
-        // BEING OUT OF FLOW IS THE SHEET'S, the RECT is inline. The split is what the animation needs:
-        // out-of-flow is a structural fact about this element, while its geometry is what a timeline
-        // writes -- and writing the rect at a higher origin than the timeline, as an earlier version
-        // did, puts a static value permanently above it so nothing ever moves. On this engine the
-        // structural half cannot be written from Java at all, so it is `desktop .__snap-preview__`.
-        stackPreviewUnder(source);
-        snapPreview.setDisplayed(true);
-        animateSnapPreview(from, to, null);
+    /** The preview of where a dragged window would snap. */
+    public SnapPreview snapPreview() {
+        return snapPreview;
     }
 
-    /**
-     * Puts the preview above every other window and below the dragged one. A preview with no z sits behind any
-     * window raised once, hiding the feedback for an occupied zone; above the dragged window it would grey out
-     * the window in hand. It takes the dragged window's slot and the window moves up one.
-     */
-    private void stackPreviewUnder(WindowFrame source) {
-        int previewZ = windowManager.stackTop();
-        windowManager.raise(source);
-        // INLINE, not IMPORTANT: a stacking order computed per gesture is exactly the "geometry a
-        // caller wrote" slot, and the engine may no longer write above an author's sheet anyway.
-        StyleGroup.inlinePipeline(snapPreview.getStyle().getGeneralGroup(),
-                g -> g.zIndex(previewZ));
-    }
-
-    /**
-     * Takes the snap preview off screen, <b>contracting back into the window</b> it belongs to.
-     *
-     * <p>For a drag that wandered off the edge, or one abandoned with Escape — the cases where nothing
-     * replaces the preview, so it has to be seen to go somewhere. Safe to call when it was never shown.
-     * </p>
-     */
-    public void hideSnapPreview() {
-        if (!snapShowing) return;
-        snapShowing = false;
-        snapZone = null;
-        // NEVER null while showing: snapShowing is only set by showSnapPreview, which requires a source.
-        animateSnapPreview(livePreviewRect(), frameRect(snapSource), this::hideSnapPreviewNow);
-    }
-
-    /**
-     * Takes it off screen at once, for an accepted snap: the window animates into the rect itself, so
-     * contracting the preview back would play the gesture backwards beside it.
-     */
-    public void hideSnapPreviewNow() {
-        cancelSnapMotion();
-        snapShowing = false;
-        snapZone = null;
-        snapSource = null;
-        snapPreview.setDisplayed(false);
-    }
-
-    /** Replaces whatever was running, and settles synchronously when animations are off. */
-    private void animateSnapPreview(@Nullable float[] from, @Nullable float[] to,
-                                    @Nullable Runnable then) {
-        cancelSnapMotion();
-        UIDocument window = document();
-        // NO RECT MEANS NO BOX, WHICH MEANS NOTHING TO ANIMATE BETWEEN. `Box` is nullable where the old
-        // runtime cache always answered, so a source or a preview that is not laid out -- a window
-        // opened and dragged inside one frame -- now has no measurable rect. Settling on `to` is the
-        // same outcome the animations-off arm already gives; with no destination there is nothing to
-        // settle to either, and the caller's continuation still runs so a hide cannot get stuck.
-        if (to == null) {
-            if (then != null) then.run();
-            return;
-        }
-        if (from == null) {
-            applySnapRect(to);
-            if (then != null) then.run();
-            return;
-        }
-        // ANIMATIONS OFF MUST TURN OFF THE WAITING TOO, or `then` lands a frame late and a hide is
-        // asynchronous in a mode where nothing is animating. Same contract WindowAnimator states.
-        if (!WindowAnimator.isEnabled() || window == null) {
-            applySnapRect(to);
-            if (then != null) then.run();
-            return;
-        }
-        WindowGeometryAnimation motion = new WindowGeometryAnimation(
-                snapPreview, () -> snapPreview.parent() != null,
-                from[0], from[1], from[2], from[3],
-                to[0], to[1], to[2], to[3],
-                true, true, SNAP_PREVIEW_NANOS, SNAP_PREVIEW_EASING,
-                () -> {
-                    snapMotion = null;
-                    if (then != null) then.run();
-                });
-        snapMotion = motion;
-        // OWNED BY THE THING IT MOVES. The old registration was one-way and stopped only by returning
-        // false, which is why `snapPreview.parent() != null` is passed in as a liveness test at all:
-        // the animation had to notice its own subject had gone. Ownership answers it structurally --
-        // detaching the preview drops the hook -- and the predicate stays because it is also what
-        // ends the motion when the snap is COMMITTED, which detaches nothing.
-        window.animation().every(snapPreview, motion);
-    }
-
-    private void cancelSnapMotion() {
-        if (snapMotion != null) snapMotion.cancel();
-        snapMotion = null;
-    }
-
-    /** INLINE, which is the slot {@link WindowGeometryAnimation} writes — so the two never disagree. */
-    private void applySnapRect(float[] rect) {
-        StyleGroup.inlinePipeline(snapPreview.getStyle().getLayoutGroup(),
-                l -> l.left(rect[0]).top(rect[1]).width(rect[2]).height(rect[3]));
-    }
-
-    /** Where the preview is RIGHT NOW, in the work area's own coordinates. */
-    @Nullable
-    private float[] livePreviewRect() {
-        // NO SUBTRACTION. `Box.x()` is the offset from the HOST's border-box origin and the preview is
-        // a child of the work area, so its own x IS the work-area inset -- where the old accessor
-        // accumulated through every ancestor and had to have the area's origin taken back off. Keeping
-        // the subtraction here would count the work area's own offset twice, and be wrong by whatever
-        // the taskbar and the chrome above it happen to occupy. @see plan/engine-port.md 6.4
-        Box box = snapPreview.box();
-        return box == null ? null
-                : new float[] {box.x(), box.y(), box.width(), box.height()};
-    }
-
-    /** A frame's rect in the same space — {@code left()}/{@code top()} are already work-area insets. */
-    @Nullable
-    private float[] frameRect(WindowFrame frame) {
-        Box box = frame.box();
-        return box == null ? null
-                : new float[] {frame.left(), frame.top(), box.width(), box.height()};
-    }
-
-    /** @see #showSnapPreview */
-    public static final String SNAP_PREVIEW_CLASS = "__snap-preview__";
-
-    /**
-     * Short, because this is feedback and not a window.
-     *
-     * <p>The window timings do not transfer: a minimise is 400ms because the whole information content
-     * of a minimise is <em>where the window went</em>, and it has a screen to cross. A preview is
-     * answering a question the hand is still asking, so it has to keep up with the hand.</p>
-     */
-    private static final long SNAP_PREVIEW_NANOS = 150L * 1_000_000L;
-
-    /**
-     * {@code OUT_QUAD}, by the rule that what makes individual frames visible is <b>peak velocity</b>.
-     *
-     * <p>A preview crossing between halves travels a large part of the work area, and {@code OUT_EXPO}
-     * opens at nearly seven times its average speed — a quarter of the journey in the first frame. Expo
-     * is kept for things that only scale within their own box.</p>
-     */
-    private static final CgEasing SNAP_PREVIEW_EASING = CgEasings.OUT_QUAD;
-
-    /**
-     * The translucent rectangle showing where a snap would land — W13b.
-     *
-     * <p>Built once and hidden, never per drag, so it costs a display-skip when nothing is being
-     * dragged. Its Z is assigned per show: see {@link #stackPreviewUnder}.</p>
-     */
-    private final UIElement snapPreview = new UIElement();
-
-    /** Whether the preview is on screen or on its way off. @see #showSnapPreview */
-    private boolean snapShowing;
-
-    /** The zone currently being previewed — the guard against re-arming the timeline every frame. */
-    @Nullable
-    private SnapZones.Zone snapZone;
-
-    /** The window the preview morphs out of and back into. */
-    @Nullable
-    private WindowFrame snapSource;
-
-    @Nullable
-    private WindowMotion snapMotion;
+    private final SnapPreview snapPreview = new SnapPreview(windows, windowManager, windows::hostDecoration);
 
     /** Keyboard Move/Size — W13c. @see WindowKeyboardMove */
     public WindowKeyboardMove keyboardMove() {

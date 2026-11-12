@@ -115,6 +115,15 @@ public class ClientInputTest extends UiDocumentTestBase {
         assertSame("and did not move the shell's focus", portal, document.focus().focused());
     }
 
+    @Test
+    public void aLetterTypedInAWindowReachesItsApplication() {
+        int[] at = centreOf(portal);
+        click(at[0], at[1]);
+        backend.keys.clear();
+        assertTrue("taken", keyPress(CgKeyCodes.KEY_A));
+        assertEquals(1, backend.keys.size());
+    }
+
     /** A surface x right of the window's right edge. */
     private float pastTheWindow() {
         var box = boxOf(portal);
