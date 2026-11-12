@@ -5107,6 +5107,7 @@ com/crystalgui/desktop/window/StartingMark
   field public,static,final COVER_CLASS Ljava/lang/String;
   field public,static,final LEAVE_NANOS J
   field public,static,final MARK_CLASS Ljava/lang/String;
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   method public <init> (Ljava/lang/String;Ljava/lang/String;)V
   method public,static leaveInPlace (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static leaveOver (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/WindowFrame;)V

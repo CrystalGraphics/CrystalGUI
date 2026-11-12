@@ -39,6 +39,9 @@ public class ShaderPortArityTest extends UiDocumentTestBase {
     private GraphDocument graphDocument;
 
     private void openWindow() {
+        // The vector editor is registered by the shader layer, never by the widget kit: without this the rebuild
+        // below finds no factory and keeps the scalar editor.
+        ShaderVectorFieldWidget.install();
         view = new GraphView();
         view.layout(l -> l.width(600).height(400));
         UIElement root = new UIElement().layout(l -> l.width(800).height(600));
