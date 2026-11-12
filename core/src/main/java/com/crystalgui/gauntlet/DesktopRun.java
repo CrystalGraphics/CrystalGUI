@@ -8,6 +8,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
 
 /**
  * A test that drives CrystalGUI's desktop in a world: it enters one, opens the desktop a few seconds after it loads,
@@ -60,7 +61,7 @@ public abstract class DesktopRun extends CgGauntletController {
         if (!opened) {
             if (!state().equals(CgGauntletState.IN_WORLD) || timeInState() < OPEN_AFTER.get()) return;
             opened = true;
-            Notifications.onDidChange.subscribe(event -> {
+            NotificationService.current().onDidChange.subscribe(event -> {
                 if (event.kind() != NotificationEvent.Kind.ADDED || event.notification() == null) return;
                 Notification added = event.notification();
                 CrystalGuiCore.LOGGER.info("{} notification: {}{}", id(), added,

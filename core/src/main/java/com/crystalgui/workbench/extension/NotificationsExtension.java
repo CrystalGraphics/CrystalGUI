@@ -2,6 +2,7 @@ package com.crystalgui.workbench.extension;
 
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
@@ -57,7 +58,7 @@ public final class NotificationsExtension implements WorkbenchExtension {
                         .view(view)
                         .toggle(SHOW)
                         .badge((ctx, set) -> {
-                            Connection watch = Notifications.onDidChangeUnread.subscribe(count ->
+                            Connection watch = NotificationService.current().onDidChangeUnread.subscribe(count ->
                                     set.accept(count == null || count <= 0
                                             ? null : ViewContainerRegistry.DOT));
                             return watch::disconnect;

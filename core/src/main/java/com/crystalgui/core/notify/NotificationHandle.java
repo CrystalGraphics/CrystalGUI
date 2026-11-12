@@ -27,12 +27,14 @@ import com.crystalgui.core.signal.Signal;
  */
 public final class NotificationHandle {
 
+    private final NotificationService service;
     private final Notification notification;
 
     /** Fires once, when this notification leaves the history — by {@link #close()} or by ageing out. */
     public final Signal.Action onDidClose = new Signal.Action();
 
-    NotificationHandle(Notification notification) {
+    NotificationHandle(NotificationService service, Notification notification) {
+        this.service = service;
         this.notification = notification;
     }
 
@@ -42,7 +44,7 @@ public final class NotificationHandle {
 
     /** Whether this is still in the history. */
     public boolean isOpen() {
-        return Notifications.holds(notification);
+        return service.holds(notification);
     }
 
     /**
@@ -56,13 +58,13 @@ public final class NotificationHandle {
         if (message == null || message.equals(notification.getMessage())) return;
         if (!isOpen()) return;
         notification.setMessage(message);
-        Notifications.announceChanged(notification);
+        service.announceChanged(notification);
     }
 
     /** Takes it out of the history. Idempotent. */
     public void close() {
         if (!isOpen()) return;
-        Notifications.withdraw(notification);
+        service.withdraw(notification);
     }
 
     /** Called by the service when the notification leaves for any reason. */

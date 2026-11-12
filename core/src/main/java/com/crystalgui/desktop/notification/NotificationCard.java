@@ -1,7 +1,8 @@
-package com.crystalgui.workbench.chrome.notification;
+package com.crystalgui.desktop.notification;
 
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -34,27 +35,45 @@ import java.util.Locale;
  * consumers did it, and both then had to cope with it returning null. Holding the label in a field makes
  * a repeat a {@code setText} and makes the class name a styling detail again rather than a lookup key.</p>
  */
-class NotificationCard extends UIElement {
+public class NotificationCard extends UIElement {
+
+    // The classes the sheet styles a card by: shared with the workbench's list, which lays the same cards out.
+    public static final String ENTRY_CLASS = "__notification__";
+    public static final String ICON_CLASS = "__severity__";
+    public static final String MESSAGE_CLASS = "__message__";
+    public static final String TIME_CLASS = "__time__";
+    public static final String DETAIL_CLASS = "__detail__";
+    public static final String ACTIONS_CLASS = "__actions__";
+    public static final String ATTRIBUTION_CLASS = "__attribution__";
+    public static final String ATTRIBUTION_DOT_CLASS = "__attribution-dot__";
+    public static final String ATTRIBUTION_TEXT_CLASS = "__attribution-text__";
+    public static final String HAS_ACTIONS_CLASS = "__has-actions__";
+    public static final String ACTION_CLASS = "__action__";
+    public static final String ACTION_SECONDARY_CLASS = "__action-secondary__";
+    public static final String ENTRY_HEAD_CLASS = "__entry-head__";
+    public static final String CLOSE_CLASS = "__close__";
+    public static final String SEVERITY_PREFIX = "severity-";
+
 
     private final Notification notification;
     private final UIText message;
     private final UIElement head;
 
-    NotificationCard(Notification notification) {
+    public NotificationCard(Notification notification) {
         this.notification = notification;
-        addClass(NotificationsView.ENTRY_CLASS);
+        addClass(ENTRY_CLASS);
 
         UIElement icon = new UIElement();
-        icon.addClass(NotificationsView.ICON_CLASS);
+        icon.addClass(ICON_CLASS);
         // THE CLASS CARRIES THE SEVERITY, and the sheet turns it into a glyph and a colour. Writing either
         // from here would put the palette in Java, which is the split graph.css already makes for port
         // types, and the file icons carry their own palette.
-        icon.addClass(NotificationsView.SEVERITY_PREFIX
+        icon.addClass(SEVERITY_PREFIX
                 + notification.getSeverity().name().toLowerCase(Locale.ROOT));
         icon.setHitTest(false);
 
         message = new UIText(titleOf(notification));
-        message.addClass(NotificationsView.MESSAGE_CLASS);
+        message.addClass(MESSAGE_CLASS);
         message.setHitTest(false);
         // SIZED BY ITS BOX, AND IT HAS TO SAY SO. The sheet gives this `flex-grow: 1; flex-shrink: 1;
         // min-width: 0` -- it takes the row's width and wraps against it. But the auto-detect decides
@@ -65,7 +84,7 @@ class NotificationCard extends UIElement {
         // bottom edge. The timestamp beside it needs the opposite lock for the same race.
 
         UIText time = new UIText(describeTime(notification.getTimestamp()));
-        time.addClass(NotificationsView.TIME_CLASS);
+        time.addClass(TIME_CLASS);
         time.setHitTest(false);
         // MUST REPORT ITS OWN WIDTH. UIText latches whether it self-sizes from its FIRST measurement,
         // which happens before any rule here has matched -- and a card built while its row is momentarily
@@ -74,7 +93,7 @@ class NotificationCard extends UIElement {
         // it should never have shrunk at all.
 
         UIElement head = new UIElement();
-        head.addClass(NotificationsView.ENTRY_HEAD_CLASS);
+        head.addClass(ENTRY_HEAD_CLASS);
         head.append(icon);
         head.append(message);
         // BESIDE THE TIMESTAMP, because it is the same kind of thing: both say something ABOUT the event
@@ -83,19 +102,19 @@ class NotificationCard extends UIElement {
         // change it describes.
         if (!notification.getAttribution().isEmpty()) {
             UIElement attribution = new UIElement();
-            attribution.addClass(NotificationsView.ATTRIBUTION_CLASS);
+            attribution.addClass(ATTRIBUTION_CLASS);
             attribution.setHitTest(false);
 
             // A DRAWN MARK. It was a middle dot inside the string, which put it at the mercy of the font
             // -- a missing glyph draws a blank advance rather than failing -- and left it unsizeable,
             // since a character takes its line's font size or nothing.
             UIElement mark = new UIElement();
-            mark.addClass(NotificationsView.ATTRIBUTION_DOT_CLASS);
+            mark.addClass(ATTRIBUTION_DOT_CLASS);
             mark.setHitTest(false);
             attribution.append(mark);
 
             UIText who = new UIText(notification.getAttribution());
-            who.addClass(NotificationsView.ATTRIBUTION_TEXT_CLASS);
+            who.addClass(ATTRIBUTION_TEXT_CLASS);
             who.setHitTest(false);
             attribution.append(who);
             head.append(attribution);
@@ -106,7 +125,7 @@ class NotificationCard extends UIElement {
 
         if (!notification.getDetail().isEmpty()) {
             UIText detail = new UIText(notification.getDetail());
-            detail.addClass(NotificationsView.DETAIL_CLASS);
+            detail.addClass(DETAIL_CLASS);
             detail.setHitTest(false);
             // THE SAME LOCK THE MESSAGE NEEDS, and for the same race. The sheet gives this `width: 100%`,
             // which the latched self-sizing width overrides at IMPORTANT -- so the detail took the width
@@ -119,9 +138,9 @@ class NotificationCard extends UIElement {
         boolean silenceable = notification.getNeverShowAgainId() != null;
         if (!notification.actions().isEmpty() || !notification.secondaryActions().isEmpty()
                 || silenceable) {
-            addClass(NotificationsView.HAS_ACTIONS_CLASS);
+            addClass(HAS_ACTIONS_CLASS);
             UIElement actions = new UIElement();
-            actions.addClass(NotificationsView.ACTIONS_CLASS);
+            actions.addClass(ACTIONS_CLASS);
             for (Notification.Action action : notification.actions()) {
                 actions.append(link(action.label(), action.run(), false));
             }
@@ -135,7 +154,7 @@ class NotificationCard extends UIElement {
                 // LAST, and secondary. It is the one link that acts on every FUTURE message rather than on
                 // this one, so it must not sit where "Retry" is expected.
                 actions.append(link("Don't show again",
-                        () -> Notifications.suppress(notification.getNeverShowAgainId()), true));
+                        () -> NotificationService.current().suppress(notification.getNeverShowAgainId()), true));
             }
             append(actions);
         }
@@ -143,8 +162,8 @@ class NotificationCard extends UIElement {
 
     private static UIText link(String label, Runnable run, boolean secondary) {
         UIText link = new UIText(label);
-        link.addClass(NotificationsView.ACTION_CLASS);
-        if (secondary) link.addClass(NotificationsView.ACTION_SECONDARY_CLASS);
+        link.addClass(ACTION_CLASS);
+        if (secondary) link.addClass(ACTION_SECONDARY_CLASS);
         link.setFocusPolicy(FocusPolicy.CLICK);
         link.onMouseDown.attachListener((element, event) -> {
             event.stopPropagation();
@@ -160,12 +179,12 @@ class NotificationCard extends UIElement {
      * passed in at construction cannot refer to something that does not exist yet. The balloon layer used
      * to work around that with a one-element array.</p>
      */
-    NotificationCard withClose(Runnable onClose) {
+    public NotificationCard withClose(Runnable onClose) {
         // AN ELEMENT WITH A SHAPE, not a UIText carrying "✕". The bundled font has no U+2715 and drew
         // tofu -- the same reason the breadcrumb separator is a shape and UIText carries an ellipsis
         // fallback. A glyph in Java is also a look the cascade cannot reach.
         UIElement close = new UIElement();
-        close.addClass(NotificationsView.CLOSE_CLASS);
+        close.addClass(CLOSE_CLASS);
         close.setFocusPolicy(FocusPolicy.CLICK);
         close.onMouseDown.attachListener((element, event) -> {
             event.stopPropagation();
@@ -175,12 +194,12 @@ class NotificationCard extends UIElement {
         return this;
     }
 
-    Notification notification() {
+    public Notification notification() {
         return notification;
     }
 
     /** Re-reads the notification this card is about — today, its repeat count. @see #titleOf */
-    void restate() {
+    public void restate() {
         message.setText(titleOf(notification));
     }
 

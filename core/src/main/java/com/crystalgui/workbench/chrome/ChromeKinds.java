@@ -2,7 +2,7 @@ package com.crystalgui.workbench.chrome;
 
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
-import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
+import com.crystalgui.desktop.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
 import com.crystalgui.workbench.chrome.palette.QuickPick;
 import com.crystalgui.workbench.chrome.preferences.NavigatorView;

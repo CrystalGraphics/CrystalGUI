@@ -23,7 +23,6 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.notify.Notification;
-import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgraphics.storage.config.CgConfigStorage;
@@ -140,7 +139,6 @@ public class TwoApplicationsTest {
         // colour assertions fail in the suite and pass in isolation, which is the shape this file's own
         // javadoc predicted before an application ever attached to a document.
         UiThemeManager.getInstance().resetForTesting();
-        Notifications.resetForTesting();
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
         Disposer.resetForTesting();
@@ -176,10 +174,10 @@ public class TwoApplicationsTest {
 
         // D3. One centre, and it is the desktop's -- which is why it is the one thing here that stays
         // process-wide: every OS has exactly one and it is inside no application.
-        int before = Notifications.history().size();
-        Notifications.show(Notification.info("something happened"));
+        int before = desktop.notifications().history().size();
+        desktop.notifications().show(Notification.info("something happened"));
         assertEquals("a notification landed in more than one place, or in none",
-                before + 1, Notifications.history().size());
+                before + 1, desktop.notifications().history().size());
     }
 
     /**

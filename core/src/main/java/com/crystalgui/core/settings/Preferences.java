@@ -47,6 +47,7 @@ public final class Preferences {
     public static final String LOCALE = "appearance.locale";
     private static final String OVERRIDE_PREFIX = "appearance.token.";
     private static final String KEYMAP_PREFIX = "keymap.";
+    private static final String NOTIFICATIONS_PREFIX = "notifications.";
 
     /** The published preferences. */
     public static final Published<Preferences> PUBLISHED = Published.of("preferences", new Preferences(Map.of()));
@@ -86,7 +87,8 @@ public final class Preferences {
 
     /** Whether {@code key} is a desktop-wide preference. */
     public static boolean isDesktopWide(String key) {
-        return DESKTOP_WIDE.contains(key) || key.startsWith(OVERRIDE_PREFIX) || key.startsWith(KEYMAP_PREFIX);
+        return DESKTOP_WIDE.contains(key) || key.startsWith(OVERRIDE_PREFIX) || key.startsWith(KEYMAP_PREFIX)
+                || key.startsWith(NOTIFICATIONS_PREFIX);
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────

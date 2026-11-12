@@ -2,8 +2,10 @@ package com.crystalgui.workbench.chrome.notification;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.notify.Notification;
+import com.crystalgui.desktop.notification.NotificationCard;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.scroll.ScrollerView;
@@ -55,21 +57,21 @@ public class NotificationsView extends UIElement {
     public static final String LIST_CLASS = "__notification-list__";
 
     /** One notification. */
-    public static final String ENTRY_CLASS = "__notification__";
-    public static final String ICON_CLASS = "__severity__";
-    public static final String MESSAGE_CLASS = "__message__";
-    public static final String TIME_CLASS = "__time__";
-    public static final String DETAIL_CLASS = "__detail__";
-    public static final String ACTIONS_CLASS = "__actions__";
+    public static final String ENTRY_CLASS = NotificationCard.ENTRY_CLASS;
+    public static final String ICON_CLASS = NotificationCard.ICON_CLASS;
+    public static final String MESSAGE_CLASS = NotificationCard.MESSAGE_CLASS;
+    public static final String TIME_CLASS = NotificationCard.TIME_CLASS;
+    public static final String DETAIL_CLASS = NotificationCard.DETAIL_CLASS;
+    public static final String ACTIONS_CLASS = NotificationCard.ACTIONS_CLASS;
 
     /** The line naming who did it. @see Notification#withAttribution */
-    public static final String ATTRIBUTION_CLASS = "__attribution__";
+    public static final String ATTRIBUTION_CLASS = NotificationCard.ATTRIBUTION_CLASS;
 
     /** The drawn mark on that line -- a rounded box, not a character. */
-    public static final String ATTRIBUTION_DOT_CLASS = "__attribution-dot__";
+    public static final String ATTRIBUTION_DOT_CLASS = NotificationCard.ATTRIBUTION_DOT_CLASS;
 
     /** The name itself, so the mark and the word can be sized apart. */
-    public static final String ATTRIBUTION_TEXT_CLASS = "__attribution-text__";
+    public static final String ATTRIBUTION_TEXT_CLASS = NotificationCard.ATTRIBUTION_TEXT_CLASS;
 
     /**
      * Carried by a card that ends in an action row rather than in text.
@@ -77,19 +79,19 @@ public class NotificationsView extends UIElement {
      * <p>The space under a card is wanted below a LINE OF TEXT and not below a row of controls, which
      * carries weight of its own -- and no selector can ask what a card ends with, so the card says.</p>
      */
-    public static final String HAS_ACTIONS_CLASS = "__has-actions__";
-    public static final String ACTION_CLASS = "__action__";
+    public static final String HAS_ACTIONS_CLASS = NotificationCard.HAS_ACTIONS_CLASS;
+    public static final String ACTION_CLASS = NotificationCard.ACTION_CLASS;
     /** A quieter action, and the "Don't show again" link. @see com.crystalgui.core.notify.Notification */
-    public static final String ACTION_SECONDARY_CLASS = "__action-secondary__";
+    public static final String ACTION_SECONDARY_CLASS = NotificationCard.ACTION_SECONDARY_CLASS;
     /** The line holding the title and the timestamp, which sit at opposite ends. */
-    public static final String ENTRY_HEAD_CLASS = "__entry-head__";
+    public static final String ENTRY_HEAD_CLASS = NotificationCard.ENTRY_HEAD_CLASS;
     /** Shown only while there is nothing to show. */
     public static final String EMPTY_CLASS = "__notifications-empty__";
     /** A balloon's dismiss button. Not drawn in the list — see the class note. */
-    public static final String CLOSE_CLASS = "__close__";
+    public static final String CLOSE_CLASS = NotificationCard.CLOSE_CLASS;
 
     /** Severity, as a class the sheet colours — never a colour written from here. */
-    public static final String SEVERITY_PREFIX = "severity-";
+    public static final String SEVERITY_PREFIX = NotificationCard.SEVERITY_PREFIX;
 
     private final UIElement head = new UIElement();
     private final UIText title = new UIText("Timeline");
@@ -108,11 +110,11 @@ public class NotificationsView extends UIElement {
     public NotificationsView() {
         super(NAME);
         addClass(PANEL_CLASS);
-        whileConnected(() -> Notifications.onDidChange.subscribe(this::apply));
+        whileConnected(() -> NotificationService.current().onDidChange.subscribe(this::apply));
         // OPENING THE PANEL IS READING IT, which is why the mark is here and not in a click handler.
         onConnected(() -> {
             rebuild();
-            Notifications.markAllRead();
+            NotificationService.current().markAllRead();
         });
 
         head.addClass(HEAD_CLASS);
@@ -122,7 +124,7 @@ public class NotificationsView extends UIElement {
         clearAll.setFocusPolicy(FocusPolicy.CLICK);
         clearAll.onMouseDown.attachListener((element, event) -> {
             event.stopPropagation();
-            Notifications.clear();
+            NotificationService.current().clear();
         }, false, true);
         head.append(title);
         head.append(clearAll);
@@ -179,14 +181,14 @@ public class NotificationsView extends UIElement {
         // reaching here means it is on screen — and a bell that ticks up for a message sitting visible in
         // front of the user is counting something they have already seen. This used to fall out of running
         // on every layout pass; with the window hook it has to be said.
-        Notifications.markAllRead();
+        NotificationService.current().markAllRead();
     }
 
     /** Builds the column from scratch. Only on open and on Clear all — see the class note. */
     private void rebuild() {
         list.removeAll();
         cards.clear();
-        List<Notification> history = Notifications.history();
+        List<Notification> history = NotificationService.current().history();
         // NEWEST FIRST, which is the opposite of the history's own order. What you want on opening the
         // panel is what just happened, and a list that grows downwards puts it off the bottom of a full
         // one -- the reason both references lead with the most recent.
@@ -200,7 +202,7 @@ public class NotificationsView extends UIElement {
     }
 
     private void refreshEmptyState() {
-        boolean nothing = Notifications.isEmpty();
+        boolean nothing = NotificationService.current().isEmpty();
         empty.setDisplayed(nothing);
         list.setDisplayed(!nothing);
     }

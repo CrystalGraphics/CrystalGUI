@@ -3,7 +3,7 @@ package com.crystalgui.core.async;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
-import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
 
 import org.junit.Test;
 
@@ -227,7 +227,9 @@ public class JobProgressTest {
     @Test
     public void anAnnouncedFailureNotifiesAndAQuietOneDoesNot() {
         List<String> raised = new ArrayList<>();
-        Notifications.onDidChange.subscribe(event -> {
+        NotificationService service = new NotificationService();
+        NotificationService.install(service, () -> service, () -> null);
+        service.onDidChange.subscribe(event -> {
             if (event.notification() != null) raised.add(event.notification().getMessage());
         });
         try {
@@ -255,7 +257,7 @@ public class JobProgressTest {
             assertTrue(raised.toString(),
                     raised.stream().anyMatch(message -> message.contains("Downloading engine band")));
         } finally {
-            Notifications.resetForTesting();
+            service.resetForTesting();
         }
     }
 }

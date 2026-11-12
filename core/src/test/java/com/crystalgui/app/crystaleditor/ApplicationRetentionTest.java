@@ -20,7 +20,6 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.dispose.Disposer;
-import com.crystalgui.core.notify.Notifications;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
@@ -148,7 +147,6 @@ public class ApplicationRetentionTest {
         // colour assertions fail in the suite and pass in isolation, which is the shape this file's own
         // javadoc predicted before an application ever attached to a document.
         UiThemeManager.getInstance().resetForTesting();
-        Notifications.resetForTesting();
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
         Disposer.resetForTesting();
@@ -160,8 +158,8 @@ public class ApplicationRetentionTest {
     private Map<String, Integer> census() {
         Map<String, Integer> counts = new LinkedHashMap<>();
         counts.put("Disposer.liveCount()", Disposer.liveCount());
-        counts.put("Notifications.onDidChange", Notifications.onDidChange.subscriberCount());
-        counts.put("Notifications.onDidChangeUnread", Notifications.onDidChangeUnread.subscriberCount());
+        counts.put("Notifications.onDidChange", desktop.notifications().onDidChange.subscriberCount());
+        counts.put("Notifications.onDidChangeUnread", desktop.notifications().onDidChangeUnread.subscriberCount());
         counts.put("InspectorRegistry sections", InspectorRegistry.all().size());
         counts.put("ProjectSourcesRegistry", ProjectSourcesRegistry.size());
         counts.put("WorkspaceClient.onDidReconnect", workspace.onDidReconnect.connectionCount());

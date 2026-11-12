@@ -3852,6 +3852,7 @@ com/crystalgui/core/notify/Notification
   extends java/lang/Object
   field public,static,final DEFAULT_GROUP Ljava/lang/String;
   method public actions ()Ljava/util/List;
+  method public from (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/notify/Notification;
   method public getAttribution ()Ljava/lang/String;
   method public getDetail ()Ljava/lang/String;
   method public getGroupId ()Ljava/lang/String;
@@ -3859,6 +3860,8 @@ com/crystalgui/core/notify/Notification
   method public getNeverShowAgainId ()Ljava/lang/String;
   method public getRepeats ()I
   method public getSeverity ()Lcom/crystalgui/core/notify/Notification$Severity;
+  method public getSourceId ()Ljava/lang/String;
+  method public getSourceName ()Ljava/lang/String;
   method public getTimestamp ()J
   method public inGroup (Ljava/lang/String;)Lcom/crystalgui/core/notify/Notification;
   method public saysTheSameAs (Lcom/crystalgui/core/notify/Notification;)Z
@@ -3924,14 +3927,14 @@ com/crystalgui/core/notify/NotificationEvent$Kind
 com/crystalgui/core/notify/NotificationGroups
   access public,final
   extends java/lang/Object
-  field public,static,final onDidChangeDisplay Lcom/crystalgui/core/async/Broadcast;
-  method public,static displayOf (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationDisplay;
-  method public,static group (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationGroups$Group;
-  method public,static isOverridden (Ljava/lang/String;)Z
-  method public,static register (Ljava/lang/String;Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
-  method public,static registered ()Ljava/util/List;
-  method public,static resetForTesting ()V
-  method public,static setDisplay (Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
+  field public,final onDidChangeDisplay Lcom/crystalgui/core/async/Broadcast;
+  method public <init> ()V
+  method public displayOf (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationDisplay;
+  method public group (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationGroups$Group;
+  method public isOverridden (Ljava/lang/String;)Z
+  method public register (Ljava/lang/String;Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
+  method public registered ()Ljava/util/List;
+  method public setDisplay (Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
 com/crystalgui/core/notify/NotificationGroups$Group
   access public,final,record
   extends java/lang/Record
@@ -3950,26 +3953,39 @@ com/crystalgui/core/notify/NotificationHandle
   method public isOpen ()Z
   method public notification ()Lcom/crystalgui/core/notify/Notification;
   method public updateMessage (Ljava/lang/String;)V
+com/crystalgui/core/notify/NotificationService
+  access public,final
+  extends java/lang/Object
+  field public,final onDidChange Lcom/crystalgui/core/async/Broadcast;
+  field public,final onDidChangeUnread Lcom/crystalgui/core/async/Broadcast;
+  field public,static,final HISTORY_LIMIT I
+  method public <init> ()V
+  method public clear ()V
+  method public closeFrom (Ljava/lang/String;)V
+  method public error (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public groups ()Lcom/crystalgui/core/notify/NotificationGroups;
+  method public history ()Ljava/util/List;
+  method public historyFrom (Ljava/lang/String;)Ljava/util/List;
+  method public info (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public isEmpty ()Z
+  method public isSuppressed (Ljava/lang/String;)Z
+  method public markAllRead ()V
+  method public resetForTesting ()V
+  method public show (Lcom/crystalgui/core/notify/Notification;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public size ()I
+  method public suppress (Ljava/lang/String;)V
+  method public suppressed ()Ljava/util/List;
+  method public unread ()I
+  method public unsuppress (Ljava/lang/String;)V
+  method public warning (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public,static current ()Lcom/crystalgui/core/notify/NotificationService;
+  method public,static install (Lcom/crystalgui/core/notify/NotificationService;Ljava/util/function/Supplier;Ljava/util/function/Supplier;)V
 com/crystalgui/core/notify/Notifications
   access public,final
   extends java/lang/Object
-  field public,static,final HISTORY_LIMIT I
-  field public,static,final onDidChange Lcom/crystalgui/core/async/Broadcast;
-  field public,static,final onDidChangeUnread Lcom/crystalgui/core/async/Broadcast;
-  method public,static clear ()V
   method public,static error (Ljava/lang/String;)V
-  method public,static history ()Ljava/util/List;
   method public,static info (Ljava/lang/String;)V
-  method public,static isEmpty ()Z
-  method public,static isSuppressed (Ljava/lang/String;)Z
-  method public,static markAllRead ()V
-  method public,static resetForTesting ()V
   method public,static show (Lcom/crystalgui/core/notify/Notification;)Lcom/crystalgui/core/notify/NotificationHandle;
-  method public,static size ()I
-  method public,static suppress (Ljava/lang/String;)V
-  method public,static suppressed ()Ljava/util/List;
-  method public,static unread ()I
-  method public,static unsuppress (Ljava/lang/String;)V
   method public,static warning (Ljava/lang/String;)V
 com/crystalgui/core/notify/StatusBar
   access public,final
@@ -4686,6 +4702,7 @@ com/crystalgui/desktop/Desktop
   method public keyboardMove ()Lcom/crystalgui/desktop/window/WindowKeyboardMove;
   method public leave (Ljava/lang/Runnable;)V
   method public moveModifier ()I
+  method public notifications ()Lcom/crystalgui/core/notify/NotificationService;
   method public openStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public overlayLayer ()Lcom/crystalgui/ui/dom/UIElement;
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
@@ -4963,6 +4980,41 @@ com/crystalgui/desktop/motion/WindowMotion
   extends java/lang/Object
   implements com/crystalgui/ui/service/Animation$Hook
   method public,abstract cancel ()V
+com/crystalgui/desktop/notification/NotificationBalloons
+  access public
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final BALLOON_CLASS Ljava/lang/String;
+  field public,static,final FADE_MS F
+  field public,static,final HIDDEN_CLASS Ljava/lang/String;
+  field public,static,final LAYER_CLASS Ljava/lang/String;
+  field public,static,final LINGER_MS F
+  field public,static,final MAX_VISIBLE I
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  method protected connected ()V
+  method public <init> ()V
+  method public liveCount ()I
+com/crystalgui/desktop/notification/NotificationCard
+  access public
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final ACTIONS_CLASS Ljava/lang/String;
+  field public,static,final ACTION_CLASS Ljava/lang/String;
+  field public,static,final ACTION_SECONDARY_CLASS Ljava/lang/String;
+  field public,static,final ATTRIBUTION_CLASS Ljava/lang/String;
+  field public,static,final ATTRIBUTION_DOT_CLASS Ljava/lang/String;
+  field public,static,final ATTRIBUTION_TEXT_CLASS Ljava/lang/String;
+  field public,static,final CLOSE_CLASS Ljava/lang/String;
+  field public,static,final DETAIL_CLASS Ljava/lang/String;
+  field public,static,final ENTRY_CLASS Ljava/lang/String;
+  field public,static,final ENTRY_HEAD_CLASS Ljava/lang/String;
+  field public,static,final HAS_ACTIONS_CLASS Ljava/lang/String;
+  field public,static,final ICON_CLASS Ljava/lang/String;
+  field public,static,final MESSAGE_CLASS Ljava/lang/String;
+  field public,static,final SEVERITY_PREFIX Ljava/lang/String;
+  field public,static,final TIME_CLASS Ljava/lang/String;
+  method public <init> (Lcom/crystalgui/core/notify/Notification;)V
+  method public notification ()Lcom/crystalgui/core/notify/Notification;
+  method public restate ()V
+  method public withClose (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/notification/NotificationCard;
 com/crystalgui/desktop/switcher/WindowSwitcher
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -19048,19 +19100,6 @@ com/crystalgui/workbench/chrome/menu/MenuBarView
   method public toggleMainMenu ()V
   method public,static mnemonicIndexOf (Ljava/lang/String;)I
   method public,static strip (Ljava/lang/String;)Ljava/lang/String;
-com/crystalgui/workbench/chrome/notification/NotificationBalloons
-  access public
-  extends com/crystalgui/ui/dom/UIElement
-  field public,static,final BALLOON_CLASS Ljava/lang/String;
-  field public,static,final FADE_MS F
-  field public,static,final HIDDEN_CLASS Ljava/lang/String;
-  field public,static,final LAYER_CLASS Ljava/lang/String;
-  field public,static,final LINGER_MS F
-  field public,static,final MAX_VISIBLE I
-  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
-  method protected connected ()V
-  method public <init> ()V
-  method public liveCount ()I
 com/crystalgui/workbench/chrome/notification/NotificationsView
   access public
   extends com/crystalgui/ui/dom/UIElement

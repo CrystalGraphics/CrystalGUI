@@ -572,6 +572,8 @@ public final class ApplicationRegistry {
      * everything anybody else shut down.</p>
      */
     public void forget(Application application) {
+        // ITS STICKY NOTIFICATIONS GO WITH IT: there is no window left to act on them.
+        desktop.notifications().closeFrom(application.kind().id());
         WorkspaceClient client = clients.remove(application);
         if (client != null) client.dispose();
         if (running.remove(application)) onDidChange.emit();

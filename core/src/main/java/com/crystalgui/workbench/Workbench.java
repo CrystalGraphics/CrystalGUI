@@ -58,7 +58,6 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
@@ -290,8 +289,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
 
 
-    /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
-    private final NotificationBalloons balloons = new NotificationBalloons();
     /**
      * The tree's half of the workbench — extracted at W5.
      *
@@ -1055,10 +1052,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // thing that puts the right-hand stripe on the right: it is an ordinary flex child, not something
         // positioned, and both rails carry the same fixed width.
         content.append(rightStripe);
-        // AFTER the regions and BEFORE the drop overlay. Balloons must float over the workbench, but not
-        // over a live drag: the overlay is what tells you where a panel will land, and a message arriving
-        // mid-drag must not cover the answer.
-        content.append(balloons);
         // LAST, so it draws over everything it covers, and listening on `content` so it hears a drag
         // anywhere in the workbench -- DragEvent.Over bubbles, which is what makes one listener enough.
         content.append(dropOverlay);

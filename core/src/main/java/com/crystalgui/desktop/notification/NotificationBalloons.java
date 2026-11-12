@@ -1,4 +1,4 @@
-package com.crystalgui.workbench.chrome.notification;
+package com.crystalgui.desktop.notification;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.notify.Notification;
@@ -6,6 +6,9 @@ import com.crystalgui.core.notify.NotificationDisplay;
 import com.crystalgui.core.notify.NotificationEvent;
 import com.crystalgui.core.notify.NotificationGroups;
 import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.Application;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -119,7 +122,7 @@ public class NotificationBalloons extends UIElement {
     public NotificationBalloons() {
         super(NAME);
         addClass(LAYER_CLASS);
-        whileConnected(() -> Notifications.onDidChange.subscribe(this::apply));
+        whileConnected(() -> NotificationService.current().onDidChange.subscribe(this::apply));
         // The hook is dropped with the detach, so it needs no "am I still in that window" guard of its
         // own -- which is what the flag this used to keep got wrong. @see UINode#onConnected
         onConnected(() -> document().animation().every(this, this::tickFrame));
@@ -182,13 +185,13 @@ public class NotificationBalloons extends UIElement {
     }
 
     private static boolean showsABalloon(Notification notification) {
-        NotificationDisplay display = NotificationGroups.displayOf(notification.getGroupId());
+        NotificationDisplay display = NotificationService.current().groups().displayOf(notification.getGroupId());
         return display == NotificationDisplay.BALLOON || display == NotificationDisplay.STICKY_BALLOON;
     }
 
     /** Whether this one waits to be dismissed rather than leaving on its own. @see NotificationDisplay */
     private static boolean isSticky(Notification notification) {
-        return NotificationGroups.displayOf(notification.getGroupId())
+        return NotificationService.current().groups().displayOf(notification.getGroupId())
                 == NotificationDisplay.STICKY_BALLOON;
     }
 
@@ -206,6 +209,9 @@ public class NotificationBalloons extends UIElement {
         NotificationCard card = new NotificationCard(notification);
         Live entry = new Live(card);
         card.withClose(() -> beginLeaving(entry));
+        // A CLICK ON THE TOAST GOES TO WHO SAID IT: its links and close mark stop the press, so what reaches the card
+        // is a click on the message itself.
+        card.onMouseDown.attachListener((element, event) -> activateSource(notification), false, true);
         card.addClass(BALLOON_CLASS);
         // TRANSPARENT ON ARRIVAL, revealed on the next frame -- see the class note on why the resting
         // value has to come from the sheet.
@@ -230,6 +236,19 @@ public class NotificationBalloons extends UIElement {
      * them, which is what makes it terminate. "How many are staying" is the question a cap was always
      * asking; re-reading the list's size was the wrong proxy for it.</p>
      */
+    private void activateSource(Notification notification) {
+        String source = notification.getSourceId();
+        if (source.isEmpty() || !isConnected()) return;
+        Desktop desktop = Desktop.ifPresent(document());
+        if (desktop == null) return;
+        for (Application running : desktop.applications().running()) {
+            if (running.kind().id().equals(source)) {
+                running.activate();
+                return;
+            }
+        }
+    }
+
     private void evictOldest() {
         int staying = 0;
         for (Live entry : live) {

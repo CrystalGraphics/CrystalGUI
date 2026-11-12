@@ -813,8 +813,8 @@ by `StatusBarViewTest` for the view half.
 Notifications.show(Notification.error("Open failed")
         .withDetail(path.name() + " — " + failure.code())
         .withAction("Retry", () -> openFile(path)));
-Notifications.clear();          // "Clear all"
-Notifications.markAllRead();    // the bell, without touching the history
+service.clear();             // "Clear all"
+service.markAllRead();        // the bell, without touching the history
 ```
 
 `Notification` carries a severity, a **title**, an optional **detail** body, a wall-clock `timestamp`, a
@@ -1741,11 +1741,11 @@ StatusBarEntryAccessor caret = StatusBar.addEntry(
 
 ## The notification model
 
-`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`. Its changes are
+`NotificationService` (`desktop.notifications()`, one per desktop) is one observable collection emitting typed changes — VS Code's `NotificationsModel`. Its changes are
 a `Broadcast`: posted, and heard on the subscriber's own document, a turn later.
 
 ```java
-whileConnected(() -> Notifications.onDidChange.subscribe(event -> {
+whileConnected(() -> service.onDidChange.subscribe(event -> {
     switch (event.kind()) {
         case ADDED   -> add(event.notification());
         case CHANGED -> restate(event.notification());   // a repeat, or a handle's updateMessage
@@ -1753,7 +1753,7 @@ whileConnected(() -> Notifications.onDidChange.subscribe(event -> {
         case CLEARED -> rebuild();                       // one event, not N removals
     }
 }));
-NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
+NotificationHandle handle = service.show(Notification.error("Disconnected"));
 handle.updateMessage("Reconnecting");   // arrives as CHANGED — not a new event, does not re-ring the bell
 handle.close();                          // arrives as REMOVED
 ```
@@ -1765,6 +1765,9 @@ handle.close();                          // arrives as REMOVED
 | **A group decides how loud a notification is** | `NotificationGroups.displayOf(groupId)` → BALLOON / STICKY_BALLOON / LOG_ONLY / NONE, user-overridable via `setDisplay`. IntelliJ's model. An **unregistered group gets BALLOON**, because a producer that forgot to register must not go silent |
 | **Never-show-again is keyed by a message KIND** | `withNeverShowAgain(id)`; the instance is gone the moment it fades, so a flag on it would suppress nothing. Deliberately not the group — silencing one warning and silencing a whole producer are different requests |
 | **A repeat is CHANGED, and does not move the card** | Collapsing exists so a repeated message stops burying the list; re-ordering on every repeat would undo half of that |
+| **The service is the desktop's; the toasts are the shell's** | `Desktop.notifications()` owns history, handles, unread and groups; `NotificationBalloons` sits in the desktop's overlay layer above every window, so a toast outlives the application that said it. `Notifications.show(...)` is a stateless facade to the caller's document's service |
+| **Every notification has a source application** | `Notification.from(id, name)`; unset, `show` stamps the focused application. A click on the toast activates it, `closeFrom(id)` withdraws its sticky ones when it closes, `historyFrom(id)` is its own list. One document serves every application until P4, so "focused" is the best source there is |
+| **What the user silenced is a preference** | `notifications.silenced.<id>` and `notifications.display.<group>` are desktop-wide `Preferences`, persisted with them. The history itself is not persisted: an action is a lambda |
 
 ## Diagnostics — owners and resources
 

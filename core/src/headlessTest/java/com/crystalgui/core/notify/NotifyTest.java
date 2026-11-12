@@ -1,5 +1,6 @@
 package com.crystalgui.core.notify;
 
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgraphics.job.CgHostThread;
 
 import org.junit.After;
@@ -23,18 +24,22 @@ import static org.junit.Assert.assertTrue;
  */
 public class NotifyTest {
 
+    private NotificationService notifications;
+
     private final StatusBar bar = new StatusBar();
 
     @Before
     public void setUp() {
-        Notifications.resetForTesting();
-        NotificationGroups.resetForTesting();
+        notifications = new NotificationService();
+        NotificationService.install(notifications, () -> notifications, () -> null);
+        notifications.resetForTesting();
+        Preferences.update(p -> p.withAll(java.util.Map.of()));
     }
 
     @After
     public void tearDown() {
-        Notifications.resetForTesting();
-        NotificationGroups.resetForTesting();
+        notifications.resetForTesting();
+        Preferences.update(p -> p.withAll(java.util.Map.of()));
     }
 
     private StatusBarEntryAccessor add(String name, String text) {
@@ -151,12 +156,12 @@ public class NotifyTest {
     @Test
     public void severityReachesTheListener() {
         List<Notification> seen = new ArrayList<>();
-        Notifications.onDidChange.subscribe(event -> {
+        notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.ADDED) seen.add(event.notification());
         });
 
-        Notifications.info("saved notes.txt");
-        Notifications.error("save failed: notes.txt");
+        notifications.info("saved notes.txt");
+        notifications.error("save failed: notes.txt");
         CgHostThread.drainFrames();
 
         assertEquals(2, seen.size());
@@ -168,10 +173,10 @@ public class NotifyTest {
     @Test
     public void anActionTravelsWithTheNotification() {
         boolean[] retried = { false };
-        Notifications.show(Notification.error("copy failed")
+        notifications.show(Notification.error("copy failed")
                 .withAction("Retry", () -> retried[0] = true));
 
-        Notification.Action action = Notifications.history().get(0).actions().get(0);
+        Notification.Action action = notifications.history().get(0).actions().get(0);
         assertEquals("Retry", action.label());
         action.run().run();
         assertTrue(retried[0]);
@@ -188,22 +193,22 @@ public class NotifyTest {
     @Test
     public void theHistoryIsBoundedAndSaysWhatItDropped() {
         List<Notification> evicted = new ArrayList<>();
-        Notifications.onDidChange.subscribe(event -> {
+        notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.REMOVED) evicted.add(event.notification());
         });
 
-        for (int i = 0; i < Notifications.HISTORY_LIMIT + 5; i++) Notifications.info("message " + i);
+        for (int i = 0; i < NotificationService.HISTORY_LIMIT + 5; i++) notifications.info("message " + i);
         CgHostThread.drainFrames();
 
-        List<Notification> history = Notifications.history();
-        assertEquals("unbounded at " + history.size(), Notifications.HISTORY_LIMIT, history.size());
-        assertEquals("and it keeps the NEWEST", "message " + (Notifications.HISTORY_LIMIT + 4),
+        List<Notification> history = notifications.history();
+        assertEquals("unbounded at " + history.size(), NotificationService.HISTORY_LIMIT, history.size());
+        assertEquals("and it keeps the NEWEST", "message " + (NotificationService.HISTORY_LIMIT + 4),
                 history.get(history.size() - 1).getMessage());
 
         assertEquals("one eviction per overflow", 5, evicted.size());
         assertEquals("the OLDEST went first", "message 0", evicted.get(0).getMessage());
         assertEquals("a view can only splice what it is handed",
-                Notifications.HISTORY_LIMIT, Notifications.size());
+                NotificationService.HISTORY_LIMIT, notifications.size());
     }
 
     /**
@@ -215,17 +220,17 @@ public class NotifyTest {
      */
     @Test
     public void markingReadKeepsTheHistoryAndClearingDoesNot() {
-        Notifications.info("one");
-        Notifications.warning("two");
-        assertEquals(2, Notifications.unread());
-        assertEquals(2, Notifications.size());
+        notifications.info("one");
+        notifications.warning("two");
+        assertEquals(2, notifications.unread());
+        assertEquals(2, notifications.size());
 
-        Notifications.markAllRead();
-        assertEquals("the badge is gone", 0, Notifications.unread());
-        assertEquals("but the messages are not", 2, Notifications.size());
+        notifications.markAllRead();
+        assertEquals("the badge is gone", 0, notifications.unread());
+        assertEquals("but the messages are not", 2, notifications.size());
 
-        Notifications.clear();
-        assertTrue(Notifications.isEmpty());
+        notifications.clear();
+        assertTrue(notifications.isEmpty());
     }
 
     /**
@@ -237,18 +242,18 @@ public class NotifyTest {
     @Test
     public void clearingIsItsOwnKindOfChange() {
         List<NotificationEvent.Kind> seen = new ArrayList<>();
-        Notifications.onDidChange.subscribe(event -> seen.add(event.kind()));
+        notifications.onDidChange.subscribe(event -> seen.add(event.kind()));
 
-        Notifications.info("something");
+        notifications.info("something");
         CgHostThread.drainFrames();
         assertEquals(List.of(NotificationEvent.Kind.ADDED), seen);
 
-        Notifications.clear();
+        notifications.clear();
         CgHostThread.drainFrames();
         assertEquals("one event, not one per entry",
                 List.of(NotificationEvent.Kind.ADDED, NotificationEvent.Kind.CLEARED), seen);
 
-        Notifications.clear();
+        notifications.clear();
         CgHostThread.drainFrames();
         assertEquals("clearing an empty history says nothing", 2, seen.size());
     }
@@ -282,21 +287,21 @@ public class NotifyTest {
     @Test
     public void anImmediateRepeatCollapses() {
         List<NotificationEvent> changes = new ArrayList<>();
-        Notifications.onDidChange.subscribe(event -> {
+        notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.CHANGED) changes.add(event);
         });
 
-        Notifications.error("Save failed");
-        Notifications.error("Save failed");
-        Notifications.error("Save failed");
+        notifications.error("Save failed");
+        notifications.error("Save failed");
+        notifications.error("Save failed");
         CgHostThread.drainFrames();
 
-        assertEquals("three arrivals became one entry", 1, Notifications.size());
-        assertEquals(3, Notifications.history().get(0).getRepeats());
+        assertEquals("three arrivals became one entry", 1, notifications.size());
+        assertEquals(3, notifications.history().get(0).getRepeats());
         assertEquals("each repeat announced once", 2, changes.size());
         assertSame("and it names the entry already on screen",
-                Notifications.history().get(0), changes.get(0).notification());
-        assertEquals("a repeat is not news", 1, Notifications.unread());
+                notifications.history().get(0), changes.get(0).notification());
+        assertEquals("a repeat is not news", 1, notifications.unread());
     }
 
     /**
@@ -305,12 +310,12 @@ public class NotifyTest {
      */
     @Test
     public void aRepeatMustBeImmediateToCollapse() {
-        Notifications.error("Save failed");
-        Notifications.info("Something else");
-        Notifications.error("Save failed");
+        notifications.error("Save failed");
+        notifications.info("Something else");
+        notifications.error("Save failed");
 
-        assertEquals("the older one was folded into the newer", 3, Notifications.size());
-        for (Notification each : Notifications.history()) {
+        assertEquals("the older one was folded into the newer", 3, notifications.size());
+        for (Notification each : notifications.history()) {
             assertEquals("nothing should have collapsed", 1, each.getRepeats());
         }
     }
@@ -328,19 +333,19 @@ public class NotifyTest {
     @Test
     public void aGroupDecidesHowLoudlyItSpeaks() {
         assertEquals("an unregistered group must still be heard",
-                NotificationDisplay.BALLOON, NotificationGroups.displayOf("never.registered"));
+                NotificationDisplay.BALLOON, notifications.groups().displayOf("never.registered"));
 
-        NotificationGroups.register("compiler", "Shader compilation", NotificationDisplay.LOG_ONLY);
-        assertEquals(NotificationDisplay.LOG_ONLY, NotificationGroups.displayOf("compiler"));
+        notifications.groups().register("compiler", "Shader compilation", NotificationDisplay.LOG_ONLY);
+        assertEquals(NotificationDisplay.LOG_ONLY, notifications.groups().displayOf("compiler"));
 
-        NotificationGroups.setDisplay("compiler", NotificationDisplay.BALLOON);
+        notifications.groups().setDisplay("compiler", NotificationDisplay.BALLOON);
         assertEquals("the user outranks the declaration",
-                NotificationDisplay.BALLOON, NotificationGroups.displayOf("compiler"));
-        assertTrue(NotificationGroups.isOverridden("compiler"));
+                NotificationDisplay.BALLOON, notifications.groups().displayOf("compiler"));
+        assertTrue(notifications.groups().isOverridden("compiler"));
 
-        NotificationGroups.setDisplay("compiler", null);
+        notifications.groups().setDisplay("compiler", null);
         assertEquals("and clearing the override restores the declared default",
-                NotificationDisplay.LOG_ONLY, NotificationGroups.displayOf("compiler"));
+                NotificationDisplay.LOG_ONLY, notifications.groups().displayOf("compiler"));
     }
 
     /**
@@ -351,14 +356,14 @@ public class NotifyTest {
      */
     @Test
     public void aSilencedGroupIsNotEvenHeld() {
-        NotificationGroups.register("chatty", "Chatty", NotificationDisplay.NONE);
+        notifications.groups().register("chatty", "Chatty", NotificationDisplay.NONE);
 
-        Notifications.show(Notification.info("tick").inGroup("chatty"));
-        Notifications.info("something else");
+        notifications.show(Notification.info("tick").inGroup("chatty"));
+        notifications.info("something else");
 
-        assertEquals(1, Notifications.size());
-        assertEquals("something else", Notifications.history().get(0).getMessage());
-        assertEquals("a silenced message must not ring the bell", 1, Notifications.unread());
+        assertEquals(1, notifications.size());
+        assertEquals("something else", notifications.history().get(0).getMessage());
+        assertEquals("a silenced message must not ring the bell", 1, notifications.unread());
     }
 
     /**
@@ -370,25 +375,25 @@ public class NotifyTest {
      */
     @Test
     public void aHandleCanWithdrawAndReviseWhatItSaid() {
-        NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
+        NotificationHandle handle = notifications.show(Notification.error("Disconnected"));
         assertNotNull(handle);
         assertTrue(handle.isOpen());
 
         List<NotificationEvent.Kind> kinds = new ArrayList<>();
-        Notifications.onDidChange.subscribe(event -> kinds.add(event.kind()));
+        notifications.onDidChange.subscribe(event -> kinds.add(event.kind()));
         int[] closed = { 0 };
         handle.onDidClose.connect(() -> closed[0]++);
 
         handle.updateMessage("Reconnecting");
         CgHostThread.drainFrames();
         assertEquals("a revision is not a new event", List.of(NotificationEvent.Kind.CHANGED), kinds);
-        assertEquals("Reconnecting", Notifications.history().get(0).getMessage());
-        assertEquals("and it does not re-ring the bell", 1, Notifications.unread());
+        assertEquals("Reconnecting", notifications.history().get(0).getMessage());
+        assertEquals("and it does not re-ring the bell", 1, notifications.unread());
 
         handle.close();
         CgHostThread.drainFrames();
         assertFalse(handle.isOpen());
-        assertTrue(Notifications.isEmpty());
+        assertTrue(notifications.isEmpty());
         assertEquals("a withdrawal reaches views as the kind they already handle",
                 List.of(NotificationEvent.Kind.CHANGED, NotificationEvent.Kind.REMOVED), kinds);
         assertEquals(1, closed[0]);
@@ -400,11 +405,11 @@ public class NotifyTest {
     /** Ageing out closes the handle too — otherwise isOpen() would answer for an entry nobody holds. */
     @Test
     public void ageingOutClosesTheHandle() {
-        NotificationHandle first = Notifications.show(Notification.info("message 0"));
+        NotificationHandle first = notifications.show(Notification.info("message 0"));
         int[] closed = { 0 };
         first.onDidClose.connect(() -> closed[0]++);
 
-        for (int i = 1; i <= Notifications.HISTORY_LIMIT; i++) Notifications.info("message " + i);
+        for (int i = 1; i <= NotificationService.HISTORY_LIMIT; i++) notifications.info("message " + i);
 
         assertFalse("it left the history without saying so", first.isOpen());
         assertEquals(1, closed[0]);
@@ -420,29 +425,29 @@ public class NotifyTest {
      */
     @Test
     public void silencingAKindOfMessageOutlivesTheMessage() {
-        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
-        assertEquals(1, Notifications.size());
+        notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        assertEquals(1, notifications.size());
 
-        Notifications.suppress("preview.off");
-        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
-        Notifications.show(Notification.warning("Preview unavailable for another node")
+        notifications.suppress("preview.off");
+        notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        notifications.show(Notification.warning("Preview unavailable for another node")
                 .withNeverShowAgain("preview.off"));
-        assertEquals("a silenced kind got through", 1, Notifications.size());
+        assertEquals("a silenced kind got through", 1, notifications.size());
 
-        Notifications.info("something unrelated");
-        assertEquals("it silenced more than it was asked to", 2, Notifications.size());
+        notifications.info("something unrelated");
+        assertEquals("it silenced more than it was asked to", 2, notifications.size());
 
-        assertEquals(List.of("preview.off"), Notifications.suppressed());
+        assertEquals(List.of("preview.off"), notifications.suppressed());
 
         // CLEARING THE LIST IS NOT UN-SILENCING. "Clear all" empties a list; it is not a request to start
         // being interrupted again by everything the user has already dismissed for good.
-        Notifications.clear();
-        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
-        assertTrue("clearing the history un-silenced it", Notifications.isEmpty());
+        notifications.clear();
+        notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        assertTrue("clearing the history un-silenced it", notifications.isEmpty());
 
-        Notifications.unsuppress("preview.off");
-        Notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
-        assertEquals(1, Notifications.size());
+        notifications.unsuppress("preview.off");
+        notifications.show(Notification.warning("Preview unavailable").withNeverShowAgain("preview.off"));
+        assertEquals(1, notifications.size());
     }
 
     /** Secondary actions travel separately, so a card knows which verb to lead with. */

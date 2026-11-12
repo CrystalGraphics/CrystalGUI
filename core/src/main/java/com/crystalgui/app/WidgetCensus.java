@@ -11,7 +11,7 @@ import com.crystalgui.widget.text.MarkupView;
 import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.workbench.chrome.preferences.NavigatorView;
-import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
+import com.crystalgui.desktop.notification.NotificationBalloons;
 import com.crystalgui.workbench.chrome.notification.NotificationsView;
 import com.crystalgui.widget.layout.ContextToolbar;
 import com.crystalgui.widget.layout.PageStack;

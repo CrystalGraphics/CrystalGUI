@@ -261,7 +261,7 @@ public class WorkbenchApplication extends UIElement
         this.workbench = new Workbench(workspace, builder.extensions);
         // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
         // ambient text is what is left showing between them.
-        lifetime.add(Notifications.onDidChange.subscribe(event -> {
+        lifetime.add(desktop.notifications().onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.ADDED && event.notification() != null) {
                 onStatus.emit(event.notification().getMessage());
             }

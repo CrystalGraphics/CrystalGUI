@@ -37,6 +37,8 @@ import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.core.notify.NotificationService;
+import com.crystalgui.desktop.notification.NotificationBalloons;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
@@ -232,6 +234,12 @@ public class Desktop extends UIElement implements DataProvider {
         StyleGroup.defaultPipeline(overlayLayer.getStyle().getGeneralGroup(),
                 g -> g.zIndex(DIALOG_BAND));
         windows.hostOverlays(overlayLayer);
+        // THE TOASTS ARE THE SHELL'S: one place above every window, whichever application said it (Windows'
+        // notification centre). An application's own list is a view of the same service.
+        overlayLayer.append(new NotificationBalloons());
+        // STATIC ROUTES ONLY: the service outlives a desktop's screen, so nothing it holds may name the desktop.
+        NotificationService.install(notifications(), Desktop::notificationsOfRunningDocument,
+                Desktop::focusedApplicationOfRunningDocument);
         // AFTER the layer, so the strip is laid out below it. That order IS the work area: the taskbar is
         // laid out rather than overlaid, so what is left for windows needs no bar-shaped subtraction
         // anywhere -- maximise (W6) fills the layer, drags clamp at it, and W13's fullscreen hiding the
@@ -1551,6 +1559,35 @@ public class Desktop extends UIElement implements DataProvider {
         return connection == null ? null : connection.get();
     }
 
+    /**
+     * What anything on this desktop says happened, and where it is kept: the history, the unread count, the groups.
+     *
+     * <pre>{@code
+     * desktop.notifications().onDidChange.subscribe(event -> …);
+     * desktop.notifications().show(Notification.info("Saved"));
+     * }</pre>
+     */
+    public NotificationService notifications() {
+        return service(NotificationService.class, NotificationService::new);
+    }
+
+    @Nullable
+    private static NotificationService notificationsOfRunningDocument() {
+        UIDocument running = UIDocument.current();
+        Desktop desktop = running == null ? null : ifPresent(running);
+        return desktop == null ? null : desktop.notifications();
+    }
+
+    /** {@code {id, name}} of the application in front on the running document's desktop, or null when none is. */
+    @Nullable
+    private static String[] focusedApplicationOfRunningDocument() {
+        UIDocument running = UIDocument.current();
+        Desktop in = running == null ? null : ifPresent(running);
+        WindowFrame front = in == null ? null : in.activeWindow;
+        ApplicationKind kind = front == null ? null : front.application();
+        return kind == null ? null : new String[] {kind.id(), kind.displayName()};
+    }
+
     /** The host's workspace, or null when there is no connection, as on a title screen. @see #useWorkspace */
     @Nullable
     public WorkspaceClient workspace() {
@@ -1941,7 +1978,7 @@ public class Desktop extends UIElement implements DataProvider {
         if (registry.size() < 2) return;
         KeyChord chord = Keymap.acceleratorFor(this, DesktopCommands.SWITCH_WINDOW);
         if (chord == null || !SWITCHER_ANNOUNCED.compareAndSet(false, true)) return;
-        Notifications.show(Notification.info("Window minimised")
+        notifications().show(Notification.info("Window minimised")
                 .withDetail("Press " + chord + " to switch between windows")
                 .withNeverShowAgain("desktop.switcherHint"));
     }
