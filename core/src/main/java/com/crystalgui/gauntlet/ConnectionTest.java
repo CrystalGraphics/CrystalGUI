@@ -240,7 +240,12 @@ public final class ConnectionTest extends CgGauntletController {
     private static final int WINDOW_ID = 4242;
 
     /** Five seconds of ticks: the run is in a world already, and a stalled probe ends the run rather than holding it. */
-    private static final int DEADLINE_TICKS = 20 * 5;
+    private static final int SOLO_DEADLINE_TICKS = 20 * 5;
+
+    /** A role run waits on a second client, a minute or more from joining. */
+    private static final int ROLE_DEADLINE_TICKS = 20 * 600;
+
+    private static final int DEADLINE_TICKS = ROLE == Role.NONE ? SOLO_DEADLINE_TICKS : ROLE_DEADLINE_TICKS;
 
     /** So the watcher's two reports are two events rather than one coalesced change. */
     private static final int BETWEEN_WRITES = 40;
@@ -834,14 +839,15 @@ public final class ConnectionTest extends CgGauntletController {
     private static void driveRole(Role role) {
         ticks++;
         WorkspaceClient live = workspace();
+        int deadline = DEADLINE_TICKS;
         if (live == null) {
-            if (ticks > DEADLINE_TICKS) finish(false, "joined, but no connection");
+            if (ticks > deadline) finish(false, "joined, but no connection");
             return;
         }
         if (role == Role.WRITER) writerStep(live);
         else watcherStep(live);
 
-        if (ticks > DEADLINE_TICKS) finish(false, "timed out");
+        if (ticks > deadline) finish(false, "timed out");
     }
 
     private static void writerStep(WorkspaceClient live) {
@@ -850,7 +856,8 @@ public final class ConnectionTest extends CgGauntletController {
         if (!writerCreated) {
             if (writerCreating) return;
             writerCreating = true;
-            live.files().write(shared, "first\n".getBytes(StandardCharsets.UTF_8), null)
+            // create, never write: a write is a save, which refuses a file that is not there yet
+            live.files().create(shared, "first\n".getBytes(StandardCharsets.UTF_8))
                     .then(etag -> {
                         CrystalGuiCore.LOGGER.info("[connection] wrote {} — the watcher should hear about it",
                                 SHARED_FILE);
@@ -859,8 +866,8 @@ public final class ConnectionTest extends CgGauntletController {
                     })
                     .onError(f -> {
                         CrystalGuiCore.LOGGER.error("[connection] create failed: {} — NO_PERMISSIONS means "
-                                + "the player is not an op", f.code());
-                        writerCreating = false;
+                                + "the player is not an op; EXISTS means a run left the file", f.code());
+                        finish(false, "create failed: " + f.code());
                     });
             return;
         }
