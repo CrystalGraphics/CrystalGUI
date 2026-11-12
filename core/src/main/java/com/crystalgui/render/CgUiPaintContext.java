@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.camera.CgCamera;
 import com.crystalgraphics.gpu.resource.CgTextureAbstract;
 import com.crystalgraphics.api.PoseStack;
 import com.crystalgraphics.api.font.CgFont;
@@ -18,7 +19,6 @@ import com.crystalgraphics.render.canvas.CgClipTable;
 import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.render.canvas.CgQuadBatch;
 import com.crystalgraphics.render.canvas.CgShapeTable;
-import com.crystalgraphics.render.draw.CgPassConstants;
 import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgExecutor;
 import com.crystalgraphics.render.graph.CgFrame;
@@ -148,7 +148,7 @@ public final class CgUiPaintContext {
     /** What this context draws into: the passes of {@link #recording}. */
     private final CgCanvas recorder = new CgCanvas();
     /** The pass block of the target being drawn into: the frame's time, the target's ortho and size. */
-    private final CgPassConstants passConstants = new CgPassConstants();
+    private final CgCamera camera = new CgCamera();
     private final CgFrameBuilder builder = new CgFrameBuilder();
     private final CgFrameGraph graph = new CgFrameGraph();
 
@@ -181,10 +181,7 @@ public final class CgUiPaintContext {
 
     /** Points the pass constants at a {@code width x height} target, top-left origin; chunks from now take them. */
     private void targetConstants(int width, int height) {
-        passConstants.view.identity();
-        passConstants.projection.identity().ortho(0, width, height, 0, -1, 1);
-        passConstants.resolution(width, height);
-        recorder.constants(passConstants);
+        recorder.camera(camera.screenLens(width, height));
     }
 
     // ── Frame lifecycle ──────────────────────────────────────────────────────
@@ -248,7 +245,7 @@ public final class CgUiPaintContext {
         recorder.noScissor();
         poseStack.pushPose();
 
-        passConstants.time(CgFrameClock.seconds());   // what a material reading CG_TIME animates by
+        camera.time(CgFrameClock.seconds());   // what a material reading CG_TIME animates by
         targetConstants(screenWidth, screenHeight);
         for (CgGraphTexture released : pendingReleases) recording.release(released);
         pendingReleases.clear();
@@ -257,7 +254,7 @@ public final class CgUiPaintContext {
             if (frameTarget != null) recording.release(frameTarget);
             frameTarget = requestTexture("cgui_frame", w, h, LAYER_FORMAT);
         }
-        recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), passConstants);
+        recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), camera);
         frameActive = true;
     }
 
@@ -1211,7 +1208,7 @@ public final class CgUiPaintContext {
             CgTrace.add(UiTrace.FRAME, "layer-clear-kpx",
                     (region == null ? width * height : region.width() * region.height()) / 1000);
         }
-        recorder.recordInto(recording, target, clear ? CgLoad.clear(0f, 0f, 0f, 0f) : CgLoad.load(), passConstants);
+        recorder.recordInto(recording, target, clear ? CgLoad.clear(0f, 0f, 0f, 0f) : CgLoad.load(), camera);
         return target;
     }
 
@@ -1237,7 +1234,7 @@ public final class CgUiPaintContext {
         scissorStack.resume(frame.savedScissor);
         clipEntry = frame.savedClip;
         reapplyScissor();
-        recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
+        recorder.recordInto(recording, currentTarget(), CgLoad.load(), camera);
         frame.target = null;
         frame.savedScissor = null;
         frame.region = null;
@@ -1325,7 +1322,7 @@ public final class CgUiPaintContext {
         if (region.isEmpty()) return;
         long timed = CgTrace.stamp(UiTrace.FRAME);
         boolean elsewhere = subtree != currentTarget();
-        if (elsewhere) recorder.recordInto(recording, subtree, CgLoad.load(), passConstants);
+        if (elsewhere) recorder.recordInto(recording, subtree, CgLoad.load(), camera);
         ScissorStack.Saved suspended = scissorStack.suspend();
         scissorStack.clearScissorIfNeeded();
         int outerNode = enterNode(0);
@@ -1348,7 +1345,7 @@ public final class CgUiPaintContext {
             targetConstants(enclosingW, enclosingH);
             enterNode(outerNode);
         }
-        if (elsewhere) recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
+        if (elsewhere) recorder.recordInto(recording, currentTarget(), CgLoad.load(), camera);
         reapplyScissor();
         CgTrace.zoneDone(UiTrace.FRAME, "layer:mask", timed);
     }
@@ -1551,7 +1548,7 @@ public final class CgUiPaintContext {
 
     /** Ends what {@link #beginPasses()} lent: paint continues on the target it was drawing into. */
     public void endPasses() {
-        recorder.recordInto(recording, currentTarget(), CgLoad.load(), passConstants);
+        recorder.recordInto(recording, currentTarget(), CgLoad.load(), camera);
     }
 
     /** The frame's recording after everything drawn so far, the open pass ended: for a copy or a compute pass. */

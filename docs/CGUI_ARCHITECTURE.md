@@ -558,7 +558,7 @@ one a capability, each read through its owner and carrying its own absent-value.
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
 | **Presenting a cursor** | `CursorService.setCursor(...)`, from any thread (the last asked wins) | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
-| The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades: `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCamera`, `CgSounds` — never their slots | `platform/world/` |
+| The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades: `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCameraControl`, `CgSounds` — never their slots | `platform/world/` |
 
 **A slot is read through its facade, never `CgPlatform.get(X.SERVICE)`**: one SPI per concern, one static facade per
 SPI as its only reader, host objects handed out as `<V> V` getters beside ids. CrystalGraphics' `platform/CLAUDE.md`

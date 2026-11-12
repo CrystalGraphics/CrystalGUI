@@ -1,12 +1,12 @@
 package com.crystalgui.app.vfxlab;
 
+import com.crystalgraphics.render.CgRenderer;
 import com.crystalgraphics.platform.rhi.CgExternalTarget;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.texture.CgTextures;
 import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgraphics.gpu.resource.CgTextureDesc;
 import com.crystalgraphics.platform.rhi.format.CgFormat;
-import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.render.stage.CgHostFrame;
@@ -192,7 +192,7 @@ final class VfxViewport extends UIElement {
             target = View.of(width, height);
         }
         // editor_grid.shader's grey.
-        CgImmediate.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 1.0, false, 0);
+        CgRenderer.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 1.0, false, 0);
 
         double atX = x + eyeX, atY = y + eyeY, atZ = z + eyeZ;
         float cosPitch = (float) Math.cos(pitch);
