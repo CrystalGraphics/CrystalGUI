@@ -1,10 +1,9 @@
 package com.crystalgui.style.property.visual.texture;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import java.util.Collection;
-import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
@@ -69,9 +68,9 @@ public final class DrawableKinds {
         }
     }
 
-    // COPY ON WRITE: every document's cascade parses drawables, possibly each on its own thread, while a
-    // consumer may register at any time. Registrations are rare; reads take no lock.
-    private static volatile Map<String, Kind> byId = Collections.emptyMap();
+    // Every document's cascade parses drawables, possibly each on its own thread, while a consumer may
+    // register at any time: a published list, so a read never sees half a registration and takes no lock.
+    private static final Contributions<Kind> KINDS = Contributions.of("drawable-kinds", Kind::id);
 
     static {
         // THE BUILT-INS, in the order they were tried before — order is only visible where two kinds
@@ -98,23 +97,18 @@ public final class DrawableKinds {
     }
 
     /** Adds a kind, or replaces one with the same id. */
-    public static synchronized void register(Kind kind) {
-        Map<String, Kind> next = new LinkedHashMap<>(byId);
-        next.put(kind.id(), kind);
-        byId = Collections.unmodifiableMap(next);
+    public static void register(Kind kind) {
+        KINDS.replace(Owner.PROCESS, kind);
     }
 
     /** Removes a kind by id. For a consumer withdrawing one, and for a test not leaving its own behind. */
-    public static synchronized void unregister(String id) {
-        if (!byId.containsKey(id)) return;
-        Map<String, Kind> next = new LinkedHashMap<>(byId);
-        next.remove(id);
-        byId = Collections.unmodifiableMap(next);
+    public static void unregister(String id) {
+        KINDS.removeIf(kind -> kind.id().equals(id));
     }
 
     /** Every kind, in registration order: a snapshot, not a live view. */
     public static Collection<Kind> all() {
-        return byId.values();
+        return KINDS.all();
     }
 
     /** Which kind {@code css} is, or null when nothing claims it. */
@@ -122,7 +116,7 @@ public final class DrawableKinds {
     public static Kind matching(@Nullable String css) {
         if (css == null) return null;
         String lower = css.trim().toLowerCase(Locale.ROOT);
-        for (Kind kind : byId.values()) {
+        for (Kind kind : KINDS.all()) {
             if (kind.matches().test(lower)) return kind;
         }
         return null;

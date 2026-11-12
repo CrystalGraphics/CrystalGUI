@@ -8504,7 +8504,7 @@ com/crystalgui/render/texture/CgUiRect
   method public withFill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect;
   method public withFillColor (I)Lcom/crystalgui/render/texture/CgUiRect;
   method public withFillSprite (Lcom/crystalgui/render/texture/CgUiSprite;)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withFillTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect;
+  method public withFillTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect;
   method public,static ofColor (I)Lcom/crystalgui/render/texture/CgUiRect;
 com/crystalgui/render/texture/CgUiRect$Draw
   access public,final
@@ -8518,7 +8518,7 @@ com/crystalgui/render/texture/CgUiRect$Draw
   method public fill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public fillColor (I)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public fillSprite (Lcom/crystalgui/render/texture/CgUiSprite;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public fillTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
+  method public fillTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public radii (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public radius (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public size (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -8548,8 +8548,8 @@ com/crystalgui/render/texture/CgUiRect$Fill$Texture
   access public,final,record
   extends java/lang/Record
   implements com/crystalgui/render/texture/CgUiRect$Fill
-  method public <init> (Lcom/crystalgraphics/gl/texture/CgTexture2D;)V
-  method public texture ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
+  method public <init> (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)V
+  method public texture ()Lcom/crystalgraphics/gpu/resource/CgTexture2D;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
@@ -8603,6 +8603,7 @@ com/crystalgui/render/texture/CgUiShape$Kind
 com/crystalgui/render/texture/CgUiSprite
   access public,final
   extends java/lang/Object
+  field public,static,final PIXELS Lcom/crystalgraphics/gpu/resource/CgTextureSettings;
   method public <init> ()V
   method public borderSumX ()F
   method public borderSumY ()F
@@ -8616,7 +8617,7 @@ com/crystalgui/render/texture/CgUiSprite
   method public getBorderTop ()F
   method public getRepeatX ()Lcom/crystalgui/render/texture/CgUiRepeat;
   method public getRepeatY ()Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public getTexture ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
+  method public getTexture ()Lcom/crystalgraphics/gpu/resource/CgTexture2D;
   method public getTint ()I
   method public getU0 ()F
   method public getU1 ()F
@@ -8634,7 +8635,7 @@ com/crystalgui/render/texture/CgUiSprite
   method public setFillCenter (Z)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setRepeat (Lcom/crystalgui/render/texture/CgUiRepeat;Lcom/crystalgui/render/texture/CgUiRepeat;)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setSprite (IIII)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiSprite;
+  method public setTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setTexture (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setTextureSizeReference (II)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setTint (I)Lcom/crystalgui/render/texture/CgUiSprite;
@@ -8684,7 +8685,6 @@ com/crystalgui/render/texture/asset/FileIconTheme
   method public,static getVariant ()Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;
   method public,static invalidateCache ()V
   method public,static of (Ljava/lang/String;)Lcom/crystalgui/render/texture/asset/FileIconTheme;
-  method public,static setVariant (Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)V
   method public,static toResourcePath (Ljava/lang/String;)Ljava/lang/String;
   method public,static withVariant (Ljava/lang/String;)Ljava/lang/String;
   method public,static withVariant (Ljava/lang/String;Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)Ljava/lang/String;
@@ -9511,6 +9511,21 @@ com/crystalgui/style/ScopeGroup
   method public remove (Lcom/crystalgui/style/StyleScope;)V
   method public scopes (Lcom/crystalgui/style/StyleScope;)Z
   method public styleScopeParent ()Lcom/crystalgui/style/StyleScope;
+com/crystalgui/style/StyleContext
+  access public,final
+  extends java/lang/Object
+  field public,static,final PUBLISHED Lcom/crystalgui/core/async/Published;
+  field public,static,final SCHEME Lcom/crystalgui/style/sheet/StyleSheet;
+  field public,static,final THEME Lcom/crystalgui/style/sheet/StyleSheet;
+  method public <init> (Ljava/util/Map;Lcom/crystalgui/style/sheet/StyleSheet;Lcom/crystalgui/style/sheet/StyleSheet;Ljava/lang/String;Ljava/lang/String;Z)V
+  method public light ()Z
+  method public renewed ()Lcom/crystalgui/style/StyleContext;
+  method public resolve (Lcom/crystalgui/style/sheet/StyleSheet;)Lcom/crystalgui/style/sheet/StyleSheet;
+  method public schemeId ()Ljava/lang/String;
+  method public themeId ()Ljava/lang/String;
+  method public variables ()Ljava/util/Map;
+  method public,static current ()Lcom/crystalgui/style/StyleContext;
+  method public,static number ()J
 com/crystalgui/style/StyleEngine
   access public,final
   extends java/lang/Object
@@ -9521,6 +9536,7 @@ com/crystalgui/style/StyleEngine
   method public calculateStyle (F)V
   method public classDescendantKeysFrom (Ljava/lang/String;)Ljava/util/Set;
   method public computedChanged (Lcom/crystalgui/style/Styleable;)V
+  method public effectiveSheets ()Ljava/util/List;
   method public getSheets ()Ljava/util/List;
   method public getSheets (Lcom/crystalgui/style/StyleScope;)Ljava/util/List;
   method public getTransitionEngine ()Lcom/crystalgui/style/transition/TransitionEngine;
@@ -9541,7 +9557,6 @@ com/crystalgui/style/StyleEngine
   method public,static carriesAny (Lcom/crystalgui/style/Styleable;Ljava/util/Set;)Z
   method public,static declarationIndexOf (J)I
   method public,static reloadStylesheets ()I
-  method public,static restyleAllWindows ()I
   method public,static ruleOrderOf (J)I
   method public,static sheetIndexOf (J)I
 com/crystalgui/style/StyleGroup
@@ -10740,16 +10755,19 @@ com/crystalgui/style/sheet/StyleSheet
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT Lcom/crystalgui/style/sheet/StyleSheet;
+  method public bound (Ljava/util/Map;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public candidatesFor (Lcom/crystalgui/style/Styleable;)Ljava/util/List;
   method public classDescendantsFrom (Ljava/lang/String;)Ljava/util/Set;
   method public getOrigin ()Lcom/crystalgui/style/StyleOrigin;
   method public getRules ()Ljava/util/List;
   method public hasUnboundedStateDescendants ()Z
   method public refillFrom (Lcom/crystalgui/style/sheet/StyleSheet;)V
+  method public sameSourceAs (Lcom/crystalgui/style/sheet/StyleSheet;)Z
   method public source ()Ljava/lang/String;
   method public stateDescendantKeys ()Ljava/util/Set;
   method public stateDescendantsFrom (Ljava/lang/String;)Ljava/util/Set;
   method public stateDescendantsFromAnyAncestor ()Ljava/util/Set;
+  method public usesVariables ()Z
   method public warmValues ()V
   method public,static parse (Ljava/lang/String;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static parse (Ljava/lang/String;Ljava/util/Map;)Lcom/crystalgui/style/sheet/StyleSheet;
@@ -10758,8 +10776,6 @@ com/crystalgui/style/sheet/StyleSheetRegistry
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT_SHEET_PARTS Ljava/util/List;
-  method public,static bindVariables (Ljava/util/Map;)V
-  method public,static boundVariables ()Ljava/util/Map;
   method public,static of (Ljava/lang/String;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static reloadAll ()I
 com/crystalgui/style/sheet/source/CssEdits
@@ -10873,11 +10889,9 @@ com/crystalgui/style/theme/UiThemeManager
   method public overrides ()Ljava/util/Map;
   method public reloadFromDisk ()I
   method public resetForTesting ()V
-  method public schemeSheet ()Lcom/crystalgui/style/sheet/StyleSheet;
   method public setOverrides (Ljava/util/Map;)V
   method public setScheme (Ljava/lang/String;)Z
   method public setTheme (Ljava/lang/String;)Z
-  method public themeSheet ()Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static getInstance ()Lcom/crystalgui/style/theme/UiThemeManager;
 com/crystalgui/style/transition/ActiveTransition
   access public,final,record

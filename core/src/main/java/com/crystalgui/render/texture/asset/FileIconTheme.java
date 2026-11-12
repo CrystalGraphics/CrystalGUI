@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture.asset;
 
+import com.crystalgui.style.StyleContext;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
 import com.crystalgraphics.serialization.format.CgFiles;
@@ -126,40 +127,15 @@ public final class FileIconTheme {
         }
     }
 
-    /**
-     * Which drawing of each icon is in use — <b>driven by the active theme's {@code @kind}</b>.
-     *
-     * <p>This field carried a note saying it was provisional because "there is no editor-theme concept
-     * yet, so there is nothing for an icon variant to be a property <em>of</em>". Themes have landed, and
-     * {@code UiThemeManager} now sets this on every swap. It stays a <em>static</em> rather than becoming
-     * a field on the theme, because that note's other half still holds: the consumers are static
-     * utilities ({@link #withVariant}, {@link #classFor}) reached from row-binding code that has no theme
-     * in hand, and threading one through them would be plumbing in service of a purity nothing needs.
-     * One global switch remains the honest representation of "the whole application is light or dark".</p>
-     *
-     * <p>{@code volatile} because a theme switch does not happen on the render thread and a stale read
-     * would show one row's icon from the old variant.</p>
-     *
-     * <p><b>A change here is picked up without rebinding anything</b>, and that is deliberate. It used to
-     * need it — the variant was applied when a drawable was built, so an icon outlived the theme it was
-     * resolved under, and the answer was for {@code WorkbenchSettings.apply} to refresh the file tree by
-     * hand. That is a contract whose second half fails silently: it covered the one consumer somebody
-     * remembered, while the editor tabs, the rail, the breadcrumbs and the Problems panel all kept the
-     * old drawing. {@link CgUiSvg#ofIcon} resolves the variant at DRAW time instead, so every consumer is
-     * correct without knowing this field exists — the same late-binding {@code currentColor} already
-     * uses, and for the same reason: the drawable outlives the state it depends on.</p>
-     */
-    private static volatile Variant variant = Variant.DARK;
-
     /** Icon name → whether that name's file is actually on disk; see {@link #withVariant}. */
     private static final ConcurrentHashMap<String, Boolean> DARK_VARIANTS = new ConcurrentHashMap<>();
 
+    /**
+     * Which drawing of each icon is in use: the light set under a light theme, the dark one otherwise. Read from the
+     * current style generation at draw time, so a drawable resolved under one theme is correct under the next.
+     */
     public static Variant getVariant() {
-        return variant;
-    }
-
-    public static void setVariant(Variant newVariant) {
-        variant = Objects.requireNonNull(newVariant, "variant");
+        return StyleContext.current().light() ? Variant.LIGHT : Variant.DARK;
     }
 
     /**
@@ -181,7 +157,7 @@ public final class FileIconTheme {
      */
     @Nullable
     public static String withVariant(@Nullable String iconName) {
-        return withVariant(iconName, variant);
+        return withVariant(iconName, getVariant());
     }
 
     /**

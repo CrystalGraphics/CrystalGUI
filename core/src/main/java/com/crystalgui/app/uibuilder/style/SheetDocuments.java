@@ -15,6 +15,7 @@ import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.style.StyleContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.TextBuffer;
@@ -295,7 +296,7 @@ public final class SheetDocuments {
 
     /** Parsed against the bound theme variables, so a sheet's {@code var()} reads what the theme set. */
     private static StyleSheet parse(String text) {
-        return StyleSheet.parse(text, StyleSheetRegistry.boundVariables());
+        return StyleSheet.parse(text, StyleContext.current().variables());
     }
 
     /**

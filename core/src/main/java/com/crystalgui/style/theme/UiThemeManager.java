@@ -3,11 +3,10 @@ package com.crystalgui.style.theme;
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.texture.asset.FileIconTheme;
+import com.crystalgui.style.StyleContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.sheet.DeclarationParser;
 import com.crystalgui.style.sheet.StyleSheet;
-import com.crystalgui.style.sheet.StyleSheetRegistry;
 import org.jetbrains.annotations.Nullable;
 
 import java.util.ArrayDeque;
@@ -20,27 +19,22 @@ import java.util.Objects;
 import java.util.Set;
 
 /**
- * The owner the sheet stack never had — the one object that answers "what sheets does a themed
- * window run, in what order", and the only sanctioned caller of the swap primitives.
+ * The active theme, the editor scheme and the user's token overrides, and the one place that turns them into a
+ * {@link StyleContext}.
  *
- * <h3>The canonical stack</h3>
- * <p>{@link StyleSheet#DEFAULT} → {@code themeSheet} → {@code schemeSheet} → the app's own sheets
- * ({@code plan/style-overhaul.md} §3.3). The two sheets this class owns are <b>stable instances whose
- * rules are swapped in place</b> ({@link StyleSheet#refillFrom}), never removed and re-added — the
- * sheet <em>list</em> of an installed engine does not change across a swap, which is what keeps
- * "re-adding appends at highest priority" out of the picture by construction.</p>
+ * <pre>{@code
+ * UiThemeManager themes = UiThemeManager.getInstance();
+ * themes.installInto(document.styles());   // once per document: user-agent, theme, scheme
+ * themes.setTheme("crystal-light");        // publishes the next generation; each document adopts it at its next frame
+ * }</pre>
  *
- * <h3>What a swap is</h3>
- * <p>Variable tables of the inheritance chain (root-first) and the active scheme merge, resolve to
- * a fixed point once ({@link DeclarationParser#resolveTable}), and bind through
- * {@link StyleSheetRegistry#bindVariables} — which re-substitutes every registered sheet in place,
- * no I/O. The chain's override <em>rules</em> re-parse against that same table into
- * {@code themeSheet} (one parse over the concatenated chain sources, so a child's equal-specificity
- * rule beats its parent's by ordinary source order). Then every live window re-matches, once.</p>
+ * <p>The stack is {@link StyleSheet#DEFAULT} → {@link StyleContext#THEME} → {@link StyleContext#SCHEME} → the
+ * document's own sheets. A switch merges the variable tables of the inheritance chain (root-first) and the scheme,
+ * resolves them to a fixed point once, parses the chain's override rules against that table, and publishes the
+ * result; nothing is rewritten in place and no document is told to restyle.</p>
  *
- * <p>Process-global on purpose — sheets are shared instances, so per-window divergence needs
- * per-window copies; the plan defers that until the in-game ore-dialogs-beside-crystal-dark case
- * actually lands.</p>
+ * <p>Easy to get wrong: the sheets' own text is unthemed. A sheet read outside a document's engine shows the
+ * fallbacks of its {@code var()}s; resolve it through {@link StyleContext#resolve}.</p>
  */
 public final class UiThemeManager {
 
@@ -53,11 +47,6 @@ public final class UiThemeManager {
     /** Fired after a successful theme or scheme change, once every live window is invalidated —
      * what a Preferences page listens to for its dropdown state. */
     public final Signal.Action onChanged = new Signal.Action();
-
-    /** The active theme's override rules — stack slot 4. Stable identity; contents swap. */
-    private final StyleSheet themeSheet = StyleSheet.parse("", Map.of());
-    /** The active editor scheme's rules — stack slot 5. Stable identity; contents swap. */
-    private final StyleSheet schemeSheet = StyleSheet.parse("", Map.of());
 
     @Nullable
     private UiTheme activeTheme;
@@ -89,14 +78,6 @@ public final class UiThemeManager {
         return activeScheme == null ? null : activeScheme.id();
     }
 
-    public StyleSheet themeSheet() {
-        return themeSheet;
-    }
-
-    public StyleSheet schemeSheet() {
-        return schemeSheet;
-    }
-
     /**
      * Adds the canonical stack to {@code engine} — idempotent, so a host that already added
      * {@link StyleSheet#DEFAULT} itself is not double-registered. App sheets go on after this,
@@ -104,16 +85,11 @@ public final class UiThemeManager {
      */
     public void installInto(StyleEngine engine) {
         List<StyleSheet> present = engine.getSheets();
-        boolean addedTheme = !present.contains(themeSheet);
+        boolean added = !present.contains(StyleContext.THEME);
         if (!present.contains(StyleSheet.DEFAULT)) engine.addStylesheet(StyleSheet.DEFAULT);
-        if (addedTheme) engine.addStylesheet(themeSheet);
-        if (!present.contains(schemeSheet)) engine.addStylesheet(schemeSheet);
-        // SAID ONCE PER ENGINE, because an engine that never had this called on it is the one state a
-        // swap cannot recover from and cannot report: `apply()` would re-substitute every sheet, refill
-        // the user-agent sheet and restyle every window, all correctly, and this window would still show
-        // none of it -- its engine simply does not hold the theme sheet. `WorkbenchSettings.apply` only
-        // calls this when the workbench HAS a window, and nothing re-runs it when one arrives.
-        if (addedTheme) {
+        if (added) engine.addStylesheet(StyleContext.THEME);
+        if (!present.contains(StyleContext.SCHEME)) engine.addStylesheet(StyleContext.SCHEME);
+        if (added) {
             CrystalGuiCore.LOGGER.info("theme stack installed into a style engine (sheets now {})",
                     engine.getSheets().size());
         }
@@ -197,23 +173,9 @@ public final class UiThemeManager {
     }
 
     /**
-     * Deactivates both axes, drops the overrides, and unbinds the table — the pristine sheets.
-     *
-     * <h3>A theme swap is process-wide, and nothing calls this by itself</h3>
-     *
-     * <p>This is a singleton, and {@link StyleSheetRegistry#bindVariables} re-substitutes every cached
-     * sheet <em>in place</em> — {@link StyleSheet#DEFAULT} included, which is a {@code static final}
-     * refilled rather than replaced, precisely so existing registrations stay valid. So one test that
-     * builds anything applying settings ({@code WorkbenchSettings.install} calls {@code setTheme} and
-     * {@code setScheme}) permanently changes what every LATER test in that JVM resolves
-     * {@code var(--x, fallback)} to.</p>
-     *
-     * <p>Which made the editor suite flaky at about one run in four, because class order is not stable:
-     * {@code theResetLinkIsStyledAsALink} asserts {@code #4A9EFF}, the unthemed fallback of
-     * {@code --editor-zoom-link}, and got {@code #548AF7} — islands-dark's value for that same token —
-     * whenever a theming test happened to run first.</p>
-     *
-     * <p>The method is not new; <b>calling it from a fixture that asserts on style is</b>.</p>
+     * Deactivates both axes, drops the overrides and publishes the pristine generation. Nothing calls this by
+     * itself: a theme is process-wide, so a test that applies one changes what every later test in the JVM
+     * resolves {@code var(--x, fallback)} to, and a fixture that asserts on style resets it.
      */
     public void resetForTesting() {
         activeTheme = null;
@@ -227,8 +189,8 @@ public final class UiThemeManager {
      * and the call a host pairs with {@code StyleEngine.reloadStylesheets()}.
      *
      * <p>Both halves are needed and neither covers the other. A stylesheet reload re-reads the sheets
-     * and re-substitutes them against {@code boundVariables}, which is the table the active theme
-     * produced <em>when it was last applied</em> — so an edited token is invisible. This re-reads the
+     * and re-substitutes them against the variables of the generation published <em>when the theme was last
+     * applied</em> — so an edited token is invisible. This re-reads the
      * theme, rebinds the table and restyles; the sheets keep the rules they already had.</p>
      *
      * <p>Three things go stale here and only one is obvious. The registry entries are replaced by
@@ -272,44 +234,28 @@ public final class UiThemeManager {
         if (activeScheme != null) merged.putAll(activeScheme.variables());
         merged.putAll(overrides);
 
-        StyleSheetRegistry.bindVariables(DeclarationParser.resolveTable(merged));
-
-        // The file-type icons are DRAWINGS, not tinted glyphs — JetBrains ships each one twice because a
-        // filled multi-colour shape cannot be recoloured for the opposite background the way a monochrome
-        // stroke can. So the icon set follows the theme's declared kind rather than any token, and this is
-        // the one place that knows the kind changed. Unthemed keeps the DARK drawings, matching the ua/
-        // fallbacks' own dark-first look.
-        FileIconTheme.setVariant(activeTheme != null && activeTheme.kind() == UiTheme.Kind.LIGHT
-                ? FileIconTheme.Variant.LIGHT
-                : FileIconTheme.Variant.DARK);
+        Map<String, String> table = DeclarationParser.resolveTable(merged);
 
         // One parse over the concatenated chain, root-first — cross-link source order falls out of
         // the single parse instead of needing rules renumbered by hand.
         StringBuilder themeCss = new StringBuilder();
         for (UiTheme link : chain) themeCss.append(link.source()).append('\n');
-        themeSheet.refillFrom(StyleSheet.parse(themeCss.toString()));
-        schemeSheet.refillFrom(StyleSheet.parse(activeScheme == null ? "" : activeScheme.source()));
+        StyleSheet theme = StyleSheet.parse(themeCss.toString(), table);
+        StyleSheet scheme = StyleSheet.parse(activeScheme == null ? "" : activeScheme.source(), table);
+        // The file-type icons are DRAWINGS, not tinted glyphs: a filled multi-colour shape cannot be recoloured
+        // for the opposite ground, so the set follows the theme's declared kind. Unthemed keeps the dark set.
+        boolean light = activeTheme != null && activeTheme.kind() == UiTheme.Kind.LIGHT;
 
-        int restyled = StyleEngine.restyleAllWindows();
+        StyleContext.PUBLISHED.update(old -> new StyleContext(table, theme, scheme, activeThemeId(),
+                activeSchemeId(), light));
 
-        // ONE LINE PER SWAP, AND IT IS NOT DEBUG NOISE.
-        //
-        // A theme swap has five things that can each be individually fine while the screen does not
-        // change, and from outside they are indistinguishable: the theme resolved to nothing, the
-        // variable table came out empty, the sheet re-parsed to no rules, the user-agent sheet was not
-        // refilled (it is a rules-COPY of the cached one, and the refill is skipped when the cache has
-        // no entry -- `StyleSheetRegistry.of` does not cache a MISS), or there was no live engine to
-        // restyle. "Nothing happened" is the report for all five.
-        //
-        // Reported because this is the shape that only appears across the loader seam: theme switching
-        // works in the harness, which resolves sheets from source directories, and does nothing in a
-        // client, which resolves them through the resource manager. A swap happens when a person picks
-        // one, so this costs a line an hour at worst.
-        CrystalGuiCore.LOGGER.info(
-                "theme swap: theme={} scheme={} vars={} themeRules={} schemeRules={} uaRules={} engines={}",
+        // ONE LINE PER SWAP: a swap has several parts that can each be fine while the screen does not change
+        // (the theme resolved to nothing, the table came out empty, a sheet parsed to no rules), and from
+        // outside they are indistinguishable. Seen across the loader seam, where sheets resolve through the
+        // resource manager and a swap that works in the harness can do nothing.
+        CrystalGuiCore.LOGGER.info("theme swap: theme={} scheme={} vars={} themeRules={} schemeRules={}",
                 activeThemeId(), activeSchemeId(), merged.size(),
-                themeSheet.getRules().size(), schemeSheet.getRules().size(),
-                StyleSheet.DEFAULT.getRules().size(), restyled);
+                theme.getRules().size(), scheme.getRules().size());
 
         onChanged.emit();
     }

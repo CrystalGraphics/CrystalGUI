@@ -5,6 +5,7 @@ import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
+import com.crystalgui.style.StyleContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.StyleOrigin;
 import com.crystalgui.style.selector.Selector;
@@ -140,17 +141,15 @@ public final class StyleSheet {
     }
 
     /**
-     * The CSS text this sheet was parsed from — retained so the sheet can be <b>re-substituted
-     * in place</b> against a different external variable table ({@link #rebind}), which is what a
-     * theme swap is. {@code null} only for rule-copy instances ({@link #DEFAULT}), which the
-     * registry refills by mirroring the cached source sheet instead.
+     * The CSS text this sheet was parsed from — retained so the sheet can be {@linkplain #bound bound}
+     * to a different variable table, which is what a theme switch is.
      *
      * <p>Deliberately kept in memory rather than re-read through {@code CgIO} on demand: a theme
      * swap must not depend on the resource still being readable, and inline sheets
      * ({@code StyleSheet.parse(...)} in a scene or test) have no path to re-read from at all.</p>
      */
     private String rawSource;
-    /** {@link #rawSource} compiled, what {@link #rebind} builds from; null exactly when it is. */
+    /** {@link #rawSource} compiled, what {@link #bound} builds from; null exactly when it is. */
     @Nullable private Compiled compiled;
 
     private StyleSheet(List<StyleRule> rules) {
@@ -168,13 +167,12 @@ public final class StyleSheet {
     }
 
     /**
-     * Parses {@code source} against the registry's currently {@linkplain
-     * StyleSheetRegistry#boundVariables() bound variable table} — so a sheet parsed while a theme
-     * is active resolves the theme's tokens, regardless of load order. With no theme bound the
-     * table is empty and only the sheet's own variables apply.
+     * Parses {@code source} against the {@linkplain StyleContext#variables() variables of the current
+     * generation} — so a sheet parsed while a theme is active resolves the theme's tokens, regardless of load
+     * order. With no theme the table is empty and only the sheet's own variables apply.
      */
     public static StyleSheet parse(String source) {
-        return parse(source, StyleSheetRegistry.boundVariables());
+        return parse(source, StyleContext.current().variables());
     }
 
     /**
@@ -187,6 +185,14 @@ public final class StyleSheet {
     public static StyleSheet parse(String source, Map<String, String> externalVariables) {
         Compiled compiled = Compiled.of(source);
         StyleSheet sheet = new StyleSheet(compiled.rules(externalVariables));
+        sheet.rawSource = source;
+        sheet.compiled = compiled;
+        return sheet;
+    }
+
+    private static StyleSheet parseAs(String source, Map<String, String> externalVariables, StyleOrigin origin) {
+        Compiled compiled = Compiled.of(source);
+        StyleSheet sheet = new StyleSheet(compiled.rules(externalVariables), origin);
         sheet.rawSource = source;
         sheet.compiled = compiled;
         return sheet;
@@ -239,6 +245,14 @@ public final class StyleSheet {
                 rules.add(new Rule(selectors, raw, fixed));
             }
             return new Compiled(locals, rules);
+        }
+
+        /** Whether any declaration names a {@code var()}, so a different table can change a rule. */
+        boolean usesVariables() {
+            for (Rule rule : rules) {
+                if (rule.fixed().contains(null)) return true;
+            }
+            return false;
         }
 
         /** The rules, {@code var()} resolved against the locals merged over {@code externalVariables}. */
@@ -481,14 +495,16 @@ public final class StyleSheet {
      * forever, a packaging slip would otherwise surface only as every widget silently laying out at
      * 0x0 — which is precisely the failure this file exists to prevent. */
     private static StyleSheet loadUserAgentSheet() {
-        StyleSheet sheet = StyleSheetRegistry.of(StyleSheetRegistry.DEFAULT_SHEET);
+        String css = StyleSheetRegistry.sourceOf(StyleSheetRegistry.DEFAULT_SHEET);
+        // Unthemed: its own fallbacks. A theme reaches a document through StyleContext#resolve, never through this.
+        StyleSheet sheet = parseAs(css == null ? "" : css, Map.of(), StyleOrigin.USER_AGENT);
         if (sheet.getRules().isEmpty()) {
             CrystalGuiCore.LOGGER.error(
                     "StyleSheet.DEFAULT is EMPTY — every 'assets/crystalgui/ui/styles/ua/*.css' part is "
                             + "missing or failed to parse. Widgets have no default geometry and will lay "
                             + "out at zero size.");
         }
-        return new StyleSheet(sheet.getRules(), StyleOrigin.USER_AGENT);
+        return sheet;
     }
 
     /** Values a worker computes ahead of the first style pass, in chunks of this many. */
@@ -562,16 +578,26 @@ public final class StyleSheet {
         for (var rule : rules) index(rule);
     }
 
+    /** Whether {@code other} was built from the same compiled text as this sheet. */
+    public boolean sameSourceAs(StyleSheet other) {
+        return compiled == other.compiled;
+    }
+
+    /** Whether a different variable table could change a rule of this sheet. */
+    public boolean usesVariables() {
+        return compiled != null && compiled.usesVariables();
+    }
+
     /**
-     * Re-substitutes this sheet's retained source against {@code externalVariables} and swaps the
-     * rules in place — the <b>theme-binding</b> operation. No I/O; identity-stable, so every window
-     * holding this sheet sees the new values with no re-registration (the same guarantee
-     * {@link #replaceRules} documents). No-op for rule-copy instances with no source
-     * ({@link #DEFAULT} — the registry mirrors it from the cached source sheet instead).
+     * This sheet's text bound to {@code variables}, as a new sheet at the same origin; this one, unchanged, when no
+     * rule names a {@code var()}. What {@link StyleContext#resolve} builds, once per generation.
      */
-    void rebind(Map<String, String> externalVariables) {
-        if (compiled == null) return;
-        replaceRules(compiled.rules(externalVariables));
+    public StyleSheet bound(Map<String, String> variables) {
+        if (!usesVariables()) return this;
+        StyleSheet sheet = new StyleSheet(compiled.rules(variables), origin);
+        sheet.rawSource = rawSource;
+        sheet.compiled = compiled;
+        return sheet;
     }
 
     /**
@@ -598,9 +624,10 @@ public final class StyleSheet {
 
     /**
      * Public identity-stable swap: adopts {@code freshlyParsed}'s rules and source, keeping
-     * <em>this</em> instance — for holders like {@code UiThemeManager} whose sheets live in engine
-     * lists and must never be re-registered. The parsed argument is a carrier, not a peer: parse
-     * into a throwaway, hand it here, drop it.
+     * <em>this</em> instance — for a sheet its one owner edits (a document's own sheet, in the UI builder), which
+     * lives in an engine's list and must not be re-registered. Never for a sheet shared between documents. The
+     * parsed argument is a carrier: parse into a throwaway, hand it here, drop it, then ask the engine to
+     * {@code invalidateAllMatches()}.
      */
     public void refillFrom(StyleSheet freshlyParsed) {
         this.rawSource = freshlyParsed.rawSource;

@@ -29,8 +29,12 @@ Three tiers of tokens (Material 3's ref/sys/comp, by their names):
 
 Every colour in an engine sheet is spelled `var(--token, #fallback)` — the fallback is the
 themeless resting value, so `StyleSheet.DEFAULT` alone still renders a complete, functional UI.
-A theme swap rebinds every sheet **in place** (`UiThemeManager` → `StyleSheetRegistry
-.bindVariables`), so no engine's sheet list ever changes.
+A theme switch publishes the next `StyleContext` generation (`UiThemeManager.apply`): the resolved
+tokens, the theme's and the scheme's rules, and — built once on first use and shared by every document —
+each sheet that names a `var()` bound to those tokens. Nothing is rewritten in place. A document adopts the
+generation at its next frame (`StyleEngine.calculateStyle`), so a document is never half one theme.
+`StyleSheet.DEFAULT` and every registry sheet stay the unthemed text; read one outside a document's engine and you
+see the fallbacks, so resolve it with `StyleContext.current().resolve(sheet)`.
 
 ## 2. How a theme reaches a widget — three depths
 
