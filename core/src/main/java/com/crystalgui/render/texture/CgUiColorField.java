@@ -76,16 +76,6 @@ public final class CgUiColorField implements CgUiDrawable {
 
     /** The drawn box's size, for {@link #writeProperties}. Per-draw scratch, not part of the value. */
     private float drawWidth, drawHeight;
-    /** {@link #writeProperties}, held once: a lambda over the draw's values would be a capture per element per frame. */
-    // Linked on the first DRAW, never at construction: the method type of `this::writeProperties`
-    // names CgMaterialValues, so resolving it loads a CrystalGraphics CORE class. A dedicated server
-    // builds drawables and never paints, which is what headlessTest asserts by running without core.
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter;
-
-    private java.util.function.Consumer<CgMaterialValues> propertyWriter() {
-        if (propertyWriter == null) propertyWriter = this::writeProperties;
-        return propertyWriter;
-    }
 
     public CgUiColorField setMode(Mode value) {
         this.mode = value == null ? Mode.GRADIENT : value;
@@ -146,7 +136,7 @@ public final class CgUiColorField implements CgUiDrawable {
                      float x, float y, float width, float height) {
         drawWidth = width;
         drawHeight = height;
-        propertyWriter().accept(material());
+        writeProperties(material());
         ctx.quad(material()).at(x, y).size(width, height).color(ctx.getColor()).submit();
     }
 

@@ -362,7 +362,7 @@ public final class CgUiPaintContext {
      * set them; set them before this call, since the quad takes them when it is submitted.
      *
      * <pre>{@code
-     * material.applyProperties(writeStops);
+     * material.set1f("_Angle", angle);   // its own instance
      * ctx.quad(material).at(x, y).size(w, h).color(ctx.getColor()).submit();
      * }</pre>
      *
