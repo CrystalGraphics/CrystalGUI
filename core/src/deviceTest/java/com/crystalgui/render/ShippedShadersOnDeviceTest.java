@@ -1,6 +1,5 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.api.CgBindingPoints;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.material.CgRenderPassVariant;
 import com.crystalgraphics.material.CgMaterialShader;
@@ -42,7 +41,6 @@ public class ShippedShadersOnDeviceTest {
         new CgNullRHI(64, 64).install(new ExplicitBindingCheck(compiler, bare));
         CgCapabilities.clearCache();
         // CgEngineLifecycle.ensureGraphicsContext's own steps, less the platform it would ask for a device.
-        CgBindingPoints.init(CgCapabilities.detect());
         CgFallbackTextures.init();
     }
 
