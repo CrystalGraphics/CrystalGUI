@@ -156,6 +156,22 @@ public class PopupPlacementTest extends UiDocumentTestBase {
     }
 
     @Test
+    public void thePointerLeavingAMenuForTheDesktopIsToldToTheApplication() {
+        openMenu();
+        Box window = application.active().box();
+        float[] centre = menuCentrePixels();
+        move(window.worldX() + centre[0], window.worldY() + centre[1]);
+        frame();
+        frame();
+        backend.mouse.clear();
+        move(2f, 2f);                                   // off every window of the application
+        frame();
+        assertTrue("the application heard the pointer go", !backend.mouse.isEmpty());
+        CgSystemInput.Mouse.Event last = backend.mouse.get(backend.mouse.size() - 1);
+        assertTrue("and where it went, not where it was", Math.abs(last.x() - centre[0]) > 20f);
+    }
+
+    @Test
     public void thePointerOverAMenuReachesTheApplicationOverTheSameSpot() {
         openMenu();
         Box window = application.active().box();
