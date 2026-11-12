@@ -69,7 +69,7 @@ final class VfxViewport extends UIElement {
         static View of(int width, int height) {
             CgTexture2D colour = CgTextures.of("vfx_lab_viewport", CgTextureDesc.of(width, height, CgFormat.RGBA8_UNORM));
             CgTexture2D depth = CgTextures.of("vfx_lab_viewport.depth",
-                    CgTextureDesc.of(width, height, CgFormat.DEPTH24_PLUS_STENCIL8));
+                    CgTextureDesc.of(width, height, CgFormat.DEPTH32_FLOAT_STENCIL8));
             return new View(colour, depth, CgTextures.target("vfx_lab_viewport", colour, depth));
         }
 
@@ -192,7 +192,7 @@ final class VfxViewport extends UIElement {
             target = View.of(width, height);
         }
         // editor_grid.shader's grey.
-        CgRenderer.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 1.0, false, 0);
+        CgRenderer.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 0.0, false, 0);
 
         double atX = x + eyeX, atY = y + eyeY, atZ = z + eyeZ;
         float cosPitch = (float) Math.cos(pitch);
