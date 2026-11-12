@@ -254,7 +254,7 @@ public final class CgUiPaintContext {
             if (frameTarget != null) recording.release(frameTarget);
             frameTarget = requestTexture("cgui_frame", w, h, LAYER_FORMAT);
         }
-        recorder.recordInto(recording, frameTarget, CgLoad.clear(0f, 0f, 0f, 0f), camera);
+        recorder.recordInto(recording, frameTarget, CgLoad.CLEAR, camera);
         frameActive = true;
     }
 
@@ -1208,7 +1208,7 @@ public final class CgUiPaintContext {
             CgTrace.add(UiTrace.FRAME, "layer-clear-kpx",
                     (region == null ? width * height : region.width() * region.height()) / 1000);
         }
-        recorder.recordInto(recording, target, clear ? CgLoad.clear(0f, 0f, 0f, 0f) : CgLoad.load(), camera);
+        recorder.recordInto(recording, target, clear ? CgLoad.CLEAR : CgLoad.load(), camera);
         return target;
     }
 
