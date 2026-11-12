@@ -1,9 +1,12 @@
 package com.crystalgui.desktop.app;
 
+import java.util.function.DoubleConsumer;
+
 import javax.annotation.Nullable;
 
 import com.crystalgui.render.Surface;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 
 /**
@@ -24,10 +27,15 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
 
     /** What puts it in a surface and at the document's corner; installed with the document. */
     public static final String SHEET = ".__client__ { position: absolute; left: 0px; top: 0px; will-change: transform; }"
-            + " .__client-front__ { z-index: 1; }";
+            + " .__client-front__ { z-index: 1; }"
+            + " .__client-caption__ { flex-direction: row; align-items: center; }";
+
+    /** What the sheets address it by. */
+    public static final Name NAME = Name.of("clientroot");
 
     private static final String CLASS = "__client__";
     private static final String FRONT = "__client-front__";
+    private static final String CAPTION = "__client-caption__";
 
     @Nullable
     private volatile Surface surface;
@@ -37,15 +45,39 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
     private long seenRevision = -1L;
     @Nullable
     private volatile Runnable changed;
+    @Nullable
+    private volatile DoubleConsumer contentWidth;
+    private float seenWidth = -1f;
 
     public ClientRoot() {
+        super(NAME);
         addClass(CLASS);
+    }
+
+    /**
+     * Makes this the client of a window's caption: its content is a row at its natural width, and {@code width} hears
+     * that width after each commit it changes in, so the frame can give the caption exactly that much room.
+     *
+     * <pre>{@code
+     * ClientRoot bar = new ClientRoot();
+     * bar.setContent(menuBar);
+     * bar.captionOf(w -> portal.setWidth(w));
+     * }</pre>
+     */
+    void captionOf(DoubleConsumer width) {
+        this.contentWidth = width;
+    }
+
+    /** Lays its content out as a caption's bar: a row at its natural width. The application's thread. */
+    void asCaption() {
+        addClass(CAPTION);
     }
 
     /** Shows {@code root} here, in place of what was. The application's thread. */
     public void setContent(@Nullable UIElement root) {
         if (content == root) return;
-        removeAll();
+        // ONLY WHAT IT SHOWED: the floats a workbench put over it are not its content.
+        if (content != null) remove(content);
         content = root;
         if (root != null) append(root);
     }
@@ -83,6 +115,15 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
 
     /** The application's thread, after each commit of its document. */
     void committed() {
+        DoubleConsumer width = contentWidth;
+        if (width != null && content != null) {
+            Box bar = content.box();
+            float now = bar == null ? 0f : bar.width();
+            if (now != seenWidth) {
+                seenWidth = now;
+                width.accept(now);
+            }
+        }
         Box box = box();
         long revision = box == null ? -1L : box.innerRevision();
         if (revision == seenRevision) return;

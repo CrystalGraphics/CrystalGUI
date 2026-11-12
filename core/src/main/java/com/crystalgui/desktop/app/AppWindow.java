@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -108,9 +109,32 @@ public final class AppWindow {
      * window's menu bar, so pass it here rather than appending it to {@link #content()}.
      */
     public AppWindow setContent(UIElement root) {
-        if (client != null) client.setContent(root);
-        else frame.setContent(root);
+        if (client != null) {
+            client.setContent(root);
+            if (root instanceof WindowChrome provider) adoptCaption(provider);
+        } else {
+            frame.setContent(root);
+        }
         return this;
+    }
+
+    /**
+     * Gives the caption the bar of an application in its own document, which cannot be moved across documents: the bar
+     * gets a client of its own, shown by a portal in the caption, so the window has one header and not two.
+     */
+    private void adoptCaption(WindowChrome provider) {
+        UIElement bar = provider.captionChrome();
+        if (bar == null || document == null) return;
+        ClientRoot captionClient = new ClientRoot();
+        captionClient.asCaption();
+        bar.addClass(WindowFrame.ADOPTED_CHROME_CLASS);
+        captionClient.setContent(bar);
+        document.addClient(captionClient);
+        onShell(() -> {
+            ClientPortal portal = new ClientPortal(document, captionClient, true);
+            frame.addClass(WindowFrame.ADOPTED_CLASS);
+            frame.adoptChrome(() -> portal);
+        });
     }
 
     /** The title shown in the caption, the taskbar and the switcher. */

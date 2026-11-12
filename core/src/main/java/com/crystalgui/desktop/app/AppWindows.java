@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * An application's windows: where it opens them, and how it finds them again. Reached with
@@ -62,19 +63,30 @@ public final class AppWindows {
     }
 
     /**
-     * Puts a window the workbench built (a torn-out tab, a tool window) on the desktop of {@code document}, as a window
-     * of its own that is not an application's main window.
+     * Puts a window the workbench built (a torn-out tab, a tool window) beside {@code anchor}, as a window that is not an
+     * application's main window.
      *
      * <pre>{@code
      * DockWindow torn = new DockWindow(area, layout, title);
-     * AppWindows.addFloat(area.document(), torn);
+     * AppWindows.addFloat(area, torn);
      * }</pre>
      *
-     * <p>For code that builds its own {@link WindowFrame} subclass, which only the workbench's floats do; everything
-     * else opens a window with {@link #open}.</p>
+     * <ul>
+     *   <li>An anchor in an application's own document gets a float in that document, over the window it is in and kept
+     *       inside it: its content cannot leave the thread that owns it.</li>
+     *   <li>Any other anchor gets a window of the desktop of its document.</li>
+     *   <li>For code that builds its own {@link WindowFrame} subclass, which only the workbench's floats do; everything
+     *       else opens a window with {@link #open}.</li>
+     * </ul>
      */
-    public static <T extends WindowFrame> T addFloat(UIDocument document, T frame) {
-        return Desktop.of(document).addWindow(frame);
+    public static <T extends WindowFrame> T addFloat(UIElement anchor, T frame) {
+        for (UIElement node = anchor; node != null; node = node.parentElement()) {
+            if (node instanceof ClientRoot client) {
+                client.append(frame);
+                return frame;
+            }
+        }
+        return Desktop.of(anchor.document()).addWindow(frame);
     }
 
     static AppWindow open(Desktop desktop, @Nullable ApplicationKind kind, @Nullable AppDocument document,

@@ -410,7 +410,11 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
                 try {
                     content.paint(ctx);
                 } catch (RuntimeException | LinkageError failed) {
-                    ctx.abortFrame();
+                    try {
+                        ctx.abortFrame();
+                    } catch (RuntimeException | LinkageError aborting) {
+                        failed.addSuppressed(aborting);   // the paint's own failure is the one to report
+                    }
                     throw failed;
                 }
                 frame = ctx.seal();

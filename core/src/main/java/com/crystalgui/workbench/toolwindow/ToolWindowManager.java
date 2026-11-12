@@ -880,9 +880,9 @@ public final class ToolWindowManager {
             // not in a test.
             UIElement scope = window.focus().scopeOf(anchor);
             if (scope instanceof WindowFrame owner) owner.attachOwned(frame);
-            else AppWindows.addFloat(window, frame);
+            else AppWindows.addFloat(anchor, frame);
         } else {
-            AppWindows.addFloat(window, frame);
+            AppWindows.addFloat(anchor, frame);
             // TOP-LEVEL, BUT OWNED. The frame keeps everything a window has -- it can be dragged
             // anywhere on the desktop and has its own taskbar entry -- and gains the one thing a tool
             // window needs from the editor it came out of: it stays above it. Without this, clicking the

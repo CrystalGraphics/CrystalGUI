@@ -9,6 +9,7 @@ import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.Surface;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -28,6 +29,9 @@ import com.crystalgui.ui.service.Animation;
  */
 final class PopupPortal extends UIElement {
 
+    /** What the sheets address it by. */
+    static final Name NAME = Name.of("popupportal");
+
     private final AppDocument appDocument;
     private final PopupLayer layer;
     private float left = Float.NaN, top, width = -1f, height = -1f;
@@ -35,6 +39,7 @@ final class PopupPortal extends UIElement {
     private float originX, originY;
 
     PopupPortal(AppDocument appDocument, PopupLayer layer) {
+        super(NAME);
         this.appDocument = appDocument;
         this.layer = layer;
         layout(l -> l.width(0f).height(0f));

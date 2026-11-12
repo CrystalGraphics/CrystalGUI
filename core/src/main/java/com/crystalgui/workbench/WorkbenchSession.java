@@ -501,7 +501,7 @@ public final class WorkbenchSession {
             // in at a default and jumping -- Desktop.addWindow's own note, from the other side.
             frame.resizeTo(record.width(), record.height());
             frame.moveTo(record.left(), record.top());
-            AppWindows.addFloat(window, frame);
+            AppWindows.addFloat(workbench.dock(), frame);
         }
     }
 

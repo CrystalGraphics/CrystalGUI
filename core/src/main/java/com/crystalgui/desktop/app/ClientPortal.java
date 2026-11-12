@@ -5,6 +5,7 @@ import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.Surface;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
@@ -30,14 +31,34 @@ import org.joml.Vector2f;
  */
 public final class ClientPortal extends UIElement {
 
+    /** What the sheets address it by: it never rings, as a pane does not. */
+    public static final Name NAME = Name.of("clientportal");
+
     private final AppDocument appDocument;
     private final ClientRoot client;
     private float sentWidth = -1f, sentHeight = -1f;
 
     ClientPortal(AppDocument appDocument, ClientRoot client) {
+        this(appDocument, client, false);
+    }
+
+    /**
+     * A portal for a window's caption when {@code caption}: as tall as the caption and as wide as the client's content,
+     * which the client reports, so the caption's free space stays the window's drag region.
+     */
+    ClientPortal(AppDocument appDocument, ClientRoot client, boolean caption) {
+        super(NAME);
         this.appDocument = appDocument;
         this.client = client;
-        layout(l -> l.widthPercent(100f).height(0f).flexGrow(1f));
+        if (caption) {
+            layout(l -> l.width(0f).heightPercent(100f));
+            client.captionOf(width -> {
+                UIDocument shell = document();
+                if (shell != null) shell.execute(() -> layout(l -> l.width((float) width)));
+            });
+        } else {
+            layout(l -> l.widthPercent(100f).height(0f).flexGrow(1f));
+        }
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
         // The first window of an application is the one its popups belong to, until another takes a press.
         if (appDocument.active() == null) appDocument.activate(this);

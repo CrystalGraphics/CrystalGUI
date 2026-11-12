@@ -4887,7 +4887,7 @@ com/crystalgui/desktop/app/AppWindows
   method public active ()Lcom/crystalgui/desktop/app/AppWindow;
   method public all ()Ljava/util/List;
   method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
-  method public,static addFloat (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public,static addFloat (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/desktop/app/Application
   access public,abstract,interface
   extends java/lang/Object
@@ -4971,12 +4971,14 @@ com/crystalgui/desktop/app/ApplicationRegistry
 com/crystalgui/desktop/app/ClientPortal
   access public,final
   extends com/crystalgui/ui/dom/UIElement
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   method public application ()Lcom/crystalgui/desktop/app/AppDocument;
   method public client ()Lcom/crystalgui/desktop/app/ClientRoot;
   method public paintContent (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
 com/crystalgui/desktop/app/ClientRoot
   access public,final
   extends com/crystalgui/ui/dom/UIElement
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final SHEET Ljava/lang/String;
   implements com/crystalgui/render/Surface$Owner
   method public <init> ()V

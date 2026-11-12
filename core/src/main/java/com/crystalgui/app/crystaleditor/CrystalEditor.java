@@ -98,6 +98,7 @@ public final class CrystalEditor {
                     DocumentKind.FilePatterns.extension("css"),
                     DocumentKind.FilePatterns.extension("notes"))
             .singleInstance()
+            .separateDocument()
             .launch(context -> WorkbenchApplication.of(context)
                     .with(EXTENSIONS)
                     .title("Crystal Editor")

@@ -2137,14 +2137,16 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private void toggleFloatingProjectPanel() {
         if (editor == null) return;
-        ToolWindowManager manager = editor.workbench().toolWindowManager();
-        if (manager.typeOf(Workbench.PROJECT_TYPE) == ToolWindowType.FLOATING) {
-            manager.dockPanel(Workbench.PROJECT_TYPE);
-            return;
-        }
-        // Offset from the editor window's own corner, which is the space a float's insets are measured
-        // in -- it is owned by that window, so (0,0) is the editor's top-left and not the desktop's.
-        manager.floatPanel(Workbench.PROJECT_TYPE, 100f, 70f);
+        onEditor(() -> {
+            ToolWindowManager manager = editor.workbench().toolWindowManager();
+            if (manager.typeOf(Workbench.PROJECT_TYPE) == ToolWindowType.FLOATING) {
+                manager.dockPanel(Workbench.PROJECT_TYPE);
+                return;
+            }
+            // Offset from the editor window's own corner, which is the space a float's insets are measured
+            // in -- it is in that window's document, so (0,0) is the editor's top-left.
+            manager.floatPanel(Workbench.PROJECT_TYPE, 100f, 70f);
+        });
     }
 
     /**

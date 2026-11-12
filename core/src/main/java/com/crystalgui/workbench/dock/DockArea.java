@@ -1774,7 +1774,7 @@ public class DockArea extends UIElement implements MinimumSize {
         String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
         DockWindow frame = new DockWindow(this, torn, title);
         frame.moveTo(left, top);
-        AppWindows.addFloat(window, frame);
+        AppWindows.addFloat(this, frame);
         requestRebuild();
     }
 
