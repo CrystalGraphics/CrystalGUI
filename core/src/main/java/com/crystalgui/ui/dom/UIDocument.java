@@ -545,20 +545,43 @@ public final class UIDocument extends UIElement {
         return this;
     }
 
+    /**
+     * Builds the top layer as {@code node}, a {@link #TOP_LAYER} element of the caller's own kind, in place of a plain
+     * one: for a document whose popups something else shows, as a surface.
+     *
+     * <pre>{@code
+     * document.useTopLayer(new PopupLayer());   // before anything is promoted
+     * }</pre>
+     *
+     * <p>Throws once the layer exists: call it straight after the document is made.</p>
+     */
+    public void useTopLayer(UIElement node) {
+        if (topLayerNode != null) throw new IllegalStateException("the top layer is already built");
+        topLayerNode = Objects.requireNonNull(node, "node");
+        append(node);
+        styleTopLayer(node);
+    }
+
     /** The layer's node, built on first use. The box tree resolves its box. */
     public UIElement topLayerNode() {
         if (topLayerNode == null) {
             topLayerNode = new UIElement(TOP_LAYER);
-            // The viewport's size: a promoted element's percentages resolve against this node, its host. Written
-            // inline and after the append, since a style set on a detached node resolves nothing.
             append(topLayerNode);
-            topLayerNode.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
-                    .left(0f)
-                    .top(0f)
-                    .widthPercent(100f)
-                    .heightPercent(100f));
+            styleTopLayer(topLayerNode);
         }
         return topLayerNode;
+    }
+
+    /**
+     * The viewport's size: a promoted element's percentages resolve against this node, its host. Written inline and
+     * after the append, since a style set on a detached node resolves nothing.
+     */
+    private static void styleTopLayer(UIElement node) {
+        node.layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
+                .left(0f)
+                .top(0f)
+                .widthPercent(100f)
+                .heightPercent(100f));
     }
 
     /**

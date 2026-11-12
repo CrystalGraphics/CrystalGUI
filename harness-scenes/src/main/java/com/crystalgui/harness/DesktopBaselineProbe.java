@@ -59,6 +59,14 @@ public final class DesktopBaselineProbe {
         default void describeWindows() {
         }
 
+        /** Opens a popover in an application's own document, and prints where its popups are and where they are shown. */
+        default void showPopup() {
+        }
+
+        /** Prints where the shell put the popups opened by {@link #showPopup}. On the document. */
+        default void describePopup() {
+        }
+
         /** Switches the theme to the next one, and back on the next call. */
         void switchTheme();
 
@@ -216,8 +224,12 @@ public final class DesktopBaselineProbe {
                 target.openOthers();
                 taskbar = new float[][] {target.taskbarPoint(0), target.taskbarPoint(1)};
             });
-            case STEADY -> viewport.execute(target::describeWindows);
+            case STEADY -> viewport.execute(() -> {
+                target.describeWindows();
+                target.showPopup();
+            });
             case FILE -> {
+                viewport.execute(target::describePopup);
                 filePosted = now;
                 viewport.execute(() -> target.openLargeFile(() -> {
                     fileOpened = System.nanoTime();

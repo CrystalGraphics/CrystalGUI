@@ -10,6 +10,8 @@ import java.util.concurrent.FutureTask;
 import java.util.concurrent.locks.LockSupport;
 import java.util.function.Supplier;
 
+import javax.annotation.Nullable;
+
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -45,9 +47,44 @@ public final class AppDocument {
     private final Queue<Runnable> pump = new ConcurrentLinkedQueue<>();
     private volatile boolean waiting;
 
+    /** The window whose client last took input: the one the popups belong to, when more than one is open. */
+    @Nullable
+    private volatile ClientPortal active;
+    @Nullable
+    private PopupPortal popupPortal;
+
     public AppDocument(UIDocument document, Backend backend) {
         this.document = document;
         this.backend = backend;
+    }
+
+    /** The document's popups as a surface, or null where its host did not install a {@link PopupLayer}. */
+    @Nullable
+    public PopupLayer popups() {
+        return document.topLayerNodeIfPresent() instanceof PopupLayer layer ? layer : null;
+    }
+
+    /** Closes every open popup of the document, as a press outside them does. Any thread. */
+    public void dismissPopups() {
+        document.execute(() -> document.dismiss().lightDismiss(null));
+    }
+
+    @Nullable
+    ClientPortal active() {
+        return active;
+    }
+
+    void activate(ClientPortal portal) {
+        active = portal;
+    }
+
+    /** The shell's thread: shows the document's popups, once, in the shell's top layer. */
+    void showPopupsIn(UIDocument shell) {
+        PopupLayer layer = popups();
+        if (layer == null || popupPortal != null) return;
+        popupPortal = new PopupPortal(this, layer);
+        shell.append(popupPortal);
+        shell.promote(popupPortal);
     }
 
     public UIDocument document() {
@@ -154,6 +191,8 @@ public final class AppDocument {
     /** The document's thread, after each commit: tells the windows whose client changed. */
     public void committed() {
         for (ClientRoot client : clients) client.committed();
+        PopupLayer layer = popups();
+        if (layer != null) layer.committed();
     }
 
     /** Ends the document: its thread stops and what it drew with is freed. The host's thread. */

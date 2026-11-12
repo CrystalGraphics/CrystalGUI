@@ -8,6 +8,7 @@ import com.crystalgui.desktop.app.AppDocument;
 import com.crystalgui.desktop.app.AppDocuments;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.app.ClientRoot;
+import com.crystalgui.desktop.app.PopupLayer;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
@@ -66,7 +67,8 @@ final class ApplicationDocuments implements AppDocuments {
     @Override
     public AppDocument open(ApplicationKind kind) {
         UIDocument document = CgUiScreen.newDocument();
-        document.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET));
+        document.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET));
+        document.useTopLayer(new PopupLayer());
         CgUiViewport.Threading threading = kind.threading() == ApplicationKind.Threading.INLINE
                 ? CgUiViewport.Threading.INLINE : CgUiViewport.Threading.fromFlags();
         CgUiViewport viewport = CgUiViewport.open(document, threading, "app:" + kind.id());

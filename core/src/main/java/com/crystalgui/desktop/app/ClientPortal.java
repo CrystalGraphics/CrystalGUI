@@ -39,6 +39,8 @@ public final class ClientPortal extends UIElement {
         this.client = client;
         layout(l -> l.widthPercent(100f).height(0f).flexGrow(1f));
         setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
+        // The first window of an application is the one its popups belong to, until another takes a press.
+        if (appDocument.active() == null) appDocument.activate(this);
         client.onChanged(() -> {
             UIDocument shell = document();
             if (shell != null) shell.execute(this::repaint);
@@ -53,6 +55,11 @@ public final class ClientPortal extends UIElement {
         onMouseLeave.attachListener((element, event) -> pointer(event.getPosition(), -1, false, 0f), false, true);
         onKeyDown.attachListener((element, event) -> key(event, true), false, true);
         onKeyUp.attachListener((element, event) -> key(event, false), false, true);
+    }
+
+    /** The document the client lives in. */
+    public AppDocument application() {
+        return appDocument;
     }
 
     /** The client this shows. */
@@ -75,6 +82,7 @@ public final class ClientPortal extends UIElement {
     private void pointer(ReadOnlyVec2f at, int button, boolean pressed, float wheel) {
         UIDocument shell = document();
         if (shell == null) return;
+        if (pressed) appDocument.activate(this);
         Vector2f local = toLocal(at.x(), at.y());
         float scale = shell.boxes().uiScale();
         appDocument.mouse(new CgSystemInput.Mouse.Event(Math.round(local.x * scale), Math.round(local.y * scale), 0, 0,

@@ -23,6 +23,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
@@ -62,6 +63,10 @@ import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.config.control.MaskControl;
 import com.crystalgui.widget.display.FrameStatsOverlay;
 import com.crystalgui.widget.overlay.Dialog;
+import com.crystalgui.widget.overlay.Popover;
+import com.crystalgui.desktop.app.AppDocument;
+import com.crystalgui.desktop.app.ClientPortal;
+import com.crystalgui.desktop.app.PopupLayer;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
@@ -852,6 +857,51 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                     System.out.printf(Locale.ROOT, "[windows] %-24s %s x=%d y=%d w=%d h=%d%n", each.getTitle(), each.state(),
                             Math.round(box.x() * scale), Math.round(box.y() * scale), Math.round(box.width() * scale),
                             Math.round(box.height() * scale));
+                }
+            }
+
+            private AppDocument popupApplication() {
+                for (WindowFrame each : desktop.windowManager().windows()) {
+                    if (!each.content().children().isEmpty() && each.content().children().get(0) instanceof ClientPortal portal) {
+                        return portal.application();
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public void showPopup() {
+                AppDocument application = popupApplication();
+                if (application == null) {
+                    System.out.println("[popup] no application on its own document");
+                    return;
+                }
+                application.execute(() -> {
+                    Popover popover = new Popover();
+                    popover.append(new UIText("A menu in the application's own document"));
+                    application.document().append(popover);
+                    popover.showAt(24f, 40f, null);
+                });
+            }
+
+            @Override
+            public void describePopup() {
+                AppDocument application = popupApplication();
+                PopupLayer layer = application == null ? null : application.popups();
+                float[] occupied = layer == null ? null : layer.occupied();
+                System.out.println("[popup] in the application's document: " + Arrays.toString(occupied));
+                if (application != null) {
+                    application.execute(() -> System.out.println("[popup] its thread: layer="
+                            + application.document().topLayerNodeIfPresent() + " content="
+                            + application.document().hasTopLayerContent() + " promoted="
+                            + application.document().promotedNodes().size()));
+                }
+                for (UIElement each : desktop.document().promotedNodes()) {
+                    Box box = each.box();
+                    if (box != null && each.getClass().getSimpleName().equals("PopupPortal")) {
+                        System.out.printf(Locale.ROOT, "[popup] shown by the shell at x=%.0f y=%.0f w=%.0f h=%.0f%n",
+                                box.worldX(), box.worldY(), box.width(), box.height());
+                    }
                 }
             }
 

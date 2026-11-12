@@ -4835,8 +4835,10 @@ com/crystalgui/desktop/app/AppDocument
   method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public close ()V
   method public committed ()V
+  method public dismissPopups ()V
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public execute (Ljava/lang/Runnable;)V
+  method public popups ()Lcom/crystalgui/desktop/app/PopupLayer;
   method public run (Ljava/lang/Runnable;)V
 com/crystalgui/desktop/app/AppDocument$Backend
   access public,abstract,interface
@@ -4968,6 +4970,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
 com/crystalgui/desktop/app/ClientPortal
   access public,final
   extends com/crystalgui/ui/dom/UIElement
+  method public application ()Lcom/crystalgui/desktop/app/AppDocument;
   method public client ()Lcom/crystalgui/desktop/app/ClientRoot;
   method public paintContent (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
 com/crystalgui/desktop/app/ClientRoot
@@ -4982,6 +4985,17 @@ com/crystalgui/desktop/app/ClientRoot
   method public picture ()Lcom/crystalgui/render/Surface;
   method public setClientSize (FF)V
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)V
+  method public surface (Lcom/crystalgui/render/Surface;)V
+com/crystalgui/desktop/app/PopupLayer
+  access public,final
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final SHEET Ljava/lang/String;
+  implements com/crystalgui/render/Surface$Owner
+  method public <init> ()V
+  method public keepsSurface ()Z
+  method public occupied ()[F
+  method public onChanged (Ljava/lang/Runnable;)V
+  method public picture ()Lcom/crystalgui/render/Surface;
   method public surface (Lcom/crystalgui/render/Surface;)V
 com/crystalgui/desktop/app/ServerWindowHost
   access public,abstract,interface
@@ -13700,6 +13714,7 @@ com/crystalgui/ui/dom/UIDocument
   method public topLayerNode ()Lcom/crystalgui/ui/dom/UIElement;
   method public topLayerNodeIfPresent ()Lcom/crystalgui/ui/dom/UIElement;
   method public update (FF)V
+  method public useTopLayer (Lcom/crystalgui/ui/dom/UIElement;)V
   method public workArea ()Lcom/crystalgui/ui/dom/UIElement;
   method public,static current ()Lcom/crystalgui/ui/dom/UIDocument;
 com/crystalgui/ui/dom/UIDocument$Local
