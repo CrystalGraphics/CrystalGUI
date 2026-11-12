@@ -4822,6 +4822,7 @@ com/crystalgui/desktop/app/Application
 com/crystalgui/desktop/app/ApplicationKind
   access public,final
   extends java/lang/Object
+  field public,static,final DATA_KEY Lcom/crystalgui/core/data/DataKey;
   method public action (Ljava/util/function/Consumer;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public autostart (Ljava/util/function/Consumer;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public displayName ()Ljava/lang/String;
@@ -4971,6 +4972,69 @@ com/crystalgui/desktop/manager/WindowManager$Shell
   method public,abstract setTaskbarVisible (Z)V
   method public,abstract visibleFrames ()Ljava/util/List;
   method public,abstract workArea ()Lcom/crystalgui/ui/box/Box;
+com/crystalgui/desktop/manager/WindowRecord
+  access public,final
+  extends java/lang/Object
+  method public <init> (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public application ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public application (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public applicationMain ()Z
+  method public applicationMain (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public badge ()Ljava/lang/String;
+  method public badge (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public demandingAttention ()Z
+  method public demandingAttention (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public frame ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public fullscreen ()Z
+  method public fullscreen (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public iconName ()Ljava/lang/String;
+  method public iconName (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public key ()Ljava/lang/String;
+  method public key (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public maximized ()Z
+  method public maximized (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public maximizedBeforeFullscreen ()Z
+  method public maximizedBeforeFullscreen (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public owner ()Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public owner (Lcom/crystalgui/desktop/manager/WindowRecord;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public pinned ()Z
+  method public pinned (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public placed ()Z
+  method public placed (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public placedLeft ()F
+  method public placedLeft (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public placedTop ()F
+  method public placedTop (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public policy ()Lcom/crystalgui/core/window/WindowPolicy;
+  method public policy (Lcom/crystalgui/core/window/WindowPolicy;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public progress ()F
+  method public progress (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreHeight ()F
+  method public restoreHeight (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreLeft ()F
+  method public restoreLeft (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreTop ()F
+  method public restoreTop (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreWidth ()F
+  method public restoreWidth (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public sized ()Z
+  method public sized (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public snappedZone ()Lcom/crystalgui/desktop/window/SnapZones$Zone;
+  method public snappedZone (Lcom/crystalgui/desktop/window/SnapZones$Zone;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public stackOrder ()I
+  method public stackOrder (I)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public state ()Lcom/crystalgui/core/window/WindowState;
+  method public state (Lcom/crystalgui/core/window/WindowState;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public title ()Ljava/lang/String;
+  method public title (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public titleShown ()Z
+  method public titleShown (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public toolWindow ()Z
+  method public toolWindow (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public wantedLeft ()F
+  method public wantedLeft (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public wantedTop ()F
+  method public wantedTop (F)Lcom/crystalgui/desktop/manager/WindowRecord;
 com/crystalgui/desktop/motion/BoxFlights
   access public,final
   extends java/lang/Object
@@ -5382,6 +5446,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public pressBlocked (Lcom/crystalgui/ui/dom/UIElement;)V
   method public progress ()F
   method public reclamp ()V
+  method public record ()Lcom/crystalgui/desktop/manager/WindowRecord;
   method public recordedHeight ()F
   method public recordedWidth ()F
   method public releaseChrome ()V
@@ -13211,7 +13276,6 @@ com/crystalgui/ui/contract/WidgetContracts
 com/crystalgui/ui/data/UiDataKeys
   access public,final
   extends java/lang/Object
-  field public,static,final APPLICATION_KIND Lcom/crystalgui/core/data/DataKey;
   field public,static,final CLIPBOARD Lcom/crystalgui/core/data/DataKey;
   field public,static,final SELECTION Lcom/crystalgui/core/data/DataKey;
   field public,static,final SETTINGS_HOST Lcom/crystalgui/core/data/DataKey;
