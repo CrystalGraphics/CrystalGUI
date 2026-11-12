@@ -413,6 +413,7 @@ public class WorkbenchApplication extends UIElement
             giveInitialFocus();
             return !focusGiven;
         });
+        document.animation().every(this, this::autosave);
     }
 
     /**
@@ -590,6 +591,48 @@ public class WorkbenchApplication extends UIElement
         // listening -- the restore is asynchronous per file but the subscription is not.
         lifetime.add(workbench.editors().onDidRestoreUnsavedWork.connect(this::announceRestored));
         workbench.editors().restoreUnsavedWork();
+        watchArrangement();
+    }
+
+    /** Seconds a change waits before the session is written, so a drag or a run of closes is one write. */
+    private static final float AUTOSAVE_DELAY = 1f;
+
+    private boolean arrangementChanged;
+    private float changedFor;
+
+    /**
+     * Writes the session soon after the arrangement changes, as well as when the application quits: a client that is
+     * closed without quitting its applications keeps what was done. Subscribed after the restore, so putting the
+     * last arrangement back does not rewrite it.
+     */
+    private void watchArrangement() {
+        lifetime.add(workbench.dock().onDidChangeLayout.connect(this::arrangementChanged));
+        lifetime.add(workbench.toolWindowManager().onDidChangePlacement.connect(id -> arrangementChanged()));
+        lifetime.add(workbench.editors().onDidOpen.connect(tab -> arrangementChanged()));
+        lifetime.add(workbench.editors().onDidClose.connect(tab -> arrangementChanged()));
+        lifetime.add(workbench.editors().onDidChangeActive.connect(tab -> arrangementChanged()));
+    }
+
+    private void arrangementChanged() {
+        arrangementChanged = true;
+        changedFor = 0f;
+    }
+
+    /** Once a frame while attached: writes the session when the arrangement has been still for the delay. */
+    private boolean autosave(float delta) {
+        if (!arrangementChanged || disposed || sessionKey == null) return true;
+        changedFor += delta;
+        if (changedFor < AUTOSAVE_DELAY) return true;
+        arrangementChanged = false;
+        UIDocument surface = document();
+        Box box = surface == null ? null : surface.box();
+        if (box == null) return true;
+        try {
+            session.save(sessionKey, (int) box.width(), (int) box.height());
+        } catch (RuntimeException failed) {
+            CrystalGuiCore.LOGGER.error("[session] {} not saved: writing it failed", kind().id(), failed);
+        }
+        return true;
     }
 
     /**
