@@ -23,9 +23,11 @@ import com.crystalgui.ui.dom.UIElement;
 public final class ClientRoot extends UIElement implements Surface.Owner {
 
     /** What puts it in a surface and at the document's corner; installed with the document. */
-    public static final String SHEET = ".__client__ { position: absolute; left: 0px; top: 0px; will-change: transform; }";
+    public static final String SHEET = ".__client__ { position: absolute; left: 0px; top: 0px; will-change: transform; }"
+            + " .__client-front__ { z-index: 1; }";
 
     private static final String CLASS = "__client__";
+    private static final String FRONT = "__client-front__";
 
     @Nullable
     private volatile Surface surface;
@@ -57,6 +59,14 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
     /** Gives it the size its frame's client slot has, in logical pixels. The application's thread. */
     public void setClientSize(float width, float height) {
         layout(l -> l.width(width).height(height));
+    }
+
+    /**
+     * Puts it above the application's other clients, which share its corner: the pointer's events hit the one on top.
+     * The application's thread.
+     */
+    void front(boolean on) {
+        toggleClass(FRONT, on);
     }
 
     /** Its picture as it last painted, or null before the first paint. Any thread: a frame draws it. */

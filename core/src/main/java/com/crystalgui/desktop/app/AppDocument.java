@@ -13,7 +13,9 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 
 /**
  * The document one application runs in, on a thread of its own: its windows' client roots live here, and the shell's
@@ -52,6 +54,9 @@ public final class AppDocument {
     private volatile ClientPortal active;
     @Nullable
     private PopupPortal popupPortal;
+    /** The client the pointer is aimed at, which is on top of the others. */
+    @Nullable
+    private volatile ClientRoot aimed;
 
     public AppDocument(UIDocument document, Backend backend) {
         this.document = document;
@@ -171,6 +176,30 @@ public final class AppDocument {
         backend.consumeMouseEvent(event);
     }
 
+    /**
+     * Aims the pointer at {@code client}: clients share the document's corner, so the one the next event is for goes on
+     * top first. The shell's thread; the change lands with the document's next commit.
+     */
+    void aim(ClientRoot client) {
+        ClientRoot was = aimed;
+        if (was == client) return;
+        aimed = client;
+        document.execute(() -> {
+            if (was != null) was.front(false);
+            client.front(true);
+        });
+    }
+
+    /** The portal of this application under a point of the shell's document, or null when none is. The shell's thread. */
+    @Nullable
+    ClientPortal portalAt(UIDocument shell, float x, float y) {
+        Box under = shell.boxes().hitTest(x, y);
+        for (UIElement node = under == null ? null : under.node(); node != null; node = node.parentElement()) {
+            if (node instanceof ClientPortal portal && portal.application() == this) return portal;
+        }
+        return null;
+    }
+
     /** Offers the document a key. */
     void key(CgSystemInput.Keyboard.Event event) {
         backend.consumeKeyboardEvent(event);
@@ -185,6 +214,7 @@ public final class AppDocument {
     /** Takes a client root out of the document. The document's thread. */
     void removeClient(ClientRoot client) {
         clients.remove(client);
+        if (aimed == client) aimed = null;
         document.remove(client);
     }
 

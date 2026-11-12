@@ -90,8 +90,16 @@ public final class ClientPortal extends UIElement {
         UIDocument shell = document();
         if (shell == null) return;
         if (pressed) appDocument.activate(this);
-        Vector2f local = toLocal(at.x(), at.y());
+        // A DRAG THAT STARTED HERE AND IS NOW OVER ANOTHER WINDOW OF THE SAME APPLICATION goes to that window's client: a tab
+        // dropped from one window onto the other lands where the pointer is, not where it would be in this one.
+        ClientPortal target = this;
+        if (shell.input().pointerCaptureTarget() == this) {
+            ClientPortal under = appDocument.portalAt(shell, at.x(), at.y());
+            if (under != null) target = under;
+        }
+        Vector2f local = target.toLocal(at.x(), at.y());
         float scale = shell.boxes().uiScale();
+        appDocument.aim(target.client);
         appDocument.mouse(new CgSystemInput.Mouse.Event(Math.round(local.x * scale), Math.round(local.y * scale), 0, 0,
                 button, pressed, wheel, System.currentTimeMillis()));
     }
