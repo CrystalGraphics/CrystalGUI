@@ -10,7 +10,7 @@ import com.crystalgraphics.platform.rhi.format.CgFormat;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.render.stage.CgHostFrame;
-import com.crystalgraphics.render.stage.CgHostView;
+import com.crystalgraphics.camera.CgCamera;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.vfx.CgVfxSystem;
 import com.crystalgui.render.CgUiPaintContext;
@@ -200,7 +200,7 @@ final class VfxViewport extends UIElement {
                 (float) -Math.cos(yaw) * cosPitch, 0f, 1f, 0f);
 
         CgHostFrame first = WORLD[0].host();
-        CgHostView host = first.view();
+        CgCamera host = first.camera();
         float tick = first.partialTick();
         int hostWidth = first.width(), hostHeight = first.height();
         CgExternalTarget hostTarget = first.target();
@@ -216,11 +216,11 @@ final class VfxViewport extends UIElement {
 
         CgExternalTarget into = target.target();
         for (CgRenderStage stage : WORLD) {
-            stage.host().set(0f, width, height, into).view().set(atX, atY, atZ, view, projection);
+            stage.host().set(0f, width, height, into).camera().set(atX, atY, atZ, view, projection);
             stage.fireInto(into);
         }
         for (CgRenderStage stage : WORLD) {
-            stage.host().set(tick, hostWidth, hostHeight, hostTarget).view().set(hostX, hostY, hostZ, hostView, hostProjection);
+            stage.host().set(tick, hostWidth, hostHeight, hostTarget).camera().set(hostX, hostY, hostZ, hostView, hostProjection);
         }
         picture = target.colour();
         particles = CgVfxSystem.particlesDrawn(into);
