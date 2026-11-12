@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.BytesDocumentModel;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
@@ -32,7 +33,7 @@ public class BinaryFilesOpenAsBytesTest {
     /** What the workbench registers as its fallback: text unless the bytes say otherwise. */
     private static DocumentKinds kinds() {
         DocumentKinds kinds = new DocumentKinds();
-        kinds.register(DocumentKind.of("test:file", "File").fallback()
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:file", "File").fallback()
                 .model((resource, bytes) -> TextEncoding.looksBinary(bytes)
                         ? new BytesDocumentModel(bytes)
                         : TextDocumentModel.of(bytes)));

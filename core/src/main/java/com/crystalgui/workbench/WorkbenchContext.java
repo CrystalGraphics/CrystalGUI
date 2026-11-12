@@ -18,6 +18,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.fs.CgPath;
@@ -50,7 +51,7 @@ import com.crystalgui.workbench.toolwindow.ToolWindowManager;
  * public Disposable activate(WorkbenchContext workbench) {
  *     Disposable panel = workbench.registerToolWindow(ToolWindowKind.of("mymod:panel", "My Panel")
  *             .view(myView).openByDefault());
- *     Disposable kind  = workbench.kinds().register(MY_FILE_TYPE);
+ *     Disposable kind  = workbench.kinds().contribute(workbench.owner(), MY_FILE_TYPE);
  *     workbench.onDidOpenDocument().connect(path -> ...);
  *     return () -> { kind.dispose(); panel.dispose(); };
  * }
@@ -96,11 +97,14 @@ public interface WorkbenchContext extends SettingsScope {
     /** The open documents, one per resource. */
     WorkspaceDocuments documents();
 
-    /** Every kind of document this workbench can open. @see #contribute */
+    /** Every kind of document the process can open: contribute one with {@link #owner()}. @see #contribute */
     DocumentKinds kinds();
 
-    /** What <b>New ▸</b> can make here — where a contributor registers its own document. */
+    /** What <b>New ▸</b> can make — where a contributor offers its own document, with {@link #owner()}. */
     NewDocumentKinds newDocuments();
+
+    /** Who this workbench is to the process-wide registries: what it contributes goes when it does. */
+    Owner owner();
 
     /** The tabs over those documents — the one open lane. */
     EditorService editors();

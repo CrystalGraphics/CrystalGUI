@@ -45,7 +45,10 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
   .async                       UiSequence (a document's sequence; services(), the one owned services
                                live on; forDocument, which -Dcrystalgui.ui.singleSequence=true makes
                                one for all), Broadcast<T> (an event across sequences: posted, heard on
-                               the subscriber's), JobScheduler, UiThread, UiBudget
+                               the subscriber's), Published<T> (state as immutable generations; a document's frame pins each one it
+                               reads), Contributions<T> + Owner (what modules and applications declare:
+                               a published list of (owner, item), indices per generation, an owner's
+                               contributions leave together), JobScheduler, UiThread, UiBudget
   .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
   .dispose                     Disposable, Disposable.Gl, Disposer — the ownership tree. NOT a
@@ -424,7 +427,7 @@ com.crystalgui.document        WHAT AN OPEN DOCUMENT IS, headless and below `wid
                                IntelliJ's name-and-kind prompt with no widget of its own),
                                NewDocumentContext (where a New would land: the directory and the
                                source root holding it, asked per CLICK rather than at registration)
-                               and NewDocumentKinds (the registry, per workbench, reached through
+                               and NewDocumentKinds (the process-wide registry, scoped by owner, reached through
                                WorkbenchContext.newDocuments()). Most openable things cannot be
                                conjured from nothing and some creatable things are not documents, so
                                the two registries do not merge

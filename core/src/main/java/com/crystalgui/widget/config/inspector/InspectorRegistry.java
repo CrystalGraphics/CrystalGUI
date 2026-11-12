@@ -1,12 +1,13 @@
 package com.crystalgui.widget.config.inspector;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Every {@link InspectorSection} anything has contributed. What is being inspected is the document's:
@@ -24,17 +25,13 @@ public final class InspectorRegistry {
     private InspectorRegistry() {
     }
 
-    // COPY-ON-WRITE, because the two ends run at different times: an extension registers while a
-    // workbench is being built and withdraws while one is being torn down, and `sectionsFor` walks the
-    // list every time the inspector's subject changes. Both are the frame thread today, so a plain
-    // ArrayList was correct rather than lucky -- but nothing says so, and the cost of the guarantee is a
-    // copy per registration, which happens a handful of times per application.
-    private static final List<InspectorSection> SECTIONS = new CopyOnWriteArrayList<>();
+    private static final Contributions<InspectorSection> SECTIONS =
+            Contributions.of("inspector-sections", section -> section, Contributions.Conflict.REJECT);
 
     /** Idempotent per instance, so a contribution that runs twice does not double every form. */
     public static Disposable register(InspectorSection section) {
         if (section == null) return () -> { };
-        if (!SECTIONS.contains(section)) SECTIONS.add(section);
+        SECTIONS.add(Owner.PROCESS, section);
         // The handle rather than nothing, so a caller need not pair this with `remove` by hand. A
         // contribution installed more than once wants SectionSet, which counts its holders.
         return () -> remove(section);
@@ -63,7 +60,7 @@ public final class InspectorRegistry {
      */
     public static List<InspectorSection> sectionsFor(DataContext context) {
         List<InspectorSection> found = new ArrayList<>();
-        for (InspectorSection section : SECTIONS) {
+        for (InspectorSection section : SECTIONS.all()) {
             if (section.accepts(context)) found.add(section);
         }
         found.sort(Comparator.comparing(InspectorSection::tab)
@@ -73,11 +70,11 @@ public final class InspectorRegistry {
 
     /** Every registered section, in registration order. For diagnostics. */
     public static List<InspectorSection> all() {
-        return List.copyOf(SECTIONS);
+        return SECTIONS.all();
     }
 
     /** Empties the registry. For tests that need isolation, never for production. */
     public static void resetForTesting() {
-        SECTIONS.clear();
+        SECTIONS.clearForTesting();
     }
 }

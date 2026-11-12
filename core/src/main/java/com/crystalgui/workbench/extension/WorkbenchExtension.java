@@ -20,7 +20,7 @@ import com.crystalgui.workbench.WorkbenchContext;
  *     public NotesKind() { }                       // ServiceLoader's rule
  *     public String id() { return ID; }
  *     public Disposable activate(WorkbenchContext workbench) {
- *         return workbench.kinds().register(KIND);
+ *         return workbench.kinds().contribute(workbench.owner(), KIND);
  *     }
  * }
  * }</pre>

@@ -49,10 +49,10 @@ public final class NotesKind implements WorkbenchExtension {
         return ID;
     }
 
-    /** @return {@code DocumentKinds.register}'s own handle, so withdrawing the extension withdraws the
+    /** @return {@code DocumentKinds.contribute}'s own handle, so withdrawing the extension withdraws the
      * file type — there is nothing else to undo */
     @Override
     public Disposable activate(WorkbenchContext workbench) {
-        return workbench.kinds().register(KIND);
+        return workbench.kinds().contribute(workbench.owner(), KIND);
     }
 }

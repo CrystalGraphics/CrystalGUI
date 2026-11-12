@@ -60,7 +60,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         // where one belongs -- so a document kind could be opened, edited and saved by a jar of its own
         // and still not be something you could MAKE without editing the explorer. It starts empty for
         // now; `template` is where a starter document goes. @see NewDocumentKind
-        workbench.newDocuments().register(NewDocumentKind.of("uibuilder:new", "UI Document")
+        workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of("uibuilder:new", "UI Document")
                 .icon("crystalgui:filetypes/cgui")
                 .suffix(".cgui")
                 .where(NewDocumentContext::outsideSourceRoots)

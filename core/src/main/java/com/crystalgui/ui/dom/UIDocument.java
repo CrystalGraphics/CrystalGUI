@@ -1,6 +1,7 @@
 package com.crystalgui.ui.dom;
 
 import com.crystalgui.core.async.Broadcast;
+import com.crystalgui.core.async.Published;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.UiSequence;
@@ -671,7 +672,8 @@ public final class UIDocument extends UIElement {
      * layout run once more, so {@code :hover} lands on the right element this frame. The host paints after.
      */
     public void frame(float deltaSeconds, float width, float height) {
-        try (Running ignored = makeCurrent()) {
+        // A frame reads every published state (registries, preferences) at one generation.
+        try (Running ignored = makeCurrent(); Published.Pin pinned = Published.pin()) {
             // Owned, this is work inside the host's frame, which alone opens one in the trace.
             if (owner == null) {
                 UiTrace.frameBegin();

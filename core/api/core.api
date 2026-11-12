@@ -2942,6 +2942,46 @@ com/crystalgui/core/async/Broadcast
   method public,static create (Ljava/lang/String;)Lcom/crystalgui/core/async/Broadcast;
   method public,static deliverThrough (Ljava/util/function/Supplier;)V
   method public,static sequenceHere ()Ljava/util/concurrent/Executor;
+com/crystalgui/core/async/Contributions
+  access public,final
+  extends java/lang/Object
+  method public add (Lcom/crystalgui/core/async/Owner;Ljava/lang/Object;)Lcom/crystalgui/core/dispose/Disposable;
+  method public all ()Ljava/util/List;
+  method public clearForTesting ()V
+  method public entries ()Ljava/util/List;
+  method public generation ()J
+  method public index (Ljava/util/function/Function;)Lcom/crystalgui/core/async/Contributions$Index;
+  method public name ()Ljava/lang/String;
+  method public published ()Lcom/crystalgui/core/async/Published;
+  method public remove (Ljava/lang/Object;)Z
+  method public removeOwner (Lcom/crystalgui/core/async/Owner;)V
+  method public replace (Lcom/crystalgui/core/async/Owner;Ljava/lang/Object;)Lcom/crystalgui/core/dispose/Disposable;
+  method public toString ()Ljava/lang/String;
+  method public,static of (Ljava/lang/String;)Lcom/crystalgui/core/async/Contributions;
+  method public,static of (Ljava/lang/String;Ljava/util/function/Function;)Lcom/crystalgui/core/async/Contributions;
+  method public,static of (Ljava/lang/String;Ljava/util/function/Function;Lcom/crystalgui/core/async/Contributions$Conflict;)Lcom/crystalgui/core/async/Contributions;
+com/crystalgui/core/async/Contributions$Conflict
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final FIRST_WINS Lcom/crystalgui/core/async/Contributions$Conflict;
+  field public,static,final LATER_WINS Lcom/crystalgui/core/async/Contributions$Conflict;
+  field public,static,final REJECT Lcom/crystalgui/core/async/Contributions$Conflict;
+  field public,static,final SHARED Lcom/crystalgui/core/async/Contributions$Conflict;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/core/async/Contributions$Conflict;
+  method public,static values ()[Lcom/crystalgui/core/async/Contributions$Conflict;
+com/crystalgui/core/async/Contributions$Entry
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Lcom/crystalgui/core/async/Owner;Ljava/lang/Object;)V
+  method public item ()Ljava/lang/Object;
+  method public owner ()Lcom/crystalgui/core/async/Owner;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/core/async/Contributions$Index
+  access public,final
+  extends java/lang/Object
+  method public get ()Ljava/lang/Object;
 com/crystalgui/core/async/JobScheduler
   access public,final
   extends java/lang/Object
@@ -2970,6 +3010,40 @@ com/crystalgui/core/async/JobScheduler$Job
   method public debounce (J)Lcom/crystalgui/core/async/JobScheduler$Job;
   method public onDone (Ljava/util/function/Consumer;)Lcom/crystalgui/core/async/JobScheduler$Job;
   method public submit ()Lcom/crystalgraphics/job/CgJob;
+com/crystalgui/core/async/Owner
+  access public,final
+  extends java/lang/Object
+  field public,static,final PROCESS Lcom/crystalgui/core/async/Owner;
+  method public name ()Ljava/lang/String;
+  method public toString ()Ljava/lang/String;
+  method public,static of (Ljava/lang/String;)Lcom/crystalgui/core/async/Owner;
+com/crystalgui/core/async/Published
+  access public,final
+  extends java/lang/Object
+  method public changes ()Lcom/crystalgui/core/async/Broadcast;
+  method public current ()Ljava/lang/Object;
+  method public generation ()Lcom/crystalgui/core/async/Published$Generation;
+  method public latest ()Lcom/crystalgui/core/async/Published$Generation;
+  method public name ()Ljava/lang/String;
+  method public onChange (Ljava/util/function/Consumer;)Lcom/crystalgui/core/signal/Connection;
+  method public toString ()Ljava/lang/String;
+  method public update (Ljava/util/function/UnaryOperator;)Ljava/lang/Object;
+  method public,static of (Ljava/lang/String;Ljava/lang/Object;)Lcom/crystalgui/core/async/Published;
+  method public,static pin ()Lcom/crystalgui/core/async/Published$Pin;
+com/crystalgui/core/async/Published$Generation
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (JLjava/lang/Object;)V
+  method public number ()J
+  method public value ()Ljava/lang/Object;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/core/async/Published$Pin
+  access public,abstract,interface
+  extends java/lang/Object
+  implements java/lang/AutoCloseable
+  method public,abstract close ()V
 com/crystalgui/core/async/UiBudget
   access public,final
   extends java/lang/Object
@@ -5380,13 +5454,15 @@ com/crystalgui/document/DocumentKind$Matcher
 com/crystalgui/document/DocumentKinds
   access public,final
   extends java/lang/Object
-  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> ()V
   method public all ()Ljava/util/List;
   method public byId (Ljava/lang/String;)Lcom/crystalgui/document/DocumentKind;
+  method public changes ()Lcom/crystalgui/core/async/Broadcast;
+  method public contribute (Lcom/crystalgui/core/async/Owner;Lcom/crystalgui/document/DocumentKind;)Lcom/crystalgui/core/dispose/Disposable;
   method public forResource (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/document/DocumentKind;
   method public isEmpty ()Z
-  method public register (Lcom/crystalgui/document/DocumentKind;)Lcom/crystalgui/core/dispose/Disposable;
+  method public removeOwner (Lcom/crystalgui/core/async/Owner;)V
+  method public,static process ()Lcom/crystalgui/document/DocumentKinds;
 com/crystalgui/document/DocumentModel
   access public,abstract,interface
   extends java/lang/Object
@@ -5516,12 +5592,14 @@ com/crystalgui/document/NewDocumentKind$Variant
 com/crystalgui/document/NewDocumentKinds
   access public,final
   extends java/lang/Object
-  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> ()V
   method public all ()Ljava/util/List;
   method public byId (Ljava/lang/String;)Lcom/crystalgui/document/NewDocumentKind;
+  method public changes ()Lcom/crystalgui/core/async/Broadcast;
+  method public contribute (Lcom/crystalgui/core/async/Owner;Lcom/crystalgui/document/NewDocumentKind;)Lcom/crystalgui/core/dispose/Disposable;
   method public offeredAt (Lcom/crystalgui/document/NewDocumentContext;)Ljava/util/List;
-  method public register (Lcom/crystalgui/document/NewDocumentKind;)Lcom/crystalgui/core/dispose/Disposable;
+  method public removeOwner (Lcom/crystalgui/core/async/Owner;)V
+  method public,static process ()Lcom/crystalgui/document/NewDocumentKinds;
 com/crystalgui/document/RecentFiles
   access public,final
   extends java/lang/Object
@@ -18663,6 +18741,7 @@ com/crystalgui/workbench/Workbench
   method public openTabPaths ()Ljava/util/List;
   method public othersEditing (Lcom/crystalgui/fs/CgPath;)Ljava/lang/String;
   method public othersViewing (Lcom/crystalgui/fs/CgPath;)Ljava/lang/String;
+  method public owner ()Lcom/crystalgui/core/async/Owner;
   method public panels ()Lcom/crystalgui/workbench/dock/panel/DockPanelRegistry;
   method public projectListing ()Lcom/crystalgui/workbench/explorer/WorkspaceTreeSource;
   method public projectSources ()Lcom/crystalgui/text/lang/ProjectSources;
@@ -18735,6 +18814,7 @@ com/crystalgui/workbench/WorkbenchContext
   method public,abstract openResource (Lcom/crystalgui/fs/Resource;Ljava/lang/Runnable;)V
   method public,abstract othersEditing (Lcom/crystalgui/fs/CgPath;)Ljava/lang/String;
   method public,abstract othersViewing (Lcom/crystalgui/fs/CgPath;)Ljava/lang/String;
+  method public,abstract owner ()Lcom/crystalgui/core/async/Owner;
   method public,abstract panels ()Lcom/crystalgui/workbench/dock/panel/DockPanelRegistry;
   method public,abstract projectListing ()Lcom/crystalgui/workbench/explorer/WorkspaceTreeSource;
   method public,abstract projects ()Lcom/crystalgui/fs/client/WorkspaceProjects;
@@ -19892,7 +19972,7 @@ com/crystalgui/workbench/explorer/BuiltInNewDocuments
   field public,static,final JS_FILE Ljava/lang/String;
   field public,static,final PACKAGE Ljava/lang/String;
   field public,static,final PACKAGE_INFO Ljava/lang/String;
-  method public,static registerInto (Lcom/crystalgui/document/NewDocumentKinds;)V
+  method public,static registerInto (Lcom/crystalgui/document/NewDocumentKinds;Lcom/crystalgui/core/async/Owner;)V
 com/crystalgui/workbench/explorer/ChangeNotice
   access public,final
   extends java/lang/Object

@@ -495,7 +495,7 @@ public final class WorkbenchOpener {
      * rather than one that re-read over whatever was unsaved in it.</p>
      */
     public Workbench contribute(DocumentKind kind) {
-        workbench.kinds.register(kind);
+        workbench.kinds.contribute(workbench.owner(), kind);
         workbench.registry.register(DockPanelDescriptor.document(kind.id(), kind.displayName()), ref -> {
             Resource resource = Resource.parse(ref.state(Workbench.PATH_STATE, ""));
             EditorInput input = EditorInput.of(resource);

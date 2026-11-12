@@ -7,6 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
@@ -100,7 +101,7 @@ public class PresenceTest {
             workspace = Workspace.over(client::call, client::onNotify, CgPlainOps.INSTANCE)
                     .setStorage(new CgInMemoryConfigStorage());
             DocumentKinds kinds = new DocumentKinds();
-            kinds.register(DocumentKind.of("test:text", "Text")
+            kinds.contribute(Owner.PROCESS, DocumentKind.of("test:text", "Text")
                     .files(DocumentKind.FilePatterns.extension("txt"))
                     .model(TextDocumentModel::of));
             documents = new WorkspaceDocuments(workspace, kinds);

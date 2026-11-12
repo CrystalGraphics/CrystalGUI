@@ -1,10 +1,11 @@
 package com.crystalgui.text.lang;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Where {@link TypeSearch} providers register, and the one place a picker asks.
@@ -26,7 +27,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class TypeSearchRegistry {
 
-    private static final List<TypeSearch> PROVIDERS = new CopyOnWriteArrayList<>();
+    private static final Contributions<TypeSearch> PROVIDERS =
+            Contributions.of("type-search", provider -> provider, Contributions.Conflict.REJECT);
 
     private TypeSearchRegistry() {
     }
@@ -36,8 +38,8 @@ public final class TypeSearchRegistry {
      * it does: a host that opens two languages calls each one's registration, and both lend to the other.
      */
     public static void contribute(TypeSearch provider) {
-        if (provider == null || PROVIDERS.contains(provider)) return;
-        PROVIDERS.add(provider);
+        if (provider == null) return;
+        PROVIDERS.add(Owner.PROCESS, provider);
     }
 
     public static boolean remove(TypeSearch provider) {
@@ -46,7 +48,7 @@ public final class TypeSearchRegistry {
 
     /** True when anything can answer at all — for a caller that wants to not offer the affordance. */
     public static boolean hasProvider() {
-        return !PROVIDERS.isEmpty();
+        return !PROVIDERS.all().isEmpty();
     }
 
     /**
@@ -64,13 +66,13 @@ public final class TypeSearchRegistry {
      */
     public static TypeSearch.Results search(String query, int limit) {
         if (query == null || query.isEmpty() || limit <= 0) return TypeSearch.Results.EMPTY;
-        if (PROVIDERS.isEmpty()) return TypeSearch.Results.EMPTY;
+        if (PROVIDERS.all().isEmpty()) return TypeSearch.Results.EMPTY;
 
         List<TypeSearch.Result> merged = new ArrayList<>();
         Set<String> seen = new LinkedHashSet<>();
         boolean truncated = false;
 
-        for (TypeSearch provider : PROVIDERS) {
+        for (TypeSearch provider : PROVIDERS.all()) {
             TypeSearch.Results answer;
             try {
                 answer = provider.search(query, limit);
@@ -96,6 +98,6 @@ public final class TypeSearchRegistry {
 
     /** Drops every provider. Tests only — statics outlive a test class, and this one is shared. */
     public static void resetForTesting() {
-        PROVIDERS.clear();
+        PROVIDERS.clearForTesting();
     }
 }

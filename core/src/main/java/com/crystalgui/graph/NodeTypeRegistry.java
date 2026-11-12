@@ -1,6 +1,8 @@
 package com.crystalgui.graph;
 
 import javax.annotation.Nullable;
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchQuery;
 
@@ -33,7 +35,13 @@ public final class NodeTypeRegistry {
 
     private static final NodeTypeRegistry SHARED = new NodeTypeRegistry();
 
-    private final Map<String, NodeType> types = new LinkedHashMap<>();
+    private final Contributions<NodeType> contributed =
+            Contributions.of("node-types", NodeType::id, Contributions.Conflict.REJECT);
+    private final Contributions.Index<Map<String, NodeType>> byId = contributed.index(entries -> {
+        Map<String, NodeType> types = new LinkedHashMap<>();
+        for (Contributions.Entry<NodeType> entry : entries) types.put(entry.item().id(), entry.item());
+        return Collections.unmodifiableMap(types);
+    });
 
     /** A library for an application that only ever has one. Not a requirement — see the class note. */
     public static NodeTypeRegistry shared() {
@@ -41,14 +49,11 @@ public final class NodeTypeRegistry {
     }
 
     /**
-     * @throws IllegalArgumentException on a duplicate id, matching every other registry here — a silent
-     *         overwrite hides two consumers fighting over one id far more often than it is deliberate
+     * @throws IllegalStateException on a duplicate id: a silent overwrite hides two consumers fighting over one id
+     *         far more often than it is deliberate. The same type again is a no-op.
      */
     public NodeTypeRegistry register(NodeType type) {
-        NodeType previous = types.putIfAbsent(type.id(), type);
-        if (previous != null && !previous.equals(type)) {
-            throw new IllegalArgumentException("Node type id already registered: " + type.id());
-        }
+        contributed.add(Owner.PROCESS, type);
         return this;
     }
 
@@ -58,23 +63,23 @@ public final class NodeTypeRegistry {
 
     @Nullable
     public NodeType get(String typeId) {
-        return types.get(typeId);
+        return byId.get().get(typeId);
     }
 
     public boolean contains(String typeId) {
-        return types.containsKey(typeId);
+        return byId.get().containsKey(typeId);
     }
 
     public Collection<NodeType> all() {
-        return Collections.unmodifiableCollection(types.values());
+        return byId.get().values();
     }
 
     public int size() {
-        return types.size();
+        return byId.get().size();
     }
 
     public void clear() {
-        types.clear();
+        contributed.clearForTesting();
     }
 
     // ── What the menu asks ──────────────────────────────────────────────────
@@ -91,11 +96,11 @@ public final class NodeTypeRegistry {
         SearchQuery parsed = SearchQuery.of(query);
         List<NodeType> found = new ArrayList<>();
         if (parsed.isEmpty()) {
-            found.addAll(types.values());
+            found.addAll(byId.get().values());
             return found;
         }
         List<Ranked<NodeType>> ranked = new ArrayList<>();
-        for (NodeType type : types.values()) {
+        for (NodeType type : byId.get().values()) {
             SearchMatch match = type.bestMatch(parsed);
             if (match != null) ranked.add(new Ranked<>(type, match, type.label()));
         }
@@ -150,7 +155,7 @@ public final class NodeTypeRegistry {
     public List<Offer> offersForOutput(String sourceTypeId, TypeCompatibility compatibility, String query) {
         SearchQuery parsed = SearchQuery.of(query);
         List<Ranked<Offer>> ranked = new ArrayList<>();
-        for (NodeType type : types.values()) {
+        for (NodeType type : byId.get().values()) {
             SearchMatch match = parsed.isEmpty() ? null : type.bestMatch(parsed);
             if (!parsed.isEmpty() && match == null) continue;
             for (PortSpec port : type.inputsAccepting(sourceTypeId, compatibility)) {
@@ -172,7 +177,7 @@ public final class NodeTypeRegistry {
     public List<Offer> offersForInput(String targetTypeId, TypeCompatibility compatibility, String query) {
         SearchQuery parsed = SearchQuery.of(query);
         List<Ranked<Offer>> ranked = new ArrayList<>();
-        for (NodeType type : types.values()) {
+        for (NodeType type : byId.get().values()) {
             SearchMatch match = parsed.isEmpty() ? null : type.bestMatch(parsed);
             if (!parsed.isEmpty() && match == null) continue;
             for (PortSpec port : type.outputsFeeding(targetTypeId, compatibility)) {

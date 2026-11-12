@@ -32,6 +32,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.document.DocumentState;
@@ -224,8 +225,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     public final Workspace workspace;
 
-    /** Every kind of document this workbench can open. An instance, so two workbenches differ. */
-    public final DocumentKinds kinds = new DocumentKinds();
+    /** Who this workbench is to the process-wide registries: what it contributes leaves when it is disposed. */
+    private final Owner owner = Owner.of("workbench");
+
+    /** Every kind of document the process can open: what this workbench contributes is read by all of them. */
+    public final DocumentKinds kinds = DocumentKinds.process();
 
     /**
      * What <b>New ▸</b> can make here — the creation-side twin of {@link #kinds}.
@@ -234,7 +238,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * how to OPEN something that already exists, and most of those cannot be conjured from nothing (an
      * image, a decompiled class). A kind here says what a new one starts out as. @see NewDocumentKinds
      */
-    public final NewDocumentKinds newDocuments = new NewDocumentKinds();
+    public final NewDocumentKinds newDocuments = NewDocumentKinds.process();
 
     /** The open documents, and the wire underneath them. */
     public final WorkspaceDocuments documents;
@@ -894,7 +898,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         opener.contribute(TextFileKind.declare(this));
         // THE NEW MENU'S OWN BUILT-INS, through the seam a contributor uses. A workbench with none of
         // these registered has an empty New menu, which is the honest test of the seam.
-        BuiltInNewDocuments.registerInto(newDocuments);
+        BuiltInNewDocuments.registerInto(newDocuments, owner);
 
         dock = new DockArea(registry, defaultLayout());
         // WHAT AN EMPTY EDITOR SAYS, named here because these are THIS application's ways in -- the dock is
@@ -1214,6 +1218,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // signals and whose commands are in the global registry.
         for (Disposable handle : new ArrayList<>(toolWindowHandles)) handle.dispose();
         toolWindowHandles.clear();
+        kinds.removeOwner(owner);
+        newDocuments.removeOwner(owner);
         // EXTENSIONS FIRST, in reverse activation order -- a later one may have been built from an
         // earlier one's contribution, which is the same argument Disposer makes about children.
         for (int i = activeExtensions.size() - 1; i >= 0; i--) activeExtensions.get(i).dispose();
@@ -1877,7 +1883,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return editors;
     }
 
-    /** Every kind of document this workbench can open. @see #contribute */
+    @Override
+    public Owner owner() {
+        return owner;
+    }
+
+    /** What <b>New ▸</b> can make: the process-wide kinds. */
     public NewDocumentKinds newDocuments() {
         return newDocuments;
     }

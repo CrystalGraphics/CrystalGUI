@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.NewDocumentContext;
 import com.crystalgui.document.NewDocumentKind;
 import com.crystalgui.document.NewDocumentKinds;
@@ -37,7 +38,7 @@ public class NewMenuPresetsTest {
     @Before
     public void registerTheBuiltIns() {
         kinds = new NewDocumentKinds();
-        BuiltInNewDocuments.registerInto(kinds);
+        BuiltInNewDocuments.registerInto(kinds, Owner.PROCESS);
     }
 
     private List<String> offeredIn(String sourceRoot) {
@@ -98,7 +99,7 @@ public class NewMenuPresetsTest {
      */
     @Test
     public void aContributedKindIsOfferedLikeAnyOther() {
-        kinds.register(NewDocumentKind.of("mymod:thing", "Thing")
+        kinds.contribute(Owner.PROCESS, NewDocumentKind.of("mymod:thing", "Thing")
                 .suffix(".thing")
                 .template(target -> "name: " + target.typeName()));
 
@@ -110,7 +111,7 @@ public class NewMenuPresetsTest {
     /** Engine rows sort above contributed ones, because a contributor's default order IS the reserve. */
     @Test
     public void engineRowsComeFirst() {
-        kinds.register(NewDocumentKind.of("mymod:thing", "Thing"));
+        kinds.contribute(Owner.PROCESS, NewDocumentKind.of("mymod:thing", "Thing"));
 
         List<String> rows = offeredIn(null);
         assertEquals("a plain file leads", BuiltInNewDocuments.FILE, rows.get(0));
@@ -122,9 +123,9 @@ public class NewMenuPresetsTest {
     @Test
     public void aDuplicateIdIsRefused() {
         try {
-            kinds.register(NewDocumentKind.of(BuiltInNewDocuments.FILE, "Impostor"));
+            kinds.contribute(Owner.PROCESS, NewDocumentKind.of(BuiltInNewDocuments.FILE, "Impostor"));
             throw new AssertionError("a duplicate id should be refused");
-        } catch (IllegalStateException expected) {
+        } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains(BuiltInNewDocuments.FILE));
         }
     }

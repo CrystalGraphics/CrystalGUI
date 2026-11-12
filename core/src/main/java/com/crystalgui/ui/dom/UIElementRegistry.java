@@ -1,11 +1,13 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -32,10 +34,15 @@ public final class UIElementRegistry {
      * Moving it below the block turns every built-in registration into a
      * {@link NullPointerException} on a class that plainly declares it.
      */
-    private static final Map<Name, Entry> ENTRIES = new ConcurrentHashMap<>();
+    private static final Contributions<Entry> ENTRIES = Contributions.of("node-kinds", Entry::name);
+    private static final Contributions.Index<Map<Name, Entry>> BY_NAME = ENTRIES.index(entries -> {
+        Map<Name, Entry> byName = new LinkedHashMap<>();
+        for (Contributions.Entry<Entry> entry : entries) byName.put(entry.item().name(), entry.item());
+        return byName;
+    });
 
     /** {@code factory} is null for a cascade-only kind — see {@link #registerTag}. */
-    private record Entry(@Nullable Supplier<? extends UIElement> factory, NodeContract contract,
+    private record Entry(Name name, @Nullable Supplier<? extends UIElement> factory, NodeContract contract,
                         KindInfo info) {
     }
 
@@ -134,7 +141,7 @@ public final class UIElementRegistry {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(factory, "factory");
         Objects.requireNonNull(contract, "contract");
-        ENTRIES.put(name, new Entry(factory, contract, info == null ? KindInfo.derived() : info));
+        ENTRIES.add(Owner.PROCESS, new Entry(name, factory, contract, info == null ? KindInfo.derived() : info));
     }
 
     /**
@@ -150,9 +157,9 @@ public final class UIElementRegistry {
     public static void describe(Name name, KindInfo info) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(info, "info");
-        Entry registered = ENTRIES.get(name);
+        Entry registered = BY_NAME.get().get(name);
         if (registered == null) throw new IllegalStateException("No kind " + name + " to describe");
-        ENTRIES.put(name, new Entry(registered.factory(), registered.contract(), info));
+        ENTRIES.replace(Owner.PROCESS, new Entry(name, registered.factory(), registered.contract(), info));
     }
 
     /**
@@ -175,7 +182,7 @@ public final class UIElementRegistry {
     public static void registerTag(Name name, NodeContract contract) {
         Objects.requireNonNull(name, "name");
         Objects.requireNonNull(contract, "contract");
-        ENTRIES.put(name, new Entry(null, contract, KindInfo.derived()));
+        ENTRIES.add(Owner.PROCESS, new Entry(name, null, contract, KindInfo.derived()));
     }
 
     /**
@@ -185,29 +192,29 @@ public final class UIElementRegistry {
      */
     public static KindInfo infoOf(Name name) {
         bootstrap();
-        Entry entry = ENTRIES.get(name);
+        Entry entry = BY_NAME.get().get(name);
         return entry == null ? KindInfo.derived() : entry.info();
     }
 
     /** Whether this kind can be BUILT, as opposed to merely existing for the cascade. */
     public static boolean isBuildable(Name name) {
         bootstrap();
-        Entry entry = ENTRIES.get(name);
+        Entry entry = BY_NAME.get().get(name);
         return entry != null && entry.factory() != null;
     }
 
     public static boolean isRegistered(Name name) {
         bootstrap();
-        return ENTRIES.containsKey(name);
+        return BY_NAME.get().containsKey(name);
     }
 
     /** A fresh node of the named kind. Throws for a name nothing registered. */
     public static UIElement create(Name name) {
         bootstrap();
-        Entry entry = ENTRIES.get(name);
+        Entry entry = BY_NAME.get().get(name);
         if (entry == null) {
             throw new IllegalArgumentException("No node kind is registered as <" + name + ">; registered: "
-                    + ENTRIES.keySet());
+                    + BY_NAME.get().keySet());
         }
         if (entry.factory() == null) {
             throw new IllegalArgumentException("<" + name + "> is a cascade-only kind and cannot be "
@@ -220,13 +227,13 @@ public final class UIElementRegistry {
     /** The contract for a kind — the registered one, or a plain container's for a name nothing registered. */
     public static NodeContract contractFor(Name name) {
         bootstrap();
-        Entry entry = ENTRIES.get(name);
+        Entry entry = BY_NAME.get().get(name);
         return entry != null ? entry.contract() : plain(name, true);
     }
 
     public static Set<Name> names() {
         bootstrap();
-        return Set.copyOf(ENTRIES.keySet());
+        return Set.copyOf(BY_NAME.get().keySet());
     }
 
     /** A contract that reports nothing and carries no state: the plain container's. */

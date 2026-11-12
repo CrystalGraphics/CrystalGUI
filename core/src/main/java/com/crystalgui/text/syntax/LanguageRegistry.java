@@ -3,6 +3,8 @@ package com.crystalgui.text.syntax;
 import com.crystalgui.core.provider.Providers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.Broadcast;
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.text.TextBuffer;
@@ -104,10 +106,32 @@ public final class LanguageRegistry {
         onCapabilityChanged.post(CAPABILITY_CHANGES.incrementAndGet());
     }
 
-    private static final FilePatternMap<Entry> RULES = new FilePatternMap<>();
+    private enum Kind { EXTENSIONS, NAMES, GLOBS }
 
-    // The same entries by language name, for a caller holding a Language and no file name
-    private static final Map<String, Entry> BY_LANGUAGE = new HashMap<>();
+    /** One registration: patterns of one kind claiming files for an entry. */
+    private record Rule(Entry entry, Kind kind, String[] patterns) {
+    }
+
+    private static final Contributions<Rule> CONTRIBUTED = Contributions.of("language-rules");
+
+    /** The rules replayed in registration order, so a later one replaces an earlier one's pattern. */
+    private record Table(FilePatternMap<Entry> rules, Map<String, Entry> byLanguage) {
+    }
+
+    private static final Contributions.Index<Table> TABLE = CONTRIBUTED.index(entries -> {
+        FilePatternMap<Entry> rules = new FilePatternMap<>();
+        Map<String, Entry> byLanguage = new HashMap<>();
+        for (Contributions.Entry<Rule> contributed : entries) {
+            Rule rule = contributed.item();
+            switch (rule.kind()) {
+                case EXTENSIONS -> rules.putExtensions(rule.entry(), rule.patterns());
+                case NAMES -> rules.putNames(rule.entry(), rule.patterns());
+                case GLOBS -> rules.putGlobs(rule.entry(), rule.patterns());
+            }
+            byLanguage.put(rule.entry().language().name(), rule.entry());
+        }
+        return new Table(rules, byLanguage);
+    });
 
     static {
         Entry java = new Entry(Language.JAVA, KeywordTokenizer::java);
@@ -125,52 +149,45 @@ public final class LanguageRegistry {
     }
 
     /** Registers {@code entry} for each extension, with or without the leading dot, case-insensitively. */
-    public static synchronized void registerExtensions(Entry entry, String... extensions) {
-        RULES.putExtensions(entry, extensions);
-        remember(entry);
+    public static void registerExtensions(Entry entry, String... extensions) {
+        CONTRIBUTED.add(Owner.PROCESS, new Rule(entry, Kind.EXTENSIONS, extensions));
     }
 
     /** Registers {@code entry} for each <b>exact</b> file name — {@code Dockerfile}, {@code .gitignore}. */
-    public static synchronized void registerNames(Entry entry, String... fileNames) {
-        RULES.putNames(entry, fileNames);
-        remember(entry);
+    public static void registerNames(Entry entry, String... fileNames) {
+        CONTRIBUTED.add(Owner.PROCESS, new Rule(entry, Kind.NAMES, fileNames));
     }
 
     /** Registers {@code entry} for each glob over the whole file name — {@code *.test.js}. */
-    public static synchronized void registerGlobs(Entry entry, String... globs) {
-        RULES.putGlobs(entry, globs);
-        remember(entry);
-    }
-
-    private static void remember(Entry entry) {
-        BY_LANGUAGE.put(entry.language().name(), entry);
+    public static void registerGlobs(Entry entry, String... globs) {
+        CONTRIBUTED.add(Owner.PROCESS, new Rule(entry, Kind.GLOBS, globs));
     }
 
     /** The entry for a language by its name, never null: {@link #PLAIN} when nothing claims it. */
-    public static synchronized Entry forLanguage(@Nullable Language language) {
+    public static Entry forLanguage(@Nullable Language language) {
         bootstrap();
         if (language == null) return PLAIN;
-        Entry entry = BY_LANGUAGE.get(language.name());
+        Entry entry = TABLE.get().byLanguage().get(language.name());
         return entry == null ? PLAIN : entry;
     }
 
     /** The language for a file name or path, never null. */
-    public static synchronized Entry forFileName(@Nullable String fileName) {
+    public static Entry forFileName(@Nullable String fileName) {
         bootstrap();
-        Entry entry = RULES.get(fileName);
+        Entry entry = TABLE.get().rules().get(fileName);
         return entry == null ? PLAIN : entry;
     }
 
     /** Whether anything claims this file. */
-    public static synchronized boolean isKnown(@Nullable String fileName) {
+    public static boolean isKnown(@Nullable String fileName) {
         bootstrap();
-        return RULES.get(fileName) != null;
+        return TABLE.get().rules().get(fileName) != null;
     }
 
     /** Every registered pattern, in registration order, as {@code KIND:pattern}. */
-    public static synchronized List<String> rules() {
+    public static List<String> rules() {
         bootstrap();
-        return RULES.patterns();
+        return TABLE.get().rules().patterns();
     }
 
     private static final List<String> CONTRIBUTORS = new ArrayList<>();

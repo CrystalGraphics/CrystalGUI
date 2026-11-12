@@ -1,9 +1,12 @@
 package com.crystalgui.graph.port;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
+
 import javax.annotation.Nullable;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * id → {@link PortType}, so a graph loaded from disk or off the wire can resolve the types it names.
@@ -21,7 +24,13 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public final class PortTypeRegistry {
 
-    private static final Map<String, PortType> TYPES = new ConcurrentHashMap<>();
+    private static final Contributions<PortType> TYPES =
+            Contributions.of("port-types", PortType::id, Contributions.Conflict.REJECT);
+    private static final Contributions.Index<Map<String, PortType>> BY_ID = TYPES.index(entries -> {
+        Map<String, PortType> byId = new LinkedHashMap<>();
+        for (Contributions.Entry<PortType> entry : entries) byId.put(entry.item().id(), entry.item());
+        return byId;
+    });
 
     private PortTypeRegistry() {
     }
@@ -29,39 +38,35 @@ public final class PortTypeRegistry {
     /**
      * Registers {@code type} under its own id.
      *
-     * <p>Throws on a duplicate id, matching {@code ElementRegistry.register}
-     * — a silent overwrite hides two consumers fighting over one id far more often than it is a
-     * deliberate re-registration. Re-registering the <em>identical</em> type is a no-op rather than a
-     * throw, so a host that registers from more than one entry point is not punished for it.</p>
+     * <p>Throws on a duplicate id: a silent overwrite hides two consumers fighting over one id far more often than
+     * it is a deliberate re-registration. Re-registering the <em>identical</em> type is a no-op rather than a throw,
+     * so a host that registers from more than one entry point is not punished for it.</p>
      */
     public static void register(PortType type) {
-        PortType previous = TYPES.putIfAbsent(type.id(), type);
-        if (previous != null && !previous.equals(type)) {
-            throw new IllegalArgumentException("Port type id already registered: " + type.id()
-                    + " (as " + previous + ")");
-        }
+        TYPES.add(Owner.PROCESS, type);
     }
 
     @Nullable
     public static PortType get(String id) {
-        return TYPES.get(id);
+        return BY_ID.get().get(id);
     }
 
     /** As {@link #get}, but throws with the registered set listed — the shape of error a decode wants. */
     public static PortType require(String id) {
-        PortType type = TYPES.get(id);
+        Map<String, PortType> types = BY_ID.get();
+        PortType type = types.get(id);
         if (type == null) {
-            throw new IllegalArgumentException("Unknown port type: " + id + " (registered: " + TYPES.keySet() + ")");
+            throw new IllegalArgumentException("Unknown port type: " + id + " (registered: " + types.keySet() + ")");
         }
         return type;
     }
 
     public static Set<String> ids() {
-        return Set.copyOf(TYPES.keySet());
+        return Set.copyOf(BY_ID.get().keySet());
     }
 
     /** Drops every registration. For tests, which must not inherit each other's types. */
     public static void clear() {
-        TYPES.clear();
+        TYPES.clearForTesting();
     }
 }

@@ -94,7 +94,7 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
         // AND THE ROW THAT MAKES ONE -- the graph's own declaration now, not the explorer's. A
         // starter graph (an output node, a couple of inputs) goes in `template`, which is handed the
         // file's name and its directory. @see NewDocumentKind
-        workbench.newDocuments().register(NewDocumentKind.of("shadergraph:new", "Shader Graph")
+        workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of("shadergraph:new", "Shader Graph")
                 .icon("crystalgui:filetypes/shader")
                 .suffix(".shadergraph")
                 .where(NewDocumentContext::outsideSourceRoots)

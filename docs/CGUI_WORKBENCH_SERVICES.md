@@ -1184,7 +1184,7 @@ the workbench, and the split is not ceremony: most openable things cannot be con
 image, a decompiled class — and some creatable things are not documents at all, such as a folder.
 
 ```java
-workbench.newDocuments().register(NewDocumentKind.of("mymod:notes", "Notes")
+workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of("mymod:notes", "Notes")
         .icon("crystalgui:file-text")
         .suffix(".notes")
         .where(NewDocumentContext::outsideSourceRoots)
@@ -1195,7 +1195,7 @@ workbench.newDocuments().register(NewDocumentKind.of("mymod:notes", "Notes")
 |---|---|
 | `NewDocumentKind` | the declaration: id, label, icon, suffix, placement, `where`, `template`, variants |
 | `NewDocumentContext` | where a New would land — the directory and the source root containing it |
-| `NewDocumentKinds` | the registry, per workbench. `register` answers a `Disposable`; a duplicate id is refused |
+| `NewDocumentKinds` | the process-wide registry, one `Contributions`. `contribute(owner, kind)` answers a `Disposable`; what an owner contributed is offered by every workbench while it runs and leaves with it; one owner contributing an id twice is refused |
 | `WorkbenchContext.newDocuments()` | how an extension reaches it |
 
 **The id is a command id.** A row is invocable like anything else, so the id is what a keymap and a
@@ -1482,7 +1482,7 @@ public final class NotesKind implements WorkbenchExtension {
     public NotesKind() { }                                  // ServiceLoader's rule
     @Override public String id() { return ID; }
     @Override public Disposable activate(WorkbenchContext workbench) {
-        return workbench.kinds().register(KIND);            // everything it registered, in one handle
+        return workbench.kinds().contribute(workbench.owner(), KIND);   // everything it contributed, in one handle
     }
 }
 ```

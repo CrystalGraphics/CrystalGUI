@@ -1055,8 +1055,8 @@ public final class NotesKind {
             .model((resource, bytes) -> NotesModel.decode(bytes))   // what it IS
             .editor(NotesView::new);                                 // one way of looking at it
 
-    public static Disposable register(DocumentKinds kinds) {
-        return kinds.register(KIND);
+    public static Disposable register(DocumentKinds kinds, Owner owner) {
+        return kinds.contribute(owner, KIND);
     }
 }
 ```
