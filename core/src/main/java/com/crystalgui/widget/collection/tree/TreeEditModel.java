@@ -5,7 +5,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.ui.service.DragData;
+import com.crystalgui.ui.service.TransferData;
 
 /**
  * What a tree's items are, and how to change them — the half of {@link TreeEditing} only its owner can write.
@@ -94,7 +94,7 @@ public interface TreeEditModel<T> {
     }
 
     /**
-     * What a drag of {@code items} offers a target OUTSIDE this tree, found there with {@link DragData#find}, or null
+     * What a drag of {@code items} offers a target OUTSIDE this tree, found there with {@link TransferData#find}, or null
      * for nothing. The explorer offers its files, which an editor area opens where they land.
      *
      * <pre>{@code

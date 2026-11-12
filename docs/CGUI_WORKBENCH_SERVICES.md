@@ -1107,7 +1107,10 @@ registry.register(Command.of("mymod.pin", "Pin Tab")
 
 A file dragged from the Project panel opens where it is dropped, with the zones a dragged tab gets: into a
 group, beside it, or along the dock's outer edge. Nothing about files is in the dock: a drag it did not start
-is asked of a `DockForeignDrop` on the home, and the payload says what it carries through `DragData`.
+is asked of a `DockForeignDrop` on the home, and the payload says what it carries through `TransferData`. The
+clipboard carries the same type: `UiClipboard.process().put(TransferData.of(fragment, text))` keeps the typed form for
+other applications and writes the text through to the system, and a paste (`read(type)`) offers the typed form only
+while the system text is still what was written (another program's copy since wins).
 
 ```java
 // a tree offers its rows to targets outside it

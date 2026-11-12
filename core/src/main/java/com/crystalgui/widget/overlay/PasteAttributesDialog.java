@@ -10,7 +10,6 @@ import java.util.function.Consumer;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.core.attribute.AttributeClipboard;
 import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIDocument;
@@ -102,6 +101,13 @@ public final class PasteAttributesDialog {
     @Nullable
     public static Dialog open(@Nullable UIElement from, AttributeSet copied, String target,
                               Consumer<AttributeSet> onApply) {
+        return open(from, copied, target, onApply, chosen -> { });
+    }
+
+    /** As {@link #open(UIElement, AttributeSet, String, Consumer)}; {@code onRemember} hears a subset the user asked not to be asked about again. */
+    @Nullable
+    public static Dialog open(@Nullable UIElement from, AttributeSet copied, String target,
+                              Consumer<AttributeSet> onApply, Consumer<AttributeSet> onRemember) {
         UIDocument window = from == null ? null : from.document();
         if (window == null || copied.isEmpty()) return null;
 
@@ -212,7 +218,7 @@ public final class PasteAttributesDialog {
                 if (pair.getKey().isChecked()) wanted.add(pair.getValue().slot().id());
             }
             AttributeSet chosen = copied.keeping(slot -> wanted.contains(slot.id()));
-            if (remember.isChecked()) AttributeClipboard.remember(chosen);
+            if (remember.isChecked()) onRemember.accept(chosen);
             dialog.close();
             if (!chosen.isEmpty()) onApply.accept(chosen);
         });

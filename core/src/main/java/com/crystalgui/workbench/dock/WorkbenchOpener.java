@@ -14,7 +14,7 @@ import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.service.DragData;
+import com.crystalgui.ui.service.TransferData;
 import com.crystalgui.widget.texteditor.TextEditor;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.dock.drag.DockDropZone;
@@ -237,7 +237,7 @@ public final class WorkbenchOpener {
         return new DockForeignDrop() {
             @Override
             public List<DockPanelRef> panelsFor(Object payload) {
-                DraggedResources dragged = DragData.find(payload, DraggedResources.class);
+                DraggedResources dragged = TransferData.find(payload, DraggedResources.class);
                 if (dragged == null) return List.of();
                 List<DockPanelRef> panels = new ArrayList<>();
                 for (Resource resource : dragged.resources()) {

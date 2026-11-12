@@ -10,7 +10,7 @@ import com.crystalgui.fs.Resource;
  *
  * <pre>{@code
  * public Object transfer(List<CgPath> paths) { return new DraggedResources(paths.stream().map(Resource::of).toList()); }
- * DraggedResources dropped = DragData.find(event.getPayload(), DraggedResources.class);
+ * DraggedResources dropped = TransferData.find(event.getPayload(), DraggedResources.class);
  * }</pre>
  *
  * @param resources never empty — a source with nothing to offer offers no {@code DraggedResources} at all

@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.widget.surface.edit.Clipboard;
-import com.crystalgui.widget.surface.edit.Clipboards;
+import com.crystalgui.ui.service.UiClipboard;
 
 /**
  * The ten things every surface can do: delete, select all, deselect, frame, and the clipboard four.
@@ -85,13 +85,13 @@ public final class SurfaceCommands {
                 .enabledWhen(context -> surfaceOf(context) != null));
 
         registry.register(Command.of(COPY, "Copy")
-                .run(context -> with(context, surface -> Clipboards.store(copyOf(surface))))
+                .run(context -> with(context, surface -> store(surface, copyOf(surface))))
                 .enabledWhen(context -> canCopy(surfaceOf(context))));
         registry.register(Command.of(CUT, "Cut")
                 .run(context -> with(context, surface -> {
                     Object clip = copyOf(surface);
                     if (clip == null) return;
-                    Clipboards.store(clip);
+                    store(surface, clip);
                     surface.selection().clear();
                 }))
                 .enabledWhen(context -> canCopy(surfaceOf(context))));
@@ -197,10 +197,16 @@ public final class SurfaceCommands {
         return clipboard == null ? null : clipboard.copy();
     }
 
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private static void store(SurfaceEditor surface, @Nullable Object clip) {
+        Clipboard clipboard = surface.clipboard();
+        if (clipboard != null && clip != null) UiClipboard.process().put(clipboard.transfer(clip));
+    }
+
     private static void paste(SurfaceEditor surface) {
         Clipboard<?> clipboard = surface.clipboard();
         if (clipboard == null) return;
-        pasteInto(surface, Clipboards.stored(clipboard.type()));
+        UiClipboard.process().read(clipboard.type()).then(clip -> pasteInto(surface, clip));
     }
 
     @SuppressWarnings({"unchecked", "rawtypes"})
@@ -243,6 +249,6 @@ public final class SurfaceCommands {
 
     private static boolean canPaste(@Nullable SurfaceEditor surface) {
         return surface != null && surface.clipboard() != null
-                && Clipboards.has(surface.clipboard().type());
+                && UiClipboard.process().has(surface.clipboard().type());
     }
 }

@@ -1,5 +1,7 @@
 package com.crystalgui.widget.surface.edit;
 
+import com.crystalgui.ui.service.TransferData;
+import com.crystalgui.ui.service.UiClipboard;
 import javax.annotation.Nullable;
 
 /**
@@ -14,7 +16,7 @@ import javax.annotation.Nullable;
  * }
  * }</pre>
  *
- * <p>The engine holds what was copied ({@link Clipboards}) and the commands; what a fragment <em>is</em>
+ * <p>The engine holds what was copied ({@link UiClipboard}, one process-wide) and the commands; what a fragment <em>is</em>
  * is yours — a detached graph document, a subtree of a {@code .cgui}. {@link #type} is how a paste into
  * a surface of another kind is declined rather than attempted.</p>
  *
@@ -39,5 +41,16 @@ public interface Clipboard<T> {
     /** Whether a clip has anything in it. Overridden where empty is representable. */
     default boolean isEmpty(T clip) {
         return clip == null;
+    }
+
+    /** The clip as plain text for other programs, or null when it has no text form worth sharing. */
+    @Nullable
+    default String text(T clip) {
+        return null;
+    }
+
+    /** The clip with its text form: what the engine puts on the {@link UiClipboard}. */
+    default TransferData transfer(T clip) {
+        return TransferData.of(clip, text(clip));
     }
 }

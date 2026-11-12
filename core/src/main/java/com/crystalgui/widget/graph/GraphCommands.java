@@ -7,7 +7,7 @@ import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.graph.GraphDocument;
-import com.crystalgui.widget.surface.edit.Clipboards;
+import com.crystalgui.ui.service.UiClipboard;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.Keymap;
 
@@ -64,12 +64,12 @@ public final class GraphCommands {
     /**
      * Forgets what was copied. For a test that must not see what another one copied.
      *
-     * <p>The clip itself is {@link Clipboards}', shared by every surface in the process — a clipboard
+     * <p>The clip itself is the {@link UiClipboard}'s, shared by every surface in the process — a clipboard
      * that lived on a {@code GraphView} could not copy from one shader graph and paste into another,
      * which is most of the reason to have one.</p>
      */
     public static void clearClipboard() {
-        Clipboards.clear();
+        UiClipboard.process().clear();
     }
 
     /** World units of breathing room when framing. Not a pixel value in a widget — framing is a view
@@ -156,9 +156,8 @@ public final class GraphCommands {
                 .run(context -> withGraph(context, graph -> {
                     // Left ALONE when nothing is selected -- see GraphView.copySelection. Copying
                     // nothing must not throw away what was copied a minute ago.
-                    // STORED ONLY WHEN THERE IS SOMETHING: copying nothing must not throw away what
-                    // was copied a minute ago. Clipboards.store ignores null for that reason.
-                    Clipboards.store(graph.clipboard().copy());
+                    GraphDocument copied = graph.clipboard().copy();
+                    if (copied != null) UiClipboard.process().put(graph.clipboard().transfer(copied));
                 }))
                 .enabledWhen(context -> hasNodes(graphFor(context))));
 
@@ -168,7 +167,7 @@ public final class GraphCommands {
                 .run(context -> withGraph(context, graph -> {
                     GraphDocument copied = graph.clipboard().copy();
                     if (copied == null) return;
-                    Clipboards.store(copied);
+                    UiClipboard.process().put(graph.clipboard().transfer(copied));
                     graph.deleteSelection();
                 }))
                 .enabledWhen(context -> hasNodes(graphFor(context))));
@@ -177,7 +176,7 @@ public final class GraphCommands {
                 .icon(ActionIcons.PASTE)
                 .menu(MenuId.GRAPH_NODE_CONTEXT, "1_clipboard", 30)
                 .run(context -> withGraph(context, graph ->
-                        pasteInto(graph, Clipboards.stored(GraphDocument.class))))
+                        UiClipboard.process().read(GraphDocument.class).then(clip -> pasteInto(graph, clip))))
                 // Disabled with an empty clipboard, so the key falls through rather than doing nothing
                 // visible -- and the palette and any menu grey it, which is the same answer.
                 .enabledWhen(context -> graphFor(context) != null
@@ -258,7 +257,7 @@ public final class GraphCommands {
     /** Whether {@code graph} has nodes selected — a wire alone is not something to copy. */
     /** Whether the process clipboard holds a graph fragment with anything in it. */
     private static boolean hasClip() {
-        GraphDocument clip = Clipboards.stored(GraphDocument.class);
+        GraphDocument clip = UiClipboard.process().peek(GraphDocument.class);
         return clip != null && clip.nodeCount() > 0;
     }
 

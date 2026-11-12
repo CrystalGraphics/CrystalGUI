@@ -3091,16 +3091,15 @@ com/crystalgui/core/attribute/AttributeCarrier
   extends java/lang/Object
   method public,abstract copyAttributes ()Lcom/crystalgui/core/attribute/AttributeSet;
   method public,abstract pasteAttributes (Lcom/crystalgui/core/attribute/AttributeSet;)V
-com/crystalgui/core/attribute/AttributeClipboard
+com/crystalgui/core/attribute/AttributeClip
   access public,final
   extends java/lang/Object
-  method public,static clear ()V
-  method public,static hasSomething ()Z
-  method public,static pending (Ljava/lang/String;)Lcom/crystalgui/core/attribute/AttributeSet;
-  method public,static put (Lcom/crystalgui/core/attribute/AttributeSet;)V
-  method public,static remember (Lcom/crystalgui/core/attribute/AttributeSet;)V
-  method public,static remembered (Lcom/crystalgui/core/attribute/AttributeSet;)Lcom/crystalgui/core/attribute/AttributeSet;
-  method public,static remembersAChoice ()Z
+  method public accepts (Ljava/lang/String;)Z
+  method public attributes ()Lcom/crystalgui/core/attribute/AttributeSet;
+  method public remember (Lcom/crystalgui/core/attribute/AttributeSet;)V
+  method public remembered ()Lcom/crystalgui/core/attribute/AttributeSet;
+  method public remembersAChoice ()Z
+  method public,static of (Lcom/crystalgui/core/attribute/AttributeSet;)Lcom/crystalgui/core/attribute/AttributeClip;
 com/crystalgui/core/attribute/AttributeSet
   access public,final
   extends java/lang/Object
@@ -14304,11 +14303,6 @@ com/crystalgui/ui/service/Drag$Listener
   method public onDragCancel ()V
   method public onDragEnd (FF)V
   method public,abstract onDragUpdate (FFFFFF)V
-com/crystalgui/ui/service/DragData
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract as (Ljava/lang/Class;)Ljava/lang/Object;
-  method public,static find (Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;
 com/crystalgui/ui/service/Focus
   access public,final
   extends java/lang/Object
@@ -14428,6 +14422,33 @@ com/crystalgui/ui/service/RotationCursor
   access public,final
   extends java/lang/Object
   method public,static paint (Lcom/crystalgui/render/CgUiPaintContext;FFF)V
+com/crystalgui/ui/service/TransferData
+  access public,abstract,interface
+  extends java/lang/Object
+  method public text ()Ljava/lang/String;
+  method public,abstract as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public,static find (Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;
+  method public,static of ([Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
+com/crystalgui/ui/service/TransferData$Forms
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/ui/service/TransferData
+  method public <init> (Ljava/util/List;)V
+  method public as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public held ()Ljava/util/List;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/ui/service/UiClipboard
+  access public,final
+  extends java/lang/Object
+  method public <init> ()V
+  method public clear ()V
+  method public has (Ljava/lang/Class;)Z
+  method public peek (Ljava/lang/Class;)Ljava/lang/Object;
+  method public put (Lcom/crystalgui/ui/service/TransferData;)V
+  method public read (Ljava/lang/Class;)Lcom/crystalgraphics/job/reply/CgReply;
+  method public,static process ()Lcom/crystalgui/ui/service/UiClipboard;
 com/crystalgui/ui/text/HighlightRegistry
   access public,final
   extends java/lang/Object
@@ -17087,6 +17108,7 @@ com/crystalgui/widget/overlay/PasteAttributesDialog
   field public,static,final SECTION_CLASS Ljava/lang/String;
   field public,static,final VALUE_CLASS Ljava/lang/String;
   method public,static open (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/attribute/AttributeSet;Ljava/lang/String;Ljava/util/function/Consumer;)Lcom/crystalgui/widget/overlay/Dialog;
+  method public,static open (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/attribute/AttributeSet;Ljava/lang/String;Ljava/util/function/Consumer;Ljava/util/function/Consumer;)Lcom/crystalgui/widget/overlay/Dialog;
 com/crystalgui/widget/overlay/Popover
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -17413,17 +17435,12 @@ com/crystalgui/widget/surface/edit/Clipboard
   access public,abstract,interface
   extends java/lang/Object
   method public isEmpty (Ljava/lang/Object;)Z
+  method public text (Ljava/lang/Object;)Ljava/lang/String;
+  method public transfer (Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
   method public,abstract copy ()Ljava/lang/Object;
   method public,abstract paste (Ljava/lang/Object;FF)V
   method public,abstract pasteBy (Ljava/lang/Object;FF)V
   method public,abstract type ()Ljava/lang/Class;
-com/crystalgui/widget/surface/edit/Clipboards
-  access public,final
-  extends java/lang/Object
-  method public,static clear ()V
-  method public,static has (Ljava/lang/Class;)Z
-  method public,static store (Ljava/lang/Object;)V
-  method public,static stored (Ljava/lang/Class;)Ljava/lang/Object;
 com/crystalgui/widget/surface/edit/Edits
   access public,final
   extends java/lang/Object

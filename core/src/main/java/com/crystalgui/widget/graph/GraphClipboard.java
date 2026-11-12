@@ -7,11 +7,13 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
+import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.graph.EdgeData;
+import com.crystalgui.graph.GraphCodecs;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.graph.GraphIds;
 import com.crystalgui.graph.NodeData;
@@ -176,6 +178,12 @@ final class GraphClipboard {
         @Override
         public boolean isEmpty(GraphDocument clip) {
             return clip == null || clip.nodeCount() == 0;
+        }
+
+        /** The graph file's own encoding, so a fragment pastes into a text editor as the JSON it is. */
+        @Override
+        public String text(GraphDocument clip) {
+            return CgFiles.JSON.toText(GraphCodecs.DOCUMENT, clip);
         }
     };
 

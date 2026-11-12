@@ -20,7 +20,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.ui.service.DragData;
+import com.crystalgui.ui.service.TransferData;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.widget.dnd.DragGhost;
 
@@ -98,7 +98,7 @@ final class TreeDragAndDrop<T> {
      * The items being carried, and the editing they came from — so a drag from another tree is ignored — plus what
      * the model offers anything else. @see TreeEditModel#transfer
      */
-    private record Payload(TreeEditing<?> from, List<?> items, @Nullable Object transfer) implements DragData {
+    private record Payload(TreeEditing<?> from, List<?> items, @Nullable Object transfer) implements TransferData {
 
         @Nullable
         @Override
