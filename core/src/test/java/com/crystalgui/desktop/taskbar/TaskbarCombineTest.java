@@ -8,6 +8,7 @@ import com.crystalgui.core.command.MenuSection;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
+import com.crystalgui.desktop.app.AppWindow;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -174,7 +175,7 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
     }
 
     private record Running(ApplicationKind kind, WindowFrame window) implements Application {
-        @Override public WindowFrame mainWindow() { return window; }
+        @Override public AppWindow mainWindow() { return AppWindow.of(window); }
         @Override public boolean open(Resource resource) { return false; }
         @Override public void activate() { }
         @Override public void dispose() { }

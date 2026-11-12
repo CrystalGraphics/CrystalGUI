@@ -1,5 +1,6 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.desktop.app.AppWindow;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.launcher.Launcher;
@@ -196,8 +197,8 @@ public class LauncherTest extends UiDocumentTestBase {
         }
 
         @Override
-        public WindowFrame mainWindow() {
-            return window;
+        public AppWindow mainWindow() {
+            return AppWindow.of(window);
         }
 
         @Override

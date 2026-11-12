@@ -37,7 +37,7 @@ import com.crystalgui.ui.dom.UIDocument;
  * <ul>
  *   <li>{@link #installed()} — what a launcher lists. Answerable with nothing running.</li>
  *   <li>{@link #handlerFor} — which product opens this file, and {@link #open} launches it and shows it.</li>
- *   <li>{@link #launch(ApplicationKind, LaunchContext)} — start one, or activate the instance already
+ *   <li>{@link #launch(ApplicationKind, AppContext)} — start one, or activate the instance already
  *       there when the manifest says {@code singleInstance}.</li>
  *   <li>{@link #running()} — every live instance, which is what the taskbar groups by and what a
  *       "quit everything" walks.</li>
@@ -60,7 +60,7 @@ import com.crystalgui.ui.dom.UIDocument;
  * <h3>Each instance gets its own corner</h3>
  *
  * <p>{@link #launch} scopes the {@link CgConfigStorage} it is given by the kind's id before handing over a
- * {@link LaunchContext}, so two applications on one desktop keep separate sessions and preferences with
+ * {@link AppContext}, so two applications on one desktop keep separate sessions and preferences with
  * neither of them doing anything about it.</p>
  */
 public final class ApplicationRegistry {
@@ -208,11 +208,11 @@ public final class ApplicationRegistry {
     }
 
     private void runAutostart(ApplicationKind kind) {
-        Consumer<LaunchContext> hook = kind.autostartHook();
+        Consumer<AppContext> hook = kind.autostartHook();
         CgConfigStorage storage = desktop.config();
         if (hook == null || storage == null) return;
         try {
-            hook.accept(LaunchContext.of(kind, desktop, null, scoped(kind, storage),
+            hook.accept(AppContext.of(kind, desktop, null, scoped(kind, storage),
                     cacheFor(kind, desktop.cacheRoot())));
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] the autostart of '{}' failed: {}", kind.id(),
@@ -247,7 +247,7 @@ public final class ApplicationRegistry {
      * @return the instance, or null when it could not be started, or ran as an {@link ApplicationKind#action}
      */
     @Nullable
-    public Application launch(ApplicationKind kind, LaunchContext context) {
+    public Application launch(ApplicationKind kind, AppContext context) {
         bootstrap();
         if (kind.isSingleInstance()) {
             Application already = firstRunning(kind);
@@ -280,7 +280,7 @@ public final class ApplicationRegistry {
         WorkspaceClient shared = context.workspace();
         WorkspaceClient own = shared == null ? null : shared.service().client(kind.displayName());
         if (own != null) {
-            context = new LaunchContext(kind, context.desktop(), own, context.storage(), context.cache(),
+            context = new AppContext(kind, context.desktop(), own, context.storage(), context.cache(),
                     context.open());
         }
         Application application;
@@ -308,8 +308,8 @@ public final class ApplicationRegistry {
         running.add(application);
         // Its main window destroyed is the application quit: closing it under DESTROY_ON_CLOSE, or anything else
         // taking it down. Every application gets this from here, so none hooks its own window.
-        WindowFrame main = application.mainWindow();
-        if (main != null) main.onDestroyed.connect(() -> quit(application));
+        AppWindow main = application.mainWindow();
+        if (main != null) main.onClosed(() -> quit(application));
         onDidChange.emit();
         return application;
     }
@@ -379,7 +379,7 @@ public final class ApplicationRegistry {
                 Application application = launch(kind, workspace);
                 // No main window took its place: a refusal, a failure, or an application with none
                 if (desktop.isStarting(kind)) {
-                    desktop.endStartingWindow(kind, application == null ? null : application.mainWindow());
+                    desktop.endStartingWindow(kind, application == null ? null : application.mainWindow().frame());
                 }
                 if (application != null && !away) application.activate();
                 return false;
@@ -406,7 +406,7 @@ public final class ApplicationRegistry {
      *
      * <pre>{@code
      * Application app = desktop.applications().openPrimary(workspace);
-     * if (app != null) desktop.activate(app.mainWindow());
+     * if (app != null) app.activate();
      * }</pre>
      *
      * <ul>
@@ -450,7 +450,7 @@ public final class ApplicationRegistry {
         int best = Integer.MAX_VALUE;
         List<WindowFrame> mru = desktop.windowManager().registry().mruOrder();
         for (Application live : running(kind)) {
-            int at = mru.indexOf(live.mainWindow());
+            int at = mru.indexOf(live.mainWindow().frame());
             if (recent == null || (at >= 0 && at < best)) {
                 recent = live;
                 if (at >= 0) best = at;
@@ -498,7 +498,7 @@ public final class ApplicationRegistry {
     @Nullable
     public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace,
                               CgConfigStorage storage, @Nullable Path cacheRoot) {
-        return launch(kind, LaunchContext.of(kind, desktop, workspace,
+        return launch(kind, AppContext.of(kind, desktop, workspace,
                 scoped(kind, storage), cacheFor(kind, cacheRoot)));
     }
 
@@ -519,7 +519,7 @@ public final class ApplicationRegistry {
                             CgConfigStorage storage, @Nullable Path cacheRoot) {
         ApplicationKind kind = handlerFor(resource);
         if (kind == null) return null;
-        return launch(kind, new LaunchContext(kind, desktop, workspace, scoped(kind, storage),
+        return launch(kind, new AppContext(kind, desktop, workspace, scoped(kind, storage),
                 cacheFor(kind, cacheRoot), List.of(resource)));
     }
 

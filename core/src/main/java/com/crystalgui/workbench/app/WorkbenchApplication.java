@@ -27,10 +27,11 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.app.LaunchContext;
+import com.crystalgui.desktop.app.AppContext;
 import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowChrome;
-import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.WindowSpec;
 import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -123,7 +124,7 @@ public class WorkbenchApplication extends UIElement
     private final WorkspaceClient workspace;
     private final CgConfigStorage storage;
     private final Workbench workbench;
-    private final WindowFrame window;
+    private final AppWindow window;
     private final WorkbenchSession session;
 
     /** Marked internal exactly ONCE, while empty. {@code markAsInternal()} RECURSES. */
@@ -164,7 +165,7 @@ public class WorkbenchApplication extends UIElement
     // ── Building ────────────────────────────────────────────────────────────────────────────────
 
     /** Starts one from a launch. @see Builder */
-    public static Builder of(LaunchContext context) {
+    public static Builder of(AppContext context) {
         return new Builder(context);
     }
 
@@ -178,7 +179,7 @@ public class WorkbenchApplication extends UIElement
      */
     public static final class Builder {
 
-        private final LaunchContext context;
+        private final AppContext context;
         private final List<String> extensions = new ArrayList<>();
         @Nullable
         private String title;
@@ -189,7 +190,7 @@ public class WorkbenchApplication extends UIElement
         private WindowPolicy policy = WindowPolicy.DESTROY_ON_CLOSE;
         private boolean titleShown = true;
 
-        private Builder(LaunchContext context) {
+        private Builder(AppContext context) {
             this.context = context;
         }
 
@@ -215,7 +216,7 @@ public class WorkbenchApplication extends UIElement
             return this;
         }
 
-        /** A stable name for the window, so its geometry survives a restart. @see WindowFrame#key() */
+        /** A stable name for the window, so its geometry survives a restart. @see WindowSpec#key */
         public Builder key(String windowKey) {
             this.key = windowKey;
             return this;
@@ -251,7 +252,7 @@ public class WorkbenchApplication extends UIElement
 
     protected WorkbenchApplication(Builder builder) {
         super(NAME);
-        LaunchContext context = builder.context;
+        AppContext context = builder.context;
         this.kind = context.kind();
         this.desktop = context.desktop();
         this.workspace = context.workspace();
@@ -294,15 +295,10 @@ public class WorkbenchApplication extends UIElement
 
         // WHOSE IT IS AND ITS KEY BEFORE IT IS ADDED: the desktop places a window by its key and sizes an
         // application's main window by its kind as it adds it, so one named afterwards reopened at the default.
-        WindowFrame frame = new WindowFrame(builder.title == null ? kind.displayName() : builder.title);
-        frame.setApplication(kind).markApplicationMain();
-        frame.setPolicy(builder.policy);
-        if (builder.key != null) frame.setKey(builder.key);
-        frame.setTitleShown(builder.titleShown);
-        this.window = desktop.addWindow(frame);
         String iconName = builder.icon != null ? builder.icon : kind.icon();
+        this.window = context.windows().open(WindowSpec.titled(builder.title == null ? kind.displayName() : builder.title)
+                .key(builder.key).icon(iconName).policy(builder.policy).titleShown(builder.titleShown));
         if (iconName != null) {
-            window.setIcon(iconName);
             // AND WHATEVER THIS DOCK TEARS OUT WEARS IT TOO. A tab dragged into a window of its own
             // is still this product -- it was monogramming the first letter of its own title instead,
             // so a torn-out Main.java opened under a red S.
@@ -345,7 +341,7 @@ public class WorkbenchApplication extends UIElement
     }
 
     @Override
-    public WindowFrame mainWindow() {
+    public AppWindow mainWindow() {
         return window;
     }
 
@@ -362,8 +358,7 @@ public class WorkbenchApplication extends UIElement
         // THREE STATES AND THEY ARE NOT THE SAME: hidden (minimised, or closed under HIDE_ON_CLOSE)
         // needs showing, visible-but-behind needs raising, in-front needs only the keyboard. `show`
         // covers the first two and `activate` the last, so asking for both is correct rather than lazy.
-        window.show(true);
-        desktop.windowManager().activate(window);
+        window.activate();
     }
 
     public Workbench workbench() {

@@ -921,7 +921,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
             @Override
             public float[] region() {
-                UIElement window = editor == null ? null : editor.mainWindow();
+                UIElement window = editor == null ? null : editor.mainWindow().frame();
                 float[] corner = at(window, 0f, 0f);
                 float[] far = at(window, 1f, 1f);
                 return new float[]{corner[0], corner[1], far[0] - corner[0], far[1] - corner[1]};
@@ -1076,7 +1076,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             log("before opening: recording " + CgTrace.isRecording() + ", frames already recorded "
                     + CgTrace.frameCount() + ", keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames()
                     + ", record-at-launch " + profilerSettings().get(ProfilerSettings.RECORD_AT_LAUNCH));
-            WindowFrame window = FrameProfiler.openOn(desktop);
+            WindowFrame window = FrameProfiler.openOn(desktop).frame();
             profilerWindow = window;
             window.maximize();
             // THE COMPOSED TREE, not content(): the window hosts what it is given in a slot of its

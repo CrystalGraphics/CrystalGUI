@@ -1,5 +1,6 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.desktop.app.AppWindow;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.launcher.Launcher;
@@ -202,7 +203,7 @@ public class LauncherClickTest extends UiDocumentTestBase {
 
     private record Stub(WindowFrame window) implements Application {
         @Override public ApplicationKind kind() { return ApplicationKind.of("test:alpha", "Alpha"); }
-        @Override public WindowFrame mainWindow() { return window; }
+        @Override public AppWindow mainWindow() { return AppWindow.of(window); }
         @Override public boolean open(Resource resource) { return false; }
         @Override public void activate() { }
         @Override public void dispose() { }

@@ -208,7 +208,7 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
                                handlerFor — a launcher, "open with" and taskbar grouping all answerable
                                with nothing running; runs the ApplicationKinds services once per
                                DESKTOP, since discovery is per process and installing is per shell),
-                               LaunchContext (the Exec line's arguments)
+                               AppContext (the Exec line's arguments)
 
 com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platform SPI, which CrystalGUI
                                consumes. Listed here because the engine's input, sound and clipboard

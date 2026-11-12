@@ -62,13 +62,13 @@ public final class ApplicationKind {
     @Nullable
     private final List<DocumentKind.Matcher> opens = new ArrayList<>();
     @Nullable
-    private Function<LaunchContext, Application> factory;
+    private Function<AppContext, Application> factory;
     private boolean singleInstance;
     private boolean preventPinning;
     private boolean requiresConnection = true;
     private boolean startingWindow;
     @Nullable
-    private Consumer<LaunchContext> autostart;
+    private Consumer<AppContext> autostart;
     private float windowWidth, windowHeight;
     private float windowFraction;
     private boolean frozen;
@@ -177,7 +177,7 @@ public final class ApplicationKind {
     }
 
     /** How one is started. Required — a manifest nothing can launch is a listing with no product. */
-    public ApplicationKind launch(Function<LaunchContext, Application> factory) {
+    public ApplicationKind launch(Function<AppContext, Application> factory) {
         check();
         this.factory = factory;
         return this;
@@ -197,7 +197,7 @@ public final class ApplicationKind {
      *   <li>Replaces {@link #launch}; a kind has one or the other.</li>
      * </ul>
      */
-    public ApplicationKind action(Consumer<LaunchContext> hook) {
+    public ApplicationKind action(Consumer<AppContext> hook) {
         check();
         this.factory = context -> {
             hook.accept(context);
@@ -288,7 +288,7 @@ public final class ApplicationKind {
      * <p>freedesktop's autostart entry, for what an application must set up <b>before</b> its window
      * exists — a profiler that records from the first frame, a tool that restores a background service.
      * Run once per desktop, as soon as the desktop has storage, with this application's own
-     * {@link LaunchContext#storage()} and no workspace.</p>
+     * {@link AppContext#storage()} and no workspace.</p>
      *
      * <pre>{@code
      * ApplicationKind.of("mymod:profiler", "Profiler")
@@ -299,14 +299,14 @@ public final class ApplicationKind {
      * <p>It must be quick and must not open a window: it runs inside the host's startup, before the
      * first frame.</p>
      */
-    public ApplicationKind autostart(Consumer<LaunchContext> hook) {
+    public ApplicationKind autostart(Consumer<AppContext> hook) {
         check();
         this.autostart = hook;
         return this;
     }
 
     @Nullable
-    Consumer<LaunchContext> autostartHook() {
+    Consumer<AppContext> autostartHook() {
         return autostart;
     }
 
@@ -360,7 +360,7 @@ public final class ApplicationKind {
     }
 
     @Nullable
-    Function<LaunchContext, Application> factory() {
+    Function<AppContext, Application> factory() {
         return factory;
     }
 }

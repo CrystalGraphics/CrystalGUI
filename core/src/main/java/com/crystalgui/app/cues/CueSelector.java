@@ -5,10 +5,11 @@ import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.AppContext;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.WindowSpec;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
@@ -50,7 +51,7 @@ public final class CueSelector {
             .keywords("cues", "hits", "kit")
             .windowFraction(0.5f)
             .standalone()
-            .launch(context -> new Instance(context.desktop()));
+            .launch(Instance::new);
 
     private CueSelector() {
     }
@@ -165,7 +166,7 @@ public final class CueSelector {
     /** One window: the registry's cues at launch, and the world tick that plays what a press asked for. */
     private static final class Instance implements Application {
 
-        private final WindowFrame window;
+        private final AppWindow window;
         private final Map<String, Column> columns = new LinkedHashMap<>();
         private final CueSelection selection = CueSelection.client();
         private final SearchField search = new SearchField();
@@ -178,7 +179,7 @@ public final class CueSelector {
         private static final int MAX_OPEN = 4;
         private static final String HINT = "Click a cue to play it  |  a folder to fold it";
 
-        Instance(Desktop desktop) {
+        Instance(AppContext app) {
             Map<String, List<Node>> roots = new LinkedHashMap<>();
             for (String id : selection.refresh().ids()) add(roots, id);
             for (Map.Entry<String, List<Node>> e : roots.entrySet()) {
@@ -187,12 +188,7 @@ public final class CueSelector {
                 column.show("");
                 columns.put(e.getKey(), column);
             }
-            window = new WindowFrame("Cues");
-            window.setKey(ID);
-            window.setApplication(KIND);
-            window.markApplicationMain();
-            window.setContent(build());
-            desktop.addWindow(window);
+            window = app.windows().open(WindowSpec.titled("Cues").key(ID).content(build()));
             tick = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, ID, dt -> sync());
         }
 
@@ -390,14 +386,12 @@ public final class CueSelector {
         }
 
         @Override public ApplicationKind kind() { return KIND; }
-        @Override public WindowFrame mainWindow() { return window; }
+        @Override public AppWindow mainWindow() { return window; }
         @Override public boolean open(Resource resource) { return false; }
 
         @Override
         public void activate() {
-            // The window's own desktop: a minimised one is detached, and has no document to find it by
-            Desktop desktop = window.desktop();
-            if (desktop != null) desktop.windowManager().activate(window, true);
+            window.activate();
         }
 
         @Override

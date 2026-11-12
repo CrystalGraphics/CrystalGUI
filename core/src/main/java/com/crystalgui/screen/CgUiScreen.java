@@ -463,7 +463,7 @@ public final class CgUiScreen {
         }
         launchPending = false;
         raiseOnShow = false;
-        WindowFrame window = app.mainWindow();
+        WindowFrame window = app.mainWindow().frame();
         if (app != primary) {
             primary = app;
             // Its X quits it: the next open launches a fresh one rather than reporting one that is gone

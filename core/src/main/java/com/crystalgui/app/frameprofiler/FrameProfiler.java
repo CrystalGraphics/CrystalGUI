@@ -9,9 +9,13 @@ import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.desktop.app.AppContext;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.WindowSpec;
+import com.crystalgui.fs.client.WorkspaceClient;
+import java.util.Iterator;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.widget.control.Button;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.display.FrameStatsOverlay;
@@ -31,7 +35,7 @@ import javax.annotation.Nullable;
  *
  * <p>It is resizable, long-lived, arranged into bands, and has to be usable <b>while the application it
  * measures keeps running</b> — you cannot profile something that is blocked on a modal. So a
- * {@link WindowFrame} on the desktop. Closing it quits the profiler, its selection and snapshot with it; the ring it
+ * window on the desktop. Closing it quits the profiler, its selection and snapshot with it; the ring it
  * reads is the engine's, so the next one opened sees every frame recorded meanwhile. Minimised, it keeps both.</p>
  *
  * <h3>One instance</h3>
@@ -65,8 +69,9 @@ public final class FrameProfiler {
                     UIElement source = UIElement.sourceOf(context);
                     Desktop desktop = source == null ? null : Desktop.ifPresent(source.document());
                     if (desktop == null) return;
-                    WindowFrame existing = desktop.windowManager().registry().byKey(WINDOW_KEY);
-                    if (existing != null && existing == desktop.windowManager().activeWindow()) existing.requestClose();
+                    Iterator<Application> running = desktop.applications().running(KIND).iterator();
+                    AppWindow open = running.hasNext() ? running.next().mainWindow() : null;
+                    if (open != null && open.isActive()) open.close();
                     else openOn(desktop);
                 })
                 .enabledWhen(context -> {
@@ -86,10 +91,10 @@ public final class FrameProfiler {
      * }</pre>
      */
     @Nullable
-    public static WindowFrame openAt(@Nullable UIDocument document, long frameIndex) {
-        WindowFrame window = open(document);
+    public static AppWindow openAt(@Nullable UIDocument document, long frameIndex) {
+        AppWindow window = open(document);
         if (window == null) return null;
-        for (UIElement each : window.composedSubtree()) {
+        for (UIElement each : window.content().composedSubtree()) {
             if (each instanceof FrameProfilerPanel panel) {
                 panel.model().setFollowing(false);
                 panel.model().refresh();
@@ -122,7 +127,7 @@ public final class FrameProfiler {
             // BEFORE THE FIRST FRAME, whether or not the window is ever opened: the ring's size and
             // "record from launch" are only worth anything if they apply before anything is recorded.
             .autostart(context -> ProfilerSettings.of(context.desktop()).atLaunch())
-            .launch(context -> new Instance(context.desktop()));
+            .launch(Instance::new);
 
     /**
      * Opens the profiler on {@code document}'s desktop, or raises the one already there.
@@ -132,50 +137,34 @@ public final class FrameProfiler {
      * with no desktop is an ordinary configuration rather than a mistake.</p>
      */
     @Nullable
-    public static WindowFrame open(@Nullable UIDocument document) {
+    public static AppWindow open(@Nullable UIDocument document) {
         if (document == null) return null;
         Desktop desktop = Desktop.ifPresent(document);
         return desktop == null ? null : openOn(desktop);
     }
 
-    /** As {@link #open}, given the desktop already. */
-    public static WindowFrame openOn(Desktop desktop) {
-        // THE SAME FILE A LAUNCH READS, for a window opened by key rather than through the registry.
-        // A no-op when the desktop's autostart already loaded it.
-        ProfilerSettings settings = ProfilerSettings.of(desktop);
-        WindowFrame existing = desktop.windowManager().registry().byKey(WINDOW_KEY);
-        if (existing != null) {
-            // ACTIVATE, not raise: a minimised profiler is hidden, and raising a hidden window reorders it and
-            // leaves it hidden -- the second F9 did nothing at all.
-            desktop.windowManager().activate(existing, true);
-            return existing;
-        }
-        long opening = CgTrace.stamp(UiTrace.FLOW);
-        WindowFrame frame = new WindowFrame("Frame Profiler");
-        frame.setKey(WINDOW_KEY);
-        frame.setApplication(KIND);
-        frame.markApplicationMain();
-        FrameProfilerPanel panel = new FrameProfilerPanel(settings);
-        frame.setContent(panel);
-        // THE GEAR, left of the pin: the settings are the window's own, so they are reached from its
-        // caption rather than from a menu this window does not have.
-        Button gear = frame.addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings", panel::toggleSettings);
-        panel.onSettingsToggled.connect(open -> {
-            if (open) gear.addClass(WindowFrame.ACTION_ON_CLASS);
-            else gear.removeClass(WindowFrame.ACTION_ON_CLASS);
-        });
-        desktop.addWindow(frame);
-        CgTrace.zoneDone(UiTrace.FLOW, "profiler:open", opening);
-        return frame;
+    /** As {@link #open}, given the desktop already: launches the profiler, or brings the running one forward. */
+    @Nullable
+    public static AppWindow openOn(Desktop desktop) {
+        Application running = desktop.applications().launch(KIND, (WorkspaceClient) null);
+        return running == null ? null : running.mainWindow();
     }
 
     /** One running profiler. */
     private static final class Instance implements Application {
 
-        private final WindowFrame window;
+        private final AppWindow window;
 
-        Instance(Desktop desktop) {
-            window = openOn(desktop);
+        Instance(AppContext app) {
+            long opening = CgTrace.stamp(UiTrace.FLOW);
+            // THE SAME FILE A LAUNCH READS, for a window opened by key rather than through the registry.
+            FrameProfilerPanel panel = new FrameProfilerPanel(ProfilerSettings.of(app.desktop()));
+            window = app.windows().open(WindowSpec.titled("Frame Profiler").key(WINDOW_KEY).content(panel));
+            // THE GEAR, left of the pin: the settings are the window's own, so they are reached from its
+            // caption rather than from a menu this window does not have.
+            AppWindow.CaptionAction gear = window.addSettingsAction(panel::toggleSettings);
+            panel.onSettingsToggled.connect(gear::lit);
+            CgTrace.zoneDone(UiTrace.FLOW, "profiler:open", opening);
         }
 
         @Override
@@ -184,20 +173,18 @@ public final class FrameProfiler {
         }
 
         @Override
-        public WindowFrame mainWindow() {
+        public AppWindow mainWindow() {
             return window;
         }
 
         @Override
         public boolean open(Resource resource) {
-            return false;       // not mine — see KIND's note on declaring no handler
+            return false;       // not mine -- see KIND's note on declaring no handler
         }
 
         @Override
         public void activate() {
-            // The window's own desktop: a minimised one is detached, and has no document to find it by
-            Desktop desktop = window.desktop();
-            if (desktop != null) desktop.windowManager().activate(window, true);
+            window.activate();
         }
 
         @Override
