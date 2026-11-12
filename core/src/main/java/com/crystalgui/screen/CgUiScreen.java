@@ -511,7 +511,7 @@ public final class CgUiScreen {
             // The arrangement first, with every window still up
             gone.savePersistedState();
             // Every application quits, not the primary alone: one holding ticks or stage draws releases them here
-            for (Application app : new ArrayList<>(gone.applications().running())) app.dispose();
+            for (Application app : new ArrayList<>(gone.applications().running())) gone.applications().dispose(app);
             // A copy: destroying a window takes it out of the list being walked
             for (WindowFrame frame : new ArrayList<>(gone.windowManager().windows())) frame.destroy();
             gone.suspend();

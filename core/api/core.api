@@ -4950,6 +4950,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public autostart ()V
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public dispose (Lcom/crystalgui/desktop/app/Application;)V
   method public forget (Lcom/crystalgui/desktop/app/Application;)V
   method public handlerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;

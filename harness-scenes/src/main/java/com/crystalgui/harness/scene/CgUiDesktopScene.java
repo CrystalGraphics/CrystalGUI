@@ -236,6 +236,11 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
 
     private WorkbenchApplication editor;
+
+    /** Runs {@code work} on the editor's own document: its tree is touched by that thread alone. */
+    private void onEditor(Runnable work) {
+        editor.mainWindow().execute(work);
+    }
     private int backgroundWindows;
 
     @Override
@@ -594,7 +599,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             Document graph = graphDocument();
             if (graph == null || !graph.isDirty()) {
                 closeWhenClean = false;
-                if (editor != null) editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+                if (editor != null) onEditor(() -> editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE)));
             }
         }
         String graphShot = graphCost == null ? null : graphCost.captureNow();
@@ -928,13 +933,13 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             @Override
             public void openLargeFile(Runnable onOpened) {
                 if (editor == null) return;
-                editor.workbench().openFile(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE), onOpened);
+                onEditor(() -> editor.workbench().openFile(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE), onOpened));
             }
 
             @Override
             public void closeLargeFile() {
-                if (editor != null) editor.workbench().dock().closePanel(
-                        editor.workbench().refFor(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE)));
+                if (editor != null) onEditor(() -> editor.workbench().dock().closePanel(
+                        editor.workbench().refFor(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE))));
             }
 
             @Override
@@ -1027,7 +1032,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
             @Override
             public void open() {
-                if (editor != null) editor.workbench().openFile(GRAPH_COST_FILE);
+                if (editor != null) onEditor(() -> editor.workbench().openFile(GRAPH_COST_FILE));
             }
 
             /**
@@ -1039,11 +1044,11 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 if (editor == null) return;
                 Document graph = graphDocument();
                 if (graph != null && graph.isDirty()) {
-                    editor.workbench().documents().revert(graph);
+                    onEditor(() -> editor.workbench().documents().revert(graph));
                     closeWhenClean = true;
                     return;
                 }
-                editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+                onEditor(() -> editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE)));
             }
 
             @Override

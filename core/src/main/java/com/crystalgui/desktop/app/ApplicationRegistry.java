@@ -281,14 +281,19 @@ public final class ApplicationRegistry {
         }
         // EVERY APPLICATION HAS A CLIENT OF ITS OWN on the workspace the desktop owns: its replies and events come
         // back to the sequence it launches on, and the others see it by name in presence.
+        // MADE ON ITS DOCUMENT'S THREAD when it has one: a client answers where it was made, and a signal belongs to the
+        // sequence that first used it.
         WorkspaceClient shared = context.workspace();
-        WorkspaceClient own = shared == null ? null : shared.service().client(kind.displayName());
+        AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
+        String clientName = kind.displayName();
+        WorkspaceClient own = shared == null ? null
+                : document == null ? shared.service().client(clientName)
+                : document.ask(() -> shared.service().client(clientName));
         if (own != null) {
             context = new AppContext(kind, context.desktop(), own, context.storage(), context.cache(),
                     context.open());
         }
         Application application;
-        AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
         AppContext launched = context.withDocument(document);
         // On the document's thread outside any frame: without a zone, a launch is a stretch of nothing in the trace.
         long launching = CgTrace.stamp(UiTrace.FLOW);
@@ -403,6 +408,16 @@ public final class ApplicationRegistry {
     private static final int STARTING_FRAMES = 2;
     /** The longest a build waits for its starting window's mark to come in. */
     private static final long STARTING_LONGEST_NANOS = 3_000_000_000L;
+
+    /**
+     * Disposes {@code application} where it was built and waits: on its own document's thread when it has one. For a
+     * desktop going down, which must not leave an application holding a tick or a draw.
+     */
+    public void dispose(Application application) {
+        AppDocument document = documentsOf.get(application);
+        if (document == null) application.dispose();
+        else document.run(application::dispose);
+    }
 
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
     private void quit(Application application) {
