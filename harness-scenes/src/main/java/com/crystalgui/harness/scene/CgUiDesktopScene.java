@@ -870,6 +870,16 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
 
             @Override
+            public void stallApplication(long millis) {
+                AppDocument application = popupApplication();
+                if (application == null) return;
+                application.execute(() -> {
+                    long until = System.nanoTime() + millis * 1_000_000L;
+                    while (System.nanoTime() < until) Thread.onSpinWait();
+                });
+            }
+
+            @Override
             public void showPopup() {
                 AppDocument application = popupApplication();
                 if (application == null) {

@@ -59,6 +59,10 @@ public final class DesktopBaselineProbe {
         default void describeWindows() {
         }
 
+        /** Keeps an application's own document busy for {@code millis}, on its thread. On the document. */
+        default void stallApplication(long millis) {
+        }
+
         /** Opens a popover in an application's own document, and prints where its popups are and where they are shown. */
         default void showPopup() {
         }
@@ -88,6 +92,12 @@ public final class DesktopBaselineProbe {
 
     private static final int POINTER_EVERY = 6;
     private static final int THEME_EVERY = 30;
+    /**
+     * {@code -Dcrystalgui.harness.desktop.baseline.stall=<ms>}: an application on a document of its own is kept busy for
+     * that long every {@value #STALL_EVERY} frames of the steady phase, to read what the taskbar and the other windows feel.
+     */
+    private static final long STALL_MS = Long.getLong("crystalgui.harness.desktop.baseline.stall", 0L);
+    private static final int STALL_EVERY = 24;
 
     private enum Phase {
         OPEN("editor's first open", 300),
@@ -205,6 +215,9 @@ public final class DesktopBaselineProbe {
             target.switchTheme();
             themeSwitches.add(System.nanoTime() - at);
         });
+        if (current == Phase.STEADY && STALL_MS > 0L && inPhase % STALL_EVERY == 0) {
+            viewport.execute(() -> target.stallApplication(STALL_MS));
+        }
         if (current != Phase.OPEN && inPhase % POINTER_EVERY == 0) movePointer(viewport, inPhase / POINTER_EVERY % 2);
         inPhase++;
         return false;
