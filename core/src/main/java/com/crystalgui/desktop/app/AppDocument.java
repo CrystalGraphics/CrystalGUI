@@ -13,6 +13,7 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -61,6 +62,13 @@ public final class AppDocument {
     public AppDocument(UIDocument document, Backend backend) {
         this.document = document;
         this.backend = backend;
+        // What the pointer looks like over a window is what the shell shows there, asked of this document.
+        document.input().presentsCursor(false);
+    }
+
+    /** The cursor the application's document wants where its pointer is. Any thread. */
+    Cursor cursor() {
+        return document.input().currentCursor();
     }
 
     /** The document's popups as a surface, or null where its host did not install a {@link PopupLayer}. */

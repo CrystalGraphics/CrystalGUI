@@ -9,6 +9,7 @@ import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -104,6 +105,18 @@ public class ApplicationInputEndToEndTest extends UiDocumentTestBase {
         document.input().consumeKeyboardEvent(new CgSystemInput.Keyboard.Event('a', CgKeyCodes.KEY_A, true, false, 1L));
         settle();
         assertEquals("a", field.getText());
+    }
+
+    @Test
+    public void overATextFieldTheShellShowsTheApplicationsCursor() {
+        float[] at = fieldInShell();
+        move(at[0], at[1]);
+        settle();
+        assertEquals("the application's document says text", Cursor.TEXT, own.input().currentCursor());
+        assertEquals("and the shell shows it over the window", Cursor.TEXT, document.input().currentCursor());
+        move(5f, 5f);
+        settle();
+        assertEquals("off the window it is the shell's own", Cursor.DEFAULT, document.input().currentCursor());
     }
 
     @Test

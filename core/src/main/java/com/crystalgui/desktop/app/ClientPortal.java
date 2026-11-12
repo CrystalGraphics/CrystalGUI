@@ -3,6 +3,7 @@ package com.crystalgui.desktop.app;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.render.CgUiPaintContext;
@@ -14,6 +15,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
+import com.crystalgui.ui.service.CursorSource;
 import org.joml.Vector2f;
 
 /**
@@ -32,7 +34,7 @@ import org.joml.Vector2f;
  *       surface.</li>
  * </ul>
  */
-public final class ClientPortal extends UIElement {
+public final class ClientPortal extends UIElement implements CursorSource {
 
     /** What the sheets address it by: it never rings, as a pane does not. */
     public static final Name NAME = Name.of("clientportal");
@@ -87,6 +89,12 @@ public final class ClientPortal extends UIElement {
         onMouseLeave.attachListener((element, event) -> pointer(event.getPosition(), -1, false, 0f), false, true);
         onKeyDown.attachListener((element, event) -> key(event, true), false, true);
         onKeyUp.attachListener((element, event) -> key(event, false), false, true);
+    }
+
+    /** The pointer looks as the application's document says it does over what this shows. */
+    @Override
+    public Cursor cursorAt(float x, float y) {
+        return appDocument.cursor();
     }
 
     /** Whether this shows a window's caption rather than its content. */

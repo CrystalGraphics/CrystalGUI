@@ -8,6 +8,7 @@ import javax.annotation.Nullable;
 import org.joml.Vector2f;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
+import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.Surface;
@@ -18,6 +19,7 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Animation;
+import com.crystalgui.ui.service.CursorSource;
 
 import dev.vfyjxf.taffy.style.TaffyPosition;
 
@@ -69,7 +71,7 @@ final class PopupPortal extends UIElement {
     }
 
     /** What takes the pointer over one popup. */
-    private final class Slot extends UIElement {
+    private final class Slot extends UIElement implements CursorSource {
         private float left = Float.NaN, top, width, height;
 
         Slot() {
@@ -93,6 +95,11 @@ final class PopupPortal extends UIElement {
             }, false, true);
             onMouseScroll.attachListener((element, event) -> pointer(event.getPosition(), -1, false, event.getScroll()),
                     false, true);
+        }
+
+        @Override
+        public Cursor cursorAt(float x, float y) {
+            return appDocument.cursor();
         }
 
         void place(float x, float y, float w, float h) {

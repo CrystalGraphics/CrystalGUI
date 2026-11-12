@@ -255,7 +255,24 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     /** Beats the CSS answer while a gesture owns the pointer. @see #setCursorOverride */
     private @Nullable Cursor cursorOverride;
 
-    private Cursor lastCursor = Cursor.DEFAULT;
+    private volatile Cursor lastCursor = Cursor.DEFAULT;
+
+    /** Whether {@link #currentCursor} reaches the pointer's own cursor; off for a document another one shows. */
+    private volatile boolean presentsCursor = true;
+
+    /**
+     * Whether this document sets the platform's cursor itself, which it does until told otherwise. A document that
+     * another shows (an application's, in its window) turns it off and answers {@link #currentCursor} instead, so the
+     * document that owns the pointer decides what it looks like.
+     *
+     * <pre>{@code
+     * applicationDocument.input().presentsCursor(false);    // the shell asks currentCursor() over its portal
+     * }</pre>
+     */
+    public Input presentsCursor(boolean presents) {
+        this.presentsCursor = presents;
+        return this;
+    }
 
     /** Art a live gesture put at the pointer, which outranks what the tree answers. @see #pointerArt */
     private @Nullable CursorDecoration decoration;
@@ -403,7 +420,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         if (resolved == lastCursor) return;
         lastCursor = resolved;
         // Inert until CrystalGraphics has a cursor adapter, which is correct for a headless tree.
-        CursorService.setCursor(resolved);
+        if (presentsCursor) CursorService.setCursor(resolved);
     }
 
     /**
