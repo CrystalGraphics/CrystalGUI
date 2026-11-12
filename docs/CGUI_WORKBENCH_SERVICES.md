@@ -875,7 +875,18 @@ against mutants.
 ## Resources
 
 `com.crystalgui.fs` — `Resource`, `CgPath`, and the two failure types both halves name.
-`com.crystalgui.fs.client` — `Workspace` and its facades, `ContentProvider`, `ContentProviders`.
+`com.crystalgui.fs.client` — `Workspace` (the desktop's service for one connection) and `WorkspaceClient` (an
+application's handle on it, with the facades), `ContentProvider`, `ContentProviders`.
+
+**One workspace per connection, one client per application.** `Workspace.of(connection)` is shared by everything on
+the wire and lives on the services sequence: it keeps the greeting, the capabilities, the server's watches (one
+subscription per path however many applications hold it), the backup and history stores (filed from the greeting's
+workspace id) and the provider table. `workspace.client("Crystal Editor")` made on an application's sequence returns
+its handle: replies and events come back there, and the registry gives every launched application one and disposes
+it when the application quits. Document models stay local to each client: two applications with one file open
+agree **through the file**. A save, create or delete in one reaches the other's watches at once, a clean copy
+reloads, a dirty one conflicts on its next save (the etag model, unchanged), and each shows in the other's
+`presence()` by its name.
 `com.crystalgui.fs.provider` — the filesystem SPI under all of it; `com.crystalgui.fs.server` — the
 workspace over it, where authorisation, etags, trash and presence live.
 
@@ -916,7 +927,7 @@ the resource *is*, which is how a tab draws its glyph) and `locate` (where a mem
 Every answer is a `CgReply`, because the work can be real — reading a source archive is I/O and
 decompiling a class is hundreds of milliseconds, and neither may land on a frame.
 
-Register through `Workspace.registerScheme` when the scheme belongs to one server, and through
+Register through `WorkspaceClient.registerScheme` when the scheme belongs to one server, and through
 `ContentProviders.contribute` when it belongs to the process — a language stack registers at mod init,
 long before any world is joined, so it has no workspace to be handed and `core/` may never name
 `language/`. Each workspace drains the contributions into its own table, so two servers in one client
@@ -925,7 +936,7 @@ keep separate ones.
 ### Rules
 
 - **A project resource's CONTENT always comes from the server**, whatever has registered the scheme.
-  `Workspace.read` checks the scheme before it checks the provider table, so a provider registered for
+  `WorkspaceClient.read` checks the scheme before it checks the provider table, so a provider registered for
   `project://` — which is how the author's own `.java` files get a declaration glyph — is never asked
   for their bytes.
 - **Unregistered schemes are read-only.** Refusing to write something nobody claims is the safe direction.

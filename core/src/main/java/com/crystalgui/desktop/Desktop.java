@@ -8,7 +8,7 @@ import com.crystalgraphics.storage.config.CgLocalConfigStorage;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.app.ApplicationRegistry;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.motion.WindowAnimator;
@@ -1521,7 +1521,7 @@ public class Desktop extends UIElement implements DataProvider {
     }
 
     @Nullable
-    private Supplier<Workspace> workspace;
+    private Supplier<WorkspaceClient> workspace;
 
     /**
      * Tells this desktop how to find the workspace its host is connected to, which every launch from the shell
@@ -1531,7 +1531,7 @@ public class Desktop extends UIElement implements DataProvider {
      * desktop.useWorkspace(host::workspace);
      * }</pre>
      */
-    public Desktop useWorkspace(@Nullable Supplier<Workspace> connected) {
+    public Desktop useWorkspace(@Nullable Supplier<WorkspaceClient> connected) {
         this.workspace = connected;
         return this;
     }
@@ -1553,7 +1553,7 @@ public class Desktop extends UIElement implements DataProvider {
 
     /** The host's workspace, or null when there is no connection, as on a title screen. @see #useWorkspace */
     @Nullable
-    public Workspace workspace() {
+    public WorkspaceClient workspace() {
         return workspace == null ? null : workspace.get();
     }
 
@@ -1828,7 +1828,7 @@ public class Desktop extends UIElement implements DataProvider {
      * one may run for the session.
      */
     private boolean loading() {
-        Workspace at = workspace();
+        WorkspaceClient at = workspace();
         return at != null && at.health().inFlight() > 0;
     }
 

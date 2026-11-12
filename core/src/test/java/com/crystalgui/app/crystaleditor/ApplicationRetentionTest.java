@@ -26,7 +26,7 @@ import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.motion.WindowAnimator;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -54,7 +54,7 @@ import com.crystalgui.widget.config.inspector.InspectorRegistry;
  * <h3>What it counts</h3>
  *
  * <p>Every process-wide holder an editor writes itself into, plus the per-connection ones on the
- * {@link Workspace}. The status bar left this census at W5 and its absence is the point: it is an
+ * {@link WorkspaceClient}. The status bar left this census at W5 and its absence is the point: it is an
  * instance per workbench now, so it goes when the workbench does and there is no static to count. Dock banner providers were one of them and are deliberately absent: since W1 they
  * live on the workbench's own {@code DockPanelRegistry}, so their lifetime is structural and there is
  * no longer a static list to read — which is the better answer than an assertion about one.</p>
@@ -87,7 +87,7 @@ public class ApplicationRetentionTest {
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
     private CgProtocolConnection<Object> clientEnd;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
 
     /**
      * A whole workspace in this process — both halves over one transport.
@@ -112,7 +112,7 @@ public class ApplicationRetentionTest {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
 
         // A REAL DESKTOP, because an application is launched onto one and its window is what a dispose
         // has to destroy -- and because the retention question is now partly the compositor's: a window
@@ -164,10 +164,11 @@ public class ApplicationRetentionTest {
         counts.put("Notifications.onDidChangeUnread", Notifications.onDidChangeUnread.subscriberCount());
         counts.put("InspectorRegistry sections", InspectorRegistry.all().size());
         counts.put("ProjectSourcesRegistry", ProjectSourcesRegistry.size());
-        counts.put("Workspace.onDidReconnect", workspace.onDidReconnect.connectionCount());
-        counts.put("Workspace.files().onDidRun", workspace.files().onDidRun.connectionCount());
-        counts.put("Workspace.files().onDidFail", workspace.files().onDidFail.connectionCount());
-        counts.put("Workspace.presence().onDidChange", workspace.presence().onDidChange.connectionCount());
+        counts.put("WorkspaceClient.onDidReconnect", workspace.onDidReconnect.connectionCount());
+        counts.put("WorkspaceClient.files().onDidRun", workspace.files().onDidRun.connectionCount());
+        counts.put("WorkspaceClient.files().onDidFail", workspace.files().onDidFail.connectionCount());
+        counts.put("WorkspaceClient.presence().onDidChange", workspace.presence().onDidChange.connectionCount());
+        counts.put("Workspace clients", workspace.service().clientCount());
         counts.put("applications running", desktop.applications().running().size());
         counts.put("desktop windows", desktop.registry().size());
         return counts;
@@ -201,7 +202,7 @@ public class ApplicationRetentionTest {
      *
      * <p>The census can only see holders it knows the name of, and the last one found was reachable
      * through none of them: a walk from every static in the jar traced
-     * {@code ContentProviders.onDidChange} &rarr; a {@code Workspace} &rarr; its {@code onDidGreet}
+     * {@code ContentProviders.onDidChange} &rarr; a {@code WorkspaceClient} &rarr; its {@code onDidGreet}
      * &rarr; the {@code WorkspaceDocuments} a workbench built &rarr; its {@code DocumentKinds} &rarr; a
      * {@code DocumentKind} whose model factory captures the workbench. Not one counter moved for that,
      * and it kept the whole editor tree.</p>

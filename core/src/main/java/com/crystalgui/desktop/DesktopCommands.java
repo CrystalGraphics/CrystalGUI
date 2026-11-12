@@ -13,7 +13,7 @@ import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.display.FrameStatsOverlay;

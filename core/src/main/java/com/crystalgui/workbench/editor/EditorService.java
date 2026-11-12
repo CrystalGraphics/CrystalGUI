@@ -17,7 +17,7 @@ import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.Backup;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.ui.dom.UIDocument;
@@ -69,7 +69,7 @@ import org.jetbrains.annotations.Nullable;
 public final class EditorService implements Disposable {
 
     private final WorkspaceDocuments documents;
-    private final Workspace workspace;
+    private final WorkspaceClient workspace;
     private final DocumentKinds kinds;
 
     /** Open tabs, in the order they were opened. One per {@link EditorInput}. */
@@ -178,7 +178,7 @@ public final class EditorService implements Disposable {
     /** Every tab that has been in front, most recent first. @see #follow */
     private final List<Tab> recency = new ArrayList<>();
 
-    public EditorService(Workspace workspace, WorkspaceDocuments documents, DocumentKinds kinds) {
+    public EditorService(WorkspaceClient workspace, WorkspaceDocuments documents, DocumentKinds kinds) {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.documents = Objects.requireNonNull(documents, "documents");
         this.kinds = Objects.requireNonNull(kinds, "kinds");

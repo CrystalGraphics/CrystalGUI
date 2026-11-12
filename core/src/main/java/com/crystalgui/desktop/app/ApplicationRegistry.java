@@ -24,7 +24,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.ui.dom.UIDocument;
 
 /**
@@ -68,6 +68,8 @@ public final class ApplicationRegistry {
     private final Desktop desktop;
     private final List<ApplicationKind> installed = new ArrayList<>();
     private final List<Application> running = new ArrayList<>();
+    /** Each running application's own client on the workspace, released when it quits. */
+    private final java.util.Map<Application, WorkspaceClient> clients = new java.util.IdentityHashMap<>();
     /** Kinds already told they need a server, so a host retrying every frame says so once. */
     private final Set<String> refusedForNoServer = new HashSet<>();
 
@@ -273,6 +275,14 @@ public final class ApplicationRegistry {
             CrystalGuiCore.LOGGER.warn("[cgui] the application '{}' declares no launch factory", kind.id());
             return null;
         }
+        // EVERY APPLICATION HAS A CLIENT OF ITS OWN on the workspace the desktop owns: its replies and events come
+        // back to the sequence it launches on, and the others see it by name in presence.
+        WorkspaceClient shared = context.workspace();
+        WorkspaceClient own = shared == null ? null : shared.service().client(kind.displayName());
+        if (own != null) {
+            context = new LaunchContext(kind, context.desktop(), own, context.storage(), context.cache(),
+                    context.open());
+        }
         Application application;
         // On the document's thread outside any frame: without a zone, a launch is a stretch of nothing in the trace.
         long launching = CgTrace.stamp(UiTrace.FLOW);
@@ -286,9 +296,14 @@ public final class ApplicationRegistry {
             CrystalGuiCore.LOGGER.error("[cgui] the application '{}' failed to launch: {}",
                     kind.id(), failed.getMessage(), failed);
             desktop.reportFailure(kind.id(), kind.displayName(), kind.displayName() + " could not be opened.", failed);
+            if (own != null) own.dispose();
             return null;
         }
-        if (application == null) return null;
+        if (application == null) {
+            if (own != null) own.dispose();
+            return null;
+        }
+        if (own != null) clients.put(application, own);
         refusedForNoServer.remove(kind.id());
         running.add(application);
         // Its main window destroyed is the application quit: closing it under DESTROY_ON_CLOSE, or anything else
@@ -315,7 +330,7 @@ public final class ApplicationRegistry {
      *   <li>For the instance itself, call {@link #launch}: this answers nothing, since nothing exists yet.</li>
      * </ul>
      */
-    public void launchInStartingWindow(ApplicationKind kind, @Nullable Workspace workspace) {
+    public void launchInStartingWindow(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         bootstrap();
         boolean runsAlready = kind.isSingleInstance() && firstRunning(kind) != null;
         boolean refused = kind.factory() == null || (kind.requiresConnection() && workspace == null)
@@ -401,7 +416,7 @@ public final class ApplicationRegistry {
      * </ul>
      */
     @Nullable
-    public Application openPrimary(@Nullable Workspace workspace) {
+    public Application openPrimary(@Nullable WorkspaceClient workspace) {
         ApplicationKind kind = primary();
         if (kind == null) return null;
         for (Application live : running(kind)) {
@@ -430,7 +445,7 @@ public final class ApplicationRegistry {
      * starting window ({@link #launchInStartingWindow}) and answers null, since the instance builds a frame later.</p>
      */
     @Nullable
-    public Application activateOrLaunch(ApplicationKind kind, @Nullable Workspace workspace) {
+    public Application activateOrLaunch(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         Application recent = null;
         int best = Integer.MAX_VALUE;
         List<WindowFrame> mru = desktop.registry().mruOrder();
@@ -462,7 +477,7 @@ public final class ApplicationRegistry {
      * looks exactly like one whose preferences do not work.</p>
      */
     @Nullable
-    public Application launch(ApplicationKind kind, @Nullable Workspace workspace) {
+    public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         CgConfigStorage storage = desktop.config();
         if (storage == null) {
             CrystalGuiCore.LOGGER.warn("[cgui] '{}' was not launched: this desktop has nowhere to "
@@ -474,14 +489,14 @@ public final class ApplicationRegistry {
 
     /** Launches with nothing asked of it, and nowhere to cache derived output. */
     @Nullable
-    public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
+    public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace,
                               CgConfigStorage storage) {
         return launch(kind, workspace, storage, null);
     }
 
     /** Launches with nothing asked of it. @param cacheRoot {@code crystalgui/cache}, or null for none */
     @Nullable
-    public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
+    public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace,
                               CgConfigStorage storage, @Nullable Path cacheRoot) {
         return launch(kind, LaunchContext.of(kind, desktop, workspace,
                 scoped(kind, storage), cacheFor(kind, cacheRoot)));
@@ -493,14 +508,14 @@ public final class ApplicationRegistry {
      * @see #handlerFor
      */
     @Nullable
-    public Application open(Resource resource, @Nullable Workspace workspace,
+    public Application open(Resource resource, @Nullable WorkspaceClient workspace,
                             CgConfigStorage storage) {
         return open(resource, workspace, storage, null);
     }
 
-    /** As {@link #open(Resource, Workspace, CgConfigStorage)}, with somewhere to cache. */
+    /** As {@link #open(Resource, WorkspaceClient, CgConfigStorage)}, with somewhere to cache. */
     @Nullable
-    public Application open(Resource resource, @Nullable Workspace workspace,
+    public Application open(Resource resource, @Nullable WorkspaceClient workspace,
                             CgConfigStorage storage, @Nullable Path cacheRoot) {
         ApplicationKind kind = handlerFor(resource);
         if (kind == null) return null;
@@ -557,6 +572,8 @@ public final class ApplicationRegistry {
      * everything anybody else shut down.</p>
      */
     public void forget(Application application) {
+        WorkspaceClient client = clients.remove(application);
+        if (client != null) client.dispose();
         if (running.remove(application)) onDidChange.emit();
     }
 

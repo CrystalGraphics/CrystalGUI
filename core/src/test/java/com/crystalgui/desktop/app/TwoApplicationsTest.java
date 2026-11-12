@@ -33,7 +33,7 @@ import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -96,7 +96,7 @@ public class TwoApplicationsTest {
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
     private CgProtocolConnection<Object> clientEnd;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private UIDocument surface;
     private Desktop desktop;
     private CgConfigStorage storage;
@@ -115,7 +115,7 @@ public class TwoApplicationsTest {
         clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
 
         // ANIMATIONS OFF, and it is load-bearing rather than tidiness: with them on, a destroyed
         // window's taskbar entry collapses over several frames and the strip goes on holding the frame

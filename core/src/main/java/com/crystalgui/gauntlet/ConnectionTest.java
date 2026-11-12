@@ -38,7 +38,7 @@ import com.crystalgraphics.world.CgWorldQueries;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.server.WorkspaceHost;
 import com.crystalgui.net.ClientUiSession;
@@ -285,7 +285,7 @@ public final class ConnectionTest extends CgGauntletController {
     private static volatile boolean fanoutStarted;
     private static volatile boolean reported;
 
-    private static Workspace files;
+    private static WorkspaceClient files;
     private static boolean listingAsked;
     private static boolean writeStarted;
     private static boolean desktopOpened;
@@ -712,17 +712,17 @@ public final class ConnectionTest extends CgGauntletController {
     /**
      * The workspace on this client's connection — <b>the same object the desktop is using</b>.
      *
-     * <p>{@link Workspace#of} is an attachment on the connection rather than a constructor, so every
+     * <p>{@link WorkspaceClient#of} is an attachment on the connection rather than a constructor, so every
      * caller shares one. That matters for {@link #LOOP_ALIVE}: the assertion is that the request the
      * desktop itself would make completes, and a second workspace would be a second subscriber to
      * {@code fs.changed} as well as a weaker claim.</p>
      */
     @Nullable
-    private static Workspace workspace() {
+    private static WorkspaceClient workspace() {
         if (files != null) return files;
         CgProtocolConnection<Object> connection = CgNetwork.client();
         if (connection == null) return null;
-        files = Workspace.of(connection);
+        files = WorkspaceClient.of(connection);
         return files;
     }
 
@@ -738,7 +738,7 @@ public final class ConnectionTest extends CgGauntletController {
      */
     private static void driveFiles() {
         if (!done(RESHAPE)) return;
-        Workspace live = workspace();
+        WorkspaceClient live = workspace();
         if (live == null) return;
         if (!live.onHome(ConnectionTest::driveFiles)) return;
 
@@ -809,7 +809,7 @@ public final class ConnectionTest extends CgGauntletController {
         }
         if (!CgScreens.anyOpen() || loopAskStarted) return;
 
-        Workspace live = workspace();
+        WorkspaceClient live = workspace();
         if (live == null || !live.onHome(ConnectionTest::driveLoopAlive)) return;
         loopAskStarted = true;
         live.files().list(project())
@@ -833,7 +833,7 @@ public final class ConnectionTest extends CgGauntletController {
      */
     private static void driveRole(Role role) {
         ticks++;
-        Workspace live = workspace();
+        WorkspaceClient live = workspace();
         if (live == null) {
             if (ticks > DEADLINE_TICKS) finish(false, "joined, but no connection");
             return;
@@ -844,7 +844,7 @@ public final class ConnectionTest extends CgGauntletController {
         if (ticks > DEADLINE_TICKS) finish(false, "timed out");
     }
 
-    private static void writerStep(Workspace live) {
+    private static void writerStep(WorkspaceClient live) {
         Resource shared = Resource.of(CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SHARED_FILE));
 
         if (!writerCreated) {
@@ -888,7 +888,7 @@ public final class ConnectionTest extends CgGauntletController {
         finish(true, "");
     }
 
-    private static void watcherStep(Workspace live) {
+    private static void watcherStep(WorkspaceClient live) {
         if (!watching) {
             watching = true;
             // RECURSIVE, because the writer's file is at the project root and a watch that did not

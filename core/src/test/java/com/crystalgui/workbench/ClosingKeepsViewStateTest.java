@@ -23,7 +23,7 @@ import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -107,7 +107,7 @@ public class ClosingKeepsViewStateTest extends UiDocumentTestBase {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
-        Workspace workspace = Workspace.of(clientEnd);
+        WorkspaceClient workspace = WorkspaceClient.of(clientEnd);
         workbench = new Workbench(workspace);
         workbench.kinds().contribute(workbench.owner(), DocumentKind.of("test:probe", "Probe")
                 .files(DocumentKind.FilePatterns.extension("probe"))

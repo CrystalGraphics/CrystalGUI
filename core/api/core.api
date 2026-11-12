@@ -4718,7 +4718,7 @@ com/crystalgui/desktop/Desktop
   method public visibleWindows ()Ljava/util/List;
   method public windowLayer ()Lcom/crystalgui/ui/dom/UIElement;
   method public windows ()Ljava/util/List;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public workspaceStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public,static animationsEnabled ()Z
   method public,static ifPresent (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/Desktop;
@@ -4839,7 +4839,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
-  method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
+  method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
   method public autostart ()V
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
@@ -4849,31 +4849,31 @@ com/crystalgui/desktop/app/ApplicationRegistry
   method public installPrimary (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;
   method public installed ()Ljava/util/List;
   method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/LaunchContext;)Lcom/crystalgui/desktop/app/Application;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
-  method public launchInStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)V
-  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
-  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
-  method public openPrimary (Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
+  method public launchInStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)V
+  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
+  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
+  method public openPrimary (Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
   method public primary ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public running ()Ljava/util/List;
   method public running (Lcom/crystalgui/desktop/app/ApplicationKind;)Ljava/util/List;
 com/crystalgui/desktop/app/LaunchContext
   access public,final,record
   extends java/lang/Record
-  method public <init> (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;Ljava/util/List;)V
+  method public <init> (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;Ljava/util/List;)V
   method public cache ()Ljava/nio/file/Path;
   method public desktop ()Lcom/crystalgui/desktop/Desktop;
   method public first ()Lcom/crystalgui/fs/Resource;
   method public kind ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public open ()Ljava/util/List;
   method public storage ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
-  method public,static of (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/LaunchContext;
+  method public,static of (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/LaunchContext;
 com/crystalgui/desktop/app/ServerWindowHost
   access public,abstract,interface
   extends java/lang/Object
@@ -5935,58 +5935,77 @@ com/crystalgui/fs/client/LocalHistory$Entry
 com/crystalgui/fs/client/Workspace
   access public,final
   extends java/lang/Object
+  method public client ()Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public client (Ljava/lang/String;)Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public clientCount ()I
+  method public dispose ()V
+  method public greet ()V
+  method public hasGreeted ()Z
+  method public rebind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)V
+  method public rebind (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)V
+  method public server ()Lcom/crystalgui/fs/protocol/FsHello;
+  method public setStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/fs/client/Workspace;
+  method public useIdentity (Ljava/lang/String;)V
+  method public useStores (Ljava/util/function/Function;)Lcom/crystalgui/fs/client/Workspace;
+  method public,static of (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)Lcom/crystalgui/fs/client/Workspace;
+  method public,static over (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)Lcom/crystalgui/fs/client/Workspace;
+com/crystalgui/fs/client/WorkspaceClient
+  access public,final
+  extends java/lang/Object
   field public,final onDidGreet Lcom/crystalgui/core/signal/Signal$Value;
   field public,final onDidReconnect Lcom/crystalgui/core/signal/Signal$Action;
   implements com/crystalgui/core/dispose/Disposable
-  method public askCapabilities ()Lcom/crystalgraphics/job/reply/CgReply;
   method public backup ()Lcom/crystalgui/fs/client/Backup;
-  method public capabilities ()Lcom/crystalgui/fs/client/Workspace$Capabilities;
+  method public capabilities ()Lcom/crystalgui/fs/client/WorkspaceClient$Capabilities;
   method public dispose ()V
   method public documentKeyStrategy ()Ljava/util/function/UnaryOperator;
   method public files ()Lcom/crystalgui/fs/client/FileOperations;
-  method public greet ()Lcom/crystalgraphics/job/reply/CgReply;
+  method public greet ()V
   method public hasGreeted ()Z
   method public health ()Lcom/crystalgui/fs/client/Health;
   method public history ()Lcom/crystalgui/fs/client/LocalHistory;
   method public isReadOnly (Lcom/crystalgui/fs/Resource;)Z
+  method public name ()Ljava/lang/String;
   method public onHome (Ljava/lang/Runnable;)Z
-  method public presence ()Lcom/crystalgui/fs/client/Workspace$Presence;
+  method public presence ()Lcom/crystalgui/fs/client/WorkspaceClient$Presence;
   method public projects ()Lcom/crystalgraphics/job/reply/CgReply;
   method public providerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/fs/client/ContentProvider;
   method public providers ()Ljava/util/List;
   method public read (Lcom/crystalgui/fs/Resource;)Lcom/crystalgraphics/job/reply/CgReply;
   method public rebind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)V
-  method public rebind (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/Workspace$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)V
+  method public rebind (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)V
   method public registerScheme (Ljava/lang/String;Lcom/crystalgui/fs/client/ContentProvider;)Lcom/crystalgui/core/dispose/Disposable;
   method public server ()Lcom/crystalgui/fs/protocol/FsHello;
+  method public service ()Lcom/crystalgui/fs/client/Workspace;
   method public setEditing (Lcom/crystalgui/fs/Resource;Z)Lcom/crystalgraphics/job/reply/CgReply;
-  method public setStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/fs/client/Workspace;
-  method public watch (Lcom/crystalgui/fs/Resource;Z)Lcom/crystalgui/fs/client/Workspace$Watch;
-  method public,static of (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)Lcom/crystalgui/fs/client/Workspace;
-  method public,static over (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/Workspace$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)Lcom/crystalgui/fs/client/Workspace;
-com/crystalgui/fs/client/Workspace$Capabilities
+  method public setStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public useIdentity (Ljava/lang/String;)V
+  method public watch (Lcom/crystalgui/fs/Resource;Z)Lcom/crystalgui/fs/client/WorkspaceClient$Watch;
+  method public,static of (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public,static over (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)Lcom/crystalgui/fs/client/WorkspaceClient;
+com/crystalgui/fs/client/WorkspaceClient$Capabilities
   access public,final
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public caseSensitive ()Z
   method public isValidName (Ljava/lang/String;)Z
   method public mayRead (Lcom/crystalgui/fs/Resource;)Z
   method public mayWrite (Lcom/crystalgui/fs/Resource;)Z
   method public scriptingMode (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/fs/protocol/ScriptingMode;
   method public sizeTierOf (J)Lcom/crystalgui/fs/protocol/FsHello$SizeTier;
-com/crystalgui/fs/client/Workspace$Presence
+com/crystalgui/fs/client/WorkspaceClient$Presence
   access public,final
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public whoElseHasOpen (Lcom/crystalgui/fs/Resource;)Ljava/util/List;
   method public whoIsEditing (Lcom/crystalgui/fs/Resource;)Ljava/util/List;
-com/crystalgui/fs/client/Workspace$Subscriber
+com/crystalgui/fs/client/WorkspaceClient$Subscriber
   access public,abstract,interface
   extends java/lang/Object
   method public,abstract subscribe (Ljava/lang/String;Ljava/util/function/Consumer;)V
-com/crystalgui/fs/client/Workspace$Watch
+com/crystalgui/fs/client/WorkspaceClient$Watch
   access public,final
   extends java/lang/Object
   field public,final onChanged Lcom/crystalgui/core/signal/Signal$Value;
@@ -6004,7 +6023,7 @@ com/crystalgui/fs/client/WorkspaceDocuments
   field public,final onWillSave Ljava/util/List;
   field public,static,final BACKUP_DEBOUNCE_MILLIS J
   implements com/crystalgui/core/dispose/Disposable
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/document/DocumentKinds;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgui/document/DocumentKinds;)V
   method public all ()Ljava/util/List;
   method public dirty ()Ljava/util/List;
   method public discardBackup (Lcom/crystalgui/fs/Resource;)V
@@ -7817,7 +7836,7 @@ com/crystalgui/net/window/ClientScope
   method public qualify (Ljava/lang/String;)Ljava/lang/String;
   method public session ()Lcom/crystalgui/net/ClientUiSession;
   method public window ()Lcom/crystalgui/net/window/ClientWindowContext;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/net/window/ClientWindowContext
   access public,abstract,interface
   extends java/lang/Object
@@ -9087,7 +9106,7 @@ com/crystalgui/screen/CgUiScreen
   method public,static textInputArea ()[F
   method public,static tick ()V
   method public,static viewport ()Lcom/crystalgui/viewport/CgUiViewport;
-  method public,static workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public,static workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/screen/CgUiScreen$Mode
   access public,final,enum
   extends java/lang/Enum
@@ -18726,7 +18745,7 @@ com/crystalgui/workbench/Workbench
   field public,final rootWatches Ljava/util/Map;
   field public,final saveActions Lcom/crystalgui/workbench/SaveActions;
   field public,final snapshotOver Ljava/util/Set;
-  field public,final workspace Lcom/crystalgui/fs/client/Workspace;
+  field public,final workspace Lcom/crystalgui/fs/client/WorkspaceClient;
   field public,static,final CONTENT_CLASS Ljava/lang/String;
   field public,static,final DIRTY_MARKER Ljava/lang/String;
   field public,static,final DOCK_CLASS Ljava/lang/String;
@@ -18749,8 +18768,8 @@ com/crystalgui/workbench/Workbench
   method protected connected ()V
   method protected disconnected ()V
   method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Ljava/util/List;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Ljava/util/List;)V
   method public activeDocument ()Lcom/crystalgui/document/Document;
   method public activeEditor ()Lcom/crystalgui/widget/texteditor/TextEditor;
   method public activeFilePath ()Lcom/crystalgui/fs/CgPath;
@@ -18829,12 +18848,12 @@ com/crystalgui/workbench/Workbench
   method public useConfig (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/workbench/Workbench;
   method public useExtensionStores (Ljava/util/function/Function;)Lcom/crystalgui/workbench/Workbench;
   method public windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/workbench/NetworkedPanels;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/workbench/Workbench$RootWatch
   access public,final
   extends java/lang/Object
   implements com/crystalgui/core/dispose/Disposable
-  method public <init> (Lcom/crystalgui/fs/client/Workspace$Watch;Lcom/crystalgui/core/signal/Connection;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient$Watch;Lcom/crystalgui/core/signal/Connection;)V
   method public dispose ()V
 com/crystalgui/workbench/WorkbenchContext
   access public,abstract,interface
@@ -18880,7 +18899,7 @@ com/crystalgui/workbench/WorkbenchContext
   method public,abstract showPanel (Ljava/lang/String;)Z
   method public,abstract statusBar ()Lcom/crystalgui/core/notify/StatusBar;
   method public,abstract toolWindowManager ()Lcom/crystalgui/workbench/toolwindow/ToolWindowManager;
-  method public,abstract workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public,abstract workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/workbench/WorkbenchKinds
   access public,final
   extends java/lang/Object
@@ -18964,7 +18983,7 @@ com/crystalgui/workbench/app/WorkbenchApplication
   method public settingsHost ()Lcom/crystalgui/core/settings/Settings;
   method public windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/net/window/WindowMount;
   method public workbench ()Lcom/crystalgui/workbench/Workbench;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public,static of (Lcom/crystalgui/desktop/app/LaunchContext;)Lcom/crystalgui/workbench/app/WorkbenchApplication$Builder;
 com/crystalgui/workbench/app/WorkbenchApplication$Builder
   access public,final
@@ -19941,7 +19960,7 @@ com/crystalgui/workbench/editor/EditorService
   field public,final onDidOpen Lcom/crystalgui/core/signal/Signal$Value;
   field public,final onDidRestoreUnsavedWork Lcom/crystalgui/core/signal/Signal$Value;
   implements com/crystalgui/core/dispose/Disposable
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/fs/client/WorkspaceDocuments;Lcom/crystalgui/document/DocumentKinds;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgui/fs/client/WorkspaceDocuments;Lcom/crystalgui/document/DocumentKinds;)V
   method public activate (Lcom/crystalgui/workbench/editor/EditorService$Tab;)V
   method public active ()Lcom/crystalgui/workbench/editor/EditorService$Tab;
   method public activeDocument ()Lcom/crystalgui/document/Document;
@@ -20097,7 +20116,7 @@ com/crystalgui/workbench/explorer/ProjectFileTree
   implements com/crystalgui/workbench/view/FocusableView
   implements com/crystalgui/workbench/view/TitleActionsContributor
   method protected connected ()V
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/workbench/explorer/WorkspaceTreeSource;Lcom/crystalgui/workbench/decoration/FileDecorations;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgui/workbench/explorer/WorkspaceTreeSource;Lcom/crystalgui/workbench/decoration/FileDecorations;)V
   method public beginNew (Lcom/crystalgui/fs/CgPath;ZLjava/util/function/Consumer;)V
   method public cancelEdit ()V
   method public closeFind ()V
@@ -20130,7 +20149,7 @@ com/crystalgui/workbench/explorer/ProjectFileTree
   method public toggleFindMode ()V
   method public treeView ()Lcom/crystalgui/widget/collection/tree/TreeView;
   method public undoStack ()Lcom/crystalgui/core/undo/UndoStack;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public,static isWellFormedName (Ljava/lang/String;)Z
 com/crystalgui/workbench/explorer/ProjectFileTree$RowParts
   access public,final,record
@@ -20166,7 +20185,7 @@ com/crystalgui/workbench/explorer/WorkspaceTreeSource
   field public,static,final MAX_INDEXED_DIRECTORIES I
   implements com/crystalgui/core/collection/tree/TreeDataSource
   implements com/crystalgui/fs/client/WorkspaceProjects
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public announceRowsChanged ()V
   method public beginPendingNew (Lcom/crystalgui/fs/CgPath;Z)Lcom/crystalgui/fs/CgPath;
   method public children (Lcom/crystalgui/fs/CgPath;)Ljava/util/List;

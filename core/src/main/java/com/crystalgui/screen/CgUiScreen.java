@@ -21,7 +21,7 @@ import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.theme.ThemeRegistry;
@@ -555,7 +555,7 @@ public final class CgUiScreen {
 
     /** The workspace on the client's connection; null before a tick has bound one. */
     @Nullable
-    public static Workspace workspace() {
+    public static WorkspaceClient workspace() {
         DesktopConnection wire = connection;
         return wire == null ? null : wire.workspace();
     }

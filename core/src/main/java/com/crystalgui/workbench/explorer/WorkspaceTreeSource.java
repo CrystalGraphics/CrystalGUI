@@ -6,7 +6,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.core.search.SearchMatch;
@@ -24,7 +24,7 @@ import java.util.Set;
 import javax.annotation.Nullable;
 
 /**
- * A {@link TreeDataSource} over an asynchronous {@link Workspace} — the file tree's model.
+ * A {@link TreeDataSource} over an asynchronous {@link WorkspaceClient} — the file tree's model.
  *
  * <h3>Answer from what has arrived; request what has not</h3>
  *
@@ -112,7 +112,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
         return x.name().compareToIgnoreCase(y.name());
     }
 
-    private final Workspace workspace;
+    private final WorkspaceClient workspace;
     private final List<CgPath> roots = new ArrayList<>();
     private final Map<String, String> projectNames = new HashMap<>();
     private final Map<CgPath, List<CgPath>> children = new HashMap<>();
@@ -199,7 +199,7 @@ public final class WorkspaceTreeSource implements TreeDataSource<CgPath>, Worksp
     @Nullable
     private String failure;
 
-    public WorkspaceTreeSource(Workspace workspace) {
+    public WorkspaceTreeSource(WorkspaceClient workspace) {
         this.workspace = workspace;
     }
 

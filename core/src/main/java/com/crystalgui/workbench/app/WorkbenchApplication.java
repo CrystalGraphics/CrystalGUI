@@ -34,7 +34,7 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.data.UiDataKeys;
@@ -120,7 +120,7 @@ public class WorkbenchApplication extends UIElement
 
     private final ApplicationKind kind;
     private final Desktop desktop;
-    private final Workspace workspace;
+    private final WorkspaceClient workspace;
     private final CgConfigStorage storage;
     private final Workbench workbench;
     private final WindowFrame window;
@@ -379,7 +379,7 @@ public class WorkbenchApplication extends UIElement
         return workbench.windowMount(desktopMount);
     }
 
-    public Workspace workspace() {
+    public WorkspaceClient workspace() {
         return workspace;
     }
 
@@ -578,7 +578,8 @@ public class WorkbenchApplication extends UIElement
         sessionKey = kind.id();
         // BACKUPS AND HISTORY TOO, and not before now: the desktop's connection binding used to set a store
         // here that every workspace shared.
-        workspace.setStorage(mine);
+        // The greeting files them itself where the desktop knows how (Workspace#useStores); this is the fallback.
+        if (workspace.backup() == null) workspace.setStorage(mine);
         session.useStorage(mine);
         // REMEMBERED EVEN WHEN THE RESTORE IS DECLINED. Turning session restore off means "do not put
         // the last arrangement back", never "stop recording this one".
@@ -643,7 +644,7 @@ public class WorkbenchApplication extends UIElement
      * falls back to a hash of the sorted project ids it listed, which is VS Code's multi-root workspace
      * id computed the same way for the same reason.</p>
      */
-    static String identityFor(Workspace workspace, List<CgPath> roots) {
+    static String identityFor(WorkspaceClient workspace, List<CgPath> roots) {
         String identity = workspace.server().workspaceId();
         return identity.isEmpty() ? hashOfProjects(roots) : identity;
     }

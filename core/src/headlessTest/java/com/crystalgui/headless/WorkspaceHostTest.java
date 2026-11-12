@@ -24,7 +24,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.fs.server.WorkspaceActor;
@@ -123,7 +123,7 @@ public class WorkspaceHostTest {
         Path root = folder.getRoot().toPath().resolve("crystalgui/workspace");
         serve(root);
 
-        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
+        WorkspaceClient workspace = WorkspaceClient.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
         CgReply<List<FsMessages.ProjectEntry>> projects = workspace.projects();
         pump();
 
@@ -192,7 +192,7 @@ public class WorkspaceHostTest {
         scripting = WorkspaceService.ScriptingPolicy.AUTHORIZED_ONLY;
         serve(folder.getRoot().toPath().resolve("crystalgui/workspace"));
 
-        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
+        WorkspaceClient workspace = WorkspaceClient.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
         workspace.greet();
         pump();
 
@@ -209,7 +209,7 @@ public class WorkspaceHostTest {
     @Test
     public void aWorkspaceNobodyHasSpokenForRunsLocally() throws IOException {
         serve(folder.getRoot().toPath().resolve("crystalgui/workspace"));
-        Workspace workspace = Workspace.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
+        WorkspaceClient workspace = WorkspaceClient.over(clientEnd::call, clientEnd::onNotify, CgPlainOps.INSTANCE);
         workspace.greet();
         pump();
 

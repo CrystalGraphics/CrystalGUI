@@ -466,7 +466,10 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
                                pair into a RENAME; `update` is a host's ONE call a tick, and it owns the
                                reconcile cadence, stat-ing on its own JobScheduler off the host's thread),
                                WorkspaceAudit, RecentOperations
-  .client                      Workspace (the entry point; facades by noun — files(), presence(),
+  .client                      Workspace (the desktop's owned service, one per connection, on the services
+                               sequence: wire, greeting, watches, stores, fan-out of saves),
+                               WorkspaceClient (one per application, made on its sequence; facades by
+                               noun — files(), presence(),
                                capabilities(), health() — and the ONE door a provider is reached
                                through, which is where UiBudget times it), FileOperations (every answer
                                a Reply, serialised per resource, undoable), FsCall (coalescing, cancel,

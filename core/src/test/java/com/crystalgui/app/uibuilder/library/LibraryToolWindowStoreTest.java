@@ -23,7 +23,7 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.uibuilder.UiBuilderContribution;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -62,7 +62,7 @@ public class LibraryToolWindowStoreTest extends UiDocumentTestBase {
         clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
-        workbench = new Workbench(Workspace.of(clientEnd), CrystalEditor.EXTENSIONS);
+        workbench = new Workbench(WorkspaceClient.of(clientEnd), CrystalEditor.EXTENSIONS);
     }
 
     @After

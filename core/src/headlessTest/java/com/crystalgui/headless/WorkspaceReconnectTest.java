@@ -7,7 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
@@ -49,7 +49,7 @@ public class WorkspaceReconnectTest {
     private static final CgPath FILE = CgPath.parse("p:a.txt");
     private static final Object PEER = new Object();
 
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private final List<FsMessages.FileChange> heard = new ArrayList<>();
 
     /** One server end, rebuildable — a reconnect is a second one of these. */
@@ -100,7 +100,7 @@ public class WorkspaceReconnectTest {
     public void setUp() {
         CgProtocols.resetForTesting();
         first = new Server(new InMemoryFileSystem().seed("p:a.txt", "one"));
-        workspace = Workspace.of(first.clientSide);
+        workspace = WorkspaceClient.of(first.clientSide);
         workspace.watch(Resource.of(FILE), false).onChanged.connect(heard::addAll);
         first.pump();
     }

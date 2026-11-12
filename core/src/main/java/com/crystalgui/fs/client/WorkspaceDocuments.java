@@ -33,7 +33,7 @@ import org.jetbrains.annotations.Nullable;
  * documents.onDidChangeState.connect((document, state) -> …);
  * }</pre>
  *
- * <p>Built over a {@link Workspace} and a {@link DocumentKinds}: opening reads the resource through the
+ * <p>Built over a {@link WorkspaceClient} and a {@link DocumentKinds}: opening reads the resource through the
  * workspace, asks the kinds which model to build, and hands back a {@link DocumentReference}. A second
  * caller for one resource joins the document already open, which is what makes two split panes one
  * document.</p>
@@ -52,7 +52,7 @@ import org.jetbrains.annotations.Nullable;
  */
 public final class WorkspaceDocuments implements Disposable {
 
-    private final Workspace workspace;
+    private final WorkspaceClient workspace;
     private final DocumentKinds kinds;
     private final Documents documents = new Documents();
 
@@ -60,11 +60,11 @@ public final class WorkspaceDocuments implements Disposable {
     /**
      * What one open document holds on the wire, so closing it lets go of exactly that.
      *
-     * <p>The listener is kept because a {@link Workspace.Watch} is <b>shared</b> by everything that asked
+     * <p>The listener is kept because a {@link WorkspaceClient.Watch} is <b>shared</b> by everything that asked
      * for the same resource: disposing it need not end it, and a listener left behind on a surviving
      * watch goes on applying changes to a document that has been disposed.</p>
      */
-    private record Attachment(Workspace.Watch watch, Connection changes) {
+    private record Attachment(WorkspaceClient.Watch watch, Connection changes) {
     }
 
     private final Map<Resource, Attachment> watches = new LinkedHashMap<>();
@@ -99,7 +99,7 @@ public final class WorkspaceDocuments implements Disposable {
         EXPLICIT, AUTO_AFTER_DELAY, AUTO_ON_FOCUS_CHANGE, CLOSING
     }
 
-    public WorkspaceDocuments(Workspace workspace, DocumentKinds kinds) {
+    public WorkspaceDocuments(WorkspaceClient workspace, DocumentKinds kinds) {
         this.workspace = Objects.requireNonNull(workspace, "workspace");
         this.kinds = Objects.requireNonNull(kinds, "kinds");
         documents.onDidOpen.connect(onDidOpen::emit);
@@ -115,7 +115,7 @@ public final class WorkspaceDocuments implements Disposable {
         // holds -- see FsHello.unknown, and why the failure it produces is the one an etag catches.
         //
         // HELD, because this is the one subscription that points the WRONG WAY down the lifetimes: a
-        // Workspace is per connection and a store is per workbench, so a dropped connection here keeps
+        // WorkspaceClient is per connection and a store is per workbench, so a dropped connection here keeps
         // the store, its DocumentKinds, and -- through the kind whose model factory captures it -- the
         // whole workbench that built them. It is the exact path a heap walk found from
         // ContentProviders.onDidChange to a workbench that had been disposed.
@@ -263,10 +263,10 @@ public final class WorkspaceDocuments implements Disposable {
 
     /** Subscribes to wherever the document is now, and files it under that. */
     private void watchFor(Document document) {
-        Workspace.Watch watch = workspace.watch(document.resource(), false);
+        WorkspaceClient.Watch watch = workspace.watch(document.resource(), false);
         Connection listening = watch.onChanged.connect(changes -> {
             for (FsMessages.FileChange change : changes) {
-                // MATCHED ON EITHER END, for the reason Workspace.deliver records: a rename's `path` is
+                // MATCHED ON EITHER END, for the reason WorkspaceClient.deliver records: a rename's `path` is
                 // where the file went, and this document is still sitting at where it came FROM.
                 if (Resource.parse(change.path()).equals(document.resource())
                         || (!change.from().isEmpty()

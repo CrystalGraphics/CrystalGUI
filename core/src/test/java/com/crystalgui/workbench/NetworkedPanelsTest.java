@@ -21,7 +21,7 @@ import com.crystalgraphics.net.CgInMemoryTransport;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -96,7 +96,7 @@ public class NetworkedPanelsTest extends UiDocumentTestBase {
                 WorkspaceActor.LOCAL, "player", CgPlainOps.INSTANCE)
                 .installOn(serverEnd);
 
-        workbench = new Workbench(Workspace.of(clientEnd));
+        workbench = new Workbench(WorkspaceClient.of(clientEnd));
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);
         document.append(root);

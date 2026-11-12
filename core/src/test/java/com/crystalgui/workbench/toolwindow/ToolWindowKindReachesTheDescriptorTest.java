@@ -15,7 +15,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -68,7 +68,7 @@ public class ToolWindowKindReachesTheDescriptorTest {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
-        Workspace workspace = Workspace.of(clientEnd);
+        WorkspaceClient workspace = WorkspaceClient.of(clientEnd);
         // NO EXTENSIONS: this is about what registration carries, not about what ships.
         workbench = new Workbench(workspace, List.of());
     }

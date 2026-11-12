@@ -24,7 +24,7 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -390,14 +390,14 @@ public class PresentationTest {
         assertEquals(2, fs.list(CgPath.ofProject("demo")).size());
     }
 
-    /** The client half is the connection's workspace, shared by every window on it. */
+    /** The client half is the connection's workspace service, shared by every window on it (each its own client). */
     @Test
     public void twoPanelsOnOneClientShareOneWorkspace() {
         ServerWindows.of(serverEnd).open(TinyPanel.TYPE, null);
         settle();
         ClientWindowContext first = mounted.get(0);
 
-        assertSame(Workspace.of(clientEnd), Workspace.of(first.connection()));
+        assertSame(WorkspaceClient.of(clientEnd).service(), WorkspaceClient.of(first.connection()).service());
     }
 
     private static WorkspaceService workspace() {

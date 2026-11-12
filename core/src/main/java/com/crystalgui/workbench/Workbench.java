@@ -43,7 +43,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.FileOperations;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.editor.TextEditorView;
@@ -223,7 +223,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // Events go to Notifications (severity, actions, a bounded history); ambient text goes to StatusBar
     // (keyed per writer, replaced rather than accumulated). See com.crystalgui.core.notify.
 
-    public final Workspace workspace;
+    public final WorkspaceClient workspace;
 
     /** Who this workbench is to the process-wide registries: what it contributes leaves when it is disposed. */
     private final Owner owner = Owner.of("workbench");
@@ -794,7 +794,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * A workbench with every contributed extension on — which is what a test and a harness scene mean,
      * and what a host meant before applications existed.
      */
-    public Workbench(Workspace workspace) {
+    public Workbench(WorkspaceClient workspace) {
         this(workspace, null);
     }
 
@@ -803,7 +803,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      *                     everything contributed. An application's manifest is what names them, which is
      *                     how two applications on one desktop enable different sets
      */
-    public Workbench(Workspace workspace, @Nullable List<String> extensionIds) {
+    public Workbench(WorkspaceClient workspace, @Nullable List<String> extensionIds) {
         super(NAME);
         if (workspace == null) throw new IllegalArgumentException("A Workbench needs a workspace");
         this.workspace = workspace;
@@ -1189,7 +1189,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * Everything this workbench subscribed to while it was being built.
      *
      * <p>Held rather than dropped because most of it is on something that outlives a workbench: the
-     * {@link Workspace} is per connection, {@code Notifications} is per process, and a listener on
+     * {@link WorkspaceClient} is per connection, {@code Notifications} is per process, and a listener on
      * either keeps this whole element tree reachable. {@code capabilityWatch} beside it has said so
      * since it was written — <i>"a workbench that subscribed from its constructor would stay reachable
      * for ever"</i> — and was the only subscription anybody had applied it to.</p>
@@ -1254,10 +1254,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * workbench's listener would go on being called on a signal it no longer has any business reading.</p>
      */
     public static final class RootWatch implements Disposable {
-        private final Workspace.Watch watch;
+        private final WorkspaceClient.Watch watch;
         private final Connection listener;
 
- public RootWatch(Workspace.Watch watch, Connection listener) {
+ public RootWatch(WorkspaceClient.Watch watch, Connection listener) {
             this.watch = watch;
             this.listener = listener;
         }
@@ -1928,7 +1928,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     /** The workspace this workbench is a view of. */
     @Override
-    public Workspace workspace() {
+    public WorkspaceClient workspace() {
         return workspace;
     }
 
