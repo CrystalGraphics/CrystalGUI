@@ -621,17 +621,4 @@ public final class StyleSheet {
     public String source() {
         return rawSource;
     }
-
-    /**
-     * Public identity-stable swap: adopts {@code freshlyParsed}'s rules and source, keeping
-     * <em>this</em> instance — for a sheet its one owner edits (a document's own sheet, in the UI builder), which
-     * lives in an engine's list and must not be re-registered. Never for a sheet shared between documents. The
-     * parsed argument is a carrier: parse into a throwaway, hand it here, drop it, then ask the engine to
-     * {@code invalidateAllMatches()}.
-     */
-    public void refillFrom(StyleSheet freshlyParsed) {
-        this.rawSource = freshlyParsed.rawSource;
-        this.compiled = freshlyParsed.compiled;
-        replaceRules(freshlyParsed.getRules());
-    }
 }

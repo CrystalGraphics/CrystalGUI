@@ -2,7 +2,7 @@ package com.crystalgui.style.theme;
 
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.style.StyleContext;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgui.style.sheet.DeclarationParser;
@@ -44,10 +44,6 @@ public final class UiThemeManager {
         return INSTANCE;
     }
 
-    /** Fired after a successful theme or scheme change, once every live window is invalidated —
-     * what a Preferences page listens to for its dropdown state. */
-    public final Signal.Action onChanged = new Signal.Action();
-
     @Nullable
     private UiTheme activeTheme;
     @Nullable
@@ -68,14 +64,16 @@ public final class UiThemeManager {
     private UiThemeManager() {
     }
 
+    /** The theme of the generation published last: what a document reads, which a switch still in flight has not reached. */
     @Nullable
     public String activeThemeId() {
-        return activeTheme == null ? null : activeTheme.id();
+        return StyleContext.current().themeId();
     }
 
+    /** As {@link #activeThemeId()}, for the editor scheme. */
     @Nullable
     public String activeSchemeId() {
-        return activeScheme == null ? null : activeScheme.id();
+        return StyleContext.current().schemeId();
     }
 
     /**
@@ -96,53 +94,71 @@ public final class UiThemeManager {
     }
 
     /**
-     * Activates a registered theme. {@code null} deactivates (back to the unthemed base). False —
-     * with the reason logged, and the previous theme left standing — for an unknown id or an id
-     * that names a scheme.
+     * Activates a registered theme; {@code null} deactivates (back to the unthemed base). False, with the reason
+     * logged and the previous theme left standing, for an unknown id or an id that names a scheme.
+     *
+     * <p>Called from a document, the next generation is built on the services sequence and the answer is only
+     * that the switch was accepted; every document, the caller's included, shows it at its next frame. Called from
+     * any other thread it is built before this returns.</p>
      */
     public boolean setTheme(@Nullable String id) {
-        // Same id, same registered object: a no-op, deliberately. Settings re-apply wholesale on
-        // every change, so without this every unrelated toggle would re-substitute every sheet.
-        if (Objects.equals(id, activeThemeId())
-                && (id == null || ThemeRegistry.get(id) == activeTheme)) {
-            return true;
+        UiTheme theme = null;
+        if (id != null) {
+            theme = ThemeRegistry.get(id);
+            if (theme == null || theme.role() != UiTheme.Role.THEME) {
+                CrystalGuiCore.LOGGER.warn("UiThemeManager: no registered theme '{}' — keeping '{}'",
+                        id, activeThemeId());
+                return false;
+            }
         }
-        if (id == null) {
-            activeTheme = null;
+        UiTheme wanted = theme;
+        build(() -> {
+            // Same id, same registered object: a no-op, deliberately. Settings re-apply wholesale on every
+            // change, so without this every unrelated toggle would rebuild a generation.
+            if (wanted == activeTheme) return;
+            activeTheme = wanted;
             apply();
-            return true;
-        }
-        UiTheme theme = ThemeRegistry.get(id);
-        if (theme == null || theme.role() != UiTheme.Role.THEME) {
-            CrystalGuiCore.LOGGER.warn("UiThemeManager: no registered theme '{}' — keeping '{}'",
-                    id, activeThemeId());
-            return false;
-        }
-        activeTheme = theme;
-        apply();
+        });
         return true;
     }
 
     /** As {@link #setTheme}, for the editor colour scheme — the independent second axis. */
     public boolean setScheme(@Nullable String id) {
-        if (Objects.equals(id, activeSchemeId())
-                && (id == null || ThemeRegistry.get(id) == activeScheme)) {
-            return true;
+        UiTheme scheme = null;
+        if (id != null) {
+            scheme = ThemeRegistry.get(id);
+            if (scheme == null || scheme.role() != UiTheme.Role.SCHEME) {
+                CrystalGuiCore.LOGGER.warn("UiThemeManager: no registered scheme '{}' — keeping '{}'",
+                        id, activeSchemeId());
+                return false;
+            }
         }
-        if (id == null) {
-            activeScheme = null;
+        UiTheme wanted = scheme;
+        build(() -> {
+            if (wanted == activeScheme) return;
+            activeScheme = wanted;
             apply();
-            return true;
-        }
-        UiTheme scheme = ThemeRegistry.get(id);
-        if (scheme == null || scheme.role() != UiTheme.Role.SCHEME) {
-            CrystalGuiCore.LOGGER.warn("UiThemeManager: no registered scheme '{}' — keeping '{}'",
-                    id, activeSchemeId());
-            return false;
-        }
-        activeScheme = scheme;
-        apply();
+        });
         return true;
+    }
+
+    /**
+     * Runs a change to the state this class owns where it cannot race: on the services sequence when asked from a
+     * document's, so a document never builds a generation for the others, and on the caller's own thread otherwise.
+     */
+    private void build(Runnable change) {
+        UiSequence from = UiSequence.current();
+        if (from == null || from == UiSequence.services()) {
+            synchronized (this) {
+                change.run();
+            }
+            return;
+        }
+        UiSequence.services().execute(() -> {
+            synchronized (this) {
+                change.run();
+            }
+        });
     }
 
     /**
@@ -161,14 +177,16 @@ public final class UiThemeManager {
             String name = key.startsWith("--") ? key : "--" + key;
             normalised.put(name, value);
         });
-        if (normalised.equals(overrides)) return;      // same guard as setTheme, same reason
-        overrides.clear();
-        overrides.putAll(normalised);
-        apply();
+        build(() -> {
+            if (normalised.equals(overrides)) return;      // same guard as setTheme, same reason
+            overrides.clear();
+            overrides.putAll(normalised);
+            apply();
+        });
     }
 
     /** The overrides in force, token names normalised to their {@code --} form. */
-    public Map<String, String> overrides() {
+    public synchronized Map<String, String> overrides() {
         return Map.copyOf(overrides);
     }
 
@@ -178,10 +196,12 @@ public final class UiThemeManager {
      * resolves {@code var(--x, fallback)} to, and a fixture that asserts on style resets it.
      */
     public void resetForTesting() {
-        activeTheme = null;
-        activeScheme = null;
-        overrides.clear();
-        apply();
+        build(() -> {
+            activeTheme = null;
+            activeScheme = null;
+            overrides.clear();
+            apply();
+        });
     }
 
     /**
@@ -205,19 +225,21 @@ public final class UiThemeManager {
      */
     public int reloadFromDisk() {
         int reloaded = ThemeRegistry.reloadAll();
-        // NEVER deactivate on a null. A theme whose file was deleted or is momentarily unreadable keeps
-        // its registry entry, so null here means the id itself is gone -- and dropping to the unthemed
-        // base mid-edit blanks the look and reads as the reload being broken.
-        if (activeTheme != null) {
-            UiTheme reread = ThemeRegistry.get(activeTheme.id());
-            if (reread != null) activeTheme = reread;
-        }
-        if (activeScheme != null) {
-            UiTheme reread = ThemeRegistry.get(activeScheme.id());
-            if (reread != null) activeScheme = reread;
-        }
-        baseTable = null;
-        apply();
+        build(() -> {
+            // NEVER deactivate on a null. A theme whose file was deleted or is momentarily unreadable keeps
+            // its registry entry, so null here means the id itself is gone -- and dropping to the unthemed
+            // base mid-edit blanks the look and reads as the reload being broken.
+            if (activeTheme != null) {
+                UiTheme reread = ThemeRegistry.get(activeTheme.id());
+                if (reread != null) activeTheme = reread;
+            }
+            if (activeScheme != null) {
+                UiTheme reread = ThemeRegistry.get(activeScheme.id());
+                if (reread != null) activeScheme = reread;
+            }
+            baseTable = null;
+            apply();
+        });
         return reloaded;
     }
 
@@ -246,18 +268,19 @@ public final class UiThemeManager {
         // for the opposite ground, so the set follows the theme's declared kind. Unthemed keeps the dark set.
         boolean light = activeTheme != null && activeTheme.kind() == UiTheme.Kind.LIGHT;
 
-        StyleContext.PUBLISHED.update(old -> new StyleContext(table, theme, scheme, activeThemeId(),
-                activeSchemeId(), light));
+        String themeId = activeTheme == null ? null : activeTheme.id();
+        String schemeId = activeScheme == null ? null : activeScheme.id();
+        StyleContext next = new StyleContext(table, theme, scheme, themeId, schemeId, light).prepared();
+        StyleContext.PUBLISHED.update(old -> next);
 
         // ONE LINE PER SWAP: a swap has several parts that can each be fine while the screen does not change
         // (the theme resolved to nothing, the table came out empty, a sheet parsed to no rules), and from
         // outside they are indistinguishable. Seen across the loader seam, where sheets resolve through the
         // resource manager and a swap that works in the harness can do nothing.
         CrystalGuiCore.LOGGER.info("theme swap: theme={} scheme={} vars={} themeRules={} schemeRules={}",
-                activeThemeId(), activeSchemeId(), merged.size(),
+                themeId, schemeId, merged.size(),
                 theme.getRules().size(), scheme.getRules().size());
 
-        onChanged.emit();
     }
 
     /** The component-token derivation table, {@code themes/base.css} — loaded once, lazily. Sits

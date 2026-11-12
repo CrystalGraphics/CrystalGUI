@@ -14,6 +14,7 @@ import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.style.theme.ThemeRegistry;
 import com.crystalgui.style.theme.UiTheme;
+import com.crystalgui.style.StyleContext;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -92,7 +93,7 @@ public final class BuilderToolbar extends UIElement {
         UiThemeManager themes = UiThemeManager.getInstance();
         form.prop(ConfigDescriptor.select("theme", "Theme", themeIds()),
                 Property.derived(themes::activeThemeId, themes::setTheme)
-                        .announcedBy(refresh -> themes.onChanged.connect(refresh)));
+                        .announcedBy(refresh -> StyleContext.PUBLISHED.changes().subscribe(() -> refresh.run())));
         preview = form.prop(ConfigDescriptor.bool("preview", "Preview").toggle(true),
                 Property.derived(() -> !host.isDesignMode(), this::setPreview));
         preview.addClass(PREVIEW_CLASS);

@@ -9519,6 +9519,7 @@ com/crystalgui/style/StyleContext
   field public,static,final THEME Lcom/crystalgui/style/sheet/StyleSheet;
   method public <init> (Ljava/util/Map;Lcom/crystalgui/style/sheet/StyleSheet;Lcom/crystalgui/style/sheet/StyleSheet;Ljava/lang/String;Ljava/lang/String;Z)V
   method public light ()Z
+  method public prepared ()Lcom/crystalgui/style/StyleContext;
   method public renewed ()Lcom/crystalgui/style/StyleContext;
   method public resolve (Lcom/crystalgui/style/sheet/StyleSheet;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public schemeId ()Ljava/lang/String;
@@ -10761,7 +10762,6 @@ com/crystalgui/style/sheet/StyleSheet
   method public getOrigin ()Lcom/crystalgui/style/StyleOrigin;
   method public getRules ()Ljava/util/List;
   method public hasUnboundedStateDescendants ()Z
-  method public refillFrom (Lcom/crystalgui/style/sheet/StyleSheet;)V
   method public sameSourceAs (Lcom/crystalgui/style/sheet/StyleSheet;)Z
   method public source ()Ljava/lang/String;
   method public stateDescendantKeys ()Ljava/util/Set;
@@ -10776,6 +10776,7 @@ com/crystalgui/style/sheet/StyleSheetRegistry
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT_SHEET_PARTS Ljava/util/List;
+  method public,static loaded ()Ljava/util/Collection;
   method public,static of (Ljava/lang/String;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static reloadAll ()I
 com/crystalgui/style/sheet/source/CssEdits
@@ -10882,7 +10883,6 @@ com/crystalgui/style/theme/UiTheme$Role
 com/crystalgui/style/theme/UiThemeManager
   access public,final
   extends java/lang/Object
-  field public,final onChanged Lcom/crystalgui/core/signal/Signal$Action;
   method public activeSchemeId ()Ljava/lang/String;
   method public activeThemeId ()Ljava/lang/String;
   method public installInto (Lcom/crystalgui/style/StyleEngine;)V

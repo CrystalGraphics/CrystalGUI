@@ -2,6 +2,7 @@ package com.crystalgui.style;
 
 import com.crystalgui.core.async.Published;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.style.sheet.StyleSheetRegistry;
 import java.util.Collections;
 import java.util.IdentityHashMap;
 import java.util.Map;
@@ -106,13 +107,24 @@ public final class StyleContext {
         if (!base.usesVariables()) return base;
         synchronized (resolved) {
             StyleSheet have = resolved.get(base);
-            // A sheet its owner edited (refillFrom) is no longer the text the copy was bound from.
+            // A hot reload refills a base where it stands, so a copy bound from its old text is stale.
             if (have == null || !have.sameSourceAs(base)) {
                 have = base.bound(variables);
+                if (have != base) have.warmValues();
                 resolved.put(base, have);
             }
             return have;
         }
+    }
+
+    /**
+     * Resolves the sheets every document is likely to install — the user-agent sheet and the loaded registry sheets —
+     * so the builder pays for their rule indices and the documents find them ready when they adopt this generation.
+     */
+    public StyleContext prepared() {
+        resolve(StyleSheet.DEFAULT);
+        for (StyleSheet sheet : StyleSheetRegistry.loaded()) resolve(sheet);
+        return this;
     }
 
     /** A new generation with the same content, for a change that is in the sheets' text: a hot reload. */

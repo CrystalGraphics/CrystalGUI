@@ -4,6 +4,7 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.StyleContext;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -90,6 +91,11 @@ public final class StyleSheetRegistry {
      * every widget out at 0x0 and points at nothing. (Counted "nine" until CrystalOS added a tenth,
      * which is the kind of number not worth restating in prose.)</p>
      */
+    /** Every sheet read so far, which is every sheet a document is likely to install. */
+    public static Collection<StyleSheet> loaded() {
+        return List.copyOf(CACHE.values());
+    }
+
     static String sourceOf(String namespacedPath) {
         return fetchSource(namespacedPath);
     }
