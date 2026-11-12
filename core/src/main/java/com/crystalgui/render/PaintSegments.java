@@ -1,7 +1,6 @@
 package com.crystalgui.render;
 
 import com.crystalgraphics.render.canvas.CgCanvas;
-import com.crystalgraphics.render.draw.CgBindingTable;
 import com.crystalgraphics.render.draw.CgDrawChunk;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgReplay;
@@ -24,9 +23,6 @@ final class PaintSegments {
     /** Off with {@code -Dcrystalgui.paint.segments=false}: a box's paint shares chunks with its neighbours'. */
     static final boolean SEGMENTS = !"false".equals(System.getProperty("crystalgui.paint.segments"));
 
-    /** Snapshots kept past which they are all dropped, and every kept segment with them. */
-    private static final int KEPT_SNAPSHOTS = 4096;
-
     private static final int MARKS = 5;
 
     private final CgUiPaintContext ctx;
@@ -39,8 +35,6 @@ final class PaintSegments {
     private int[] marks = new int[8 * MARKS];
     private int depth;
 
-    /** The snapshots kept segments bind, which outlive the recordings. @see CgReplay */
-    private final CgBindingTable keptBindings = new CgBindingTable();
     private long epoch, seenFontGeneration, seenEvictions;
     private int seenIconResets;
 
@@ -54,7 +48,7 @@ final class PaintSegments {
         this.recording = recording;
     }
 
-    /** At a frame's start: an evicted glyph page or too many kept snapshots end every kept segment. */
+    /** At a frame's start: an evicted glyph page ends every kept segment. */
     void beginFrame() {
         // A page evicted names a layer another page now holds. New glyphs move nothing: a segment whose text drew
         // without its glyphs is not kept, and growth keeps the atlas's texture.
@@ -62,10 +56,6 @@ final class PaintSegments {
         if (evicted != seenFontGeneration) {
             seenFontGeneration = evicted;
             invalidate("replay-epoch-evicted");
-        }
-        if (keptBindings.size() > KEPT_SNAPSHOTS) {
-            keptBindings.reset();
-            invalidate("replay-kept-resets");
         }
     }
 
@@ -109,7 +99,7 @@ final class PaintSegments {
             return false;
         }
         boolean kept = recorder.stateChanges() == states[s] && recording.operations() == marks[m]
-                && keep.capture(recorder, starts[s], recording, keptBindings, marks[m + 1], marks[m + 2], marks[m + 3],
+                && keep.capture(recorder, starts[s], recording, marks[m + 1], marks[m + 2], marks[m + 3],
                         marks[m + 4]);
         if (!kept) keep.clear();
         CgTrace.add(UiTrace.FRAME, kept ? "segments-kept" : "segments-unkept", 1);
