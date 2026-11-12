@@ -4995,6 +4995,7 @@ com/crystalgui/desktop/app/ClientRoot
   method public setClientSize (FF)V
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)V
   method public surface (Lcom/crystalgui/render/Surface;)V
+  method public wantsPicture ()Z
 com/crystalgui/desktop/app/PopupLayer
   access public,final
   extends com/crystalgui/ui/dom/UIElement

@@ -145,4 +145,10 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
     public boolean keepsSurface() {
         return true;
     }
+
+    /** Always: the shell shows nothing but this picture, so glass inside the client must not take it off the surface. */
+    @Override
+    public boolean wantsPicture() {
+        return true;
+    }
 }
