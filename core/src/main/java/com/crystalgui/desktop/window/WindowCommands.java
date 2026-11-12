@@ -4,7 +4,7 @@ import java.util.List;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 
 import com.crystalgui.core.window.WindowState;
@@ -32,7 +32,7 @@ import javax.annotation.Nullable;
  * nothing observable. The ids are the vocabulary; the buttons are the direct affordance for the same
  * verbs.</p>
  *
- * <p>Registered in {@link CommandRegistry#global()} because they are facts about the application rather
+ * <p>Registered in {@link Commands#global()} because they are facts about the application rather
  * than about any window: what varies per invocation is <em>which</em> window, and that is one
  * {@link com.crystalgui.core.data.DataContext} question — see {@link WindowFrame#WINDOW_FRAME}.</p>
  *
@@ -76,7 +76,7 @@ public final class WindowCommands {
     /**
      * The two groups, and the numeric prefixes are load-bearing.
      *
-     * <p>{@code CommandRegistry.sections} sorts by {@code (group, order)} with the group compared as a
+     * <p>{@code Commands.sections} sorts by {@code (group, order)} with the group compared as a
      * <b>string</b>, so a group named {@code "close"} sorts before one named {@code "state"} and the menu
      * came out Close-first with the separator above the state rows — the exact inversion of Win32's. The
      * prefix convention is what every other menu in the application already uses
@@ -101,7 +101,7 @@ public final class WindowCommands {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        CommandRegistry registry = CommandRegistry.global();
+        Commands registry = Commands.process();
 
         // ORDERED AS WIN32'S: Restore, Move, Size, Minimize, Maximize, Full Screen, separator, Close.
         // The order numbers are spaced by ten rather than consecutive, which is what let W13b's Full
@@ -244,7 +244,7 @@ public final class WindowCommands {
                 .enabledWhen(context -> frameFor(context) != null));
     }
 
-    /** Testing seam — {@code CommandRegistry.resetForTesting()} drops the registrations, not this flag. */
+    /** Testing seam — {@code Commands.resetForTesting()} drops the registrations, not this flag. */
     public static synchronized void resetForTesting() {
         registered = false;
     }

@@ -2,7 +2,7 @@ package com.crystalgui.workbench.chrome.status;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
@@ -359,12 +359,12 @@ public class StatusBarView extends UIElement {
                         // acts on a workbench or a window is — evaluates its guard against nothing, fails
                         // it, and returns false. The entry drew a pointer cursor and did nothing when
                         // clicked, which is the exact "the command exists but nothing happens" failure
-                        // CommandRegistry.run already warns about one line further down.
+                        // Commands.run already warns about one line further down.
                         //
                         // The element is what makes the walk work: a data context resolves by walking up
                         // the tree and then asking the window, and the workbench registers itself as a
                         // provider there.
-                        CommandRegistry.global().run(command, CommandContext.of(element));
+                        Commands.process().run(command, CommandContext.of(element));
                     }, false, true);
                 }
             } else {

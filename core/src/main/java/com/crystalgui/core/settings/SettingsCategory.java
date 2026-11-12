@@ -68,7 +68,7 @@ public final class SettingsCategory {
     }
 
     private static SettingsCategory register(SettingsCategory category) {
-        // Replaces, like CommandRegistry and SettingsRegistry: a theme or a mod re-titling a built-in
+        // Replaces, like Commands and SettingsRegistry: a theme or a mod re-titling a built-in
         // category is the point, not a collision.
         BY_PATH.put(category.path, category);
         return category;

@@ -3,7 +3,7 @@ package com.crystalgui.workbench.chrome.menu;
 import com.crystalgui.workbench.chrome.palette.CommandPalette;
 import com.crystalgui.workbench.chrome.problems.ProblemsCommands;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.collection.list.ListContextMenus;
 
@@ -48,12 +48,12 @@ public final class ChromeCommands {
     public static void register() {
         // EVERY LIST AND TREE GETS A RIGHT-CLICK COPY, from one place. See ListView's hook for why the
         // list cannot do this itself and why a per-widget opt-in was the wrong shape.
-        ListContextMenus.installDefault(CommandRegistry.global());
+        ListContextMenus.installDefault(Commands.process());
 
         // The Problems panel's own three rows -- see ProblemsCommands on why they are commands.
         ProblemsCommands.register();
         
-        CommandRegistry.global().contribute(ChromeCommands.class, registry ->
+        Commands.process().contribute(ChromeCommands.class, registry ->
                 registry.register(Command.of(SHOW_COMMANDS, "Show All Commands")
                         .binding("Mod+Shift+P", "Mod+Shift+A")
                         // VIEW, which is where VS Code keeps it too -- the palette is a way of looking

@@ -3,7 +3,7 @@ package com.crystalgui.workbench.chrome.status;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
@@ -269,10 +269,10 @@ public class StatusBarViewTest extends UiDocumentTestBase {
     /**
      * <b>A clickable entry has to run its command FROM the element pressed.</b>
      *
-     * <p>{@code CommandRegistry.run(id)} builds an <em>empty</em> data context, so any command guarded by
+     * <p>{@code Commands.run(id)} builds an <em>empty</em> data context, so any command guarded by
      * {@code enabledWhereData} — which every command acting on a document or a workbench is — evaluates its
      * guard against nothing, fails it, and returns false. The entry drew a pointer cursor and did nothing
-     * when clicked: the exact "the command exists but nothing happens" failure {@code CommandRegistry.run}
+     * when clicked: the exact "the command exists but nothing happens" failure {@code Commands.run}
      * warns about in its own body.</p>
      *
      * <p>The element is what makes it work, because a data context resolves by walking up the tree and then
@@ -281,7 +281,7 @@ public class StatusBarViewTest extends UiDocumentTestBase {
     @Test
     public void aCommandNeedsTheElementItWasRunFrom() {
         boolean[] ran = { false };
-        CommandRegistry.global().register(Command.of("test.needsWindow", "Needs A Window")
+        Commands.process().register(Command.of("test.needsWindow", "Needs A Window")
                 .run(c -> ran[0] = true)
                             // SURFACE, not the old engine's WINDOW. `UiDataKeys.WINDOW` is a `DataKey<UIWindow>`
             // and there is no `UIWindow` anywhere in a new-engine tree, so it can never resolve --
@@ -296,14 +296,14 @@ public class StatusBarViewTest extends UiDocumentTestBase {
             .enabledWhen(c -> UIElement.sourceOf(c) != null));
         try {
             assertFalse("a contextless run must not silently appear to work",
-                    CommandRegistry.global().run("test.needsWindow"));
+                    Commands.process().run("test.needsWindow"));
             assertFalse(ran[0]);
 
             assertTrue("running from the pressed element should resolve the document",
-                    CommandRegistry.global().run("test.needsWindow", CommandContext.of(bar)));
+                    Commands.process().run("test.needsWindow", CommandContext.of(bar)));
             assertTrue(ran[0]);
         } finally {
-            CommandRegistry.global().unregister("test.needsWindow");
+            Commands.process().unregister("test.needsWindow");
         }
     }
 

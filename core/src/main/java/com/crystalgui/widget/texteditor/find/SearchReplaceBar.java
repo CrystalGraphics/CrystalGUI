@@ -672,7 +672,7 @@ public class SearchReplaceBar extends UIElement {
      * — which put six shortcuts somewhere no keymap could see and nobody could rebind. This engine has a
      * command layer and an element-scoped resolver for exactly this; a bar in an application belongs in it.
      * (A generic widget like {@code TreeSearch} is the case that does not: making it depend on a
-     * {@code CommandRegistry} to answer one keystroke would be the wrong direction.)</p>
+     * {@code Commands} to answer one keystroke would be the wrong direction.)</p>
      */
     public void toggleMatchCase() {
         matchCaseToggle.onPressed.emit();

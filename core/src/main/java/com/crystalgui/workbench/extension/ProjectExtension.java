@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 import com.google.gson.JsonElement;
 
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.ConnectionGroup;
@@ -66,10 +66,10 @@ public final class ProjectExtension implements WorkbenchExtension {
                 workbench.projectListing(), workbench.decorations());
         // At construction, not on the first frame with a window: the registry is global, so there is
         // nothing left to wait for.
-        tree.setContextMenu(CommandRegistry.global(), ExplorerCommands::menu);
+        tree.setContextMenu(Commands.process(), ExplorerCommands::menu);
         // Drag, Cut, Copy, Paste, Rename and Delete over the selection, performed through the file service.
         tree.editWith(workbench);
-        Disposable editRows = TreeEditing.contributeMenu(CommandRegistry.global(), MenuId.EXPLORER_CONTEXT);
+        Disposable editRows = TreeEditing.contributeMenu(Commands.process(), MenuId.EXPLORER_CONTEXT);
         // The explorer IS the workspace's undo scope. UndoScope.nearest walks outward from focus, so
         // Ctrl+Z in the tree reaches file operations and Ctrl+Z in an editor still reaches its own text.
         tree.setUndoStack(workbench.workspace().files().undoStack());

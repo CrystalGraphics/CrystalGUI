@@ -78,14 +78,16 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
   .cache                       Only the CLAUDE.md of the downloads guide; the machinery (CgDownloads,
                                CgDownloadLocations, CgCacheFiles, CgTarArchive) is CrystalGraphics',
                                and CrystalGuiDownloads (in .storage) binds it to download/locations.json
-  .command                     Command (a named invocable action), CommandContext, CommandRegistry —
+  .command                     Command (a named invocable action), CommandContext, Commands —
                                what a key binding, a menu item and the palette all point at. Plus the
                                MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested
                                submenus), MenuSection (a group + its rows — what a separator is drawn
                                from), MenuEntry (Item/Submenu, sealed; an Item carries enabled/checkable/
                                checked so the RENDERER decides), MenuContributor (rows computed at open
-                               time — the Window menu's editor list). CommandRegistry.sections() is the
-                               one query every menu renderer reads; menu() is its deprecated flat view.
+                               time — the Window menu's editor list). Commands.sections() is the
+                               one query every menu renderer reads. Commands is a Contributions list: the lookup by id, each
+                               menu's rows and the declared keymap are indices of its generation, and a
+                               command with no document runs on the services sequence.
                                ActionIcons is the VOCABULARY of marks a row may draw -- a constant per
                                shipped icon, since an id naming no file draws an empty column and
                                reports nothing -- and carriesItsOwnPalette() is the line between a

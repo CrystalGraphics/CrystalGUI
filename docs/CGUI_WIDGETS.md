@@ -1399,8 +1399,8 @@ private static final TreeClipboard<Node> CLIPBOARD = new TreeClipboard<>();   //
 
 editing = new TreeEditing<>(tree, this, this::itemForRow, tree::refresh, CLIPBOARD);
 editing.setModel(new NodeModel());
-editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(NODE_MENU));
-TreeEditing.contributeMenu(CommandRegistry.global(), NODE_MENU);   // once, by the feature; dispose it with the feature
+editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(NODE_MENU));
+TreeEditing.contributeMenu(Commands.process(), NODE_MENU);   // once, by the feature; dispose it with the feature
 
 // the renderer
 public UIElement createTemplate() { ... editing.installRow(row, field); ... }

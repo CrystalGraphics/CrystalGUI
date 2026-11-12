@@ -42,7 +42,7 @@ import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import javax.annotation.Nullable;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.signal.Signal;
 import java.util.Objects;
 
@@ -75,7 +75,7 @@ public class DockArea extends UIElement implements MinimumSize {
      * See {@code DockCommands}.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         DockCommands.register();
     }
 

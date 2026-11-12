@@ -2,7 +2,7 @@ package com.crystalgui.workbench.explorer;
 
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.core.command.ActionIcons;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -507,7 +507,7 @@ public class ProjectFileTree extends UIElement
      * <p>The menu is the host's, not the tree's — a tree in a different application wants different verbs,
      * and the widget has no business naming commands it does not own.</p>
      */
-    public ProjectFileTree setContextMenu(CommandRegistry registry, Supplier<ContextMenu> menu) {
+    public ProjectFileTree setContextMenu(Commands registry, Supplier<ContextMenu> menu) {
         // THE CLICKED ROW IS THE SUBJECT: every command resolves its target through the selection, so a
         // right-click outside it has to become it -- and one inside a multi-selection has to keep it.
         editing.attachContextMenu(registry, menu);

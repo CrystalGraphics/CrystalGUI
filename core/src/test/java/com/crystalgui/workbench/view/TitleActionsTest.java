@@ -17,7 +17,7 @@ import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -106,7 +106,7 @@ public class TitleActionsTest extends UiDocumentTestBase {
 
     @Before
     public void mount() {
-        CommandRegistry.global().register(Command.of(NEW_THING, "Thing").menu(NEW_MENU, "1_new", 10).run(() -> { }));
+        Commands.process().register(Command.of(NEW_THING, "Thing").menu(NEW_MENU, "1_new", 10).run(() -> { }));
         panel = new TreePanel();
         container = new ViewContainer("test.panel", "Panel");
         container.setViews(List.of(new ViewContainerRegistry.ViewEntry("test.panel", "Panel", () -> panel)));
@@ -122,7 +122,7 @@ public class TitleActionsTest extends UiDocumentTestBase {
     @Test
     public void aToggleShowsWhatAPressSwitchesTo() {
         boolean[] rows = {false};
-        CommandRegistry.global().register(Command.of("test.titleActions.rows", "Show as Rows")
+        Commands.process().register(Command.of("test.titleActions.rows", "Show as Rows")
                 .toggledWhen(ctx -> rows[0]).run(() -> rows[0] = !rows[0]));
         ActionButton toggle = ActionButton.command("test.titleActions.rows").icon("crystalgui:general/action/viewRows")
                 .whenToggled("crystalgui:general/action/viewCards", "Show as Cards");

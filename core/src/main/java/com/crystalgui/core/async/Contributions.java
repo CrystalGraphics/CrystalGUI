@@ -8,6 +8,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import org.jetbrains.annotations.Nullable;
 
 /**
@@ -168,6 +169,23 @@ public final class Contributions<T> {
             return found[0] ? Collections.unmodifiableList(next) : list;
         });
         return found[0];
+    }
+
+    /** Removes every contribution whose item matches, as one new generation. @return whether any did */
+    public boolean removeIf(Predicate<? super T> matches) {
+        boolean[] any = {false};
+        entries.update(list -> {
+            List<Entry<T>> next = new ArrayList<>(list.size());
+            for (Entry<T> entry : list) {
+                if (matches.test(entry.item())) {
+                    any[0] = true;
+                } else {
+                    next.add(entry);
+                }
+            }
+            return any[0] ? Collections.unmodifiableList(next) : list;
+        });
+        return any[0];
     }
 
     /** Removes everything {@code owner} added, as one new generation. */

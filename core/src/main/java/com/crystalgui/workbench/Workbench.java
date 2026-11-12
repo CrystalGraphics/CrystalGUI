@@ -100,7 +100,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.text.diagnostic.Markers;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.workbench.chrome.menu.MainMenuCommands;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.core.undo.UndoCommands;
@@ -450,7 +450,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>It holds no items. Every row in every one of its menus is a {@code .menu(...)} declaration on a
      * command that already existed for the keyboard and the palette. @see MenuBarView</p>
      */
-    private final MenuBarView menuBar = new MenuBarView(CommandRegistry.global());
+    private final MenuBarView menuBar = new MenuBarView(Commands.process());
 
     /**
      * Files opened most recently — what {@code File ▸ Open Recent} lists.
@@ -638,7 +638,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     /** The explorer's verbs come with the explorer. Global, so no window is needed. */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         ExplorerCommands.register();
         EditorTabCommands.register();
         // THE PROJECT INDEX IS *NOT* CONTRIBUTED HERE, and it was, and that was the whole of S4 being
@@ -1030,7 +1030,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // The two menu sections that cannot be registered ahead of time. Wired here because this is where
         // the workbench's parts are introduced to each other, and because neither the View menu nor the
         // Window menu may go looking for a workbench itself -- both read it from the data context.
-        WorkbenchMenus.register(CommandRegistry.global());
+        WorkbenchMenus.register(Commands.process());
 
         content.addClass(CONTENT_CLASS);
         append(content);
@@ -1353,8 +1353,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         if (command != null) {
             // GLOBAL, and resolved from the data context rather than captured: a captured workbench
             // makes a second window's command toggle a panel in the first.
-            if (!CommandRegistry.global().contains(command)) {
-                CommandRegistry.global().register(Command.of(command, "Show " + kind.displayName())
+            if (!Commands.process().contains(command)) {
+                Commands.process().register(Command.of(command, "Show " + kind.displayName())
                         .runWithData(data -> {
                             Workbench workbench = data.get(WORKBENCH);
                             if (workbench != null) workbench.revealPanel(kind.id());
@@ -1387,7 +1387,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
                 // THE COMMAND AND ITS KEY, which are process-wide and would otherwise point at a panel
                 // type nothing builds. The panel type and its views stay: the registry holding them
                 // belongs to this workbench and goes when it does.
-                if (command != null) CommandRegistry.global().unregister(command);
+                if (command != null) Commands.process().unregister(command);
                 toolWindowHandles.remove(this);
             }
         };

@@ -3,7 +3,7 @@ package com.crystalgui.desktop.window;
 import com.crystalgui.widget.layout.LayoutMinimum;
 import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.window.WindowClamp;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
@@ -568,7 +568,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // and it costs nothing to add because the rows are MenuId.WINDOW_SYSTEM's: this route differs
         // from Alt+Space only in where it anchors. Built against the pressed element, whose walk reaches
         // this frame through the title bar, so the menu is always about the window it was opened on.
-        ContextMenu.attach(titleBar, CommandRegistry.global(),
+        ContextMenu.attach(titleBar, Commands.process(),
                 pressed -> ContextMenu.of(MenuId.WINDOW_SYSTEM));
 
         installActivation();

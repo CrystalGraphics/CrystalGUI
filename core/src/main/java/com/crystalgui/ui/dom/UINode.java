@@ -2,7 +2,7 @@ package com.crystalgui.ui.dom;
 
 import java.util.function.Consumer;
 import com.crystalgraphics.job.CgHostThread;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsScope;
@@ -1006,7 +1006,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * {@link #connected()} instead means the node is built, but it is still once per CLASS: register
      * per-instance things in the constructor.</p>
      */
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
     }
 
     /** This INSTANCE's chords, element-scoped. Runs on the first attach, after {@link #registerCommands}. */
@@ -1018,11 +1018,11 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
 
     void runCommandHooks() {
         // KEYED TO THE REGISTRY, never to a static set on this class. A static latch outlives
-        // `CommandRegistry.resetForTesting()`: the reset empties the registry, the next node of an
+        // `Commands.resetForTesting()`: the reset empties the registry, the next node of an
         // already-seen class registers nothing, and the command is simply absent -- no throw, no log,
         // just a key that stopped working. `contribute` records the contributor ON the registry, so
         // clearing one clears the other.
-        CommandRegistry.global().contribute(getClass(), this::registerCommands);
+        Commands.process().contribute(getClass(), this::registerCommands);
         if (!keysBound) {
             keysBound = true;
             bindKeys();

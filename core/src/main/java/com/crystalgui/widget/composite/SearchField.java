@@ -35,7 +35,7 @@ import javax.annotation.Nullable;
  * configurator panel is completely fine; that is composition, not membership.</p>
  *
  * <p>Consumers this exists for beyond the create menu: a command palette over
- * {@code core.command.CommandRegistry}, searching a configurator's settings, and filtering a
+ * {@code core.command.Commands}, searching a configurator's settings, and filtering a
  * {@code ListView} or {@code TableView}.</p>
  *
  * <h3>The parts are internal children</h3>

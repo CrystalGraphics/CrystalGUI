@@ -228,7 +228,7 @@ public final class WidgetCensus {
                         + "process has installed, so there is nothing stable to describe.");
 
         WidgetContracts.localOnly(MenuBarView.class,
-                "Shell chrome, and built from the CommandRegistry -- the menu model is the thing that "
+                "Shell chrome, and built from the Commands -- the menu model is the thing that "
                         + "would travel, not the bar.");
         WidgetContracts.localOnly(StatusBarView.class, "Shell chrome, built from contributed parts.");
         WidgetContracts.localOnly(Breadcrumbs.class, "Shell chrome, derived from the active file's path.");

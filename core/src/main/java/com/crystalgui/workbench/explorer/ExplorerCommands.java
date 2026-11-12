@@ -10,7 +10,7 @@ import com.crystalgui.core.notify.Notifications;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.document.NewDocumentContext;
 import com.crystalgui.document.NewDocumentKind;
@@ -111,7 +111,7 @@ public final class ExplorerCommands {
      * <em>focused</em> element is in — the same question, asked at the right time.</p>
      */
     public static void register() {
-        CommandRegistry.global().contribute(ExplorerCommands.class, ExplorerCommands::declare);
+        Commands.process().contribute(ExplorerCommands.class, ExplorerCommands::declare);
     }
 
     /**
@@ -139,8 +139,8 @@ public final class ExplorerCommands {
         return context.data().get(ProjectFileTree.PROJECT_TREE);
     }
 
-    private static void declare(CommandRegistry registry) {
-        // FIRST, and it is load-bearing: `CommandRegistry.all()` is registration order and
+    private static void declare(Commands registry) {
+        // FIRST, and it is load-bearing: `Commands.all()` is registration order and
         // `declaredBindings()` is built by walking it, so the two Mod+N presets have to reach the
         // resolver before `explorer.newFile`'s catch-all. @see #declareNewPresets
         declareNewPresets(registry);
@@ -288,7 +288,7 @@ public final class ExplorerCommands {
      * has to name it. That is {@code Mod+N} and the palette. Each looks its kind up in the workbench's
      * registry rather than carrying a template of its own. @see BuiltInNewDocuments</p>
      */
-    private static void declareNewPresets(CommandRegistry registry) {
+    private static void declareNewPresets(Commands registry) {
         registry.register(chordCommand(NEW_JAVA_CLASS, "Java Class", ActionIcons.JAVA_CLASS)
                 // MOD+N MAKES WHATEVER THE MENU'S FIRST ROW MAKES -- a Java class in a java source root,
                 // a script in a js one, and a plain file everywhere else, where `explorer.newFile`'s own
@@ -315,7 +315,7 @@ public final class ExplorerCommands {
                 .enabledWhen(context -> offeredHere(context, id));
     }
 
-    private static void contributeNewMenu(CommandRegistry registry) {
+    private static void contributeNewMenu(Commands registry) {
         // BOTH New MENUS, ONE CATALOGUE. `File > New` was two declared rows while the explorer's was
         // computed, so the same command offered a Java class from a right-click and a bare file from the
         // menu bar -- for the same directory. They ask the same question now, and `MenuBarView` already
@@ -326,7 +326,7 @@ public final class ExplorerCommands {
         }
     }
 
-    private static void contributeCatalogue(CommandRegistry registry, MenuId into) {
+    private static void contributeCatalogue(Commands registry, MenuId into) {
         registry.contributeMenu(into, (menu, context) -> {
             List<MenuEntry> rows = new ArrayList<>();
             for (NewDocumentKind kind : kindsAt(context)) {

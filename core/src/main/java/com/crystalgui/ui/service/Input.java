@@ -207,7 +207,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * The keymap every document has, built on first use — see {@link #chords()}.
      *
      * <p>Lazy so a tree nobody presses a chord in never builds a resolver, and per document because a
-     * {@code CommandRegistry} is.</p>
+     * {@code Commands} is.</p>
      */
     private @Nullable Chords defaultChords;
 
@@ -221,7 +221,7 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
      * {@code Ctrl+Tab} did not "do nothing": it cycled focus between windows, which looks like a
      * deliberate and slightly wrong feature rather than a missing one.</p>
      *
-     * <p>The document already owns the {@code CommandRegistry} the keymap resolves against, so there is
+     * <p>The document already owns the {@code Commands} the keymap resolves against, so there is
      * nothing for a host to supply that is not already here. {@code setChords} stays as the override —
      * a host presenting shortcuts its own way, or a test asserting on them.</p>
      */

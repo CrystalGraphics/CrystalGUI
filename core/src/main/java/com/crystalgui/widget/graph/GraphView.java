@@ -29,7 +29,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.data.UiDataKeys;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
@@ -105,7 +105,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      * forgot had no Delete, no Select All and no framing, silently.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         GraphCommands.register();
         // Undo comes with any graph, because a graph is an UndoScope -- the stack is resolved from
         // focus, so this needs no element and binds to nothing.
@@ -890,7 +890,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      * found from the pointer rather than from the press's target.</p>
      */
     private void installContextMenus() {
-        ContextMenu.attach(this, CommandRegistry.global(), target -> {
+        ContextMenu.attach(this, Commands.process(), target -> {
             UIDocument window = document();
             if (window == null || !isEnabled()) return null;
             // A FLOATING PANEL'S PRESS IS ITS OWN. The Blackboard and the Main Preview open their own menus,

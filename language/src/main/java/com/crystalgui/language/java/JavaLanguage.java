@@ -5,7 +5,7 @@ import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.core.async.JobScheduler;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
@@ -160,7 +160,7 @@ public final class JavaLanguage {
         //
         // The call also ADOPTS an extract an earlier session fetched, which is why it is not conditional
         // on the engine having opened: source attachment is the editor's, not the compiler's.
-        JdkSourceCommands.register(CommandRegistry.global());
+        JdkSourceCommands.register(Commands.process());
 
         // AND WHAT SERVES A `library://` RESOURCE, so go-to-declaration into a classpath type has
         // somewhere to land. Registered here rather than by the workbench for the reason every other

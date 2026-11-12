@@ -67,7 +67,7 @@ final class DiagnosticActions {
     /**
      * Runs one, against the editor it was offered in.
      *
-     * <p>Dispatched here rather than through {@code CommandRegistry} because these are <b>about a
+     * <p>Dispatched here rather than through {@code Commands} because these are <b>about a
      * problem</b> and the registry resolves against the focused element, which during a hover is not
      * necessarily the editor. An id that is not one of ours returns false, so a future contributor can
      * route through the registry without this having to know.</p>

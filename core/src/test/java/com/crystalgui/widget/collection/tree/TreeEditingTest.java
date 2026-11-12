@@ -19,7 +19,7 @@ import com.crystalgui.core.collection.list.SelectionMode;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -271,7 +271,7 @@ public class TreeEditingTest extends UiDocumentTestBase {
         selectOnly(c);
         CommandContext fromRow = CommandContext.of(rowElement(c));
         assertTrue("tree.delete cannot see the tree it was invoked in",
-                CommandRegistry.global().get(TreeEditCommands.DELETE).isEnabled(fromRow));
+                Commands.process().get(TreeEditCommands.DELETE).isEnabled(fromRow));
 
         document.focus().requestFocus(tree);
         assertTrue("Delete on the tree was not handled", keyPress(CgKeyCodes.KEY_DELETE));
@@ -414,7 +414,7 @@ public class TreeEditingTest extends UiDocumentTestBase {
 
     @Test
     public void aRightClickInsideTheSelectionKeepsItAndOutsideReplacesIt() {
-        editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(MenuId.of("test/tree-editing")));
+        editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(MenuId.of("test/tree-editing")));
         selectOnly(a, b);
         int[] onB = centreOf(rowElement(b));
         press(onB[0], onB[1], CgMouseCodes.RIGHT_BUTTON);

@@ -1,6 +1,6 @@
 package com.crystalgui.widget.collection.list;
 
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.widget.overlay.ContextMenu;
 
@@ -43,7 +43,7 @@ public final class ListContextMenus {
      * {@code attach} keeps one live menu per attachment site, but two attachments on one element are two
      * listeners and both would open.</p>
      */
-    public static void installDefault(CommandRegistry registry) {
+    public static void installDefault(Commands registry) {
         ListView.setDefaultContextMenuInstaller(list -> ContextMenu.attach(list, registry, element -> {
             if (list.isDefaultContextMenuSuppressed()) return null;
             int index = list.indexOfRowElement(element);

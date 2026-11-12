@@ -22,7 +22,7 @@ import com.crystalgui.app.shadergraph.preview.MainPreviewPanel;
 import com.crystalgui.app.shadergraph.preview.ShaderGraphPreviews;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -531,7 +531,7 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
 
     /** Registered once for the class; no window needed. Unity's "View Generated Shader". */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         registry.register(Command.of(VIEW_GENERATED_COMMAND, "View Generated Shader")
                 .run(context -> {
                     ShaderGraphView graph = editorFor(context);

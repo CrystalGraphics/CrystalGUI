@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataContext;
@@ -24,7 +24,7 @@ import com.crystalgui.widget.overlay.InputDialog;
  * categories; a card's Add to Group ▸ and Remove from Group; a user's group's New Group Inside, Rename and Delete.
  *
  * <pre>{@code
- * Disposable library = LibraryActions.register(CommandRegistry.global());   // the feature, once
+ * Disposable library = LibraryActions.register(Commands.process());   // the feature, once
  * }</pre>
  *
  * <p>Every command resolves the panel, the card and the group from the data context — {@link LibraryPanel#LIBRARY},
@@ -52,7 +52,7 @@ public final class LibraryActions {
     }
 
     /** Registers the commands and contributes the menus. Dispose with the feature. */
-    public static Disposable register(CommandRegistry registry) {
+    public static Disposable register(Commands registry) {
         registry.contribute(LibraryActions.class, LibraryActions::declare);
         List<Disposable> menus = List.of(
                 registry.contributeMenu(LibraryPanel.CARD_MENU, (menu, context) -> List.of(
@@ -68,7 +68,7 @@ public final class LibraryActions {
         return () -> menus.forEach(Disposable::dispose);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(TOGGLE_ROWS, "Show as Rows")
                 .enabledWhereData(data -> data.get(LibraryPanel.LIBRARY) != null)
                 .toggledWhereData(data -> {
@@ -162,12 +162,12 @@ public final class LibraryActions {
                 rows.add(new MenuEntry.Item(add, "1_groups", i, !group.kinds().contains(card.kind()), false, false));
             }
         }
-        Command create = CommandRegistry.global().get(NEW_GROUP);
+        Command create = Commands.process().get(NEW_GROUP);
         if (create != null) rows.add(new MenuEntry.Item(create, "2_new", 0, create.isEnabled(context), false, false));
         return rows;
     }
 
-    private static MenuEntry row(CommandRegistry registry, String id, String group, int order, CommandContext context) {
+    private static MenuEntry row(Commands registry, String id, String group, int order, CommandContext context) {
         Command command = registry.get(id);
         return new MenuEntry.Item(command, group, order, command != null && command.isEnabled(context), false, false);
     }

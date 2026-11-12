@@ -3,7 +3,7 @@ package com.crystalgui.workbench.toolwindow;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.workbench.Workbench;
@@ -24,12 +24,12 @@ public final class ToolWindowCommands {
     private ToolWindowCommands() {
     }
 
-    /** Registers into {@link CommandRegistry#global()}. Idempotent. */
+    /** Registers into {@link Commands#global()}. Idempotent. */
     public static void register() {
-        CommandRegistry.global().contribute(ToolWindowCommands.class, ToolWindowCommands::declare);
+        Commands.process().contribute(ToolWindowCommands.class, ToolWindowCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(mode(DOCK, "Dock Pinned", ToolWindowType.DOCKED, 10));
         registry.register(mode(FLOAT, "Float", ToolWindowType.FLOATING, 20));
         registry.register(mode(WINDOW, "Window", ToolWindowType.WINDOWED, 30));

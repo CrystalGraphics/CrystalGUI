@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.graph.EdgeData;
 import com.crystalgui.graph.GraphDocument;
@@ -200,12 +200,12 @@ final class GraphClipboard {
         @Override public void paste() { run(GraphCommands.PASTE); }
 
         private boolean isEnabled(String id) {
-            Command command = CommandRegistry.global().get(id);
+            Command command = Commands.process().get(id);
             return command != null && command.isEnabled(CommandContext.of(view));
         }
 
         private void run(String id) {
-            CommandRegistry.global().run(id, CommandContext.of(view));
+            Commands.process().run(id, CommandContext.of(view));
         }
     };
 }

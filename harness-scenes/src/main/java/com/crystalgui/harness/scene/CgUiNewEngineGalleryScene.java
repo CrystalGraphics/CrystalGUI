@@ -13,7 +13,7 @@ import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.ObservableList;
@@ -696,14 +696,14 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
     }
 
     /**
-     * A menu bar over a real {@link CommandRegistry}, with one command deliberately disabled.
+     * A menu bar over a real {@link Commands}, with one command deliberately disabled.
      *
      * <p>The disabled row is the point: the registry carries {@code enabled} and never filters, so a
      * bar that DROPPED it would look tidier and be wrong — a menu whose rows are never in the same
      * place twice is the failure that rule exists to prevent.</p>
      */
     private UIElement menuBar() {
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         MenuId file = MenuId.of("gallery.file");
         MenuId edit = MenuId.of("gallery.edit");
         UIText log = hint("pick something from the bar");

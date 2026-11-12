@@ -501,7 +501,7 @@ public class PortMachineryTest {
         final boolean fieldWasSet = true;
 
         @Override
-        protected void registerCommands(com.crystalgui.core.command.CommandRegistry registry) {
+        protected void registerCommands(com.crystalgui.core.command.Commands registry) {
             registrations++;
         }
 

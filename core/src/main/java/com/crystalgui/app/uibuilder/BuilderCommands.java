@@ -17,7 +17,7 @@ import com.crystalgui.core.attribute.AttributeClipboard;
 import com.crystalgui.core.attribute.AttributeSet;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.dnd.SortPlacement;
@@ -146,11 +146,11 @@ public final class BuilderCommands {
 
     /** Registers them, and hands back the way to withdraw them. */
     public static Disposable register() {
-        CommandRegistry.global().contribute(BuilderCommands.class, BuilderCommands::declare);
+        Commands.process().contribute(BuilderCommands.class, BuilderCommands::declare);
         return () -> { };
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(INSPECT_ELEMENT, "Inspect Element")
                 .binding("Ctrl+Shift+C")
                 .run(context -> PickMode.start(windowOf(context)))

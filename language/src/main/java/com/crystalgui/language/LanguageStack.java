@@ -16,7 +16,7 @@ import java.util.concurrent.Callable;
  *
  * <ul>
  *   <li>Each missing piece is logged and skipped: no engine colours by grammar, no grammar by core's lexers.</li>
- *   <li>On the thread that owns the UI: registering writes {@code LanguageRegistry} and {@code CommandRegistry}.</li>
+ *   <li>On the thread that owns the UI: registering writes {@code LanguageRegistry} and {@code Commands}.</li>
  *   <li>Idempotent.</li>
  * </ul>
  */

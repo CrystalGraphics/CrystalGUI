@@ -11,7 +11,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
@@ -142,11 +142,11 @@ public final class LayerStack extends ValueControl<List<String>> {
             paintSelection();
             revealSelection();
         });
-        CommandRegistry.global().contribute(LayerStack.class, LayerStack::declare);
-        ContextMenu.attach(list, CommandRegistry.global(), pressed -> rowOf(pressed) == null ? null : ROW_MENU);
+        Commands.process().contribute(LayerStack.class, LayerStack::declare);
+        ContextMenu.attach(list, Commands.process(), pressed -> rowOf(pressed) == null ? null : ROW_MENU);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(MOVE_TO_TOP, "Move to Top")
                 .enabledWhereData(data -> layer(data) > 0 && data.get(STACK).reorderable)
                 .runWithData(data -> data.get(STACK).moveTo(layer(data), 0)));

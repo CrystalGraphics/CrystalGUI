@@ -8,7 +8,7 @@ import com.crystalgui.workbench.dock.DockCommands;
 import com.crystalgui.widget.texteditor.EditorCommands;
 import com.crystalgui.widget.graph.GraphCommands;
 import com.crystalgui.core.undo.UndoCommands;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.ui.input.keymap.KeyStroke;
 import org.junit.Test;
 
@@ -63,7 +63,7 @@ public class ShippedKeymapDefaultsTest extends UiDocumentTestBase {
      */
     @Test
     public void declaredBindingsParse() {
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         UndoCommands.register();
         DockCommands.register();
         DesktopCommands.resetForTesting();
@@ -73,7 +73,7 @@ public class ShippedKeymapDefaultsTest extends UiDocumentTestBase {
         WorkbenchApplicationCommands.register();
         ChromeCommands.register();
         ExplorerCommands.register();
-        assertNotNull(CommandRegistry.global().declaredBindings());
+        assertNotNull(Commands.process().declaredBindings());
     }
 
     /** An edited tree's bare keys stay element-scoped, so they still parse through a keymap. */

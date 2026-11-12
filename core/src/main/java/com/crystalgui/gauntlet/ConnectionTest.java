@@ -740,6 +740,7 @@ public final class ConnectionTest extends CgGauntletController {
         if (!done(RESHAPE)) return;
         Workspace live = workspace();
         if (live == null) return;
+        if (!live.onHome(ConnectionTest::driveFiles)) return;
 
         if (!listingAsked) {
             listingAsked = true;
@@ -808,9 +809,9 @@ public final class ConnectionTest extends CgGauntletController {
         }
         if (!CgScreens.anyOpen() || loopAskStarted) return;
 
-        loopAskStarted = true;
         Workspace live = workspace();
-        if (live == null) return;
+        if (live == null || !live.onHome(ConnectionTest::driveLoopAlive)) return;
+        loopAskStarted = true;
         live.files().list(project())
                 .then(listing -> {
                     CrystalGuiCore.LOGGER.info("[connection] a round trip completed with the desktop UP "

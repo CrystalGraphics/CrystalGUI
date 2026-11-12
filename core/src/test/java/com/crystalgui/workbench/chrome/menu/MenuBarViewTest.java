@@ -2,7 +2,7 @@ package com.crystalgui.workbench.chrome.menu;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -50,7 +50,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
     private static int counter;
 
     private UIElement root;
-    private CommandRegistry registry;
+    private Commands registry;
     private MenuBarView bar;
     private MenuId fileMenu;
     private MenuId editMenu;
@@ -65,7 +65,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
         fileMenu = MenuId.of("bar/file/" + id);
         editMenu = MenuId.of("bar/edit/" + id);
 
-        registry = new CommandRegistry();
+        registry = new Commands();
         registry.register(Command.of("f.new", "New").menu(fileMenu, "1_new", 10)
                 .run(c -> ran.add("f.new")));
         registry.register(Command.of("f.save", "Save").menu(fileMenu, "2_save", 10)
@@ -91,7 +91,7 @@ public class MenuBarViewTest extends UiDocumentTestBase {
     public void tearDown() {
         // The bar contributes MainMenuCommands into whatever registry it is handed, and the global one is
         // shared -- a leaked Help entry would show up in an unrelated test's palette count.
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
     }
 
     /**

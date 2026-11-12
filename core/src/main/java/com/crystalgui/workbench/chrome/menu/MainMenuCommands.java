@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.chrome.menu;
 
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
@@ -31,7 +31,7 @@ public final class MainMenuCommands {
     public static final String ABOUT = "help.about";
     public static final String DOCUMENTATION = "help.documentation";
 
-    static void register(CommandRegistry registry) {
+    static void register(Commands registry) {
         // A COMMAND, so the burger is reachable by key and findable in the palette. Every title beside it
         // is a word with a mnemonic; the burger is a picture, and a picture that only answers the mouse is
         // the one control in the caption with no name at all.

@@ -7,7 +7,7 @@ import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.dom.UIElement;
@@ -131,7 +131,7 @@ public final class EditorCommands {
 
     /** Registers every editor command. Idempotent — re-registering the same ids is a no-op. */
     /**
-     * Registers into {@link CommandRegistry#global()}.
+     * Registers into {@link Commands#global()}.
      *
      * <p>Commands are global; a command is a fact about the application, and what varies per window is
      * what is <em>focused</em> — which is {@code DataContext}'s job. Registering per window meant every
@@ -150,7 +150,7 @@ public final class EditorCommands {
         // Edit > Cut/Copy/Paste, which are NOT ours: they resolve the position's own provider, so the one
         // menu row means files in the tree and text here. @see com.crystalgui.core.command.ClipboardCommands
         ClipboardCommands.register();
-        CommandRegistry.global().contribute(EditorCommands.class, EditorCommands::declare);
+        Commands.process().contribute(EditorCommands.class, EditorCommands::declare);
     }
 
     /** {@code Navigate ▸ Line/Column} — IntelliJ's own wording, binding and placeholder. */
@@ -204,7 +204,7 @@ public final class EditorCommands {
         editor.revealCaretCentred();
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         // ── Navigation ──────────────────────────────────────────────────────────────────────────
         // AN EDITOR COMMAND, though it opens a prompt. It was briefly in ChromeCommands on the grounds
         // that InputDialog lived in `chrome` -- which put an editor action in the shell's command set and

@@ -1124,7 +1124,7 @@ public final class TreeSearch<T> {
             // bar was added to fix.
             //
             // A direct listener rather than a command, because this is a widget: requiring a
-            // CommandRegistry would make a generic tree component depend on the application's command
+            // Commands would make a generic tree component depend on the application's command
             // layer to answer one keystroke. Bound on the TREE's element, so it never takes Ctrl+F from
             // an editor elsewhere in the window.
             if (CgModifiers.hasCtrl(event.getModifiers()) && event.getKeyCode() == CgKeyCodes.KEY_F) {

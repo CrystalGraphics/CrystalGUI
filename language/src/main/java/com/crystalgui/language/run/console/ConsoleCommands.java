@@ -2,7 +2,7 @@ package com.crystalgui.language.run.console;
 
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.language.run.view.RunPanel;
 import com.crystalgui.language.run.ScriptCommands;
@@ -65,7 +65,7 @@ public final class ConsoleCommands {
      * give one setting two accelerators that can drift. Clear and Scroll to End have no accelerator in
      * either reference, and a binding nobody expects is a binding that collides with one somebody does.</p>
      */
-    public static void register(CommandRegistry registry, RunPanel panel) {
+    public static void register(Commands registry, RunPanel panel) {
         registry.register(Command.of(CLEAR, "Clear All")
                 .menu(CONTEXT, "2_transcript", 10)
                 // THE SAME QUESTION THE BUTTON ASKS, from the same method -- a menu row that greys on a
@@ -93,7 +93,7 @@ public final class ConsoleCommands {
     }
 
     /** Removes them all — for a host that is torn down, and for a test that must not leak them. */
-    public static void unregister(CommandRegistry registry) {
+    public static void unregister(Commands registry) {
         registry.unregister(CLEAR);
         registry.unregister(SCROLL_TO_END);
         registry.unregister(TOGGLE_SOFT_WRAP);

@@ -24,7 +24,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 
 /**
  * The command palette, and above all <b>which element its commands are resolved against</b>.
@@ -61,7 +61,7 @@ public class CommandPaletteTest extends UiDocumentTestBase {
     public void setUpWindow() {
         // Commands are GLOBAL now, so a registry populated by another test is visible here. These
         // assertions are about which rows a palette shows and in what order, so they need a known set.
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         scope = new Scope();
         inner = new UIElement();
         inner.setFocusPolicy(FocusPolicy.FOCUSABLE);

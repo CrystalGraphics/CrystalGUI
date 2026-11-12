@@ -2,7 +2,7 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.language.java.exec.ScriptHost;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineBand;
 import com.crystalgui.language.engine.EngineSource;
@@ -36,7 +36,7 @@ public class ScriptCommandsTest {
 
     private JavaEngine engine;
     private ScriptHost host;
-    private CommandRegistry registry;
+    private Commands registry;
 
     @Before
     public void openEngine() throws Exception {
@@ -50,7 +50,7 @@ public class ScriptCommandsTest {
         // A REGISTRY OF ITS OWN, not the global. Registration is process-wide, and a test that used
         // the global one would leak its commands into every later test in the JVM -- a trap this
         // codebase has already paid for with LanguageRegistry.
-        registry = new CommandRegistry();
+        registry = new Commands();
         ScriptHostTest.Sink.WRITTEN.clear();
         ScriptHostTest.Sink.LOOPS.set(0);
     }

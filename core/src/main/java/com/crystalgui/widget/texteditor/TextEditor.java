@@ -15,7 +15,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
@@ -150,7 +150,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * and never shown had none at all.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         EditorCommands.register();
     }
 

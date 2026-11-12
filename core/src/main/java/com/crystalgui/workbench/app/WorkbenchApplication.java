@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
@@ -446,7 +446,7 @@ public class WorkbenchApplication extends UIElement
      * one desktop each save their own.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         WorkbenchApplicationCommands.register();
         ChromeCommands.register();
     }

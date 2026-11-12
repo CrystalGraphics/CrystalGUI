@@ -9,8 +9,8 @@ import javax.annotation.Nullable;
  *
  * <p>Every other thing a server sends over this protocol <em>describes</em> — a tree, a file, a state
  * delta. This is the first message that changes what the client's own machinery <b>does</b>: a
- * contributed command lands in the same {@code CommandRegistry} the palette enumerates, the menus render
- * and the keymap resolves against. {@code CommandRegistry.register} replaces by id on purpose (that is
+ * contributed command lands in the same {@code Commands} the palette enumerates, the menus render
+ * and the keymap resolves against. {@code Commands.register} replaces by id on purpose (that is
  * how a theme or a mod overrides a built-in), so without a rule a server could claim {@code edit.save}
  * and the client's own Save would quietly become a packet to the server.</p>
  *

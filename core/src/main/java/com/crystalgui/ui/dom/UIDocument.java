@@ -6,7 +6,7 @@ import com.crystalgui.core.async.JobScheduler;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgraphics.trace.CgTrace;
@@ -79,11 +79,11 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * This surface's own commands, beside {@code CommandRegistry.global()}: what a palette lists for this surface, so
+     * This surface's own commands, beside {@code Commands.process()}: what a palette lists for this surface, so
      * one window's verbs never show in another's picker.
      */
     @Getter
-    private final CommandRegistry commands = new CommandRegistry();
+    private final Commands commands = new Commands();
 
     @Nullable
     private volatile Thread frameThread;

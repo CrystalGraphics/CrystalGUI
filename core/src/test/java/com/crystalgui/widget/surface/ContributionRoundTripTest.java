@@ -10,7 +10,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.surface.extension.SurfaceExtensions;
 
@@ -30,7 +30,7 @@ public class ContributionRoundTripTest {
     public void isolate() {
         SurfaceExtensions.resetForTesting();
         InspectorRegistry.resetForTesting();
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
     }
 
     private SurfaceEditor openWithEverything() {
@@ -49,7 +49,7 @@ public class ContributionRoundTripTest {
         assertEquals(1, surface.dropHandlers().size());
         assertEquals(1, surface.sections().size());
         assertEquals(1, surface.commands().size());
-        assertTrue(CommandRegistry.global().contains("test.surface.thing"));
+        assertTrue(Commands.process().contains("test.surface.thing"));
         assertEquals(1, InspectorRegistry.all().size());
     }
 
@@ -66,7 +66,7 @@ public class ContributionRoundTripTest {
         assertEquals(List.of(), surface.sections());
         assertEquals(List.of(), surface.commands());
         assertFalse("the global command registry keeps nothing",
-                CommandRegistry.global().contains("test.surface.thing"));
+                Commands.process().contains("test.surface.thing"));
         assertEquals("the inspector keeps nothing", 0, InspectorRegistry.all().size());
     }
 
@@ -80,7 +80,7 @@ public class ContributionRoundTripTest {
         second.dispose();
 
         assertEquals(0, InspectorRegistry.all().size());
-        assertFalse(CommandRegistry.global().contains("test.surface.thing"));
+        assertFalse(Commands.process().contains("test.surface.thing"));
     }
 
     /** Disposing twice is not a second withdrawal — a handle that ran once must be inert. */

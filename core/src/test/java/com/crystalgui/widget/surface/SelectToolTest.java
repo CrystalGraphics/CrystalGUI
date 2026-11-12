@@ -159,7 +159,7 @@ public class SelectToolTest {
         frame();
         surface.selection().selectOnly(a);
 
-        com.crystalgui.core.command.CommandRegistry.global().run(SurfaceCommands.DELETE,
+        com.crystalgui.core.command.Commands.process().run(SurfaceCommands.DELETE,
                 com.crystalgui.core.command.CommandContext.of(surface));
 
         assertTrue(surface.selection().isEmpty());

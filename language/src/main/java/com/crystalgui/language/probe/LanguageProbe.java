@@ -17,7 +17,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -252,7 +252,7 @@ public final class LanguageProbe {
         CrystalGuiCore.LOGGER.info("crystalgui:desktop script: running {} through the Run command", SCRIPT);
         // THE FILE AS THE COMMAND'S SUBJECT, as Rerun passes it, so the run is of THIS file whatever the
         // session left in front.
-        if (!CommandRegistry.global().run(ScriptCommands.RUN, new CommandContext(null, Resource.of(path)))) {
+        if (!Commands.process().run(ScriptCommands.RUN, new CommandContext(null, Resource.of(path)))) {
             CrystalGuiCore.LOGGER.error("crystalgui:desktop script: '{}' did not run -- no engine band",
                     ScriptCommands.RUN);
         }

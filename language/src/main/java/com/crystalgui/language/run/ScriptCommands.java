@@ -2,7 +2,7 @@ package com.crystalgui.language.run;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.fs.Resource;
 
 import javax.annotation.Nullable;
@@ -110,7 +110,7 @@ public final class ScriptCommands {
      *                  itself would be a command that only works in one shell. Null for a host with no
      *                  opinion — a test, a headless runner
      */
-    public static void register(CommandRegistry registry, ScriptRuntimes runtimes,
+    public static void register(Commands registry, ScriptRuntimes runtimes,
                                 ScriptSource source,
                                 Supplier<Map<String, Object>> bindings,
                                 @Nullable BiConsumer<ScriptRef, Throwable> onFailure,
@@ -148,7 +148,7 @@ public final class ScriptCommands {
     }
 
     /** Both commands against a single runtime — a test, or a host with exactly one language. */
-    public static void register(CommandRegistry registry, ScriptRuntime runtime,
+    public static void register(Commands registry, ScriptRuntime runtime,
                                 ScriptSource source,
                                 Supplier<Map<String, Object>> bindings,
                                 @Nullable BiConsumer<ScriptRef, Throwable> onFailure,
@@ -171,7 +171,7 @@ public final class ScriptCommands {
     }
 
     /** Removes both — for a host that is torn down, and for a test that must not leak registrations. */
-    public static void unregister(CommandRegistry registry) {
+    public static void unregister(Commands registry) {
         registry.unregister(RUN);
         registry.unregister(STOP);
     }

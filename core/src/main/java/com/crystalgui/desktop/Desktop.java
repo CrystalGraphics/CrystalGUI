@@ -24,7 +24,7 @@ import com.crystalgui.desktop.window.WindowKeyboardMove;
 import com.crystalgui.desktop.window.WindowRegistry;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -292,7 +292,7 @@ public class Desktop extends UIElement implements DataProvider {
         // child that is not a WindowFrame -- so attaching there throws the moment somebody right-clicks.
         // The bubble phase carries the layer's press out to here anyway, which is why the guard names
         // both: this fires for a press on either surface and for nothing inside a window.
-        ContextMenu.attach(this, CommandRegistry.global(),
+        ContextMenu.attach(this, Commands.process(),
                 pressed -> pressed == this || pressed == windows
                         ? ContextMenu.of(MenuId.DESKTOP_CONTEXT) : null);
     }

@@ -14,7 +14,7 @@ import com.crystalgui.app.uibuilder.library.LibraryGroups;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.notify.Notification;
@@ -30,7 +30,7 @@ import com.crystalgui.widget.composite.ActionButton;
  * Copy and Paste Attributes, and Copy Selector.
  *
  * <pre>{@code
- * Disposable hierarchy = HierarchyActions.register(CommandRegistry.global());   // the feature, once
+ * Disposable hierarchy = HierarchyActions.register(Commands.process());   // the feature, once
  * }</pre>
  */
 public final class HierarchyActions {
@@ -45,7 +45,7 @@ public final class HierarchyActions {
     }
 
     /** Registers the commands and contributes New ▸ and the edit rows. Dispose with the feature. */
-    public static Disposable register(CommandRegistry registry) {
+    public static Disposable register(Commands registry) {
         registry.contribute(HierarchyActions.class, HierarchyActions::declare);
         // THE TREE COMMANDS THE TITLE LINE NAMES, which a tree registers only once one attaches -- with no
         // builder in front there is none, and the buttons would name raw ids.
@@ -88,13 +88,13 @@ public final class HierarchyActions {
         };
     }
 
-    private static void attributeRow(List<MenuEntry> rows, CommandRegistry registry, String id, int order,
+    private static void attributeRow(List<MenuEntry> rows, Commands registry, String id, int order,
                                      CommandContext context) {
         Command command = registry.get(id);
         if (command != null) rows.add(new MenuEntry.Item(command, "3_attributes", order, command.isEnabled(context), false, false));
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(SELECT_IN_HIERARCHY, "Select Canvas Selection")
                 .enabledWhereData(data -> data.get(HierarchyPanel.HIERARCHY) != null)
                 .runWithData(data -> {

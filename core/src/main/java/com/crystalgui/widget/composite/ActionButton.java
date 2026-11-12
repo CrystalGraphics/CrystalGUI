@@ -11,7 +11,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.CgUiSvg;
@@ -62,7 +62,7 @@ public class ActionButton extends Button {
     /** How often a command button re-asks whether its command is enabled, in seconds. */
     private static final float REFRESH_SECONDS = 0.25f;
 
-    private final CommandRegistry registry;
+    private final Commands registry;
 
     @Nullable
     private final String commandId;
@@ -97,7 +97,7 @@ public class ActionButton extends Button {
 
     /** A button that runs {@code commandId}, from the global registry. */
     public static ActionButton command(String commandId) {
-        return new ActionButton(CommandRegistry.global(), Objects.requireNonNull(commandId, "commandId"), null, null);
+        return new ActionButton(Commands.process(), Objects.requireNonNull(commandId, "commandId"), null, null);
     }
 
     /** A button that drops down everything contributed to {@code menu}, named {@code label} in its tooltip. */
@@ -108,11 +108,11 @@ public class ActionButton extends Button {
 
     /** A button that drops down the menu {@code build} describes each time it opens. */
     public static ActionButton menu(String label, Supplier<ContextMenu> build) {
-        return new ActionButton(CommandRegistry.global(), null, Objects.requireNonNull(label, "label"),
+        return new ActionButton(Commands.process(), null, Objects.requireNonNull(label, "label"),
                 Objects.requireNonNull(build, "build"));
     }
 
-    protected ActionButton(CommandRegistry registry, @Nullable String commandId, @Nullable String menuLabel,
+    protected ActionButton(Commands registry, @Nullable String commandId, @Nullable String menuLabel,
                            @Nullable Supplier<ContextMenu> menu) {
         super(Button.NAME, "");
         this.registry = registry;

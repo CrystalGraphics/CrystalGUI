@@ -73,7 +73,7 @@ public final class ServerCommands<T> {
     /**
      * Offers a command, and tells the client immediately.
      *
-     * <p>Re-contributing an id replaces it, matching {@code CommandRegistry.register} on the other side —
+     * <p>Re-contributing an id replaces it, matching {@code Commands.register} on the other side —
      * which is how a label changes without a withdraw/contribute pair racing whatever is rendering.</p>
      *
      * <p><b>The id must be in the reserved namespace</b> or the client will refuse it. Checked here as

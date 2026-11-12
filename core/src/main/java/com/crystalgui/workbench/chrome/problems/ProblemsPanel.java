@@ -4,7 +4,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.view.HeaderContributor;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.ClipboardCommands;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.search.SearchMatch;
@@ -604,7 +604,7 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
         // ITS OWN MENU, so the shared list one does not also open -- attach keeps one live menu per site,
         // but two attachments on one element are two listeners and both would fire.
         tree.suppressDefaultContextMenu();
-        ContextMenu.attach(tree, CommandRegistry.global(), element -> {
+        ContextMenu.attach(tree, Commands.process(), element -> {
             int index = tree.indexOfRowElement(element);
             if (index < 0) return null;
             TreeRow<ProblemNode> row = tree.rowAt(index);

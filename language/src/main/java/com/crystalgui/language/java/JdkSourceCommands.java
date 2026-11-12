@@ -6,7 +6,7 @@ import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgraphics.job.progress.CgProgressState;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.language.java.assist.JdkSourceExtract;
 import com.crystalgui.language.platform.ScriptService;
@@ -58,7 +58,7 @@ public final class JdkSourceCommands {
      * the download works, the file is on disk, and every launch after the first shows the assembled form
      * again — with the command still offering to fetch what is already there.</p>
      */
-    public static void register(CommandRegistry registry) {
+    public static void register(Commands registry) {
         Path cacheRoot = cacheRoot();
         JdkSourceExtract.useCachedIfPresent(cacheRoot);
 

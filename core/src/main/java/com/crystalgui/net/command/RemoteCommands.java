@@ -4,7 +4,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -40,7 +40,7 @@ import javax.annotation.Nullable;
 public final class RemoteCommands<T> {
 
     private final CgProtocolConnection<T> connection;
-    private final CommandRegistry registry;
+    private final Commands registry;
     private final RemoteCommandPolicy policy;
 
     /** Ids this connection contributed, in arrival order, so {@link #withdrawAll} is exact. */
@@ -52,7 +52,7 @@ public final class RemoteCommands<T> {
     @Nullable
     private Consumer<String> onFailure;
 
-    private RemoteCommands(CgProtocolConnection<T> connection, CommandRegistry registry,
+    private RemoteCommands(CgProtocolConnection<T> connection, Commands registry,
                            RemoteCommandPolicy policy) {
         this.connection = connection;
         this.registry = registry;
@@ -68,17 +68,17 @@ public final class RemoteCommands<T> {
      * <p>Not memoised, unlike a workspace: a second of these on one connection
      * would register {@code command/contribute} twice and the router refuses a duplicate, which is the
      * right failure and needs no help. The registry is a parameter rather than
-     * {@code CommandRegistry.global()} so a test — and a host that wants server commands quarantined —
+     * {@code Commands.process()} so a test — and a host that wants server commands quarantined —
      * can say where they land.</p>
      */
     public static <T> RemoteCommands<T> install(CgProtocolConnection<T> connection,
-                                                CommandRegistry registry) {
+                                                Commands registry) {
         return install(connection, registry, RemoteCommandPolicy.DEFAULT);
     }
 
-    /** @see #install(CgProtocolConnection, CommandRegistry) */
+    /** @see #install(CgProtocolConnection, Commands) */
     public static <T> RemoteCommands<T> install(CgProtocolConnection<T> connection,
-                                                CommandRegistry registry,
+                                                Commands registry,
                                                 RemoteCommandPolicy policy) {
         return new RemoteCommands<>(connection, registry, policy);
     }

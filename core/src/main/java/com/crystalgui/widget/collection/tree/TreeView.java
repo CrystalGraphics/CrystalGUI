@@ -3,7 +3,7 @@ package com.crystalgui.widget.collection.tree;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Signal;
@@ -120,7 +120,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
     public static final DataKey<TreeView> KEY = DataKey.create("treeView", TreeView.class);
 
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         super.registerCommands(registry);
         TreeViewCommands.register();
     }

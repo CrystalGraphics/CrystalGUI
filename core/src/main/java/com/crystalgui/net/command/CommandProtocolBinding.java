@@ -2,7 +2,7 @@ package com.crystalgui.net.command;
 
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 
 import javax.annotation.Nullable;
 
@@ -33,7 +33,7 @@ public final class CommandProtocolBinding {
     private static RemoteCommandPolicy policy = RemoteCommandPolicy.DEFAULT;
 
     @Nullable
-    private static CommandRegistry target;
+    private static Commands target;
 
     private CommandProtocolBinding() {
     }
@@ -55,12 +55,12 @@ public final class CommandProtocolBinding {
     }
 
     /**
-     * Where a client's server commands land. Defaults to {@link CommandRegistry#global()}.
+     * Where a client's server commands land. Defaults to {@link Commands#global()}.
      *
      * <p>A separate registry is the shape a host would want to quarantine them into — visible in a
      * palette section of its own rather than mixed with the application's own actions.</p>
      */
-    public static synchronized void setRegistry(@Nullable CommandRegistry registry) {
+    public static synchronized void setRegistry(@Nullable Commands registry) {
         target = registry;
     }
 
@@ -71,7 +71,7 @@ public final class CommandProtocolBinding {
         CgProtocols.contribute("command", connection -> {
             if (connection.peer() == null) {
                 RemoteCommands.install(connection,
-                        target == null ? CommandRegistry.global() : target, policy);
+                        target == null ? Commands.process() : target, policy);
             } else {
                 ServerCommands.forConnection(connection);
             }

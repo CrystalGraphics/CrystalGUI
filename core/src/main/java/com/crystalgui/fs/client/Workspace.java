@@ -75,10 +75,24 @@ public final class Workspace implements Disposable {
     /** The greeting arrived, so the server's own facts are now known. */
     public final Signal.Value<FsHello> onDidGreet = new Signal.Value<>();
 
+    @Nullable
+    private final Executor home;
+
+    /**
+     * Runs {@code task} on the sequence this workspace was made on and answers false (the caller returns); true when
+     * already on a sequence or when it has none, so the caller carries on.
+     */
+    public boolean onHome(Runnable task) {
+        if (home == null || Broadcast.sequenceHere() != null) return true;
+        home.execute(task);
+        return false;
+    }
+
     private Workspace(FsCall.Caller<Object> caller, Subscriber subscriber, CgDynamicOps<Object> ops) {
         // A wire's replies, timeouts and notifications arrive on its tick thread, and this workspace's signals
         // belong to the sequence it was made on: hand every callback back there.
         Executor home = Broadcast.sequenceHere();
+        this.home = home;
         this.calls = new FsCall<>(home == null ? caller : homed(caller, home), ops, health);
         this.files = new FileOperations(calls);
         subscribe(home == null ? subscriber : homed(subscriber, home), ops);

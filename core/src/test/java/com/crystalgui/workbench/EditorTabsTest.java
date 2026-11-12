@@ -18,7 +18,7 @@ import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.project.ProjectRegistry;
@@ -121,7 +121,7 @@ public class EditorTabsTest extends UiDocumentTestBase {
     @Test
     public void closeOtherTabsKeepsTheOneRightClicked() {
         openThree();
-        CommandRegistry.global().run(DockCommands.CLOSE_OTHERS, onTab(BOTTOM));
+        Commands.process().run(DockCommands.CLOSE_OTHERS, onTab(BOTTOM));
         frames(4);
         assertEquals(List.of(workbench.refFor(BOTTOM)), open());
     }
@@ -129,7 +129,7 @@ public class EditorTabsTest extends UiDocumentTestBase {
     @Test
     public void closeTabsToTheRightStopsAtTheOneRightClicked() {
         openThree();
-        CommandRegistry.global().run(DockCommands.CLOSE_TO_THE_RIGHT, onTab(TOP));
+        Commands.process().run(DockCommands.CLOSE_TO_THE_RIGHT, onTab(TOP));
         frames(4);
         assertEquals(List.of(workbench.refFor(TOP)), open());
     }
@@ -138,7 +138,7 @@ public class EditorTabsTest extends UiDocumentTestBase {
     public void splitAndMoveTakesTheTabOutOfItsGroup() {
         openThree();
         DockLeaf before = leafOf(BOTTOM);
-        CommandRegistry.global().run(DockCommands.SPLIT_AND_MOVE_RIGHT, onTab(BOTTOM));
+        Commands.process().run(DockCommands.SPLIT_AND_MOVE_RIGHT, onTab(BOTTOM));
         frames(8);
         assertTrue("it did not leave", before.indexOf(workbench.refFor(BOTTOM)) < 0);
         assertNotSame(leafOf(TOP), leafOf(BOTTOM));
@@ -157,7 +157,7 @@ public class EditorTabsTest extends UiDocumentTestBase {
         DockLeaf before = leafOf(BOTTOM);
         document.focus().requestPointerFocus(document.focus().firstFocusableIn(area.groupFor(before).tabFor(ref).content()));
 
-        CommandRegistry.global().run(DockCommands.SPLIT_RIGHT, onTab(BOTTOM));
+        Commands.process().run(DockCommands.SPLIT_RIGHT, onTab(BOTTOM));
         frames(8);
 
         DockLeaf split = null;
@@ -178,13 +178,13 @@ public class EditorTabsTest extends UiDocumentTestBase {
     @Test
     public void moveToTheOppositeGroupAndUnsplitComeBack() {
         openThree();
-        CommandRegistry.global().run(DockCommands.SPLIT_AND_MOVE_RIGHT, onTab(BOTTOM));
+        Commands.process().run(DockCommands.SPLIT_AND_MOVE_RIGHT, onTab(BOTTOM));
         frames(8);
-        CommandRegistry.global().run(DockCommands.MOVE_TO_OPPOSITE, onTab(NEXT));
+        Commands.process().run(DockCommands.MOVE_TO_OPPOSITE, onTab(NEXT));
         frames(8);
         assertSame("the opposite group of the one it was in is the split", leafOf(BOTTOM), leafOf(NEXT));
 
-        CommandRegistry.global().run(DockCommands.UNSPLIT, onTab(TOP));
+        Commands.process().run(DockCommands.UNSPLIT, onTab(TOP));
         frames(8);
         assertEquals(1, workbench.dock().layout().leaves().size());
         assertEquals(3, open().size());
@@ -193,7 +193,7 @@ public class EditorTabsTest extends UiDocumentTestBase {
     @Test
     public void openTabInNewWindowTearsItOut() {
         openThree();
-        CommandRegistry.global().run(DockCommands.OPEN_IN_NEW_WINDOW, onTab(TOP));
+        Commands.process().run(DockCommands.OPEN_IN_NEW_WINDOW, onTab(TOP));
         frames(8);
         assertEquals(1, workbench.dock().windows().size());
         assertSame(workbench.dock().windows().get(0).area(), workbench.dock().areaHolding(workbench.refFor(TOP)));
@@ -203,7 +203,7 @@ public class EditorTabsTest extends UiDocumentTestBase {
     @Test
     public void withNoTabPressedTheFrontTabIsTheSubject() {
         openThree();
-        CommandRegistry.global().run(DockCommands.CLOSE_OTHERS, CommandContext.of(workbench.dock()));
+        Commands.process().run(DockCommands.CLOSE_OTHERS, CommandContext.of(workbench.dock()));
         frames(4);
         assertEquals(List.of(workbench.refFor(NEXT)), open());
     }

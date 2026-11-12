@@ -737,7 +737,7 @@ com/crystalgui/app/shadergraph/ShaderGraphView
   implements com/crystalgui/core/dispose/Disposable
   implements com/crystalgui/document/DocumentEditor
   method protected connected ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> ()V
   method public <init> (Lcom/crystalgui/app/shadergraph/ShaderGraphDocument;)V
   method public activated (Z)V
@@ -804,7 +804,7 @@ com/crystalgui/app/shadergraph/blackboard/BlackboardPanel
   field public,static,final TYPES Ljava/util/Map;
   implements com/crystalgui/core/data/DataProvider
   method protected connected ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> (Lcom/crystalgui/graph/GraphDocument;Ljava/lang/String;Lcom/crystalgui/core/undo/UndoStack;)V
   method public addCategory ()Ljava/lang/String;
   method public addProperty (Ljava/lang/String;)Lcom/crystalgui/graph/GraphProperty;
@@ -2057,7 +2057,7 @@ com/crystalgui/app/uibuilder/library/LibraryActions
   field public,static,final REMOVE_FROM_GROUP Ljava/lang/String;
   field public,static,final RENAME_GROUP Ljava/lang/String;
   field public,static,final TOGGLE_ROWS Ljava/lang/String;
-  method public,static register (Lcom/crystalgui/core/command/CommandRegistry;)Lcom/crystalgui/core/dispose/Disposable;
+  method public,static register (Lcom/crystalgui/core/command/Commands;)Lcom/crystalgui/core/dispose/Disposable;
   method public,static titleActions (Ljava/util/function/Supplier;)Ljava/util/List;
 com/crystalgui/app/uibuilder/library/LibraryCatalog
   access public,final
@@ -2326,7 +2326,7 @@ com/crystalgui/app/uibuilder/panel/HierarchyActions
   extends java/lang/Object
   field public,static,final COPY_SELECTOR Ljava/lang/String;
   field public,static,final SELECT_IN_HIERARCHY Ljava/lang/String;
-  method public,static register (Lcom/crystalgui/core/command/CommandRegistry;)Lcom/crystalgui/core/dispose/Disposable;
+  method public,static register (Lcom/crystalgui/core/command/Commands;)Lcom/crystalgui/core/dispose/Disposable;
   method public,static titleActions (Ljava/util/function/Supplier;)Ljava/util/List;
 com/crystalgui/app/uibuilder/panel/HierarchyPanel
   access public,final
@@ -2954,6 +2954,7 @@ com/crystalgui/core/async/Contributions
   method public name ()Ljava/lang/String;
   method public published ()Lcom/crystalgui/core/async/Published;
   method public remove (Ljava/lang/Object;)Z
+  method public removeIf (Ljava/util/function/Predicate;)Z
   method public removeOwner (Lcom/crystalgui/core/async/Owner;)V
   method public replace (Lcom/crystalgui/core/async/Owner;Ljava/lang/Object;)Lcom/crystalgui/core/dispose/Disposable;
   method public toString ()Ljava/lang/String;
@@ -3398,24 +3399,25 @@ com/crystalgui/core/command/CommandContext
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
   method public,static of (Lcom/crystalgui/core/data/CommandTarget;)Lcom/crystalgui/core/command/CommandContext;
-com/crystalgui/core/command/CommandRegistry
+com/crystalgui/core/command/Commands
   access public,final
   extends java/lang/Object
   method public <init> ()V
   method public all ()Ljava/util/Collection;
   method public contains (Ljava/lang/String;)Z
-  method public contribute (Ljava/lang/Class;Ljava/util/function/Consumer;)Lcom/crystalgui/core/command/CommandRegistry;
+  method public contribute (Lcom/crystalgui/core/async/Owner;Lcom/crystalgui/core/command/Command;)Lcom/crystalgui/core/dispose/Disposable;
+  method public contribute (Ljava/lang/Class;Ljava/util/function/Consumer;)Lcom/crystalgui/core/command/Commands;
   method public contributeMenu (Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/MenuContributor;)Lcom/crystalgui/core/dispose/Disposable;
   method public declaredBindings ()Lcom/crystalgui/ui/input/keymap/Keymap;
   method public get (Ljava/lang/String;)Lcom/crystalgui/core/command/Command;
-  method public menu (Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/CommandContext;)Ljava/util/List;
   method public register (Lcom/crystalgui/core/command/Command;)Lcom/crystalgui/core/dispose/Disposable;
+  method public removeOwner (Lcom/crystalgui/core/async/Owner;)V
   method public resetForTesting ()V
   method public run (Ljava/lang/String;)Z
   method public run (Ljava/lang/String;Lcom/crystalgui/core/command/CommandContext;)Z
   method public sections (Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/CommandContext;)Ljava/util/List;
-  method public unregister (Ljava/lang/String;)Lcom/crystalgui/core/command/CommandRegistry;
-  method public,static global ()Lcom/crystalgui/core/command/CommandRegistry;
+  method public unregister (Ljava/lang/String;)Lcom/crystalgui/core/command/Commands;
+  method public,static process ()Lcom/crystalgui/core/command/Commands;
 com/crystalgui/core/command/MenuContributor
   access public,abstract,interface
   extends java/lang/Object
@@ -5910,6 +5912,7 @@ com/crystalgui/fs/client/Workspace
   method public health ()Lcom/crystalgui/fs/client/Health;
   method public history ()Lcom/crystalgui/fs/client/LocalHistory;
   method public isReadOnly (Lcom/crystalgui/fs/Resource;)Z
+  method public onHome (Ljava/lang/Runnable;)Z
   method public presence ()Lcom/crystalgui/fs/client/Workspace$Presence;
   method public projects ()Lcom/crystalgraphics/job/reply/CgReply;
   method public providerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/fs/client/ContentProvider;
@@ -7557,7 +7560,7 @@ com/crystalgui/net/command/CommandProtocolBinding
   method public,static register ()V
   method public,static resetForTesting ()V
   method public,static setPolicy (Lcom/crystalgui/net/command/RemoteCommandPolicy;)V
-  method public,static setRegistry (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public,static setRegistry (Lcom/crystalgui/core/command/Commands;)V
 com/crystalgui/net/command/RemoteCommandPolicy
   access public,final
   extends java/lang/Object
@@ -7576,8 +7579,8 @@ com/crystalgui/net/command/RemoteCommands
   method public isEnabled (Ljava/lang/String;)Z
   method public onFailure (Ljava/util/function/Consumer;)Lcom/crystalgui/net/command/RemoteCommands;
   method public withdrawAll ()V
-  method public,static install (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/core/command/CommandRegistry;)Lcom/crystalgui/net/command/RemoteCommands;
-  method public,static install (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/net/command/RemoteCommandPolicy;)Lcom/crystalgui/net/command/RemoteCommands;
+  method public,static install (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/core/command/Commands;)Lcom/crystalgui/net/command/RemoteCommands;
+  method public,static install (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/net/command/RemoteCommandPolicy;)Lcom/crystalgui/net/command/RemoteCommands;
 com/crystalgui/net/command/ServerCommands
   access public,final
   extends java/lang/Object
@@ -13313,7 +13316,7 @@ com/crystalgui/ui/dom/UIDocument
   method public execute (Ljava/lang/Runnable;)V
   method public focus ()Lcom/crystalgui/ui/service/Focus;
   method public frame (FFF)V
-  method public getCommands ()Lcom/crystalgui/core/command/CommandRegistry;
+  method public getCommands ()Lcom/crystalgui/core/command/Commands;
   method public getElementById (Ljava/lang/String;)Lcom/crystalgui/ui/dom/UIElement;
   method public hasTopLayerContent ()Z
   method public input ()Lcom/crystalgui/ui/service/Input;
@@ -13561,7 +13564,7 @@ com/crystalgui/ui/dom/UINode
   method protected connected ()V
   method protected disconnected ()V
   method protected frozen ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method protected thawed ()V
   method protected,final appendStructural (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UINode;
   method protected,final insertStructuralAt (ILcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UINode;
@@ -13990,7 +13993,7 @@ com/crystalgui/ui/input/keymap/KeymapResolver
   access public,final
   extends java/lang/Object
   field public,final onPendingChanged Lcom/crystalgui/core/signal/Signal$Value;
-  method public <init> (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public <init> (Lcom/crystalgui/core/command/Commands;)V
   method public cancelPending ()V
   method public claimedStrokes (Lcom/crystalgui/ui/input/keymap/KeymapScope;)Ljava/util/Set;
   method public pending ()Lcom/crystalgui/ui/input/keymap/KeyChord;
@@ -14528,7 +14531,7 @@ com/crystalgui/widget/canvas/WorldRect
 com/crystalgui/widget/collection/list/ListContextMenus
   access public,final
   extends java/lang/Object
-  method public,static installDefault (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public,static installDefault (Lcom/crystalgui/core/command/Commands;)V
 com/crystalgui/widget/collection/list/ListRenderer
   access public,abstract,interface
   extends java/lang/Object
@@ -14727,7 +14730,7 @@ com/crystalgui/widget/collection/tree/TreeEditCommands
   field public,static,final PASTE Ljava/lang/String;
   field public,static,final RENAME Ljava/lang/String;
   method public,static bindKeys (Lcom/crystalgui/ui/input/keymap/Keymap;)V
-  method public,static contributeTo (Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/core/dispose/Disposable;
+  method public,static contributeTo (Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/core/dispose/Disposable;
   method public,static register ()V
 com/crystalgui/widget/collection/tree/TreeEditModel
   access public,abstract,interface
@@ -14770,7 +14773,7 @@ com/crystalgui/widget/collection/tree/TreeEditing
   field public,static,final CUT_CLASS Ljava/lang/String;
   field public,static,final KEY Lcom/crystalgui/core/data/DataKey;
   method public <init> (Lcom/crystalgui/widget/collection/tree/TreeView;Lcom/crystalgui/ui/dom/UIElement;Ljava/util/function/Function;Ljava/lang/Runnable;Lcom/crystalgui/widget/collection/tree/TreeClipboard;)V
-  method public attachContextMenu (Lcom/crystalgui/core/command/CommandRegistry;Ljava/util/function/Supplier;)V
+  method public attachContextMenu (Lcom/crystalgui/core/command/Commands;Ljava/util/function/Supplier;)V
   method public bindRow (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/widget/control/TextField;Ljava/lang/Object;)V
   method public canCopy ()Z
   method public canCut ()Z
@@ -14793,7 +14796,7 @@ com/crystalgui/widget/collection/tree/TreeEditing
   method public selection ()Ljava/util/List;
   method public setModel (Lcom/crystalgui/widget/collection/tree/TreeEditModel;)Lcom/crystalgui/widget/collection/tree/TreeEditing;
   method public tree ()Lcom/crystalgui/widget/collection/tree/TreeView;
-  method public,static contributeMenu (Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/core/dispose/Disposable;
+  method public,static contributeMenu (Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/core/dispose/Disposable;
 com/crystalgui/widget/collection/tree/TreeRenderer
   access public,abstract,interface
   extends java/lang/Object
@@ -14894,7 +14897,7 @@ com/crystalgui/widget/collection/tree/TreeView
   method protected bindKeys ()V
   method protected handleNavigationKey (Lcom/crystalgui/ui/event/KeyboardEvent$Down;)Z
   method protected navigationKey (II)Z
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> (Lcom/crystalgui/core/collection/tree/TreeDataSource;)V
   method public collapseAll ()Lcom/crystalgui/widget/collection/tree/TreeView;
   method public expandSiblingsOf (I)Lcom/crystalgui/widget/collection/tree/TreeView;
@@ -14933,7 +14936,7 @@ com/crystalgui/widget/composite/ActionButton
   access public
   extends com/crystalgui/widget/control/Button
   field public,static,final ACTION_CLASS Ljava/lang/String;
-  method protected <init> (Lcom/crystalgui/core/command/CommandRegistry;Ljava/lang/String;Ljava/lang/String;Ljava/util/function/Supplier;)V
+  method protected <init> (Lcom/crystalgui/core/command/Commands;Ljava/lang/String;Ljava/lang/String;Ljava/util/function/Supplier;)V
   method protected connected ()V
   method protected disconnected ()V
   method public commandId ()Ljava/lang/String;
@@ -16421,7 +16424,7 @@ com/crystalgui/widget/graph/GraphView
   method protected connected ()V
   method protected createPolicy ()Lcom/crystalgui/widget/surface/SurfacePolicy;
   method protected createSelection (Lcom/crystalgui/widget/surface/SurfacePolicy;)Lcom/crystalgui/widget/surface/select/SurfaceSelection;
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> ()V
   method public <init> (Lcom/crystalgui/graph/GraphDocument;Lcom/crystalgui/core/undo/UndoStack;Ljava/util/List;)V
   method public <init> (Ljava/util/List;)V
@@ -16763,14 +16766,14 @@ com/crystalgui/widget/layout/TabView$TabSide
 com/crystalgui/widget/overlay/ContextMenu
   access public,final
   extends java/lang/Object
-  method public build (Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Menu;
+  method public build (Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Menu;
   method public contributions (Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/widget/overlay/ContextMenu;
   method public item (Ljava/lang/String;)Lcom/crystalgui/widget/overlay/ContextMenu;
   method public item (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/widget/overlay/ContextMenu;
   method public separator ()Lcom/crystalgui/widget/overlay/ContextMenu;
   method public submenu (Ljava/lang/String;Ljava/util/function/Consumer;)Lcom/crystalgui/widget/overlay/ContextMenu;
-  method public,static attach (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/command/CommandRegistry;Ljava/util/function/Function;)Lcom/crystalgui/ui/dom/UIElement;
-  method public,static attach (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/command/CommandRegistry;Ljava/util/function/Function;Z)Lcom/crystalgui/ui/dom/UIElement;
+  method public,static attach (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/command/Commands;Ljava/util/function/Function;)Lcom/crystalgui/ui/dom/UIElement;
+  method public,static attach (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/command/Commands;Ljava/util/function/Function;Z)Lcom/crystalgui/ui/dom/UIElement;
   method public,static builder ()Lcom/crystalgui/widget/overlay/ContextMenu;
   method public,static of (Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/widget/overlay/ContextMenu;
 com/crystalgui/widget/overlay/Dialog
@@ -16909,12 +16912,12 @@ com/crystalgui/widget/overlay/Menu
 com/crystalgui/widget/overlay/MenuBuilder
   access public,final
   extends java/lang/Object
-  method public,static appendSections (Lcom/crystalgui/widget/overlay/Menu;Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/ui/dom/UIElement;)Z
-  method public,static build (Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Menu;
+  method public,static appendSections (Lcom/crystalgui/widget/overlay/Menu;Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/ui/dom/UIElement;)Z
+  method public,static build (Lcom/crystalgui/core/command/MenuId;Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Menu;
   method public,static discard (Ljava/util/List;)V
   method public,static isInsideAny (Lcom/crystalgui/ui/dom/UIElement;Ljava/util/List;)Z
   method public,static present (Lcom/crystalgui/widget/overlay/Menu;Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIDocument;)Ljava/util/List;
-  method public,static row (Lcom/crystalgui/widget/overlay/Menu;Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/ui/dom/UIElement;Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/widget/overlay/MenuItem;
+  method public,static row (Lcom/crystalgui/widget/overlay/Menu;Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/ui/dom/UIElement;Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/widget/overlay/MenuItem;
 com/crystalgui/widget/overlay/MenuItem
   access public
   extends com/crystalgui/widget/control/Button
@@ -17209,7 +17212,7 @@ com/crystalgui/widget/surface/SurfaceEditor
   method protected createPolicy ()Lcom/crystalgui/widget/surface/SurfacePolicy;
   method protected createSelection (Lcom/crystalgui/widget/surface/SurfacePolicy;)Lcom/crystalgui/widget/surface/select/SurfaceSelection;
   method protected disconnected ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method protected,final ensureExtensions ()V
   method public <init> (Lcom/crystalgui/widget/surface/SurfacePolicy;)V
   method public <init> (Lcom/crystalgui/widget/surface/SurfacePolicy;Ljava/util/List;)V
@@ -17943,7 +17946,7 @@ com/crystalgui/widget/texteditor/TextEditor
   implements com/crystalgui/core/undo/UndoScope
   method protected connected ()V
   method protected invalidateWindow ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> ()V
   method public <init> (Ljava/lang/String;)V
   method public addCaret (I)Lcom/crystalgui/widget/texteditor/TextEditor;
@@ -18694,7 +18697,7 @@ com/crystalgui/workbench/Workbench
   implements com/crystalgui/workbench/WorkbenchContext
   method protected connected ()V
   method protected disconnected ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
   method public <init> (Lcom/crystalgui/fs/client/Workspace;Ljava/util/List;)V
   method public activeDocument ()Lcom/crystalgui/document/Document;
@@ -18836,7 +18839,7 @@ com/crystalgui/workbench/WorkbenchKinds
 com/crystalgui/workbench/WorkbenchMenus
   access public,final
   extends java/lang/Object
-  method public,static register (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public,static register (Lcom/crystalgui/core/command/Commands;)V
 com/crystalgui/workbench/WorkbenchSession
   access public,final
   extends java/lang/Object
@@ -18892,7 +18895,7 @@ com/crystalgui/workbench/app/WorkbenchApplication
   method protected <init> (Lcom/crystalgui/workbench/app/WorkbenchApplication$Builder;)V
   method protected connected ()V
   method protected disconnected ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public activate ()V
   method public captionChrome ()Lcom/crystalgui/ui/dom/UIElement;
   method public dispose ()V
@@ -18962,7 +18965,7 @@ com/crystalgui/workbench/chrome/menu/MenuBarView
   field public,static,final TITLE_CLASS Ljava/lang/String;
   method protected connected ()V
   method protected disconnected ()V
-  method public <init> (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public <init> (Lcom/crystalgui/core/command/Commands;)V
   method public addMenu (Lcom/crystalgui/core/command/MenuId;Ljava/lang/String;)Lcom/crystalgui/workbench/chrome/menu/MenuBarView;
   method public close ()V
   method public isCollapsed ()Z
@@ -19020,7 +19023,7 @@ com/crystalgui/workbench/chrome/palette/CommandPalette
   field public,static,final PLACEHOLDER Ljava/lang/String;
   field public,static,final SURFACE Lcom/crystalgui/core/data/DataKey;
   field public,static,final TITLE Ljava/lang/String;
-  method public,static itemsFor (Lcom/crystalgui/core/command/CommandRegistry;Lcom/crystalgui/ui/dom/UIElement;)Ljava/util/List;
+  method public,static itemsFor (Lcom/crystalgui/core/command/Commands;Lcom/crystalgui/ui/dom/UIElement;)Ljava/util/List;
   method public,static open (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/workbench/chrome/palette/QuickPick;
 com/crystalgui/workbench/chrome/palette/QuickPick
   access public
@@ -19364,7 +19367,7 @@ com/crystalgui/workbench/dock/DockArea
   implements com/crystalgui/widget/layout/MinimumSize
   method protected connected ()V
   method protected disconnected ()V
-  method protected registerCommands (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
   method public <init> (Lcom/crystalgui/workbench/dock/panel/DockPanelRegistry;Lcom/crystalgui/workbench/dock/layout/DockLayout;)V
   method public activatePanel (Lcom/crystalgui/workbench/dock/layout/DockPanelRef;)Z
   method public activeArea ()Lcom/crystalgui/workbench/dock/DockArea;
@@ -20067,7 +20070,7 @@ com/crystalgui/workbench/explorer/ProjectFileTree
   method public requestRefresh ()V
   method public reveal (Lcom/crystalgui/fs/CgPath;)V
   method public selectedPath ()Lcom/crystalgui/fs/CgPath;
-  method public setContextMenu (Lcom/crystalgui/core/command/CommandRegistry;Ljava/util/function/Supplier;)Lcom/crystalgui/workbench/explorer/ProjectFileTree;
+  method public setContextMenu (Lcom/crystalgui/core/command/Commands;Ljava/util/function/Supplier;)Lcom/crystalgui/workbench/explorer/ProjectFileTree;
   method public setFilter (Ljava/lang/String;)Lcom/crystalgui/workbench/explorer/ProjectFileTree;
   method public setFindFiltering (Z)V
   method public setUndoStack (Lcom/crystalgui/core/undo/UndoStack;)Lcom/crystalgui/workbench/explorer/ProjectFileTree;
@@ -20411,11 +20414,11 @@ com/crystalgui/workbench/stripe/StripeView
   method public listenToDrag (Lcom/crystalgui/workbench/region/RegionDropOverlay;)V
   method public listenToFocus (Lcom/crystalgui/ui/dom/UIDocument;)V
   method public listenToLayout (Lcom/crystalgui/workbench/dock/DockArea;)V
-  method public listenToPanels (Lcom/crystalgui/workbench/dock/panel/DockPanelRegistry;Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public listenToPanels (Lcom/crystalgui/workbench/dock/panel/DockPanelRegistry;Lcom/crystalgui/core/command/Commands;)V
   method public rail ()Lcom/crystalgui/workbench/stripe/StripeRail;
   method public refresh ()V
   method public sideAt (Lcom/crystalgui/workbench/region/DockRegion;F)Lcom/crystalgui/workbench/region/RegionSide;
-  method public sync (Lcom/crystalgui/core/command/CommandRegistry;)V
+  method public sync (Lcom/crystalgui/core/command/Commands;)V
   method public,static commandIdFor (Ljava/lang/String;)Ljava/lang/String;
 com/crystalgui/workbench/stripe/StripeView$StripeDrag
   access public,final,record

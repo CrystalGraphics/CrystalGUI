@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -56,10 +56,10 @@ public final class SurfaceCommands {
     }
 
     public static void register() {
-        CommandRegistry.global().contribute(SurfaceCommands.class, SurfaceCommands::declare);
+        Commands.process().contribute(SurfaceCommands.class, SurfaceCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(DELETE, "Delete")
                 .icon(ActionIcons.DELETE)
                 .run(context -> with(context, SurfaceCommands::delete))
@@ -148,7 +148,7 @@ public final class SurfaceCommands {
 
             @Override
             public void cut() {
-                CommandRegistry.global().run(CUT, CommandContext.of(surface));
+                Commands.process().run(CUT, CommandContext.of(surface));
             }
 
             @Override
@@ -158,7 +158,7 @@ public final class SurfaceCommands {
 
             @Override
             public void copy() {
-                CommandRegistry.global().run(COPY, CommandContext.of(surface));
+                Commands.process().run(COPY, CommandContext.of(surface));
             }
 
             @Override
@@ -168,7 +168,7 @@ public final class SurfaceCommands {
 
             @Override
             public void paste() {
-                CommandRegistry.global().run(PASTE, CommandContext.of(surface));
+                Commands.process().run(PASTE, CommandContext.of(surface));
             }
         };
     }

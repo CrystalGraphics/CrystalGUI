@@ -24,7 +24,7 @@ import java.util.Set;
  * an application that has one.</p>
  *
  * <p>So a contribution announces, and an application decides what to do about it — exactly the split
- * {@link com.crystalgui.core.command.CommandRegistry} and
+ * {@link com.crystalgui.core.command.Commands} and
  * {@code InspectorRegistry} already make. {@code register(workbench)} now needs nothing else.</p>
  *
  * <h3>The history is the model, and it announces itself with one event</h3>

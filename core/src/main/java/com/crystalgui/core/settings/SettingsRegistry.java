@@ -17,10 +17,10 @@ import java.util.Map;
  * <p>Ported from VS Code's {@code IConfigurationRegistry}
  * ({@code src/vs/platform/configuration/common/configurationRegistry.ts}), MIT.</p>
  *
- * <h3>Shaped like {@code CommandRegistry}, deliberately</h3>
+ * <h3>Shaped like {@code Commands}, deliberately</h3>
  * <p>Insertion-ordered so {@link #all} is stable — a panel wants that and a test needs it — and a
  * re-registration <b>replaces and logs</b> rather than being rejected, because that is how a theme or a
- * mod overrides a built-in declaration. Both decisions are copied from {@code CommandRegistry} rather
+ * mod overrides a built-in declaration. Both decisions are copied from {@code Commands} rather
  * than re-argued, since the two registries answer the same question about the same kind of thing.</p>
  *
  * <p>The one divergence: this is not per-{@code UIWindow}. A <b>declaration</b> is a fact about the code

@@ -24,7 +24,7 @@ import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -263,7 +263,7 @@ public class Taskbar extends UIElement {
         // A right-click on an ENTRY never reaches here, because the entry's own handler consumes it and
         // opens the jump list instead -- which is the distinction the two menus exist for. This one is
         // about the SET of windows; that one names a window. Nor is it the start button's.
-        ContextMenu.attach(this, CommandRegistry.global(),
+        ContextMenu.attach(this, Commands.process(),
                 pressed -> UINode.isShadowIncludingInclusiveAncestor(start, pressed)
                         ? null : ContextMenu.of(MenuId.TASKBAR_CONTEXT));
         // BOTH CHILDREN BEFORE ATTACH. Adding one later means inserting a Taffy node into a parent

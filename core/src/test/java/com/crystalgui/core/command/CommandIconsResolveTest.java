@@ -24,7 +24,7 @@ import static org.junit.Assert.assertTrue;
  * and the row draws a reserved, empty column. Nothing logs, nothing throws, and the menu looks like one
  * that was never given an icon at all — so a typo in an id survives every other check in the build.
  *
- * <p>Written against {@link CommandRegistry#all()} rather than a list of the ids in use, so an icon added
+ * <p>Written against {@link Commands#all()} rather than a list of the ids in use, so an icon added
  * later is covered without this class being edited. The registry is global and other tests populate it;
  * that is harmless here, since every assertion only looks at commands that carry an icon.</p>
  */
@@ -58,7 +58,7 @@ public class CommandIconsResolveTest {
     public void everyIconACommandNamesResolves() {
         List<String> unresolved = new ArrayList<>();
         int carried = 0;
-        for (Command command : CommandRegistry.global().all()) {
+        for (Command command : Commands.process().all()) {
             for (String mark : marksOf(command)) {
                 carried++;
                 if (CgUiSvg.ofIcon(mark) == null) unresolved.add(command.getId() + " -> " + mark);
@@ -82,7 +82,7 @@ public class CommandIconsResolveTest {
     @Test
     public void everyIconACommandNamesTakesItsColourFromTheCascade() {
         List<String> baked = new ArrayList<>();
-        for (Command command : CommandRegistry.global().all()) {
+        for (Command command : Commands.process().all()) {
             for (String mark : marksOf(command)) {
                 if (ActionIcons.carriesItsOwnPalette(mark)) continue;
                 CgUiSvg glyph = CgUiSvg.ofIcon(mark);

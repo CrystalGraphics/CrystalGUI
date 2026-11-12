@@ -20,7 +20,7 @@ import com.crystalgui.text.syntax.LanguageRegistry;
  *
  * <ul>
  *   <li>A client starts it behind the loading screen, a dedicated server as its first server starts.</li>
- *   <li>Registering on the render thread, never a worker: it writes {@code CommandRegistry}, which the UI reads
+ *   <li>Registering on the render thread, never a worker: it writes {@code Commands}, which the UI reads
  *       unsynchronised. What it costs that touches no registry runs first on a worker ({@link LanguageStack#prepare}).</li>
  * </ul>
  */

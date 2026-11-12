@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.desktop.taskbar.Taskbar;
 import com.crystalgui.ui.dom.UIElement;
@@ -247,7 +247,7 @@ public final class SystemMenu {
      */
     private static Menu open(MenuId id, Object owner, UIElement source, UIDocument window) {
         discard(owner);
-        Menu menu = MenuBuilder.build(id, CommandRegistry.global(), source);
+        Menu menu = MenuBuilder.build(id, Commands.process(), source);
         LIVE.put(owner, MenuBuilder.present(menu, source, window));
         menu.onClosed.connect(() -> discard(owner));
         return menu;
