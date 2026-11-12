@@ -1075,7 +1075,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             // recorded by the autostart alone.
             log("before opening: recording " + CgTrace.isRecording() + ", frames already recorded "
                     + CgTrace.frameCount() + ", keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames()
-                    + ", record-at-launch " + ProfilerSettings.get(ProfilerSettings.RECORD_AT_LAUNCH));
+                    + ", record-at-launch " + profilerSettings().get(ProfilerSettings.RECORD_AT_LAUNCH));
             WindowFrame window = FrameProfiler.openOn(desktop);
             profilerWindow = window;
             window.maximize();
@@ -1381,8 +1381,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
             // WHAT THE PAGE'S ROWS WRITE: the first 300 frames and no newest -- keep the start, then stop.
             case 178 -> {
-                ProfilerSettings.set(ProfilerSettings.FIRST_FRAMES, 300);
-                ProfilerSettings.set(ProfilerSettings.FRAMES, 0);
+                profilerSettings().set(ProfilerSettings.FIRST_FRAMES, 300);
+                profilerSettings().set(ProfilerSettings.FRAMES, 0);
             }
             case 181 -> {
                 log("settings changed: keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames()
@@ -1530,17 +1530,17 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             click(panel.settingsPage().doneButton());
         } else if (at == 56) {
             if ("arm-launch".equals(System.getProperty("crystalgui.harness.desktop.profiler.phase"))) {
-                ProfilerSettings.set(ProfilerSettings.RECORD_AT_LAUNCH, true);
+                profilerSettings().set(ProfilerSettings.RECORD_AT_LAUNCH, true);
                 log("armed record-at-launch for the next run");
-            } else if (ProfilerSettings.get(ProfilerSettings.RECORD_AT_LAUNCH)) {
-                ProfilerSettings.set(ProfilerSettings.RECORD_AT_LAUNCH, false);
+            } else if (profilerSettings().get(ProfilerSettings.RECORD_AT_LAUNCH)) {
+                profilerSettings().set(ProfilerSettings.RECORD_AT_LAUNCH, false);
                 log("record-at-launch switched back off");
             }
         // THE START AND THE NEWEST: 60 kept from the start, 120 newest, then run past both. Frame #0 must
         // still be there, with a gap marked before the newest.
         } else if (at == 58) {
-            ProfilerSettings.set(ProfilerSettings.FIRST_FRAMES, 40);
-            ProfilerSettings.set(ProfilerSettings.FRAMES, 150);
+            profilerSettings().set(ProfilerSettings.FIRST_FRAMES, 40);
+            profilerSettings().set(ProfilerSettings.FRAMES, 150);
             if (!model.isCapturing()) model.toggleRecording();
             model.setFollowing(true);
         } else if (at == 330) {
@@ -1705,7 +1705,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         } else if (at == 442) {
             // BACK TO THE DEFAULTS, through the store: the page is closed, so its button cannot be pressed.
             for (Setting<?> setting : ProfilerSettings.all()) {
-                ProfilerSettings.store().reset(SettingsLayer.USER, setting);
+                profilerSettings().store().reset(SettingsLayer.USER, setting);
             }
         } else if (at == 444) {
             log("defaults again: keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames());
@@ -2108,5 +2108,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     @Override
     public boolean shouldShutdownOnComplete() {
         return PROFILER_SHOT || TRACE_COST || BASELINE;
+    }
+
+    private ProfilerSettings profilerSettings() {
+        return ProfilerSettings.of(desktop);
     }
 }

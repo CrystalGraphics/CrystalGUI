@@ -63,6 +63,8 @@ public final class Settings {
      */
     @Nullable
     public String raw(String key) {
+        // A desktop-wide key has one value for every document: the preference, never a layer of this scope.
+        if (Preferences.isDesktopWide(key)) return Preferences.current().raw(key);
         SettingsLayer[] all = SettingsLayer.values();
         for (int i = all.length - 1; i >= 0; i--) {
             SettingsModel model = layers.get(all[i]);
@@ -80,6 +82,9 @@ public final class Settings {
 
     /** Which layer supplies {@code setting}'s current value — {@link SettingsLayer#DEFAULT} if none. */
     public SettingsLayer sourceOf(Setting<?> setting) {
+        if (Preferences.isDesktopWide(setting.getId())) {
+            return Preferences.current().raw(setting.getId()) == null ? SettingsLayer.DEFAULT : SettingsLayer.USER;
+        }
         SettingsLayer[] all = SettingsLayer.values();
         for (int i = all.length - 1; i >= 0; i--) {
             SettingsModel model = layers.get(all[i]);
@@ -153,6 +158,13 @@ public final class Settings {
 
     /** As {@link #set}, by key and text — what a codec and {@link SetSettingEdit} use. */
     public boolean setRaw(SettingsLayer layer, String key, @Nullable String value) {
+        if (Preferences.isDesktopWide(key)) {
+            // Written once for every document; this scope's own listeners hear it like any other write.
+            Preferences before = Preferences.current();
+            if (Preferences.update(p -> p.with(key, value)) == before) return false;
+            onChanged.emit(new SettingsChange(key, layer));
+            return true;
+        }
         SettingsModel model = layer(layer);
         if (!model.set(key, value)) return false;
         onChanged.emit(new SettingsChange(key, layer));

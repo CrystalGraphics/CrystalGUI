@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.screen.CgUiScreen;
 import java.util.List;
 
@@ -357,7 +358,7 @@ public final class DesktopScriptTest extends CgGauntletController {
     /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
     private void parkPointerOver(WindowFrame frame) {
         if (frame.box() == null || !CgUiScreen.isInstalled()) return;
-        float scale = CgUiScreen.UI_SCALE;
+        float scale = Preferences.current().uiScale();
         pointerX = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
         pointerY = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
         CgInput.movePointer(pointerX, pointerY);

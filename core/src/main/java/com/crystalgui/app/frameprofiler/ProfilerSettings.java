@@ -11,7 +11,9 @@ import com.crystalgui.core.settings.SettingsCodec;
 import com.crystalgui.core.settings.SettingsLayer;
 import com.crystalgui.core.settings.SettingsModel;
 import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.core.trace.UiTrace;
+import com.crystalgui.desktop.Desktop;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -22,16 +24,16 @@ import java.util.List;
  * What the frame profiler records and how it shows it, kept in the profiler's own {@code settings.json}.
  *
  * <pre>{@code
- * ProfilerSettings.useStorage(context.storage());   // once, from the application's autostart
- * int frames = ProfilerSettings.get(ProfilerSettings.FRAMES);
- * ProfilerSettings.set(ProfilerSettings.FRAMES, 10_000);   // saved, and the ring resized at once
+ * ProfilerSettings settings = ProfilerSettings.of(desktop);
+ * int frames = settings.get(ProfilerSettings.FRAMES);
+ * settings.set(ProfilerSettings.FRAMES, 10_000);   // saved, and the ring resized at once
  * }</pre>
  *
- * <h3>One per process, because the ring is</h3>
+ * <h3>One per desktop, because the ring is one per process</h3>
  *
- * <p>{@link CgTrace} holds a single ring for the whole process, so two sets of recording settings could
- * only fight over it. The store is loaded from the first desktop that offers storage — the application's
- * {@link FrameProfiler#KIND autostart} — and every change is written back and applied immediately.</p>
+ * <p>{@link CgTrace} holds a single ring, so two sets of recording settings could only fight over it: a desktop
+ * has one ({@link #of}), loaded from the profiler's own storage there, and every change is written back and applied
+ * immediately.</p>
  *
  * <h3>What applies when</h3>
  *
@@ -134,38 +136,50 @@ public final class ProfilerSettings {
 
     public static final int MAX_FRAMES = 100_000;
 
-    private static final Settings SETTINGS = new Settings();
+    private final Settings settings = new Settings();
     @Nullable
-    private static volatile CgConfigStorage storage;
-    private static boolean listening;
+    private volatile CgConfigStorage storage;
+    private boolean listening;
 
-    private ProfilerSettings() {
+    /** Settings with nothing stored: the defaults, held by whoever made it. */
+    public ProfilerSettings() {
+    }
+
+    /**
+     * The profiler settings of {@code desktop}, made on first use and loaded from the profiler's own storage there.
+     * Every window and panel of one desktop shares it, since the ring they configure is one.
+     */
+    public static ProfilerSettings of(Desktop desktop) {
+        ProfilerSettings found = desktop.service(ProfilerSettings.class, ProfilerSettings::new);
+        CgConfigStorage config = desktop.config();
+        if (config != null) found.useStorage(config.scoped(CrystalGuiStorage.APPS).scoped(FrameProfiler.ID));
+        return found;
     }
 
     /** The live store — what the settings page binds its rows to. */
-    public static Settings store() {
+    public Settings store() {
         listen();
-        return SETTINGS;
+        return settings;
     }
 
-    public static <T> T get(Setting<T> setting) {
-        return SETTINGS.get(setting);
+    public <T> T get(Setting<T> setting) {
+        return settings.get(setting);
     }
 
-    public static <T> void set(Setting<T> setting, T value) {
+    public <T> void set(Setting<T> setting, T value) {
         listen();
-        SETTINGS.set(SettingsLayer.USER, setting, value);
+        settings.set(SettingsLayer.USER, setting, value);
     }
 
     /**
      * Loads {@code settings.json} from {@code appStorage} and applies it — once per process; a second
      * desktop's storage is ignored, since the ring it would configure is the same one.
      */
-    public static synchronized void useStorage(CgConfigStorage appStorage) {
+    public synchronized void useStorage(CgConfigStorage appStorage) {
         if (storage != null || appStorage == null) return;
         storage = appStorage;
         SettingsModel loaded = SettingsCodec.fromJson(appStorage.read(FILE));
-        SETTINGS.replaceLayer(SettingsLayer.USER, loaded.asMap());
+        settings.replaceLayer(SettingsLayer.USER, loaded.asMap());
         listen();
         applyCapacityAtLaunch();
         applyHitch();
@@ -181,7 +195,7 @@ public final class ProfilerSettings {
      * The settings' ring, unless the launch sized it with a {@code -D} flag: CgTrace read those at class
      * init, and the flag is the more deliberate choice. An edit on the settings page still applies.
      */
-    private static void applyCapacityAtLaunch() {
+    private void applyCapacityAtLaunch() {
         String line;
         if (Arrays.stream(RING_FLAGS).anyMatch(flag -> System.getProperty(flag) != null)) {
             line = String.format("[cgui] trace ring from -D flags, not settings.json: first %d, newest %d, zones %d",
@@ -196,18 +210,17 @@ public final class ProfilerSettings {
     }
 
     /** The profiler's autostart: load, apply, and start recording if asked to. */
-    public static void atLaunch(CgConfigStorage appStorage) {
-        useStorage(appStorage);
+    public void atLaunch() {
         if (get(RECORD_AT_LAUNCH)) {
             for (String prefix : channels()) CgTrace.enable(prefix);
             CrystalGuiCore.LOGGER.info("[cgui] frame profiler recording from launch: {}", channels());
         }
     }
 
-    private static synchronized void listen() {
+    private synchronized void listen() {
         if (listening) return;
         listening = true;
-        SETTINGS.onChanged.connect(change -> {
+        settings.onChanged.connect(change -> {
             if (change.layer() != SettingsLayer.USER) return;
             save();
             if (change.affects(FRAMES) || change.affects(ZONES_PER_FRAME) || change.affects(FIRST_FRAMES)) {
@@ -218,11 +231,11 @@ public final class ProfilerSettings {
         });
     }
 
-    private static void save() {
+    private void save() {
         CgConfigStorage target = storage;
         if (target == null) return;
         try {
-            target.write(FILE, SettingsCodec.toJson(SETTINGS.layer(SettingsLayer.USER)));
+            target.write(FILE, SettingsCodec.toJson(settings.layer(SettingsLayer.USER)));
         } catch (RuntimeException failed) {
             CrystalGuiCore.LOGGER.warn("[cgui] the frame profiler's settings could not be saved: {}",
                     failed.getMessage());
@@ -231,20 +244,20 @@ public final class ProfilerSettings {
 
     // ── Reading, clamped ─────────────────────────────────────────────────────────────────────
 
-    public static int frames() {
+    public int frames() {
         return Math.max(0, Math.min(MAX_FRAMES, get(FRAMES)));
     }
 
-    public static int firstFrames() {
+    public int firstFrames() {
         return Math.max(0, Math.min(MAX_FRAMES, get(FIRST_FRAMES)));
     }
 
-    public static int zonesPerFrame() {
+    public int zonesPerFrame() {
         return Math.max(16, Math.min(4096, get(ZONES_PER_FRAME)));
     }
 
     /** The budget in nanoseconds, from the target rate. */
-    public static long budgetNanos() {
+    public long budgetNanos() {
         String target = get(TARGET);
         int fps = 60;
         try {
@@ -255,12 +268,12 @@ public final class ProfilerSettings {
         return 1_000_000_000L / Math.max(1, fps);
     }
 
-    public static float refreshSeconds() {
+    public float refreshSeconds() {
         return Math.max(50, Math.min(5_000, get(REFRESH_MS))) / 1000f;
     }
 
     /** The channel prefixes Record switches on. */
-    public static List<String> channels() {
+    public List<String> channels() {
         List<String> out = new ArrayList<>();
         for (String part : get(CHANNELS).split(",")) {
             String name = part.trim();
@@ -272,7 +285,7 @@ public final class ProfilerSettings {
     // ── Applying ─────────────────────────────────────────────────────────────────────────────
 
     /** Resizes the ring when it differs from what is asked. Clearing is the price of a resize. */
-    static synchronized void applyCapacity() {
+    synchronized void applyCapacity() {
         String wanted = firstFrames() + ":" + frames() + ":" + zonesPerFrame();
         if (wanted.equals(applied)) return;
         applied = wanted;
@@ -281,15 +294,15 @@ public final class ProfilerSettings {
 
     /** What {@link #applyCapacity} last configured, so an unrelated change does not clear the ring. */
     @Nullable
-    private static String applied;
+    private String applied;
 
     /** Neither clears anything: a picture already taken keeps its size, and the next is taken at the new one. */
-    static void applyImages() {
+    void applyImages() {
         CgFrameImages.setInterval(Math.max(1, Math.min(10_000, get(IMAGE_INTERVAL))));
         CgFrameImages.setWidth(Math.max(64, Math.min(1024, get(IMAGE_WIDTH))));
     }
 
-    static void applyHitch() {
+    void applyHitch() {
         int ms = Math.max(0, get(STOP_AFTER_MS));
         CgTrace.stopAfterHitch(ms * 1_000_000L, Math.max(0, get(FRAMES_AFTER)));
     }

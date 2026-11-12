@@ -1,6 +1,7 @@
 package com.crystalgui.screen;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.desktop.DesktopWindowMount;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.net.window.WindowMount;
@@ -43,7 +44,9 @@ final class DesktopConnection {
 
     /** Posts to the document what moved since the last frame: the connection, the language. Render thread. */
     void frame(GameState game) {
-        Locale locale = game.locale();
+        // The user's language wins; the platform's is the answer until they choose one.
+        Locale chosen = Preferences.current().locale();
+        Locale locale = chosen != null ? chosen : game.locale();
         if (!locale.equals(postedLocale)) {
             postedLocale = locale;
             document.execute(() -> FontFamilyCache.useLocale(locale));

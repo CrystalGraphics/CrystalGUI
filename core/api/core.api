@@ -71,7 +71,7 @@ com/crystalgui/app/frameprofiler/BuffersTab
   field public,static,final PAGE I
   field public,static,final SITES_CLASS Ljava/lang/String;
   field public,static,final STATUS_CLASS Ljava/lang/String;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public sites ()Lcom/crystalgui/widget/collection/table/TableView;
   method public statusText ()Ljava/lang/String;
 com/crystalgui/app/frameprofiler/CallTreeTab
@@ -240,7 +240,7 @@ com/crystalgui/app/frameprofiler/FrameProfilerPanel
   field public,static,final SPACER_CLASS Ljava/lang/String;
   field public,static,final STATS_CLASS Ljava/lang/String;
   field public,static,final TOOLBAR_CLASS Ljava/lang/String;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public buffers ()Lcom/crystalgui/app/frameprofiler/BuffersTab;
   method public callTree ()Lcom/crystalgui/app/frameprofiler/CallTreeTab;
   method public callTreeTab ()Lcom/crystalgui/widget/layout/Tab;
@@ -303,6 +303,7 @@ com/crystalgui/app/frameprofiler/ProfilerModel
   field public,static,final MAX_HINT_FRAMES I
   field public,static,final VIEWER Lcom/crystalgraphics/trace/CgTraceChannel;
   method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public channelNames ()Ljava/util/List;
   method public comparableFrom ()I
   method public compare ()Ljava/util/List;
@@ -415,18 +416,20 @@ com/crystalgui/app/frameprofiler/ProfilerSettings
   field public,static,final STOP_AFTER_MS Lcom/crystalgui/core/settings/Setting;
   field public,static,final TARGET Lcom/crystalgui/core/settings/Setting;
   field public,static,final ZONES_PER_FRAME Lcom/crystalgui/core/settings/Setting;
+  method public <init> ()V
+  method public atLaunch ()V
+  method public budgetNanos ()J
+  method public channels ()Ljava/util/List;
+  method public firstFrames ()I
+  method public frames ()I
+  method public get (Lcom/crystalgui/core/settings/Setting;)Ljava/lang/Object;
+  method public refreshSeconds ()F
+  method public set (Lcom/crystalgui/core/settings/Setting;Ljava/lang/Object;)V
+  method public store ()Lcom/crystalgui/core/settings/Settings;
+  method public useStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
+  method public zonesPerFrame ()I
   method public,static all ()Ljava/util/List;
-  method public,static atLaunch (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
-  method public,static budgetNanos ()J
-  method public,static channels ()Ljava/util/List;
-  method public,static firstFrames ()I
-  method public,static frames ()I
-  method public,static get (Lcom/crystalgui/core/settings/Setting;)Ljava/lang/Object;
-  method public,static refreshSeconds ()F
-  method public,static set (Lcom/crystalgui/core/settings/Setting;Ljava/lang/Object;)V
-  method public,static store ()Lcom/crystalgui/core/settings/Settings;
-  method public,static useStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
-  method public,static zonesPerFrame ()I
+  method public,static of (Lcom/crystalgui/desktop/Desktop;)Lcom/crystalgui/app/frameprofiler/ProfilerSettings;
 com/crystalgui/app/frameprofiler/ProfilerSettings$Section
   access public,final,record
   extends java/lang/Record
@@ -444,7 +447,7 @@ com/crystalgui/app/frameprofiler/ProfilerSettingsPage
   field public,static,final SUMMARY_CLASS Ljava/lang/String;
   field public,static,final TITLES_CLASS Ljava/lang/String;
   field public,static,final TITLE_CLASS Ljava/lang/String;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public doneButton ()Lcom/crystalgui/widget/control/Button;
   method public onDone (Ljava/lang/Runnable;)Lcom/crystalgui/app/frameprofiler/ProfilerSettingsPage;
   method public panel ()Lcom/crystalgui/widget/config/ConfiguratorPanel;
@@ -4170,6 +4173,38 @@ com/crystalgui/core/search/SearchQuery$Options
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/core/settings/Preferences
+  access public,final
+  extends java/lang/Object
+  field public,static,final LOCALE Ljava/lang/String;
+  field public,static,final PUBLISHED Lcom/crystalgui/core/async/Published;
+  field public,static,final SCHEME Ljava/lang/String;
+  field public,static,final THEME Ljava/lang/String;
+  field public,static,final UI_SCALE Ljava/lang/String;
+  method public asMap ()Ljava/util/Map;
+  method public keymap ()Ljava/util/Map;
+  method public locale ()Ljava/util/Locale;
+  method public raw (Ljava/lang/String;)Ljava/lang/String;
+  method public scheme ()Ljava/lang/String;
+  method public theme ()Ljava/lang/String;
+  method public tokenOverrides ()Ljava/util/Map;
+  method public uiScale ()F
+  method public with (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/settings/Preferences;
+  method public withAll (Ljava/util/Map;)Lcom/crystalgui/core/settings/Preferences;
+  method public withKeys (Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/core/settings/Preferences;
+  method public withLocale (Ljava/util/Locale;)Lcom/crystalgui/core/settings/Preferences;
+  method public withTokenOverride (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/settings/Preferences;
+  method public withUiScale (F)Lcom/crystalgui/core/settings/Preferences;
+  method public,static current ()Lcom/crystalgui/core/settings/Preferences;
+  method public,static declare (Ljava/lang/String;)V
+  method public,static isDesktopWide (Ljava/lang/String;)Z
+  method public,static update (Ljava/util/function/UnaryOperator;)Lcom/crystalgui/core/settings/Preferences;
+com/crystalgui/core/settings/PreferencesStore
+  access public,final
+  extends java/lang/Object
+  field public,static,final FILE Ljava/lang/String;
+  method public,static attach (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
+  method public,static detachForTesting ()V
 com/crystalgui/core/settings/SetSettingEdit
   access public,final,record
   extends java/lang/Record
@@ -4667,6 +4702,7 @@ com/crystalgui/desktop/Desktop
   method public resetWindowPlacements ()V
   method public resume ()V
   method public savePersistedState ()V
+  method public service (Ljava/lang/Class;Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public setCoversSurface (Z)V
   method public setMoveModifier (I)Lcom/crystalgui/desktop/Desktop;
   method public showSnapPreview (Lcom/crystalgui/desktop/window/SnapZones$Zone;Lcom/crystalgui/desktop/window/WindowFrame;)V

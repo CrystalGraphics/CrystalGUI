@@ -29,6 +29,8 @@ import javax.annotation.Nullable;
  */
 public class ProfilerSettingsPage extends UIElement {
 
+    private final ProfilerSettings settings;
+
     public static final Name NAME = Name.of("profilersettings");
 
     public static final String HEADER_CLASS = "__settings-header__";
@@ -44,9 +46,10 @@ public class ProfilerSettingsPage extends UIElement {
     @Nullable
     private Runnable onDone;
 
-    public ProfilerSettingsPage() {
+    public ProfilerSettingsPage(ProfilerSettings settings) {
+        this.settings = settings;
         super(NAME);
-        Settings store = ProfilerSettings.store();
+        Settings store = settings.store();
 
         UIElement header = new UIElement();
         header.addClass(HEADER_CLASS);
@@ -100,7 +103,7 @@ public class ProfilerSettingsPage extends UIElement {
     }
 
     private void restoreDefaults() {
-        Settings store = ProfilerSettings.store();
+        Settings store = settings.store();
         for (Setting<?> setting : ProfilerSettings.all()) store.reset(SettingsLayer.USER, setting);
     }
 

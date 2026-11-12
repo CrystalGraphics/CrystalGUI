@@ -78,7 +78,10 @@ public class BuffersTab extends UIElement {
     private boolean shown, startedWatching, following, reading;
     private float sinceRefresh = Float.MAX_VALUE;
 
-    public BuffersTab() {
+    private final ProfilerSettings settings;
+
+    public BuffersTab(ProfilerSettings settings) {
+        this.settings = settings;
         super(NAME);
         layout(l -> l.flexDirection(FlexDirection.COLUMN));
 
@@ -144,7 +147,7 @@ public class BuffersTab extends UIElement {
         Object answer = landed.getAndSet(null);
         if (answer != null) land(answer);
         sinceRefresh += deltaSeconds;
-        if (sinceRefresh >= ProfilerSettings.refreshSeconds()) {
+        if (sinceRefresh >= settings.refreshSeconds()) {
             sinceRefresh = 0f;
             refreshSites();
             if (following) read();

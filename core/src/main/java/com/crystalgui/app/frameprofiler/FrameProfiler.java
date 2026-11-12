@@ -121,7 +121,7 @@ public final class FrameProfiler {
             .standalone()
             // BEFORE THE FIRST FRAME, whether or not the window is ever opened: the ring's size and
             // "record from launch" are only worth anything if they apply before anything is recorded.
-            .autostart(context -> ProfilerSettings.atLaunch(context.storage()))
+            .autostart(context -> ProfilerSettings.of(context.desktop()).atLaunch())
             .launch(context -> new Instance(context.desktop()));
 
     /**
@@ -142,8 +142,7 @@ public final class FrameProfiler {
     public static WindowFrame openOn(Desktop desktop) {
         // THE SAME FILE A LAUNCH READS, for a window opened by key rather than through the registry.
         // A no-op when the desktop's autostart already loaded it.
-        CgConfigStorage config = desktop.config();
-        if (config != null) ProfilerSettings.useStorage(config.scoped(CrystalGuiStorage.APPS).scoped(ID));
+        ProfilerSettings settings = ProfilerSettings.of(desktop);
         WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
         if (existing != null) {
             // ACTIVATE, not raise: a minimised profiler is hidden, and raising a hidden window reorders it and
@@ -156,7 +155,7 @@ public final class FrameProfiler {
         frame.setKey(WINDOW_KEY);
         frame.setApplication(KIND);
         frame.markApplicationMain();
-        FrameProfilerPanel panel = new FrameProfilerPanel();
+        FrameProfilerPanel panel = new FrameProfilerPanel(settings);
         frame.setContent(panel);
         // THE GEAR, left of the pin: the settings are the window's own, so they are reached from its
         // caption rather than from a menu this window does not have.

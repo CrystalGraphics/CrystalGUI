@@ -62,6 +62,17 @@ import java.util.TreeMap;
  */
 public final class ProfilerModel {
 
+    private final ProfilerSettings settings;
+
+    /** A model over default settings, which is what a test or a tool with no desktop wants. */
+    public ProfilerModel() {
+        this(new ProfilerSettings());
+    }
+
+    public ProfilerModel(ProfilerSettings settings) {
+        this.settings = settings;
+    }
+
     /** Fired whenever the snapshot or the selection moved — one signal, because a redraw is one job. */
     public final Signal.Action onChanged = new Signal.Action();
 
@@ -408,7 +419,7 @@ public final class ProfilerModel {
         if (CgTrace.isFull()) CgTrace.clear();
         frozenChannels = null;
         if (channels.isEmpty()) {
-            for (String prefix : ProfilerSettings.channels()) CgTrace.enable(prefix);
+            for (String prefix : settings.channels()) CgTrace.enable(prefix);
         } else {
             CgTrace.enableOnly(channels);
         }
@@ -426,7 +437,7 @@ public final class ProfilerModel {
     public void setCapturing(boolean capturing) {
         frozenChannels = null;
         if (capturing) {
-            for (String prefix : ProfilerSettings.channels()) CgTrace.enable(prefix);
+            for (String prefix : settings.channels()) CgTrace.enable(prefix);
         } else {
             CgTrace.disableAll();
         }

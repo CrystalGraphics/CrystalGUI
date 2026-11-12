@@ -1,5 +1,6 @@
 package com.crystalgui.desktop;
 
+import com.crystalgui.core.settings.PreferencesStore;
 import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
@@ -54,6 +55,7 @@ import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.List;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -1460,9 +1462,24 @@ public class Desktop extends UIElement implements DataProvider {
      * when asked to launch something — an
      * answer chosen for a host that never saw the question is indistinguishable from one it meant.</p>
      */
+    private final ConcurrentHashMap<Class<?>, Object> services = new ConcurrentHashMap<>();
+
+    /**
+     * A service this desktop keeps for one of its applications, made on first use: state that belongs to the desktop
+     * and not to a process, so two desktops never share it.
+     *
+     * <pre>{@code
+     * ProfilerSettings settings = desktop.service(ProfilerSettings.class, ProfilerSettings::new);
+     * }</pre>
+     */
+    public <T> T service(Class<T> type, Supplier<? extends T> create) {
+        return type.cast(services.computeIfAbsent(type, key -> create.get()));
+    }
+
     public Desktop useStorage(Path installation) {
         this.config = new CgLocalConfigStorage(CrystalGuiStorage.configIn(installation));
         desktopSettings.useStorage(config);
+        PreferencesStore.attach(config);
         // A PATH, NOT A STORAGE: CgLocalConfigStorage creates its directory eagerly, and a cache/ that
         // exists before anything derived does is a directory nobody can explain.
         this.cacheRoot = CrystalGuiStorage.LAYOUT.cacheIn(installation);

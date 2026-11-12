@@ -25,6 +25,7 @@ import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.viewport.CgUiViewport;
@@ -78,7 +79,7 @@ public final class CgUiScreen {
     /** The theme a first run starts with: the editor's own default. */
     public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
 
-    /** Logical pixels to the surface's: on the box tree's root transform, applied nowhere else. */
+    /** The scale a host starts with; the user's own is {@code Preferences.current().uiScale()}, which defaults to it. */
     public static final float UI_SCALE = 2f;
 
     /** What the desktop is showing this host frame. */
@@ -402,7 +403,10 @@ public final class CgUiScreen {
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
         FontFamilyCache.useLocale(state.locale());
         UIDocument built = new UIDocument();
-        built.boxes().setUiScale(UI_SCALE);
+        // Logical pixels to the surface's: the user's preference, on the box tree's root transform and nowhere else.
+        built.boxes().setUiScale(Preferences.current().uiScale());
+        Preferences.PUBLISHED.changes().subscribe(
+                () -> built.execute(() -> built.boxes().setUiScale(Preferences.current().uiScale())));
         // NOT INSTALLED FOR YOU: without the sheets nothing matches, and without a theme every token falls back.
         UiThemeManager themes = UiThemeManager.getInstance();
         themes.installInto(built.styles());
