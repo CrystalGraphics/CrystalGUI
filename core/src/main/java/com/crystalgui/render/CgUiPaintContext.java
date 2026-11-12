@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.material.CgMaterialProxy;
 import com.crystalgraphics.camera.CgCamera;
 import com.crystalgraphics.gpu.resource.CgTextureAbstract;
 import com.crystalgraphics.api.PoseStack;
@@ -1352,7 +1353,7 @@ public final class CgUiPaintContext {
 
     /** The box's pass state under the mask's multiply: the blend rides on the draw's pipeline, as its own state. */
     private CgRenderState maskState() {
-        CgRenderState base = box.getPassRenderState(CgRenderPassVariant.FORWARD);
+        CgRenderState base = CgMaterialProxy.of(box).getPassRenderState(CgRenderPassVariant.FORWARD);
         if (base != maskStateBase) {
             maskStateBase = base;
             maskState = base.withBlend(CgBlendState.MASK_ALPHA_MULTIPLY);
