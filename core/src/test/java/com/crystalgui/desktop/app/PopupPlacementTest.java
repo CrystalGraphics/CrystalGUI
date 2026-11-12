@@ -117,6 +117,15 @@ public class PopupPlacementTest extends UiDocumentTestBase {
     }
 
     @Test
+    public void theApplicationLaysOutAtItsActiveWindowsSize() {
+        openMenu();
+        Box window = application.active().box();
+        application.active().paintContent(null, window);    // what a frame does: the window reports its size
+        assertEquals("wide", window.width(), application.windowWidth(), 0.5f);
+        assertEquals("tall", window.height(), application.windowHeight(), 0.5f);
+    }
+
+    @Test
     public void aShortWorkAreaDoesNotMoveWhatIsDrawnOffWhatIsHitTested() {
         openMenu(120f);
         Box window = application.active().box();

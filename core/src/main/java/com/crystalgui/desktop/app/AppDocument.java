@@ -81,6 +81,37 @@ public final class AppDocument {
 
     void activate(ClientPortal portal) {
         active = portal;
+        // A caption is a strip of its window: the document is as large as a window's content, never as its caption.
+        if (!portal.caption()) {
+            sizing = portal;
+            portal.reportSize();
+        }
+    }
+
+    /** The content portal whose size the document lays out at. */
+    @Nullable
+    private volatile ClientPortal sizing;
+    /** The logical size of that window's client area; 0 before there is one. */
+    private volatile float windowWidth, windowHeight;
+
+    /** The shell's thread: {@code portal}'s client area is now this large. Only the window the document follows is kept. */
+    void sized(ClientPortal portal, float width, float height) {
+        if (portal != sizing) return;
+        windowWidth = width;
+        windowHeight = height;
+    }
+
+    /**
+     * The width the document lays out at, in logical pixels: its active window's, so a popup flips and centres within the
+     * window it belongs to. 0 until a window has been sized.
+     */
+    public float windowWidth() {
+        return windowWidth;
+    }
+
+    /** @see #windowWidth */
+    public float windowHeight() {
+        return windowHeight;
     }
 
     /** The shell's thread: shows the document's popups, once, in the shell's top layer. */

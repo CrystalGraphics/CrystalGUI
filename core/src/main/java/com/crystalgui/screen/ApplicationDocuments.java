@@ -89,7 +89,11 @@ final class ApplicationDocuments implements AppDocuments {
         CgUiViewport.Content content = new CgUiViewport.Content() {
             @Override
             public boolean frame(float deltaSeconds, int width, int height) {
-                return whole.frame(deltaSeconds, width, height);
+                // At the active window's size, so a popup flips and centres within the window it belongs to.
+                AppDocument app = made[0];
+                if (app == null || app.windowWidth() <= 0f) return whole.frame(deltaSeconds, width, height);
+                document.frame(deltaSeconds, app.windowWidth(), app.windowHeight());
+                return true;
             }
 
             @Override

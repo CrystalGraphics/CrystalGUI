@@ -36,6 +36,7 @@ public final class ClientPortal extends UIElement {
 
     private final AppDocument appDocument;
     private final ClientRoot client;
+    private final boolean caption;
     private float sentWidth = -1f, sentHeight = -1f;
 
     ClientPortal(AppDocument appDocument, ClientRoot client) {
@@ -49,6 +50,7 @@ public final class ClientPortal extends UIElement {
         super(NAME);
         this.appDocument = appDocument;
         this.client = client;
+        this.caption = caption;
         if (caption) {
             layout(l -> l.width(0f).height(0f));
             client.captionOf((width, height) -> {
@@ -84,6 +86,16 @@ public final class ClientPortal extends UIElement {
         onKeyUp.attachListener((element, event) -> key(event, false), false, true);
     }
 
+    /** Whether this shows a window's caption rather than its content. */
+    boolean caption() {
+        return caption;
+    }
+
+    /** Tells the application's document how large this window's client area is, once it has one. */
+    void reportSize() {
+        if (sentWidth > 0f) appDocument.sized(this, sentWidth, sentHeight);
+    }
+
     /** The document the client lives in. */
     public AppDocument application() {
         return appDocument;
@@ -100,6 +112,7 @@ public final class ClientPortal extends UIElement {
         if (width != sentWidth || height != sentHeight) {
             sentWidth = width;
             sentHeight = height;
+            appDocument.sized(this, width, height);
             appDocument.execute(() -> client.setClientSize(width, height));
         }
         Surface picture = client.picture();

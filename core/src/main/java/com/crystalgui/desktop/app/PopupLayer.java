@@ -16,9 +16,9 @@ import com.crystalgui.ui.dom.UIElement;
  * popover.show();                             // the application's own code: unchanged
  * }</pre>
  *
- * <p>A popup is laid out against the application's document, whose size is its window's, so the application keeps it
- * inside the window; the shell's {@link PopupPortal} shows it where it was laid out. Nothing is surfaced while nothing
- * is shown.</p>
+ * <p>A popup is laid out against the application's document, which is as large as the window it last took input in
+ * ({@code AppDocument.windowWidth}), so it centres and flips within that window; the shell's {@link PopupPortal} shows
+ * it where it was laid out. Nothing is surfaced while nothing is shown.</p>
  */
 public final class PopupLayer extends UIElement implements Surface.Owner {
 
