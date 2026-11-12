@@ -16,9 +16,9 @@ import com.crystalgui.ui.dom.UIElement;
  * popover.show();                             // the application's own code: unchanged
  * }</pre>
  *
- * <p>A popup is laid out against the application's document and not its window, so it may reach past the window's
- * edge; the shell's {@link PopupPortal} moves what it drew back inside the work area. Nothing is surfaced while
- * nothing is shown.</p>
+ * <p>A popup is laid out against the application's document, whose size is its window's, so the application keeps it
+ * inside the window; the shell's {@link PopupPortal} shows it where it was laid out. Nothing is surfaced while nothing
+ * is shown.</p>
  */
 public final class PopupLayer extends UIElement implements Surface.Owner {
 
@@ -78,11 +78,14 @@ public final class PopupLayer extends UIElement implements Surface.Owner {
 
     private static float[] bounds(Box layer) {
         float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
+        // A box's world position is in surface pixels and its size is logical: the position is converted first.
+        float scale = layer.tree().uiScale();
         for (Box each : layer.children()) {
-            x0 = Math.min(x0, each.worldX());
-            y0 = Math.min(y0, each.worldY());
-            x1 = Math.max(x1, each.worldX() + each.width());
-            y1 = Math.max(y1, each.worldY() + each.height());
+            float x = each.worldX() / scale, y = each.worldY() / scale;
+            x0 = Math.min(x0, x);
+            y0 = Math.min(y0, y);
+            x1 = Math.max(x1, x + each.width());
+            y1 = Math.max(y1, y + each.height());
         }
         return new float[] {x0, y0, x1, y1};
     }

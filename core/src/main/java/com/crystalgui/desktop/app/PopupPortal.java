@@ -16,9 +16,10 @@ import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.Animation;
 
 /**
- * Where the shell shows an application's popups: in its top layer, above every window, at the place the popups have
- * relative to the window the application last took input in, moved back inside the work area when they would leave it.
- * It takes the pointer only over the popups, and a press anywhere else in the shell closes them.
+ * Where the shell shows an application's popups: in its top layer, above every window, exactly where the application
+ * laid them out relative to the window it last took input in. Drawn and hit-tested where the application has them, so
+ * nothing here moves them; the application keeps them inside its own window. It takes the pointer only over the popups,
+ * and a press anywhere else in the shell closes them.
  *
  * <pre>{@code
  * appDocument.showPopupsIn(shell);    // by AppWindows, with the application's first window
@@ -81,7 +82,7 @@ final class PopupPortal extends UIElement {
         return true;
     };
 
-    /** Puts the portal over the popups: at their place relative to the active window, inside the work area. */
+    /** Puts the portal over the popups: at their place relative to the active window. */
     private void placeNow() {
         float[] occupied = layer.occupied();
         ClientPortal window = appDocument.active();
@@ -91,28 +92,12 @@ final class PopupPortal extends UIElement {
             setPlace(left, top, 0f, 0f);
             return;
         }
-        float w = occupied[2] - occupied[0], h = occupied[3] - occupied[1];
         float scale = shell.boxes().uiScale();
-        float[] area = workArea(shell, scale);
         // A box's world position is in surface pixels and a style's left and top are logical: the window's is converted.
-        float x = clamp(windowBox.worldX() / scale + occupied[0], area[0], area[2] - w);
-        float y = clamp(windowBox.worldY() / scale + occupied[1], area[1], area[3] - h);
         originX = occupied[0];
         originY = occupied[1];
-        setPlace(x, y, w, h);
-    }
-
-    /** The work area, {x0, y0, x1, y1} in logical pixels, or the document's own when the shell declares none. */
-    private static float[] workArea(UIDocument shell, float scale) {
-        Box box = shell.workArea().box();
-        if (box == null) return new float[] {0f, 0f, Float.MAX_VALUE, Float.MAX_VALUE};
-        float x = box.worldX() / scale, y = box.worldY() / scale;
-        return new float[] {x, y, x + box.width(), y + box.height()};
-    }
-
-    /** {@code value} held in {@code [low, high]}; {@code low} when the range is empty. */
-    static float clamp(float value, float low, float high) {
-        return Math.max(low, Math.min(value, high));
+        setPlace(windowBox.worldX() / scale + originX, windowBox.worldY() / scale + originY, occupied[2] - originX,
+                occupied[3] - originY);
     }
 
     private void setPlace(float x, float y, float w, float h) {

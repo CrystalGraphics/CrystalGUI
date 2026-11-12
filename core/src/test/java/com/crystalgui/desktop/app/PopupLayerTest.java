@@ -122,12 +122,4 @@ public class PopupLayerTest {
         long portals = desktop.document().promotedNodes().stream().filter(n -> n instanceof PopupPortal).count();
         assertEquals(1L, portals);
     }
-
-    @Test
-    public void aPlaceIsHeldInsideTheWorkArea() {
-        assertEquals(500f, PopupPortal.clamp(700f, 0f, 500f), 0f);
-        assertEquals(0f, PopupPortal.clamp(-30f, 0f, 500f), 0f);
-        assertEquals(120f, PopupPortal.clamp(120f, 0f, 500f), 0f);
-        assertTrue("a range too small for it holds it at the start", PopupPortal.clamp(50f, 10f, 0f) == 10f);
-    }
 }
