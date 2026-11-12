@@ -26,7 +26,7 @@ import javax.annotation.Nullable;
  * shipped display of it.</p>
  *
  * <pre>{@code
- * FrameStats stats = FrameStats.get();
+ * FrameStats stats = FrameStats.compositor();   // or view.frameStats() for one document
  * stats.hold();                       // start collecting; release() when done
  * for (String line : stats.lines()) draw(line);
  *
@@ -57,13 +57,21 @@ import javax.annotation.Nullable;
  */
 public final class FrameStats {
 
-    private static final FrameStats INSTANCE = new FrameStats();
+    private static final FrameStats COMPOSITOR = new FrameStats(FrameSource.TRACE);
 
-    public static FrameStats get() {
-        return INSTANCE;
+    /**
+     * The compositor's own frames: the host frame, as {@link CgTrace} records it. One per process; it is what
+     * {@link #hold()} switches the trace channels on for.
+     */
+    public static FrameStats compositor() {
+        return COMPOSITOR;
     }
 
-    private FrameStats() {
+    private final FrameSource source;
+
+    /** Statistics over {@code source}: a view's own {@link FrameLog}, or the trace's ring. */
+    public FrameStats(FrameSource source) {
+        this.source = source;
     }
 
     /** How many holders want samples. @see #hold */
@@ -76,6 +84,7 @@ public final class FrameStats {
 
     /** Starts collecting, or joins a collection already running. The first holder clears what was there. */
     public void hold() {
+        if (source != FrameSource.TRACE) return;
         if (++holders == 1) {
             // A FRESH RING ONLY WHEN NOTHING ELSE WAS RECORDING. The ring is one per process, and showing
             // the readout while the profiler recorded wiped the profiler's frames -- the kept start
@@ -112,6 +121,7 @@ public final class FrameStats {
 
     /** Drops one {@link #hold()}, switching off only the channels that hold switched on. */
     public void release() {
+        if (source != FrameSource.TRACE) return;
         if (holders > 0 && --holders == 0) {
             if (enabledFrame) CgTrace.setEnabled(UiTrace.FRAME, false);
             if (enabledFlow) CgTrace.setEnabled(UiTrace.FLOW, false);
@@ -155,7 +165,7 @@ public final class FrameStats {
 
     /** Drops every frame held. */
     public void reset() {
-        CgTrace.clear();
+        source.clear();
         cachedAt = -1L;
     }
 
@@ -173,9 +183,9 @@ public final class FrameStats {
      * refresh for one answer.</p>
      */
     private List<CgFrameRecord> window() {
-        long written = CgTrace.frameCount();
+        long written = source.count();
         if (written == cachedAt) return cached;
-        List<CgFrameRecord> all = CgTrace.frames();
+        List<CgFrameRecord> all = source.frames();
         List<CgFrameRecord> kept = new ArrayList<>(all.size());
         if (!all.isEmpty()) {
             long newest = all.get(all.size() - 1).endNanos();
@@ -332,7 +342,7 @@ public final class FrameStats {
     private final PhaseMemo newestPhases = new PhaseMemo(), peakPhases = new PhaseMemo();
 
     /** One frame's phases, kept while it is the frame asked about: a finished frame's zones never change. */
-    private static final class PhaseMemo {
+    private final class PhaseMemo {
         private long index = -1, begin;
         private List<Map.Entry<String, Long>> phases = List.of();
 
@@ -369,12 +379,12 @@ public final class FrameStats {
         return worst;
     }
 
-    private static List<Map.Entry<String, Long>> phasesOf(@Nullable CgFrameRecord frame) {
+    private List<Map.Entry<String, Long>> phasesOf(@Nullable CgFrameRecord frame) {
         if (frame == null) return List.of();
         // INSERTION ORDER FIRST, then sorted by cost -- two zones of the same name in one frame are one
         // row, which is what makes seventeen `layer:clear` zones read as a phase rather than as a list.
         Map<String, Long> byName = new LinkedHashMap<>();
-        for (CgTraceSnapshot.ZoneView zone : CgTrace.zonesIn(frame)) {
+        for (CgTraceSnapshot.ZoneView zone : source.zones(frame)) {
             byName.merge(zone.name(), zone.durationNanos(), Long::sum);
         }
         List<Map.Entry<String, Long>> out = new ArrayList<>(byName.entrySet());
@@ -382,10 +392,10 @@ public final class FrameStats {
         return out;
     }
 
-    private static Map<String, Integer> countsOf(@Nullable CgFrameRecord frame) {
+    private Map<String, Integer> countsOf(@Nullable CgFrameRecord frame) {
         Map<String, Integer> out = new LinkedHashMap<>();
         if (frame == null) return out;
-        for (CgTraceSnapshot.CounterView counter : CgTrace.countersIn(frame)) {
+        for (CgTraceSnapshot.CounterView counter : source.counters(frame)) {
             out.merge(counter.name(), (int) counter.value(), Integer::sum);
         }
         return out;

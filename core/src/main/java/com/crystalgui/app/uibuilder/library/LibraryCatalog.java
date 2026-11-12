@@ -169,20 +169,41 @@ public final class LibraryCatalog {
         this.groups = List.copyOf(groups);
     }
 
-    /** The catalog of everything registered now, with the shipped groups. */
-    public static LibraryCatalog current() {
-        return current(List.of());
+    /** The shipped catalog of one generation of the registered kinds. */
+    private record Built(long generation, LibraryCatalog catalog) {
     }
 
-    /** As {@link #current()}, with a user's groups after the shipped ones. */
-    public static LibraryCatalog current(List<Group> userGroups) {
+    @Nullable
+    private static volatile Built built;
+
+    /**
+     * The catalog of everything registered now, with the shipped groups: derived once per generation of the node
+     * kinds and shared by every reader, rebuilt only when a kind is added or removed.
+     */
+    public static LibraryCatalog current() {
+        long generation = UIElementRegistry.generation();
+        Built have = built;
+        if (have != null && have.generation() == generation) return have.catalog();
         List<Name> buildable = new ArrayList<>();
         for (Name name : UIElementRegistry.names()) {
             if (UIElementRegistry.isBuildable(name)) buildable.add(name);
         }
-        List<Group> groups = new ArrayList<>(LibraryGroups.SHIPPED);
+        LibraryCatalog derived = of(buildable, UIElementRegistry::infoOf, LibraryGroups.SHIPPED)
+                .withStarters(LibraryStarters.ALL);
+        Built made = new Built(generation, derived);
+        // A newer generation may have been built meanwhile: keep the later.
+        Built latest = built;
+        if (latest == null || latest.generation() < generation) built = made;
+        return derived;
+    }
+
+    /** As {@link #current()}, with a user's groups after the shipped ones. */
+    public static LibraryCatalog current(List<Group> userGroups) {
+        LibraryCatalog shipped = current();
+        if (userGroups.isEmpty()) return shipped;
+        List<Group> groups = new ArrayList<>(shipped.groups);
         groups.addAll(userGroups);
-        return of(buildable, UIElementRegistry::infoOf, groups).withStarters(LibraryStarters.ALL);
+        return new LibraryCatalog(shipped.entries, shipped.starters, groups);
     }
 
     /** A catalog over {@code kinds}, each already known to be buildable, described by {@code info}. */

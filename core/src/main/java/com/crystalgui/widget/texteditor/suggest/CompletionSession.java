@@ -101,7 +101,11 @@ public final class CompletionSession {
     /** Bumped per request; an answer stamped with anything else is stale. */
     private int requestSerial;
 
-    private CompletionSession(TextBuffer buffer, CompletionProvider provider, int wordStart) {
+    private final CompletionRecency recency;
+
+    private CompletionSession(TextBuffer buffer, CompletionProvider provider, int wordStart,
+                              CompletionRecency recency) {
+        this.recency = recency;
         this.buffer = buffer;
         this.provider = provider;
         this.wordStart = wordStart;
@@ -128,9 +132,17 @@ public final class CompletionSession {
     public static CompletionSession open(TextBuffer buffer, @Nullable CompletionProvider provider,
                                          int caret, CompletionProvider.TriggerKind trigger,
                                          @Nullable String triggerCharacter) {
+        return open(buffer, provider, caret, trigger, triggerCharacter, new CompletionRecency());
+    }
+
+    /** As {@link #open(TextBuffer, CompletionProvider, int, CompletionProvider.TriggerKind, String)}, ranked and taught by {@code recency}. */
+    @Nullable
+    public static CompletionSession open(TextBuffer buffer, @Nullable CompletionProvider provider,
+                                         int caret, CompletionProvider.TriggerKind trigger,
+                                         @Nullable String triggerCharacter, CompletionRecency recency) {
         if (buffer == null || provider == null || provider == CompletionProvider.NONE) return null;
         int start = wordStartBefore(buffer, caret);
-        CompletionSession session = new CompletionSession(buffer, provider, start);
+        CompletionSession session = new CompletionSession(buffer, provider, start, recency);
         // BEFORE the request, and this is not bookkeeping. refilter() reads the caret to work out the
         // prefix, and a synchronous provider answers from inside request() -- so leaving it at zero meant
         // the very first filter ran against an EMPTY prefix and showed the whole list unranked. Visible
@@ -314,7 +326,7 @@ public final class CompletionSession {
             for (CompletionItem item : unfiltered) next.add(new Row(item, null));
             // Every row ties on match tier (there is no match), so the chain falls straight through to
             // deprecation, then proximity, then the provider's sortText -- which is the order to show.
-            next.sort(CompletionRanking.byQuality());
+            next.sort(CompletionRanking.byQuality(recency.snapshot()));
         } else {
             SearchQuery query = SearchQuery.of(prefix);
             for (CompletionItem item : unfiltered) {
@@ -324,7 +336,7 @@ public final class CompletionSession {
                         SearchMatch.FIELD_PRIMARY, true);
                 if (match != null) next.add(new Row(item, match));
             }
-            next.sort(CompletionRanking.byQuality());
+            next.sort(CompletionRanking.byQuality(recency.snapshot()));
         }
         rows = List.copyOf(next);
         selected = rows.isEmpty() ? -1 : 0;
@@ -450,7 +462,7 @@ public final class CompletionSession {
         buffer.edit(ChangeSet.of(buffer.length(), changes));
         // AFTER the edit, so a refused change set (overlapping edits) does not teach the ranking that
         // something was chosen when nothing was.
-        CompletionRecency.shared().note(item);
+        recency.note(item);
         close();
         return true;
     }

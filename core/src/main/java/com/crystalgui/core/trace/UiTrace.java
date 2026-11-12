@@ -54,7 +54,7 @@ public final class UiTrace {
 
     /** Phases and counters inside a frame: {@code paint:tree}, {@code frame:layout}, {@code drawcalls}. */
     static {
-        CgTraceRun.budget(() -> FrameStats.get().budgetMs());
+        CgTraceRun.budget(() -> FrameStats.compositor().budgetMs());
     }
 
     public static final CgTraceChannel FRAME = CgTrace.channel("crystalgui.frame");

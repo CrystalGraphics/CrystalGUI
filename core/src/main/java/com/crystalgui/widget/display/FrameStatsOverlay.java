@@ -120,7 +120,7 @@ public class FrameStatsOverlay extends UIElement {
     private boolean showing = true;
 
     public FrameStatsOverlay() {
-        this(FrameStats.get());
+        this(FrameStats.compositor());
     }
 
     /** For a test or a bench with a collector of its own. */

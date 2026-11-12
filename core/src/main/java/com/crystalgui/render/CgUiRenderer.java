@@ -1,5 +1,7 @@
 package com.crystalgui.render;
 
+import com.crystalgui.core.trace.FrameLog;
+import com.crystalgui.core.trace.FrameStats;
 import com.crystalgraphics.compute.ops.CgGpuOps;
 import com.crystalgraphics.render.draw.CgInstanceKind;
 import com.crystalgraphics.render.world.CgPipelinePrecache;
@@ -110,6 +112,8 @@ public final class CgUiRenderer {
     public static final class View {
 
         private final UiPresenter presenter = new UiPresenter();
+        private final FrameLog frames = new FrameLog();
+        private final FrameStats frameStats = new FrameStats(frames);
         @Nullable
         private volatile CgUiPaintContext context;
         private volatile boolean closed;
@@ -131,6 +135,16 @@ public final class CgUiRenderer {
                 }
                 return context;
             }
+        }
+
+        /** The frames of this view's document, written by the sequence that frames it. */
+        public FrameLog frameLog() {
+            return frames;
+        }
+
+        /** How fast this view's document runs: its own frames, apart from the compositor's. Any thread. */
+        public FrameStats frameStats() {
+            return frameStats;
         }
 
         /** What shows this view's frames at a stage, and keeps the last. Render thread. */

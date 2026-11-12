@@ -4465,9 +4465,31 @@ com/crystalgui/core/storage/CrystalGuiStorage
   field public,static,final WORKSPACE_CONFIG Ljava/lang/String;
   method public,static configIn (Ljava/nio/file/Path;)Ljava/nio/file/Path;
   method public,static projectsIn (Ljava/nio/file/Path;)Ljava/nio/file/Path;
+com/crystalgui/core/trace/FrameLog
+  access public,final
+  extends java/lang/Object
+  field public,static,final CAPACITY I
+  implements com/crystalgui/core/trace/FrameSource
+  method public <init> ()V
+  method public clear ()V
+  method public committed (JJ)V
+  method public count ()J
+  method public counters (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
+  method public frames ()Ljava/util/List;
+  method public zones (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
+com/crystalgui/core/trace/FrameSource
+  access public,abstract,interface
+  extends java/lang/Object
+  field public,static,final TRACE Lcom/crystalgui/core/trace/FrameSource;
+  method public,abstract clear ()V
+  method public,abstract count ()J
+  method public,abstract counters (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
+  method public,abstract frames ()Ljava/util/List;
+  method public,abstract zones (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
 com/crystalgui/core/trace/FrameStats
   access public,final
   extends java/lang/Object
+  method public <init> (Lcom/crystalgui/core/trace/FrameSource;)V
   method public bestMs ()F
   method public budgetMs ()F
   method public counts ()Ljava/util/Map;
@@ -4502,7 +4524,7 @@ com/crystalgui/core/trace/FrameStats
   method public spreadHealth ()Lcom/crystalgui/core/trace/FrameStats$Health;
   method public windowSeconds ()F
   method public worstMs ()F
-  method public,static get ()Lcom/crystalgui/core/trace/FrameStats;
+  method public,static compositor ()Lcom/crystalgui/core/trace/FrameStats;
   method public,static isCollecting ()Z
 com/crystalgui/core/trace/FrameStats$Detail
   access public,final,enum
@@ -5693,7 +5715,7 @@ com/crystalgui/document/NewDocumentKinds
 com/crystalgui/document/RecentFiles
   access public,final
   extends java/lang/Object
-  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  field public,final onDidChange Lcom/crystalgui/core/async/Broadcast;
   field public,static,final DEFAULT_LIMIT I
   method public <init> ()V
   method public <init> (I)V
@@ -8251,6 +8273,8 @@ com/crystalgui/render/CgUiRenderer$View
   access public,final
   extends java/lang/Object
   method public close ()V
+  method public frameLog ()Lcom/crystalgui/core/trace/FrameLog;
+  method public frameStats ()Lcom/crystalgui/core/trace/FrameStats;
   method public isClosed ()Z
   method public paintContext ()Lcom/crystalgui/render/CgUiPaintContext;
   method public presenter ()Lcom/crystalgui/render/UiPresenter;
@@ -12270,8 +12294,11 @@ com/crystalgui/text/lang/CompletionRecency
   method public <init> ()V
   method public clear ()V
   method public note (Lcom/crystalgui/text/lang/CompletionItem;)V
+  method public snapshot ()Lcom/crystalgui/text/lang/CompletionRecency$Snapshot;
+com/crystalgui/text/lang/CompletionRecency$Snapshot
+  access public,final
+  extends java/lang/Object
   method public rankOf (Lcom/crystalgui/text/lang/CompletionItem;)I
-  method public,static shared ()Lcom/crystalgui/text/lang/CompletionRecency;
 com/crystalgui/text/lang/DeclarationSite
   access public,final,record
   extends java/lang/Record
@@ -13646,6 +13673,7 @@ com/crystalgui/ui/dom/UIElementRegistry
   method public,static contractFor (Lcom/crystalgui/ui/dom/Name;)Lcom/crystalgui/ui/dom/NodeContract;
   method public,static create (Lcom/crystalgui/ui/dom/Name;)Lcom/crystalgui/ui/dom/UIElement;
   method public,static describe (Lcom/crystalgui/ui/dom/Name;Lcom/crystalgui/ui/dom/KindInfo;)V
+  method public,static generation ()J
   method public,static infoOf (Lcom/crystalgui/ui/dom/Name;)Lcom/crystalgui/ui/dom/KindInfo;
   method public,static isBuildable (Lcom/crystalgui/ui/dom/Name;)Z
   method public,static isRegistered (Lcom/crystalgui/ui/dom/Name;)Z
@@ -18710,6 +18738,7 @@ com/crystalgui/widget/texteditor/suggest/CompletionSession
   method public setSelectedIndex (I)V
   method public visibleRows ()Ljava/util/List;
   method public,static open (Lcom/crystalgui/text/TextBuffer;Lcom/crystalgui/text/lang/CompletionProvider;ILcom/crystalgui/text/lang/CompletionProvider$TriggerKind;Ljava/lang/String;)Lcom/crystalgui/widget/texteditor/suggest/CompletionSession;
+  method public,static open (Lcom/crystalgui/text/TextBuffer;Lcom/crystalgui/text/lang/CompletionProvider;ILcom/crystalgui/text/lang/CompletionProvider$TriggerKind;Ljava/lang/String;Lcom/crystalgui/text/lang/CompletionRecency;)Lcom/crystalgui/widget/texteditor/suggest/CompletionSession;
 com/crystalgui/widget/texteditor/suggest/CompletionSession$Row
   access public,final,record
   extends java/lang/Record
@@ -18735,6 +18764,7 @@ com/crystalgui/widget/texteditor/suggest/EditorSuggest
   method public session ()Lcom/crystalgui/widget/texteditor/suggest/CompletionSession;
   method public trigger ()V
   method public updateAnchor ()V
+  method public,static recencyOf (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/text/lang/CompletionRecency;
   method public,static trace (Ljava/lang/String;)V
 com/crystalgui/workbench/DocumentTabs
   access public,final

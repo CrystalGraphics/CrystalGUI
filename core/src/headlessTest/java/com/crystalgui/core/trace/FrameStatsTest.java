@@ -36,7 +36,7 @@ public class FrameStatsTest {
 
     @Before
     public void collecting() {
-        stats = FrameStats.get();
+        stats = FrameStats.compositor();
         stats.hold();
         stats.setWindowSeconds(3f).setBudgetMs(16.7f);
         clock = 1_000_000_000L;

@@ -1,5 +1,6 @@
 package com.crystalgui.widget.texteditor.suggest;
 
+import com.crystalgui.text.lang.CompletionRecency;
 import com.crystalgui.text.lang.CompletionItem;
 import com.crystalgui.text.lang.CompletionProvider;
 import com.crystalgui.ui.dom.UIDocument;
@@ -74,7 +75,8 @@ public final class EditorSuggest {
 
         close();
         CompletionSession opened = CompletionSession.open(editor.buffer(),
-                editor.languageServices().completion(), editor.getCaret(), trigger, triggerCharacter);
+                editor.languageServices().completion(), editor.getCaret(), trigger, triggerCharacter,
+                recencyOf(editor.document()));
         if (opened == null) {
             if (TRACE) trace("  refused: the provider produced no session");
             return false;
@@ -145,6 +147,14 @@ public final class EditorSuggest {
      * of leaving it in is one boolean read, and the cost of taking it out is writing it again next time.</p>
      */
     public static final boolean TRACE = Boolean.getBoolean("crystalgui.completion.trace");
+
+    private static final UIDocument.Local<CompletionRecency> RECENCY =
+            UIDocument.Local.of("completion-recency", document -> new CompletionRecency());
+
+    /** What this document's editors have accepted lately; a throwaway for an editor in no document. */
+    public static CompletionRecency recencyOf(@Nullable UIDocument document) {
+        return document == null ? new CompletionRecency() : document.local(RECENCY);
+    }
 
     /**
      * <b>Guard at the CALL SITE, always</b> — {@code if (TRACE) trace(...)}.
