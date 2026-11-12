@@ -1,7 +1,10 @@
 package com.crystalgui.desktop.app;
 
+import javax.annotation.Nullable;
+
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.data.ReadOnlyVec2f;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.Surface;
 import com.crystalgui.ui.box.Box;
@@ -89,6 +92,30 @@ public final class ClientPortal extends UIElement {
     /** Whether this shows a window's caption rather than its content. */
     boolean caption() {
         return caption;
+    }
+
+    /**
+     * The portal that shows the content of the window this one is in: itself for a content portal, the window's content
+     * for a caption. Null where the window shows none.
+     */
+    @Nullable
+    ClientPortal windowContent() {
+        if (!caption) return this;
+        for (UIElement node = composedParent(); node != null; node = node.composedParent()) {
+            if (node instanceof WindowFrame frame) return contentIn(frame.content());
+        }
+        return null;
+    }
+
+    @Nullable
+    private ClientPortal contentIn(@Nullable UIElement root) {
+        if (root == null) return null;
+        if (root instanceof ClientPortal portal && !portal.caption && portal.appDocument == appDocument) return portal;
+        for (UIElement child : root.composedChildren()) {
+            ClientPortal found = contentIn(child);
+            if (found != null) return found;
+        }
+        return null;
     }
 
     /** Tells the application's document how large this window's client area is, once it has one. */

@@ -81,10 +81,11 @@ public final class AppDocument {
 
     void activate(ClientPortal portal) {
         active = portal;
-        // A caption is a strip of its window: the document is as large as a window's content, never as its caption.
-        if (!portal.caption()) {
-            sizing = portal;
-            portal.reportSize();
+        // A caption is a strip of its window: the document is as large as the window's content, never as its caption.
+        ClientPortal content = portal.windowContent();
+        if (content != null) {
+            sizing = content;
+            content.reportSize();
         }
     }
 
