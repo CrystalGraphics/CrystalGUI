@@ -1028,7 +1028,7 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIDocument.java` |
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UINode.java` (`paintContent`/`paintDecoration`/`paintOutline`/`the paint walk`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
-| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UINode.the paint walk`/`buildDefaultMask`, `CrystalGraphics/.../gl/framebuffer/CgFrameBuffer.java` (`createOwned`), `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
+| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UINode.the paint walk`/`buildDefaultMask`, `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |

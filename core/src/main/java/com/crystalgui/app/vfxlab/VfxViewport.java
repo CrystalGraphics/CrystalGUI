@@ -1,9 +1,12 @@
 package com.crystalgui.app.vfxlab;
 
 import com.crystalgraphics.platform.rhi.CgExternalTarget;
-import com.crystalgraphics.api.framebuffer.CgFrameBufferFormat;
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.gpu.resource.CgFrameBuffer;
+import com.crystalgraphics.api.texture.CgTextures;
+import com.crystalgraphics.gpu.resource.CgTexture2D;
+import com.crystalgraphics.gpu.resource.CgTextureDesc;
+import com.crystalgraphics.platform.rhi.format.CgFormat;
+import com.crystalgraphics.render.CgImmediate;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.render.stage.CgHostFrame;
@@ -27,7 +30,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The lab's 3D view: a camera of its own, the world stages fired again from it into a framebuffer this element paints.
+ * The lab's 3D view: a camera of its own, the world stages fired again from it into textures this element paints.
  * It moves as Roblox Studio's and Unity's scene views do: drag looks around, the wheel dollies, and once clicked WASD
  * flies where it looks, Space up and Shift down. {@link VfxLab} owns it.
  */
@@ -62,11 +65,26 @@ final class VfxViewport extends UIElement {
     /** The eye, from the point {@link #draw} is given. */
     private volatile float eyeX = START_X, eyeY = START_Y, eyeZ = START_Z;
     private float dragYaw, dragPitch;
+    /** A colour and depth of the view's size, and the two as the stages draw into them. */
+    private record View(CgTexture2D colour, CgTexture2D depth, CgExternalTarget target) {
+        static View of(int width, int height) {
+            CgTexture2D colour = CgTextures.of("vfx_lab_viewport", CgTextureDesc.of(width, height, CgFormat.RGBA8_UNORM));
+            CgTexture2D depth = CgTextures.of("vfx_lab_viewport.depth",
+                    CgTextureDesc.of(width, height, CgFormat.DEPTH24_PLUS_STENCIL8));
+            return new View(colour, depth, CgTextures.target("vfx_lab_viewport", colour, depth));
+        }
+
+        void release() {
+            colour.release();
+            depth.release();
+        }
+    }
+
     @Nullable
-    private CgFrameBuffer target;
+    private View target;
     @Nullable
     private volatile CgTexture picture;
-    private final List<CgFrameBuffer> retired = new ArrayList<>();
+    private final List<View> retired = new ArrayList<>();
     private final List<Long> retiredAt = new ArrayList<>();
     private long draws;
     private final UIText stats = new UIText("");
@@ -165,19 +183,18 @@ final class VfxViewport extends UIElement {
             fpsSince = now;
         }
         while (!retired.isEmpty() && draws - retiredAt.get(0) > RETIRE_DRAWS) {
-            retired.remove(0).delete();
+            retired.remove(0).release();
             retiredAt.remove(0);
         }
-        if (target == null || target.getWidth() != width || target.getHeight() != height) {
+        if (target == null || target.target().width() != width || target.target().height() != height) {
             if (target != null) {
                 retired.add(target);
                 retiredAt.add(draws);
             }
-            target = CgFrameBuffer.createOwned("vfx_lab_viewport", width, height, CgFrameBufferFormat.RGBA8_WITH_DEPTH);
+            target = View.of(width, height);
         }
         // editor_grid.shader's grey.
-        target.clearColor(0.239f, 0.239f, 0.239f, 1f);
-        target.clearDepth();
+        CgImmediate.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 1.0, false, 0);
 
         double atX = x + eyeX, atY = y + eyeY, atZ = z + eyeZ;
         float cosPitch = (float) Math.cos(pitch);
@@ -199,7 +216,7 @@ final class VfxViewport extends UIElement {
             projection.setPerspective((float) Math.toRadians(60), aspect, 0.05f, 1000f);
         }
 
-        CgExternalTarget into = target.external();
+        CgExternalTarget into = target.target();
         for (CgRenderStage stage : WORLD) {
             stage.host().set(0f, width, height, into).view().set(atX, atY, atZ, view, projection);
             stage.fireInto(into);
@@ -207,7 +224,7 @@ final class VfxViewport extends UIElement {
         for (CgRenderStage stage : WORLD) {
             stage.host().set(tick, hostWidth, hostHeight, hostTarget).view().set(hostX, hostY, hostZ, hostView, hostProjection);
         }
-        picture = target.getColorTexture(0);
+        picture = target.colour();
         particles = CgVfxSystem.particlesDrawn(into);
     }
 
@@ -227,9 +244,9 @@ final class VfxViewport extends UIElement {
     /** Frees the target. On the render thread. */
     void release() {
         picture = null;
-        if (target != null) target.delete();
+        if (target != null) target.release();
         target = null;
-        for (CgFrameBuffer old : retired) old.delete();
+        for (View old : retired) old.release();
         retired.clear();
         retiredAt.clear();
     }
@@ -241,7 +258,7 @@ final class VfxViewport extends UIElement {
         if (w <= 0f || h <= 0f) return;
         aspect = w / h;
         CgTexture texture = picture;
-        // v flipped: the framebuffer's origin is bottom-left.
+        // v flipped: a target's origin is bottom-left.
         if (texture != null) ctx.drawImage(texture, 0f, 0f, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
         paintGizmo(ctx, w - GIZMO_INSET, GIZMO_INSET);
     }

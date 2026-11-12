@@ -117,7 +117,7 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                `gpuNanos` and a `gpu:<name>` counter per zone -- absent, never zero.
                                Frame images are `CgFrameImages` (T8), on the `images` channel: the
                                paint context's finished frame every 30 frames, read back through
-                               CrystalGraphics' `CgPixelReadback` without a stall.
+                               a graph readback without a stall.
                                **A run writes `cache/trace/latest/`** — `trace.log` (off the frame
                                thread, on a bounded queue that drops and COUNTS), and on exit
                                `report.txt` (the tiered text report, with each frame's unzoned time and
