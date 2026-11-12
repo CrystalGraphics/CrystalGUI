@@ -9,6 +9,7 @@ import java.util.Set;
 import org.junit.Test;
 
 import com.crystalgraphics.util.io.CgIO;
+import com.crystalgui.render.texture.CgUiRect;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleRule;
@@ -95,7 +96,9 @@ public class ShippedStyleRoundTripTest {
             return property.name + " wrote '" + written + "' (" + where
                     + "), which its own parser could not read";
         }
-        if (!value.equals(back)) {
+        // A sprite fill is equal by identity (CgUiRect), and a parse builds a new sprite: the same CSS is the proof.
+        boolean spriteFill = value instanceof CgUiRect rect && rect.getFill() instanceof CgUiRect.Fill.Sprite;
+        if (spriteFill ? !written.equals(property.write(back)) : !value.equals(back)) {
             return property.name + " wrote '" + written + "' (" + where
                     + "), which read back as " + back + " rather than " + value;
         }

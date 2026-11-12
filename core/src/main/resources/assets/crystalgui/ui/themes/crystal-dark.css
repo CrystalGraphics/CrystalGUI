@@ -147,6 +147,14 @@ theme {
     --hidden-veil-recessed: #13141699;
     /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
      * where --pressed-bg was a step of twenty and read as nothing. @see base.css */
+    /* The desktop's own glass: the starting wash and the failure screen sit over the game, so they are the same in
+     * both themes. */
+    --starting-wash: #0E0F1199;
+    --failure-bg: #16171A66;
+    --failure-title-bg: #FFFFFF1C;
+    --failure-icon-bg: #E8483F;
+    --failure-icon-rim: #B3261E;
+    --glass-mark-fg: #FFFFFF;
     /* WHITE AT LOW ALPHA, not a grey, so they composite with the blurred bar rather than replace it.
      * Hover 10%, active 20%, both 30%: set by eye against Windows' taskbar, side by side (2026-11-04).
      * Fluent's subtle fills (5.9%, 8.2%) read as one state on this bar. Fluent writes #AARRGGBB; these are

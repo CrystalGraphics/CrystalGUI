@@ -141,7 +141,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         settle();
         assertTrue(pushed.isDemandingAttention());
 
-        Desktop.of(document).activate(pushed);
+        Desktop.of(document).activateByUser(pushed);
         settle();
 
         assertFalse("activating the document left it still asking for attention",

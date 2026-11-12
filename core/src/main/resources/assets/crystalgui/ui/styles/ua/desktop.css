@@ -1147,7 +1147,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     background-color: transparent;
     overlay-origin: content-box;
     overlay-size: contain;
-    color: #FFFFFF;    /* as the failure box's close mark: grey sinks into the glass */
+    color: var(--glass-mark-fg, #FFFFFF);    /* as the failure box's close mark: grey sinks into the glass */
 }
 
 .__window__ .__title-bar__ .__minimize__ { overlay: icon("crystalgui:window-minimize"); }
@@ -1366,7 +1366,7 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     overlay: icon("crystalgui:window-dock");
     overlay-origin: content-box;
     overlay-size: contain;
-    color: #FFFFFF;
+    color: var(--glass-mark-fg, #FFFFFF);
 }
 
 .__window__.__tool-window__ .__title-bar__ .__dock__:hover {
@@ -2044,7 +2044,7 @@ window.__failure__.__active__ > .__title-bar__ {
 
 /* The close mark, white like the text: the default grey sinks into the dark glass. */
 window.__failure__ .__title-bar__ .__close__ {
-    color: #FFFFFF;
+    color: var(--glass-mark-fg, #FFFFFF);
 }
 
 window.__failure__ > .__content__ {
@@ -2082,7 +2082,7 @@ window.__failure__ .__failure-icon__ {
     overlay: icon("crystalgui:x-bold");
     overlay-origin: content-box;
     overlay-size: contain;
-    color: #FFFFFF;
+    color: var(--glass-mark-fg, #FFFFFF);
 }
 
 window.__failure__ .__failure-text__ {
@@ -2095,13 +2095,13 @@ window.__failure__ .__failure-message__ {
     width: 100%;
     font-weight: bold;
     font-size: 9px;
-    color: #FFFFFF;
+    color: var(--glass-mark-fg, #FFFFFF);
 }
 
 window.__failure__ .__failure-detail__ {
     width: 100%;
     font-size: 8px;
-    color: #FFFFFF;
+    color: var(--glass-mark-fg, #FFFFFF);
 }
 
 /* The default button, as Windows outlines it. */

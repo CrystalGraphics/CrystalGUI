@@ -1354,10 +1354,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             // GLOBAL, and resolved from the data context rather than captured: a captured workbench
             // makes a second window's command toggle a panel in the first.
             if (!Commands.process().contains(command)) {
+                // THE ID, not the kind: the command outlives this workbench, and the kind's view factory holds its tree.
+                String panelId = kind.id();
                 Commands.process().register(Command.of(command, "Show " + kind.displayName())
                         .runWithData(data -> {
                             Workbench workbench = data.get(WORKBENCH);
-                            if (workbench != null) workbench.revealPanel(kind.id());
+                            if (workbench != null) workbench.revealPanel(panelId);
                         })
                         .enabledWhereData(data -> data.get(WORKBENCH) != null));
             }

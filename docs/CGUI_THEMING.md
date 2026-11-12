@@ -282,6 +282,10 @@ editor scheme's.
 | `--empty-state-fg` | `var(--fg-hint)` | base.css |
 | `--error` | `#F14C4C` | crystal-dark.css |
 | `--error-icon` | `#E55765` | crystal-dark.css |
+| `--failure-bg` | `#16171A66` | crystal-dark.css |
+| `--failure-icon-bg` | `#E8483F` | crystal-dark.css |
+| `--failure-icon-rim` | `#B3261E` | crystal-dark.css |
+| `--failure-title-bg` | `#FFFFFF1C` | crystal-dark.css |
 | `--fg` | `#DFE1E5` | crystal-dark.css |
 | `--fg-disabled` | `#5A5D63` | crystal-dark.css |
 | `--fg-hint` | `#7A7A7A` | crystal-dark.css |
@@ -325,6 +329,7 @@ editor scheme's.
 | `--ghost-label-bg` | `#3C3F41F0` | crystal-dark.css |
 | `--ghost-label-fg` | `var(--fg-on-accent)` | base.css |
 | `--ghost-row-bg` | `#191A1CA0` | crystal-dark.css |
+| `--glass-mark-fg` | `#FFFFFF` | crystal-dark.css |
 | `--graph-canvas` | `var(--surface-editor)` | base.css |
 | `--graph-collapse-fg` | `var(--fg-secondary)` | base.css |
 | `--graph-collapse-hover-fg` | `var(--fg)` | base.css |
@@ -625,6 +630,7 @@ editor scheme's.
 | `--squiggle-error` | `var(--error)` | base.css |
 | `--squiggle-info` | `var(--info)` | base.css |
 | `--squiggle-warning` | `var(--warning)` | base.css |
+| `--starting-wash` | `#0E0F1199` | crystal-dark.css |
 | `--statusbar-bg` | `var(--surface-base)` | base.css |
 | `--statusbar-crumb-fg` | `var(--fg-hint)` | base.css |
 | `--statusbar-error-fg` | `var(--error)` | base.css |
