@@ -69,8 +69,8 @@ public final class ProjectSourceSymbols implements ContentProvider {
     /** Registers this for {@code project://}. Idempotent — the registry holds one provider per scheme. */
     public static void register() {
         // THE PROJECT SCHEME, whose CONTENT is still the server's: a provider answers what a file
-        // DECLARES, and `Workspace.read` checks the scheme before it checks the table so this is never
-        // asked for a project file's bytes. @see com.crystalgui.fs.client.Workspace#registerScheme
+        // DECLARES, and `WorkspaceClient.read` checks the scheme before it checks the table so this is never
+        // asked for a project file's bytes. @see com.crystalgui.fs.client.WorkspaceClient#registerScheme
         ContentProviders.contribute(Resource.SCHEME_PROJECT, new ProjectSourceSymbols());
     }
 
