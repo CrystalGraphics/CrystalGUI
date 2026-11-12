@@ -271,7 +271,8 @@ public final class DesktopScriptTest extends CgGauntletController {
                     return;
                 }
                 say("opening " + JAVA_PROBE_FILE);
-                workbench.editors().open(Resource.parse(JAVA_PROBE_FILE));
+                // ON THE EDITOR'S OWN DOCUMENT: its services belong to that sequence, not the desktop's.
+                CgUiScreen.application().mainWindow().execute(() -> workbench.editors().open(Resource.parse(JAVA_PROBE_FILE)));
                 step = Step.SHOOT_JAVA;
                 // The open is a round trip to the workspace, and the first analysis has to open an
                 // engine band before it can answer anything.
