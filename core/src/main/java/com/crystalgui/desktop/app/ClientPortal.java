@@ -43,18 +43,17 @@ public final class ClientPortal extends UIElement {
     }
 
     /**
-     * A portal for a window's caption when {@code caption}: as tall as the caption and as wide as the client's content,
-     * which the client reports, so the caption's free space stays the window's drag region.
+     * A portal for a window's caption when {@code caption}: as big as the client's content, which the client reports, so the caption's free space stays the window's drag region.
      */
     ClientPortal(AppDocument appDocument, ClientRoot client, boolean caption) {
         super(NAME);
         this.appDocument = appDocument;
         this.client = client;
         if (caption) {
-            layout(l -> l.width(0f).heightPercent(100f));
-            client.captionOf(width -> {
+            layout(l -> l.width(0f).height(0f));
+            client.captionOf((width, height) -> {
                 UIDocument shell = document();
-                if (shell != null) shell.execute(() -> layout(l -> l.width((float) width)));
+                if (shell != null) shell.execute(() -> layout(l -> l.width(width).height(height)));
             });
         } else {
             layout(l -> l.widthPercent(100f).height(0f).flexGrow(1f));

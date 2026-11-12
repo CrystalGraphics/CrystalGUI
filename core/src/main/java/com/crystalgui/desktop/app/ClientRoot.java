@@ -1,7 +1,5 @@
 package com.crystalgui.desktop.app;
 
-import java.util.function.DoubleConsumer;
-
 import javax.annotation.Nullable;
 
 import com.crystalgui.render.Surface;
@@ -46,26 +44,31 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
     @Nullable
     private volatile Runnable changed;
     @Nullable
-    private volatile DoubleConsumer contentWidth;
-    private float seenWidth = -1f;
+    private volatile Measure measure;
+    private float seenWidth = -1f, seenHeight = -1f;
 
     public ClientRoot() {
         super(NAME);
         addClass(CLASS);
     }
 
+    /** Hears the size of what a caption client shows. */
+    interface Measure {
+        void size(float width, float height);
+    }
+
     /**
-     * Makes this the client of a window's caption: its content is a row at its natural width, and {@code width} hears
-     * that width after each commit it changes in, so the frame can give the caption exactly that much room.
+     * Makes this the client of a window's caption: {@code measure} hears the size of its content, at its natural size,
+     * after each commit it changes in, so the frame can give the caption exactly that much room.
      *
      * <pre>{@code
      * ClientRoot bar = new ClientRoot();
      * bar.setContent(menuBar);
-     * bar.captionOf(w -> portal.setWidth(w));
+     * bar.captionOf((w, h) -> portal.setSize(w, h));
      * }</pre>
      */
-    void captionOf(DoubleConsumer width) {
-        this.contentWidth = width;
+    void captionOf(Measure measure) {
+        this.measure = measure;
     }
 
     /** Lays its content out as a caption's bar: a row at its natural width. The application's thread. */
@@ -115,13 +118,14 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
 
     /** The application's thread, after each commit of its document. */
     void committed() {
-        DoubleConsumer width = contentWidth;
-        if (width != null && content != null) {
+        Measure sized = measure;
+        if (sized != null && content != null) {
             Box bar = content.box();
-            float now = bar == null ? 0f : bar.width();
-            if (now != seenWidth) {
-                seenWidth = now;
-                width.accept(now);
+            float w = bar == null ? 0f : bar.width(), h = bar == null ? 0f : bar.height();
+            if (w != seenWidth || h != seenHeight) {
+                seenWidth = w;
+                seenHeight = h;
+                sized.size(w, h);
             }
         }
         Box box = box();
