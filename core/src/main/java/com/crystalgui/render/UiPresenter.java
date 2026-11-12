@@ -39,8 +39,22 @@ public final class UiPresenter {
 
     @Nullable
     private UiFrame shown;
+    private boolean composites = true;
 
     UiPresenter() {
+    }
+
+    /**
+     * Whether a frame's picture is drawn onto the stage's target. Off, a frame still executes at its place in the firing
+     * and its textures (a surface, a layer) hold what it drew, but nothing of it lands on the screen: a document whose
+     * pictures another document draws, as a window's client is by its frame.
+     *
+     * <pre>{@code
+     * viewport.presenter().composites(false);   // before its first frame
+     * }</pre>
+     */
+    public void composites(boolean composites) {
+        this.composites = composites;
     }
 
     /** Executes {@code frame} at this point of {@code stage}'s firing, composites it, and keeps it in place of the last. */
@@ -110,7 +124,8 @@ public final class UiPresenter {
     }
 
     /** The picture over the stage's target, one premultiplied quad in the window's pixels; row 0 of a target is its bottom. */
-    private static void composite(CgStageFrame stage, UiFrame frame) {
+    private void composite(CgStageFrame stage, UiFrame frame) {
+        if (!composites) return;
         stage.canvas().quad(CgCanvasMaterials.SCREEN.box()).texture(0, frame.picture())
                 .custom2(CgShapeTable.PREMULTIPLIED).at(0f, 0f).size(frame.width(), frame.height()).uv(0f, 1f, 1f, 0f)
                 .submit();

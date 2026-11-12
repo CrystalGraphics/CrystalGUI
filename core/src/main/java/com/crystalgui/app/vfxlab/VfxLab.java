@@ -114,6 +114,7 @@ public class VfxLab extends UIElement {
             .keywords("vfx", "effects", "particles", "lab")
             .singleInstance()
             .standalone()
+            .separateDocument()
             .launch(Instance::new);
 
     /** Lab space's floor: effects spawn above the origin of it, aimed along +x. */

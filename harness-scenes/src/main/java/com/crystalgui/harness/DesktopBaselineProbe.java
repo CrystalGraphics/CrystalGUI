@@ -55,6 +55,10 @@ public final class DesktopBaselineProbe {
         /** Opens VFX Lab and the Frame Profiler beside the editor. */
         void openOthers();
 
+        /** Prints where each window is, in surface pixels, as {@code [windows]} lines. On the document. */
+        default void describeWindows() {
+        }
+
         /** Switches the theme to the next one, and back on the next call. */
         void switchTheme();
 
@@ -212,6 +216,7 @@ public final class DesktopBaselineProbe {
                 target.openOthers();
                 taskbar = new float[][] {target.taskbarPoint(0), target.taskbarPoint(1)};
             });
+            case STEADY -> viewport.execute(target::describeWindows);
             case FILE -> {
                 filePosted = now;
                 viewport.execute(() -> target.openLargeFile(() -> {

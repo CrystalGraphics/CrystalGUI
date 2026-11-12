@@ -25,18 +25,24 @@ public final class AppWindows {
 
     private final Desktop desktop;
     private final ApplicationKind kind;
+    @Nullable
+    private final AppDocument document;
 
-    AppWindows(Desktop desktop, ApplicationKind kind) {
+    AppWindows(Desktop desktop, ApplicationKind kind, @Nullable AppDocument document) {
         this.desktop = desktop;
         this.kind = kind;
+        this.document = document;
     }
 
     /**
      * Opens a window for this application: placed by the manager unless the spec places it, shown, and active unless
      * the spec asks for the background. The first one opened is the application's main window.
+     *
+     * <p>Call it on the application's own thread: its content is built there, and for an application with a
+     * document of its own the window is added to the shell's by a request.</p>
      */
     public AppWindow open(WindowSpec spec) {
-        return open(desktop, kind, spec);
+        return open(desktop, kind, document, spec);
     }
 
     /** Its windows that are still open, in the order they opened: the main window first. */
@@ -71,7 +77,24 @@ public final class AppWindows {
         return Desktop.of(document).addWindow(frame);
     }
 
-    static AppWindow open(Desktop desktop, @Nullable ApplicationKind kind, WindowSpec spec) {
+    static AppWindow open(Desktop desktop, @Nullable ApplicationKind kind, @Nullable AppDocument document,
+                          WindowSpec spec) {
+        // THE CONTENT STAYS IN ITS APPLICATION'S DOCUMENT; the frame, which is the shell's, holds a portal that shows it.
+        ClientRoot client = null;
+        if (document != null) {
+            client = new ClientRoot();
+            if (spec.content() != null) client.setContent(spec.content());
+            document.addClient(client);
+        }
+        ClientRoot shown = client;
+        // BUILT ON THE SHELL'S THREAD: what a frame connects belongs to the sequence that first used it.
+        WindowFrame frame = document == null ? build(desktop, kind, null, null, spec)
+                : document.callShell(desktop.document(), () -> build(desktop, kind, document, shown, spec));
+        return AppWindow.of(frame, desktop, document, client);
+    }
+
+    private static WindowFrame build(Desktop desktop, @Nullable ApplicationKind kind, @Nullable AppDocument document,
+                                     @Nullable ClientRoot client, WindowSpec spec) {
         WindowFrame frame = new WindowFrame(spec.title());
         // Its owner, key and kind BEFORE it is added: the desktop places a window by its key and sizes it by its kind
         if (spec.key() != null) frame.setKey(spec.key());
@@ -79,7 +102,8 @@ public final class AppWindows {
         frame.setPolicy(spec.policy());
         frame.setTitleShown(spec.titleShown());
         if (spec.pinned()) frame.setPinned(true);
-        if (spec.content() != null) frame.setContent(spec.content());
+        if (client != null) frame.setContent(new ClientPortal(document, client));
+        else if (spec.content() != null) frame.setContent(spec.content());
         if (spec.owner() != null) frame.setOwnerWindow(spec.owner().frame());
         if (kind != null) {
             frame.setApplication(kind);
@@ -88,7 +112,7 @@ public final class AppWindows {
         if (spec.width() > 0 && spec.height() > 0) frame.resizeTo(spec.width(), spec.height());
         if (spec.placed()) frame.moveTo(spec.left(), spec.top());
         desktop.addWindow(frame, spec.takesFocus());
-        return AppWindow.of(frame);
+        return frame;
     }
 
     private static boolean hasMain(Desktop desktop, ApplicationKind kind) {

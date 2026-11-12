@@ -7,6 +7,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
 
@@ -34,14 +35,62 @@ import com.crystalgui.widget.control.Button;
 public final class AppWindow {
 
     private final WindowFrame frame;
+    @Nullable
+    private final Desktop desktop;
+    /** The application's own document and this window's client in it; null when it runs in the shell's. */
+    @Nullable
+    private final AppDocument document;
+    @Nullable
+    private final ClientRoot client;
 
-    private AppWindow(WindowFrame frame) {
+    private AppWindow(WindowFrame frame, @Nullable Desktop desktop, @Nullable AppDocument document,
+                      @Nullable ClientRoot client) {
         this.frame = frame;
+        this.desktop = desktop;
+        this.document = document;
+        this.client = client;
     }
 
     /** A handle on {@code frame}. For the engine, which owns frames; an application gets its handles from {@link AppWindows}. */
     public static AppWindow of(WindowFrame frame) {
-        return new AppWindow(frame);
+        return new AppWindow(frame, null, null, null);
+    }
+
+    static AppWindow of(WindowFrame frame, Desktop desktop, @Nullable AppDocument document, @Nullable ClientRoot client) {
+        return new AppWindow(frame, desktop, document, client);
+    }
+
+    /**
+     * Runs {@code work} on the shell's document, where the frame lives: at once when already there. Every request an
+     * application makes of its window goes through here, so it may be made from the application's own thread.
+     */
+    void onShell(Runnable work) {
+        UIDocument at = shellDocument();
+        if (at == null) work.run();
+        else at.execute(work);
+    }
+
+    /**
+     * Runs {@code work} on the application's thread, where its content lives: at once when already there, else after
+     * what is queued. For code that holds this handle on another thread and wants to touch what the window shows.
+     *
+     * <pre>{@code
+     * window.execute(() -> view.select(row));
+     * }</pre>
+     */
+    public void execute(Runnable work) {
+        onApplication(work);
+    }
+
+    private void onApplication(Runnable work) {
+        if (document != null) document.execute(work);
+        else onShell(work);
+    }
+
+    @Nullable
+    private UIDocument shellDocument() {
+        Desktop shell = desktop != null ? desktop : frame.desktop();
+        return shell == null ? null : shell.document();
     }
 
     /** The frame that draws this window. The engine's: an application never names it. */
@@ -51,7 +100,7 @@ public final class AppWindow {
 
     /** The element the window shows its content in; append to it, or replace it with {@link #setContent}. */
     public UIElement content() {
-        return frame.content();
+        return client != null ? client : frame.content();
     }
 
     /**
@@ -59,7 +108,8 @@ public final class AppWindow {
      * window's menu bar, so pass it here rather than appending it to {@link #content()}.
      */
     public AppWindow setContent(UIElement root) {
-        frame.setContent(root);
+        if (client != null) client.setContent(root);
+        else frame.setContent(root);
         return this;
     }
 
@@ -70,13 +120,13 @@ public final class AppWindow {
 
     /** Requests a new title. */
     public AppWindow title(String title) {
-        frame.setTitle(title);
+        onShell(() -> frame.setTitle(title));
         return this;
     }
 
     /** Requests a namespaced icon id, or null for the monogram of the title. */
     public AppWindow icon(@Nullable String icon) {
-        frame.setIcon(icon);
+        onShell(() -> frame.setIcon(icon));
         return this;
     }
 
@@ -92,65 +142,74 @@ public final class AppWindow {
 
     /** Requests a place, in the work area's coordinates; the manager clamps it on screen. */
     public AppWindow moveTo(float left, float top) {
-        frame.moveTo(left, top);
+        onShell(() -> frame.moveTo(left, top));
         return this;
     }
 
     /** Requests a size; the window's minimum size wins over a smaller one. */
     public AppWindow resizeTo(float width, float height) {
-        frame.resizeTo(width, height);
+        onShell(() -> frame.resizeTo(width, height));
         return this;
     }
 
     /** Sends the window to its taskbar entry; {@link #activate()} brings it back. */
     public void minimise() {
-        frame.minimize();
+        onShell(frame::minimize);
     }
 
     public void maximise() {
-        frame.maximize();
+        onShell(frame::maximize);
     }
 
     /** Back from maximised, or from hidden, to where it was. */
     public void restore() {
-        if (frame.state() == WindowState.HIDDEN) frame.show(true);
-        else frame.restore();
+        onShell(() -> {
+            if (frame.state() == WindowState.HIDDEN) frame.show(true);
+            else frame.restore();
+        });
     }
 
     /** Brings the window forward whatever state it is in: shown if hidden, raised if behind, focused either way. */
     public void activate() {
-        if (frame.state() == WindowState.HIDDEN) frame.show(true);
-        Desktop desktop = frame.desktop();
-        if (desktop != null) desktop.windowManager().activate(frame, true);
+        onShell(() -> {
+            if (frame.state() == WindowState.HIDDEN) frame.show(true);
+            Desktop on = frame.desktop();
+            if (on != null) on.windowManager().activate(frame, true);
+        });
     }
 
     /**
      * Closes the window as its X does: the {@link #onCloseRequested} guard is asked, then the window's policy
      * destroys or hides it.
      *
-     * @return whether the request was handled; a refusing guard still handles it
+     * @return whether the request was handled; a refusing guard still handles it. From another document's thread the
+     *         request is posted, and answered true
      */
     public boolean close() {
-        return frame.requestClose();
+        UIDocument shell = shellDocument();
+        if (shell == null || shell.isCurrent()) return frame.requestClose();
+        shell.execute(frame::requestClose);
+        return true;
     }
 
     /** Ends the window now, without asking the guard. */
     public void destroy() {
-        frame.destroy();
+        onShell(frame::destroy);
     }
 
     /**
      * Asks before a close the user made. Return false to keep the window; the answer is final for that request, so
-     * to prompt, return false, ask, then call {@link #close()} again from the prompt's callback.
+     * to prompt, return false, ask, then call {@link #close()} again from the prompt's callback. Asked on the shell's
+     * thread, so it reads only what the application keeps safe to read there.
      */
     public AppWindow onCloseRequested(BooleanSupplier allow) {
-        frame.setDiscardGuard(allow);
+        onShell(() -> frame.setDiscardGuard(allow));
         return this;
     }
 
-    /** Runs once the window has been destroyed, however it ended. */
+    /** Runs once the window has been destroyed, however it ended, on the application's thread. */
     public AppWindow onClosed(Runnable then) {
-        frame.onDestroyed.connect(then);
+        onShell(() -> frame.onDestroyed.connect(() -> onApplication(then)));
         return this;
     }
 
@@ -160,9 +219,9 @@ public final class AppWindow {
      * @throws IllegalStateException when this window is not on a desktop (it was destroyed)
      */
     public AppWindow openOwned(WindowSpec spec) {
-        Desktop desktop = frame.desktop();
-        if (desktop == null) throw new IllegalStateException("window is not on a desktop: " + title());
-        return AppWindows.open(desktop, frame.application(), spec.ownedBy(this));
+        Desktop on = desktop != null ? desktop : frame.desktop();
+        if (on == null) throw new IllegalStateException("window is not on a desktop: " + title());
+        return AppWindows.open(on, frame.application(), document, spec.ownedBy(this));
     }
 
     /**
@@ -174,22 +233,29 @@ public final class AppWindow {
      * }</pre>
      */
     public CaptionAction addSettingsAction(Runnable onPress) {
-        return new CaptionAction(frame.addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings", onPress));
+        CaptionAction action = new CaptionAction(this);
+        onShell(() -> action.button = frame.addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings",
+                () -> onApplication(onPress)));
+        return action;
     }
 
     /** A button an application added to its window's title bar. */
     public static final class CaptionAction {
 
-        private final Button button;
+        private final AppWindow window;
+        /** Set by the request that adds it; read on the shell's thread, behind that request. */
+        private Button button;
 
-        private CaptionAction(Button button) {
-            this.button = button;
+        private CaptionAction(AppWindow window) {
+            this.window = window;
         }
 
         /** Shows the action as on, as while the panel it opens is shown. */
         public void lit(boolean on) {
-            if (on) button.addClass(WindowFrame.ACTION_ON_CLASS);
-            else button.removeClass(WindowFrame.ACTION_ON_CLASS);
+            window.onShell(() -> {
+                if (on) button.addClass(WindowFrame.ACTION_ON_CLASS);
+                else button.removeClass(WindowFrame.ACTION_ON_CLASS);
+            });
         }
     }
 

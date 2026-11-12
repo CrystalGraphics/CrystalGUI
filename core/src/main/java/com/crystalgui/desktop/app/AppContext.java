@@ -33,6 +33,7 @@ import com.crystalgui.fs.client.WorkspaceClient;
  *       without one is refused before its factory runs</td></tr>
  *   <tr><td>{@code storage}</td><td>this application's own corner of the desktop's config directory</td></tr>
  *   <tr><td>{@code cache}</td><td>a directory for output you can rebuild, or {@code null}; it is deleted without warning</td></tr>
+ *   <tr><td>{@code document}</td><td>the document it runs in, or {@code null} when it runs in the shell's; its windows' client roots live here</td></tr>
  *   <tr><td>{@code open}</td><td>the files to show once it is up; {@link #first()} is the usual read</td></tr>
  * </table>
  *
@@ -57,10 +58,22 @@ public record AppContext(ApplicationKind kind,
                             @Nullable WorkspaceClient workspace,
                             CgConfigStorage storage,
                             @Nullable Path cache,
-                            List<Resource> open) {
+                            List<Resource> open,
+                            @Nullable AppDocument document) {
 
     public AppContext {
         open = open == null ? List.of() : List.copyOf(open);
+    }
+
+    /** A launch into the shell's own document. */
+    public AppContext(ApplicationKind kind, Desktop desktop, @Nullable WorkspaceClient workspace,
+                      CgConfigStorage storage, @Nullable Path cache, List<Resource> open) {
+        this(kind, desktop, workspace, storage, cache, open, null);
+    }
+
+    /** This launch, with {@code document} as the one its application runs in. */
+    public AppContext withDocument(@Nullable AppDocument document) {
+        return new AppContext(kind, desktop, workspace, storage, cache, open, document);
     }
 
     /** A launch with nothing asked of it. */
@@ -72,7 +85,7 @@ public record AppContext(ApplicationKind kind,
 
     /** This application's windows: where it opens them, and finds them again. */
     public AppWindows windows() {
-        return new AppWindows(desktop, kind);
+        return new AppWindows(desktop, kind, document);
     }
 
     /** The one resource this launch was asked to open, or null. */

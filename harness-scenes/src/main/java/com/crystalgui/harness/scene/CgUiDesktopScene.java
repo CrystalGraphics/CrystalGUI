@@ -25,6 +25,7 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import com.crystalgui.widget.display.SpanTrack;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -840,6 +841,18 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             public void openOthers() {
                 desktop.applications().launch(VfxLab.KIND, CgUiScreen.workspace());
                 FrameProfiler.openOn(desktop);
+            }
+
+            @Override
+            public void describeWindows() {
+                float scale = desktop.document().boxes().uiScale();
+                for (WindowFrame each : desktop.windowManager().windows()) {
+                    Box box = each.box();
+                    if (box == null) continue;
+                    System.out.printf(Locale.ROOT, "[windows] %-24s %s x=%d y=%d w=%d h=%d%n", each.getTitle(), each.state(),
+                            Math.round(box.x() * scale), Math.round(box.y() * scale), Math.round(box.width() * scale),
+                            Math.round(box.height() * scale));
+                }
             }
 
             @Override

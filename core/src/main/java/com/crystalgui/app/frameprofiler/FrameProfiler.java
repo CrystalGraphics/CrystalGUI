@@ -94,14 +94,17 @@ public final class FrameProfiler {
     public static AppWindow openAt(@Nullable UIDocument document, long frameIndex) {
         AppWindow window = open(document);
         if (window == null) return null;
-        for (UIElement each : window.content().composedSubtree()) {
-            if (each instanceof FrameProfilerPanel panel) {
-                panel.model().setFollowing(false);
-                panel.model().refresh();
-                panel.model().selectFrameIndex(frameIndex);
-                break;
+        // ITS PANEL IS IN ITS OWN DOCUMENT: touched there.
+        window.execute(() -> {
+            for (UIElement each : window.content().composedSubtree()) {
+                if (each instanceof FrameProfilerPanel panel) {
+                    panel.model().setFollowing(false);
+                    panel.model().refresh();
+                    panel.model().selectFrameIndex(frameIndex);
+                    break;
+                }
             }
-        }
+        });
         return window;
     }
 
@@ -122,6 +125,8 @@ public final class FrameProfiler {
             // then declaring a handler for one would put the profiler in "open with" for a file it
             // cannot read, which is worse than not being listed.
             .singleInstance()
+            // ITS OWN DOCUMENT: its model and panel are heavy, and nothing else on the desktop waits for them.
+            .separateDocument()
             // IT NEEDS NO SERVER: it measures whatever this process is doing, a title screen included.
             .standalone()
             // BEFORE THE FIRST FRAME, whether or not the window is ever opened: the ring's size and

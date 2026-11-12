@@ -70,6 +70,10 @@ public final class ApplicationRegistry {
     private final List<Application> running = new ArrayList<>();
     /** Each running application's own client on the workspace, released when it quits. */
     private final java.util.Map<Application, WorkspaceClient> clients = new java.util.IdentityHashMap<>();
+    /** The documents applications of a {@link ApplicationKind#separateDocument() separate} kind run in, until they quit. */
+    private final java.util.Map<Application, AppDocument> documentsOf = new java.util.IdentityHashMap<>();
+    @Nullable
+    private AppDocuments documents;
     /** Kinds already told they need a server, so a host retrying every frame says so once. */
     private final Set<String> refusedForNoServer = new HashSet<>();
 
@@ -284,10 +288,14 @@ public final class ApplicationRegistry {
                     context.open());
         }
         Application application;
+        AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
+        AppContext launched = context.withDocument(document);
         // On the document's thread outside any frame: without a zone, a launch is a stretch of nothing in the trace.
         long launching = CgTrace.stamp(UiTrace.FLOW);
         try {
-            application = kind.factory().apply(context);
+            // ITS OWN DOCUMENT BUILDS IT: the tree an application makes is touched by its thread alone.
+            application = document == null ? kind.factory().apply(launched)
+                    : document.ask(() -> kind.factory().apply(launched));
             CgTrace.zoneDone(UiTrace.FLOW, "app:launch", launching);
         } catch (RuntimeException failed) {
             // AN APPLICATION THAT THROWS COSTS ITS OWN LAUNCH AND NOTHING ELSE. A desktop is a shell:
@@ -297,19 +305,22 @@ public final class ApplicationRegistry {
                     kind.id(), failed.getMessage(), failed);
             desktop.reportFailure(kind.id(), kind.displayName(), kind.displayName() + " could not be opened.", failed);
             if (own != null) own.dispose();
+            if (document != null) document.close();
             return null;
         }
         if (application == null) {
             if (own != null) own.dispose();
+            if (document != null) document.close();
             return null;
         }
         if (own != null) clients.put(application, own);
+        if (document != null) documentsOf.put(application, document);
         refusedForNoServer.remove(kind.id());
         running.add(application);
         // Its main window destroyed is the application quit: closing it under DESTROY_ON_CLOSE, or anything else
         // taking it down. Every application gets this from here, so none hooks its own window.
         AppWindow main = application.mainWindow();
-        if (main != null) main.onClosed(() -> quit(application));
+        if (main != null) main.frame().onDestroyed.connect(() -> quit(application));
         onDidChange.emit();
         return application;
     }
@@ -396,7 +407,10 @@ public final class ApplicationRegistry {
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
     private void quit(Application application) {
         if (!running.contains(application)) return;
-        application.dispose();
+        AppDocument document = documentsOf.get(application);
+        // ITS DISPOSE RUNS WHERE IT WAS BUILT, ahead of the document's end.
+        if (document == null) application.dispose();
+        else document.execute(application::dispose);
         forget(application);
     }
 
@@ -572,11 +586,25 @@ public final class ApplicationRegistry {
      * everything anybody else shut down.</p>
      */
     public void forget(Application application) {
+        // FROM ITS OWN THREAD TOO: an instance calls this in its dispose, and the registry is the shell's.
+        UIDocument shell = desktop.document();
+        if (shell == null) forgetNow(application);
+        else shell.execute(() -> forgetNow(application));
+    }
+
+    private void forgetNow(Application application) {
         // ITS STICKY NOTIFICATIONS GO WITH IT: there is no window left to act on them.
         desktop.notifications().closeFrom(application.kind().id());
         WorkspaceClient client = clients.remove(application);
         if (client != null) client.dispose();
+        AppDocument document = documentsOf.remove(application);
+        if (document != null) document.close();
         if (running.remove(application)) onDidChange.emit();
+    }
+
+    /** Runs each {@link ApplicationKind#separateDocument() separate} application in a document {@code documents} builds. */
+    public void useDocuments(@Nullable AppDocuments documents) {
+        this.documents = documents;
     }
 
     /** D20: each application's own corner of a shared config directory. */

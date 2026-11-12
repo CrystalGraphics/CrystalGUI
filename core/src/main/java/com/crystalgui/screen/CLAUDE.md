@@ -12,6 +12,7 @@ tool opens, closes and reads it. No loader names any of it.
 | `CgUiScreenInput` | the one input router, registered itself at the `SCREEN` input stage: hot keys, then the viewport; over another screen, presses by `HIT_REGIONS` (sequenced) or the live hit test, the keyboard following the last press |
 | `DesktopContent` | what the desktop frames and paints in each `Mode`, and its readouts (`ATTACHED`, `PINNED`, `HIT_REGIONS`) |
 | `DesktopConnection` | the workspace and window mount on the client's connection, and the language, posted to the document when they move |
+| `ApplicationDocuments` | the documents applications run in, one viewport each: opened at launch (`AppDocuments`), framed before the shell's on every host frame, ended on the render thread once the application quits; they composite nothing, the shell draws their clients' surfaces |
 | `GameState` | the game's answers, read once a host frame on the render thread |
 | `HitRegions`, `DesktopRehearsal` | presses answered from a frame; the throwaway desktop the loading screen rehearses |
 

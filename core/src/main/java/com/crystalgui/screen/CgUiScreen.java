@@ -154,6 +154,8 @@ public final class CgUiScreen {
     private static volatile CgUiViewport viewport;
     @Nullable
     private static volatile DesktopContent[] contents;
+    /** What the applications that run in documents of their own are framed from, before the desktop. */
+    private static final ApplicationDocuments appDocuments = new ApplicationDocuments();
     /** The primary application, once launched. Written on the document. */
     @Nullable
     private static volatile Application primary;
@@ -402,16 +404,9 @@ public final class CgUiScreen {
         GameState state = new GameState();
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
         FontFamilyCache.useLocale(state.locale());
-        UIDocument built = new UIDocument();
-        // Logical pixels to the surface's: the user's preference, on the box tree's root transform and nowhere else.
-        built.boxes().setUiScale(Preferences.current().uiScale());
+        UIDocument built = newDocument();
         Preferences.PUBLISHED.changes().subscribe(
                 () -> built.execute(() -> built.boxes().setUiScale(Preferences.current().uiScale())));
-        // NOT INSTALLED FOR YOU: without the sheets nothing matches, and without a theme every token falls back.
-        UiThemeManager themes = UiThemeManager.getInstance();
-        themes.installInto(built.styles());
-        ThemeRegistry.registerBuiltins();
-        if (themes.activeThemeId() == null) themes.setTheme(DEFAULT_THEME);
         // THE HOST SAYS WHERE crystalgui/ IS AND NOTHING ELSE: the desktop derives its config, its cache and its
         // arrangement from that one directory.
         Desktop made = Desktop.of(built).useStorage(state.installationDirectory());
@@ -427,12 +422,12 @@ public final class CgUiScreen {
         made.useWorkspace(wire::workspace);
         made.useConnection(wire::bound);
         made.persistAs(DESKTOP_ID);
-        built.addClass(ROOT_CLASS);
 
         game = state;
         document = built;
         desktop = made;
         connection = wire;
+        made.applications().useDocuments(appDocuments);
         viewport = CgUiViewport.open(built, CgUiViewport.Threading.fromFlags(), "desktop");
         Mode[] modes = Mode.values();
         DesktopContent[] byMode = new DesktopContent[modes.length];
@@ -440,6 +435,23 @@ public final class CgUiScreen {
         contents = byMode;
         trace("built");
         CgTrace.zoneDone(UiTrace.FLOW, "screen:build", building);
+    }
+
+    /**
+     * A document as the desktop and every application have it: at the user's scale, with the themes' sheets and the
+     * theme in force. The caller follows the scale preference and gives the document a viewport.
+     */
+    static UIDocument newDocument() {
+        UIDocument built = new UIDocument();
+        // Logical pixels to the surface's: the user's preference, on the box tree's root transform and nowhere else.
+        built.boxes().setUiScale(Preferences.current().uiScale());
+        // NOT INSTALLED FOR YOU: without the sheets nothing matches, and without a theme every token falls back.
+        UiThemeManager themes = UiThemeManager.getInstance();
+        themes.installInto(built.styles());
+        ThemeRegistry.registerBuiltins();
+        if (themes.activeThemeId() == null) themes.setTheme(DEFAULT_THEME);
+        built.addClass(ROOT_CLASS);
+        return built;
     }
 
     /**
@@ -510,6 +522,7 @@ public final class CgUiScreen {
             shown.run(down);
             shown.close();
         }
+        appDocuments.dispose();
         installed = false;
         INPUT.reset();
         viewport = null;
@@ -683,6 +696,8 @@ public final class CgUiScreen {
         }
         long painting = CgTrace.stamp(UiTrace.FLOW);
         try {
+            // THE CLIENTS FIRST: their surfaces have executed when the desktop's frame draws them.
+            appDocuments.frame(stage);
             if (shown.frame(stage, byMode[now.ordinal()])) painted = true;
             CgTrace.zoneDone(UiTrace.FLOW, "screen:paint", painting);
         } catch (RuntimeException | LinkageError failed) {

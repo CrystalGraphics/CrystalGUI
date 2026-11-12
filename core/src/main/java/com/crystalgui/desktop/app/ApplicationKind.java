@@ -64,6 +64,8 @@ public final class ApplicationKind {
     @Nullable
     private Function<AppContext, Application> factory;
     private boolean singleInstance;
+    private boolean separateDocument;
+    private Threading threading = Threading.SEQUENCED;
     private boolean preventPinning;
     private boolean requiresConnection = true;
     private boolean startingWindow;
@@ -173,6 +175,38 @@ public final class ApplicationKind {
     public ApplicationKind opens(DocumentKind.Matcher... files) {
         check();
         for (DocumentKind.Matcher matcher : files) opens.add(matcher);
+        return this;
+    }
+
+    /** Where an application's document runs. */
+    public enum Threading {
+        /** On a thread of its own, recording while the render thread presents: the default. */
+        SEQUENCED,
+        /** On the client thread, for a small interface that reads the game every frame; its cost is the game's. */
+        INLINE
+    }
+
+    /**
+     * Runs the application in a document of its own, on its own thread, so its layout and paint stall no other
+     * application and not the shell. Its windows' frames stay in the shell's document and show what it draws.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:lab", "Lab").separateDocument().launch(Lab::new);
+     * }</pre>
+     *
+     * <p>Until every application has one this is a choice, and an application opts in: its factory then runs on the
+     * document's thread, and anything it reads from {@link AppContext#desktop()} it reads from there.</p>
+     */
+    public ApplicationKind separateDocument() {
+        check();
+        this.separateDocument = true;
+        return this;
+    }
+
+    /** Where its document runs, {@link Threading#SEQUENCED} unless said; read only with {@link #separateDocument}. */
+    public ApplicationKind threading(Threading threading) {
+        check();
+        this.threading = threading;
         return this;
     }
 
@@ -335,6 +369,14 @@ public final class ApplicationKind {
     @Nullable
     public String icon() {
         return icon;
+    }
+
+    public boolean hasSeparateDocument() {
+        return separateDocument;
+    }
+
+    public Threading threading() {
+        return threading;
     }
 
     public boolean isSingleInstance() {
