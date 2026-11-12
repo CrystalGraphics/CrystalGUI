@@ -4,7 +4,7 @@ import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.data.DataContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.graph.GraphDocument;
 import com.crystalgui.widget.surface.edit.Clipboards;
@@ -80,7 +80,7 @@ public final class GraphCommands {
     }
 
     /**
-     * Registers into {@link CommandRegistry#global()}.
+     * Registers into {@link Commands#global()}.
      *
      * <p>Commands are global; a command is a fact about the application, and what varies per window is
      * what is <em>focused</em> — which is {@code DataContext}'s job. Registering per window meant every
@@ -91,10 +91,10 @@ public final class GraphCommands {
      * command palette does.</p>
      */
     public static void register() {
-        CommandRegistry.global().contribute(GraphCommands.class, GraphCommands::declare);
+        Commands.process().contribute(GraphCommands.class, GraphCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(DELETE, "Delete")
                 .icon(ActionIcons.DELETE)
                 .menu(MenuId.GRAPH_NODE_CONTEXT, "2_edit", 20)

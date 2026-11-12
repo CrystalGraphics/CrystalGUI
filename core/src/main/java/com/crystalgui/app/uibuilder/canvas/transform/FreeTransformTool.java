@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import org.joml.Vector2f;
 
 import javax.annotation.Nullable;
@@ -182,7 +182,7 @@ public final class FreeTransformTool implements Tool {
             public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
                 // The deltas arrive in the SOURCE element's space, and the source is the overlay the box
                 // measures everything else in -- so they need no conversion.
-                int live = modifiersNow();
+                int live = Input.modifiersNow();
                 box.dragTo(fromX + dx, fromY + dy, dx, dy, CgModifiers.hasShift(live),
                         CgModifiers.hasAlt(live), !SnapSuspend.isSuspended(live));
             }
@@ -205,15 +205,6 @@ public final class FreeTransformTool implements Tool {
         return true;
     }
 
-    /**
-     * A drag callback carries no modifiers of its own, so Shift and Alt are asked for live.
-     *
-     * <p>The engine's own Select tool and the out-of-flow move both ask the same way.</p>
-     */
-    private static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 
     @Override
     public boolean pointerMoved(float rawX, float rawY, int modifiers) {

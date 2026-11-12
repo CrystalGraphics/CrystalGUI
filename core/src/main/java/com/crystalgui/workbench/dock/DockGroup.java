@@ -2,7 +2,7 @@ package com.crystalgui.workbench.dock;
 
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.render.texture.CgUiSvg;
@@ -393,7 +393,7 @@ public class DockGroup extends UIElement {
             }
             // ITS OWN MENU, on the tab rather than the group: a listener outside the strip would see the press
             // retargeted to the tab view and could not tell which tab it was. @see DockTab
-            ContextMenu.attach(tab, CommandRegistry.global(), pressed -> ContextMenu.of(MenuId.EDITOR_TAB_CONTEXT));
+            ContextMenu.attach(tab, Commands.process(), pressed -> ContextMenu.of(MenuId.EDITOR_TAB_CONTEXT));
             // AND NO CONTENT. See showContent: a tab is a title until it is looked at.
             tabByPanel.put(panel, tab);
             area.installTabDrag(this, panel, tab);

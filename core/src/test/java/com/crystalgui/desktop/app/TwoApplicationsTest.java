@@ -190,17 +190,25 @@ public class TwoApplicationsTest {
      */
     @Test
     public void eachApplicationGetsOnlyTheExtensionsItsManifestNamed() {
-        WorkbenchApplication graphs = launch(GRAPHS_ONLY);
+        // The bare one first: file types are the process's, so what the graph product contributes is
+        // visible to it once that product runs, and the counter-control is the time before.
         WorkbenchApplication bare = launch(BARE);
-
         Resource graph = Resource.of(PROJECT, "a.shadergraph");
         // BY ID, never "is there a kind at all": a workbench registers a fallback text kind, so
         // `forResource` answers for every extension nobody claimed and an assertion on null would pass
         // against a build where the manifest's list did nothing whatever.
-        assertEquals("the graph product named crystalgui:shadergraph and did not get it",
-                ShaderGraphContribution.GRAPH_TYPE, graphs.workbench().kinds().forResource(graph).id());
         assertNotEquals("an application that named no extensions was given one anyway, so the list is "
                         + "decoration and every product ships every feature",
+                ShaderGraphContribution.GRAPH_TYPE, bare.workbench().kinds().forResource(graph).id());
+
+        WorkbenchApplication graphs = launch(GRAPHS_ONLY);
+        assertEquals("the graph product named crystalgui:shadergraph and did not get it",
+                ShaderGraphContribution.GRAPH_TYPE, graphs.workbench().kinds().forResource(graph).id());
+        assertEquals("a file type is the process's: every application opens it while its owner runs",
+                ShaderGraphContribution.GRAPH_TYPE, bare.workbench().kinds().forResource(graph).id());
+
+        graphs.workbench().kinds().removeOwner(graphs.workbench().owner());
+        assertNotEquals("and it leaves with its owner",
                 ShaderGraphContribution.GRAPH_TYPE, bare.workbench().kinds().forResource(graph).id());
     }
 

@@ -1,5 +1,6 @@
 package com.crystalgui.headless;
 
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.undo.Edit;
 import com.crystalgui.document.AbstractDocumentModel;
 import com.crystalgui.document.BytesDocumentModel;
@@ -341,13 +342,13 @@ public class DocumentModelTest {
     @Test
     public void aKindClaimsItsFilesByNameExtensionAndGlob() {
         DocumentKinds kinds = new DocumentKinds();
-        kinds.register(DocumentKind.of("t:graph", "Graph")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:graph", "Graph")
                 .files(DocumentKind.FilePatterns.extension("shadergraph"))
                 .model(BytesDocumentModel::new));
-        kinds.register(DocumentKind.of("t:gradle", "Gradle")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:gradle", "Gradle")
                 .files(DocumentKind.FilePatterns.name("build.gradle.kts"))
                 .model(BytesDocumentModel::new));
-        kinds.register(DocumentKind.of("t:spec", "Spec")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:spec", "Spec")
                 .files(DocumentKind.FilePatterns.glob("*.test.js"))
                 .model(BytesDocumentModel::new));
 
@@ -361,7 +362,7 @@ public class DocumentModelTest {
     @Test
     public void aLeadingDotIsNotAnExtension() {
         DocumentKinds kinds = new DocumentKinds();
-        kinds.register(DocumentKind.of("t:ignore", "Ignore")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:ignore", "Ignore")
                 .files(DocumentKind.FilePatterns.extension("gitignore"))
                 .model(BytesDocumentModel::new));
 
@@ -371,7 +372,7 @@ public class DocumentModelTest {
     @Test
     public void aKindWithNoModelIsRefusedAtRegistration() {
         try {
-            new DocumentKinds().register(DocumentKind.of("t:broken", "Broken")
+            new DocumentKinds().contribute(Owner.PROCESS, DocumentKind.of("t:broken", "Broken")
                     .files(DocumentKind.FilePatterns.extension("x")));
             fail("a kind that cannot open anything must be refused where it is written");
         } catch (IllegalStateException expected) {
@@ -382,11 +383,11 @@ public class DocumentModelTest {
     @Test
     public void aDuplicateKindIdIsRefused() {
         DocumentKinds kinds = new DocumentKinds();
-        kinds.register(DocumentKind.of("t:one", "One").model(BytesDocumentModel::new));
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:one", "One").model(BytesDocumentModel::new));
         try {
-            kinds.register(DocumentKind.of("t:one", "Another").model(BytesDocumentModel::new));
+            kinds.contribute(Owner.PROCESS, DocumentKind.of("t:one", "Another").model(BytesDocumentModel::new));
             fail("two kinds under one id would apply in load order");
-        } catch (IllegalStateException expected) {
+        } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("namespaced"));
         }
     }
@@ -395,7 +396,7 @@ public class DocumentModelTest {
     @Test
     public void unregisteringAKindWithdrawsIt() {
         DocumentKinds kinds = new DocumentKinds();
-        var handle = kinds.register(DocumentKind.of("t:one", "One")
+        var handle = kinds.contribute(Owner.PROCESS, DocumentKind.of("t:one", "One")
                 .files(DocumentKind.FilePatterns.extension("one"))
                 .model(BytesDocumentModel::new));
         assertNotNull(kinds.forResource(file("a.one")));
@@ -410,9 +411,9 @@ public class DocumentModelTest {
     @Test
     public void theMostRecentlyRegisteredKindWins() {
         DocumentKinds kinds = new DocumentKinds();
-        kinds.register(DocumentKind.of("t:text", "Text")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:text", "Text")
                 .files(DocumentKind.FilePatterns.extension("md")).model(BytesDocumentModel::new));
-        kinds.register(DocumentKind.of("t:markdown", "Markdown")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("t:markdown", "Markdown")
                 .files(DocumentKind.FilePatterns.extension("md")).model(BytesDocumentModel::new));
 
         assertEquals("t:markdown", kinds.forResource(file("readme.md")).id());
@@ -422,7 +423,7 @@ public class DocumentModelTest {
     public void aRegisteredKindCannotBeReDeclared() {
         DocumentKinds kinds = new DocumentKinds();
         DocumentKind kind = DocumentKind.of("t:one", "One").model(BytesDocumentModel::new);
-        kinds.register(kind);
+        kinds.contribute(Owner.PROCESS, kind);
         try {
             kind.icon("something-else");
             fail("a kind is shared once registered");

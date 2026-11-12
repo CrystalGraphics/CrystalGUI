@@ -601,7 +601,7 @@ public class QuickPick extends Popover {
         if (index < 0 || index >= results.size()) return;
         QuickPickItem item = results.get(index).item();
         // A dimmed row is listed so you can learn the command exists and what it is bound to -- never so it
-        // can be run. Refusing here rather than relying on CommandRegistry.run's own disabled check keeps
+        // can be run. Refusing here rather than relying on Commands.run's own disabled check keeps
         // the palette honest for every source, not only the command one.
         if (!item.enabled()) return;
         hide();

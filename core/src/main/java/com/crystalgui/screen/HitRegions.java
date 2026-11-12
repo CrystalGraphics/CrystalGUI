@@ -1,4 +1,4 @@
-package com.crystalgui.desktop.host;
+package com.crystalgui.screen;
 
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -20,7 +20,7 @@ import java.util.List;
  * boolean ours = regions.takes(x, y);                   // the host's thread, until the next capture
  * }</pre>
  *
- * <p>The answer is {@link ScreenOverlay#overlayHitTest}'s, flattened: every box the hit test would try, in its order,
+ * <p>The answer is {@link CgUiScreenInput#overlayHitTest}'s, flattened: every box the hit test would try, in its order,
  * each marked with whether a hit there is the desktop's. A window, or something promoted into the top layer, is one
  * region; boxes over the windows that are not theirs (the taskbar) are regions that give the point back to the game.
  * Inert boxes are left out, as the hit test passes over them.</p>
@@ -94,7 +94,7 @@ public final class HitRegions {
         return regions.length;
     }
 
-    /** {@link ScreenOverlay#overlayHitTest}'s rule for a box the hit test answered with. */
+    /** {@link CgUiScreenInput#overlayHitTest}'s rule for a box the hit test answered with. */
     private static boolean ours(UIDocument document, @Nullable UIElement layer, UIElement node) {
         for (UIElement walk = node; walk != null; walk = walk.composedParent()) {
             if (document.isPromoted(walk)) return true;

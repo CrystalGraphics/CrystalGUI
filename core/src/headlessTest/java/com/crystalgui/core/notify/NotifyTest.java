@@ -1,5 +1,7 @@
 package com.crystalgui.core.notify;
 
+import com.crystalgraphics.job.CgHostThread;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -149,12 +151,13 @@ public class NotifyTest {
     @Test
     public void severityReachesTheListener() {
         List<Notification> seen = new ArrayList<>();
-        Notifications.onDidChange.connect(event -> {
+        Notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.ADDED) seen.add(event.notification());
         });
 
         Notifications.info("saved notes.txt");
         Notifications.error("save failed: notes.txt");
+        CgHostThread.drainFrames();
 
         assertEquals(2, seen.size());
         assertEquals(Notification.Severity.INFO, seen.get(0).getSeverity());
@@ -185,11 +188,12 @@ public class NotifyTest {
     @Test
     public void theHistoryIsBoundedAndSaysWhatItDropped() {
         List<Notification> evicted = new ArrayList<>();
-        Notifications.onDidChange.connect(event -> {
+        Notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.REMOVED) evicted.add(event.notification());
         });
 
         for (int i = 0; i < Notifications.HISTORY_LIMIT + 5; i++) Notifications.info("message " + i);
+        CgHostThread.drainFrames();
 
         List<Notification> history = Notifications.history();
         assertEquals("unbounded at " + history.size(), Notifications.HISTORY_LIMIT, history.size());
@@ -233,16 +237,19 @@ public class NotifyTest {
     @Test
     public void clearingIsItsOwnKindOfChange() {
         List<NotificationEvent.Kind> seen = new ArrayList<>();
-        Notifications.onDidChange.connect(event -> seen.add(event.kind()));
+        Notifications.onDidChange.subscribe(event -> seen.add(event.kind()));
 
         Notifications.info("something");
+        CgHostThread.drainFrames();
         assertEquals(List.of(NotificationEvent.Kind.ADDED), seen);
 
         Notifications.clear();
+        CgHostThread.drainFrames();
         assertEquals("one event, not one per entry",
                 List.of(NotificationEvent.Kind.ADDED, NotificationEvent.Kind.CLEARED), seen);
 
         Notifications.clear();
+        CgHostThread.drainFrames();
         assertEquals("clearing an empty history says nothing", 2, seen.size());
     }
 
@@ -275,13 +282,14 @@ public class NotifyTest {
     @Test
     public void anImmediateRepeatCollapses() {
         List<NotificationEvent> changes = new ArrayList<>();
-        Notifications.onDidChange.connect(event -> {
+        Notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.CHANGED) changes.add(event);
         });
 
         Notifications.error("Save failed");
         Notifications.error("Save failed");
         Notifications.error("Save failed");
+        CgHostThread.drainFrames();
 
         assertEquals("three arrivals became one entry", 1, Notifications.size());
         assertEquals(3, Notifications.history().get(0).getRepeats());
@@ -367,16 +375,18 @@ public class NotifyTest {
         assertTrue(handle.isOpen());
 
         List<NotificationEvent.Kind> kinds = new ArrayList<>();
-        Notifications.onDidChange.connect(event -> kinds.add(event.kind()));
+        Notifications.onDidChange.subscribe(event -> kinds.add(event.kind()));
         int[] closed = { 0 };
         handle.onDidClose.connect(() -> closed[0]++);
 
         handle.updateMessage("Reconnecting");
+        CgHostThread.drainFrames();
         assertEquals("a revision is not a new event", List.of(NotificationEvent.Kind.CHANGED), kinds);
         assertEquals("Reconnecting", Notifications.history().get(0).getMessage());
         assertEquals("and it does not re-ring the bell", 1, Notifications.unread());
 
         handle.close();
+        CgHostThread.drainFrames();
         assertFalse(handle.isOpen());
         assertTrue(Notifications.isEmpty());
         assertEquals("a withdrawal reaches views as the kind they already handle",

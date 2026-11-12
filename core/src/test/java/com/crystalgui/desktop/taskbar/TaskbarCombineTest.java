@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.taskbar;
 
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
@@ -194,7 +194,7 @@ public class TaskbarCombineTest extends UiDocumentTestBase {
     private static List<String> rowsOf(Button entry) {
         List<String> ids = new ArrayList<>();
         CommandContext context = CommandContext.of(entry);
-        for (MenuSection section : CommandRegistry.global().sections(MenuId.TASKBAR_ENTRY, context)) {
+        for (MenuSection section : Commands.process().sections(MenuId.TASKBAR_ENTRY, context)) {
             for (MenuEntry each : section.entries()) {
                 if (each instanceof MenuEntry.Item item) ids.add(item.command().getId());
             }

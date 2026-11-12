@@ -9,7 +9,7 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 
 /**
  * The key bindings owned by one element — its scope.
@@ -215,7 +215,7 @@ public final class Keymap {
 
     @Nullable
     private static KeyChord declaredChordFor(String commandId) {
-        return CommandRegistry.global().declaredBindings().chordFor(commandId);
+        return Commands.process().declaredBindings().chordFor(commandId);
     }
 
     /**
@@ -240,7 +240,7 @@ public final class Keymap {
         }
         // Declared defaults last, so a scope's rebinding still shadows them -- same precedence as the
         // walk above and as KeymapResolver.
-        for (KeyBinding binding : CommandRegistry.global()
+        for (KeyBinding binding : Commands.process()
                 .declaredBindings().bindings) {
             if (binding.getEventType() != KeyEventType.PRESS) continue;
             out.putIfAbsent(binding.getCommandId(), binding.getChord());

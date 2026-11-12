@@ -13,7 +13,7 @@ import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.config.HarnessContext;
 import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleEngine;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 
 import java.util.logging.Logger;
 
@@ -70,8 +70,8 @@ public class CgUiTextGammaScene extends UiDocumentScene {
 
     /** Inline: each capture is of the frame its preset was set for. */
     @Override
-    protected DocumentDriver.Mode mode() {
-        return DocumentDriver.Mode.INLINE;
+    protected CgUiViewport.Threading threading() {
+        return CgUiViewport.Threading.INLINE;
     }
 
     @Override

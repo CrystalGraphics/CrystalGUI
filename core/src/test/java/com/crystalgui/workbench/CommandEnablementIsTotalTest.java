@@ -9,7 +9,7 @@ import org.junit.Test;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.workbench.explorer.ExplorerCommands;
 import com.crystalgui.ui.dom.UIElement;
@@ -33,7 +33,7 @@ public class CommandEnablementIsTotalTest extends UiDocumentTestBase {
     public void everyCommandAnswersEnablementFromAContextThatKnowsNothing() {
         // The explorer's, which is where the reported crash was. Contributions are global and lazy, so a
         // command nobody registered cannot be asked about.
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         ExplorerCommands.register();
 
         UIElement bare = new UIElement();
@@ -41,7 +41,7 @@ public class CommandEnablementIsTotalTest extends UiDocumentTestBase {
         document.update(W, H);
 
         List<String> broke = new ArrayList<>();
-        for (Command command : CommandRegistry.global().all()) {
+        for (Command command : Commands.process().all()) {
             try {
                 command.isEnabled(CommandContext.of(bare));
             } catch (RuntimeException thrown) {

@@ -4,7 +4,7 @@ import com.crystalgui.ui.service.Animation;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -77,7 +77,7 @@ import java.util.Map;
  * <h3>Every button runs a command</h3>
  *
  * <p>The rail holds no toggling logic of its own: a click runs {@code view.<typeId>} through the
- * {@link CommandRegistry}, which is the same command a keybinding or a menu item would run. This is
+ * {@link Commands}, which is the same command a keybinding or a menu item would run. This is
  * VS Code's arrangement exactly — the Activity Bar item for the Explorer and {@code Ctrl+Shift+E} both
  * invoke {@code workbench.view.explorer} — and it is the difference between a bar that <em>presents</em> a
  * capability and one that is a second, subtly different way to reach it. The second kind is where "the
@@ -283,7 +283,7 @@ public class StripeView extends UIElement {
 
     /** The registry a deferred sync runs against. @see #requestSync */
     @Nullable
-    private CommandRegistry commands;
+    private Commands commands;
 
     private boolean pendingSync;
 
@@ -319,7 +319,7 @@ public class StripeView extends UIElement {
         // tool window bar" is how IntelliJ words the gesture, and Show Tool Window Names is the bar's
         // setting rather than any button's. The builder is handed whatever was pressed, so a press ON a
         // button gets the fuller menu.
-        ContextMenu.attach(this, CommandRegistry.global(), this::contextMenuFor);
+        ContextMenu.attach(this, Commands.process(), this::contextMenuFor);
         // NO DROP TARGET HERE. It used to accept drops on the rail itself, which meant landing a drag on a
         // twenty-pixel stripe -- aiming at the control rather than at the place. The whole workbench is
         // the target now; see RegionDropOverlay.
@@ -537,7 +537,7 @@ public class StripeView extends UIElement {
      * first, which is the failure mode of every "replace a poll with an event" change; it is the one this
      * landing actually hit, and it is why the order here is written down.</p>
      */
-    public void listenToPanels(DockPanelRegistry<UIElement> registry, CommandRegistry commands) {
+    public void listenToPanels(DockPanelRegistry<UIElement> registry, Commands commands) {
         this.commands = commands;
         // HERE, not in the constructor. The rail is a FIELD INITIALISER on Workbench, so it is built
         // before the constructor body assigns the tool-window manager -- reaching for it there is a
@@ -635,7 +635,7 @@ public class StripeView extends UIElement {
         focusSubscription = null;
     }
 
-    public void sync(CommandRegistry commands) {
+    public void sync(Commands commands) {
         this.commands = commands;
         ToolWindowManager toolWindows = workbench.toolWindowManager();
         for (DockPanelDescriptor descriptor : workbench.panels().descriptors()) {
@@ -705,7 +705,7 @@ public class StripeView extends UIElement {
     }
 
     private ItemButton buildButton(DockPanelDescriptor descriptor, String commandId,
-                                   CommandRegistry commands) {
+                                   Commands commands) {
         ItemButton button = new ItemButton(workbench, descriptor.typeId(), descriptor.title());
         button.addClass(ITEM_CLASS);
         // Not in the tab sequence. This is the ARIA roving-tabindex case the engine already models: a rail

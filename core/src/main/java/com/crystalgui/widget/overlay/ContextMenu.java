@@ -1,7 +1,7 @@
 package com.crystalgui.widget.overlay;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -83,7 +83,7 @@ public final class ContextMenu {
      * them; a contributor picks its group and needs to know nothing about the rest.</p>
      *
      * <p><b>Disabled commands are included, dimmed</b> — this class's rule, stated at the top, and not
-     * {@link CommandRegistry#menu}'s. That method filters, which is right for a caller assembling a list
+     * {@link Commands#menu}'s. That method filters, which is right for a caller assembling a list
      * from scratch and wrong here for the reason the header gives: a menu whose items move depending on
      * what happens to apply is a menu whose items are never in the same place twice.</p>
      *
@@ -138,7 +138,7 @@ public final class ContextMenu {
      * even when focus is somewhere else entirely, which is the single most common way a context menu is
      * used and the one a focus-derived context gets wrong.</p>
      */
-    public Menu build(CommandRegistry registry, UIElement source) {
+    public Menu build(Commands registry, UIElement source) {
         Menu menu = new Menu();
         boolean pendingSeparator = false;
         boolean anyItem = false;
@@ -188,13 +188,13 @@ public final class ContextMenu {
      * @param builder called per press with the element actually under the pointer, so a menu can be built
      *                for <em>that row</em> rather than for the container
      */
-    public static UIElement attach(UIElement on, CommandRegistry registry,
+    public static UIElement attach(UIElement on, Commands registry,
                                    Function<UIElement, ContextMenu> builder) {
         return attach(on, registry, builder, false);
     }
 
     /**
-     * As {@link #attach(UIElement, CommandRegistry, Function)}, on the CAPTURE phase.
+     * As {@link #attach(UIElement, Commands, Function)}, on the CAPTURE phase.
      *
      * <p>For a container that has to answer for its content rather than beside it. A designer's canvas is
      * the case: what is drawn there is a document being edited, not widgets being used, and a button on
@@ -204,7 +204,7 @@ public final class ContextMenu {
      * <p>Not the default, and should not be: an inner element can only override a menu that is listening
      * after it.</p>
      */
-    public static UIElement attach(UIElement on, CommandRegistry registry,
+    public static UIElement attach(UIElement on, Commands registry,
                                    Function<UIElement, ContextMenu> builder, boolean capture) {
         // ONE LIVE MENU PER ATTACHMENT SITE, and this is a correctness requirement rather than tidiness.
         //

@@ -15,7 +15,7 @@ import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.insert.BuilderInsert;
 import com.crystalgui.app.uibuilder.style.SheetDocuments;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgraphics.storage.config.CgConfigStorage;
@@ -177,7 +177,7 @@ public final class UIBuilderView implements DocumentEditor {
         // ON THE CAPTURE PHASE. What is on the artboard is a document being edited rather than widgets
         // being used, but a Button drawn there still consumes a press -- so listening after it meant the
         // menu opened over blank page and over nothing else.
-        ContextMenu.attach(surface, CommandRegistry.global(), element -> menuFor(pointedAt()), true);
+        ContextMenu.attach(surface, Commands.process(), element -> menuFor(pointedAt()), true);
         // ONE ROW, whose page follows the tool: Free Transform's numbers take the toolbar's place rather
         // than pushing the plane down a row.
         this.contextBar = new ContextToolbar(toolbar);

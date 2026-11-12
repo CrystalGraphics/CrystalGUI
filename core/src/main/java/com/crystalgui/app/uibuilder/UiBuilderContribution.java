@@ -7,7 +7,7 @@ import com.crystalgui.app.uibuilder.library.LibraryActions;
 import com.crystalgui.app.uibuilder.library.LibraryToolWindow;
 import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyToolWindow;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.NewDocumentContext;
 import com.crystalgui.document.NewDocumentKind;
@@ -60,7 +60,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         // where one belongs -- so a document kind could be opened, edited and saved by a jar of its own
         // and still not be something you could MAKE without editing the explorer. It starts empty for
         // now; `template` is where a starter document goes. @see NewDocumentKind
-        workbench.newDocuments().register(NewDocumentKind.of("uibuilder:new", "UI Document")
+        workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of("uibuilder:new", "UI Document")
                 .icon("crystalgui:filetypes/cgui")
                 .suffix(".cgui")
                 .where(NewDocumentContext::outsideSourceRoots)
@@ -88,7 +88,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
         Disposable sections = BuilderInspectorSections.register();
 
         // New ▸ and the edit rows on a row's right-click, and the title line's commands. Once, for every hierarchy.
-        Disposable rowMenu = HierarchyActions.register(CommandRegistry.global());
+        Disposable rowMenu = HierarchyActions.register(Commands.process());
 
         Disposable panel = workbench.registerToolWindow(
                 ToolWindowKind.of(HIERARCHY_PANEL, "Hierarchy")
@@ -97,7 +97,7 @@ public final class UiBuilderContribution implements WorkbenchExtension {
                         .view(new HierarchyToolWindow(workbench))
                         .openByDefault());
 
-        Disposable libraryCommands = LibraryActions.register(CommandRegistry.global());
+        Disposable libraryCommands = LibraryActions.register(Commands.process());
         LibraryToolWindow libraryWindow = new LibraryToolWindow(workbench, ID);
         Disposable library = workbench.registerToolWindow(
                 ToolWindowKind.of(LIBRARY_PANEL, "Library")

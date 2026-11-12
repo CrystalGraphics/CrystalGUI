@@ -4,7 +4,7 @@ import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.language.map.MappingSet;
@@ -93,7 +93,7 @@ public final class MappingCommands {
      * rule to carry it: rows dim rather than disappear, so the entry keeps its place in the Edit menu and
      * simply reads as unavailable on a host with nothing to remap.</p>
      */
-    public static void register(CommandRegistry registry, WorkbenchContext workbench) {
+    public static void register(Commands registry, WorkbenchContext workbench) {
         MappingCommands commands = new MappingCommands(workbench);
         registry.register(Command.of(REMAP, "Remap to Readable Names")
                 // ITS OWN GROUP, so a separator falls between it and Find. It is not one of the editor's
@@ -108,7 +108,7 @@ public final class MappingCommands {
     }
 
     /** Removes it — for a host that is torn down, and for a test that must not leak registrations. */
-    public static void unregister(CommandRegistry registry) {
+    public static void unregister(Commands registry) {
         registry.unregister(REMAP);
     }
 

@@ -1,7 +1,7 @@
 package com.crystalgui.desktop.taskbar;
 
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
@@ -185,13 +185,13 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
 
     private String firstLabel(WindowFrame frame) {
         CommandContext context = CommandContext.of(taskbar().entryFor(frame));
-        MenuSection first = CommandRegistry.global().sections(MenuId.TASKBAR_ENTRY, context).get(0);
+        MenuSection first = Commands.process().sections(MenuId.TASKBAR_ENTRY, context).get(0);
         return ((MenuEntry.Item) first.entries().get(0)).command().getLabel();
     }
 
     private boolean offersPin(WindowFrame frame) {
         CommandContext context = CommandContext.of(taskbar().entryFor(frame));
-        for (MenuSection section : CommandRegistry.global().sections(MenuId.TASKBAR_ENTRY, context)) {
+        for (MenuSection section : Commands.process().sections(MenuId.TASKBAR_ENTRY, context)) {
             for (MenuEntry entry : section.entries()) {
                 if (entry instanceof MenuEntry.Item item && item.command().getId().equals(DesktopCommands.PIN_TO_TASKBAR)) return true;
             }

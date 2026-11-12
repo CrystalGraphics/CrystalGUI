@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.notify.Notification;
@@ -261,7 +261,7 @@ public class WorkbenchApplication extends UIElement
         this.workbench = new Workbench(workspace, builder.extensions);
         // BOTH CHANNELS INTO ONE LINE. A notification is an event and wins the line when it arrives; the
         // ambient text is what is left showing between them.
-        lifetime.add(Notifications.onDidChange.connect(event -> {
+        lifetime.add(Notifications.onDidChange.subscribe(event -> {
             if (event.kind() == NotificationEvent.Kind.ADDED && event.notification() != null) {
                 onStatus.emit(event.notification().getMessage());
             }
@@ -446,7 +446,7 @@ public class WorkbenchApplication extends UIElement
      * one desktop each save their own.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         WorkbenchApplicationCommands.register();
         ChromeCommands.register();
     }
@@ -576,7 +576,7 @@ public class WorkbenchApplication extends UIElement
         // because the directory has already said which workspace this is.
         CgConfigStorage mine = desktop.workspaceStore(identityFor(workspace, roots));
         sessionKey = kind.id();
-        // BACKUPS AND HISTORY TOO, and not before now: see DesktopHost#frame, which used to set a store
+        // BACKUPS AND HISTORY TOO, and not before now: the desktop's connection binding used to set a store
         // here that every workspace shared.
         workspace.setStorage(mine);
         session.useStorage(mine);

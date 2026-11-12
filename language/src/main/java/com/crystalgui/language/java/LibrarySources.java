@@ -2,12 +2,13 @@ package com.crystalgui.language.java;
 
 import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
+import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.fs.Resource;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.Connection;
-import com.crystalgui.core.signal.Signal;
+
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.ContentProviders;
 import com.crystalgui.language.java.assist.AttachedSources;
@@ -234,7 +235,7 @@ public final class LibrarySources implements ContentProvider {
                         SYMBOLS.put(binaryName, described);
                     }
                     PENDING.remove(binaryName);
-                    RESOLVED.emit(resource);
+                    RESOLVED.post(resource);
                 })
                 .submit();
     }
@@ -245,14 +246,14 @@ public final class LibrarySources implements ContentProvider {
     /**
      * A class this provider had answered "not yet" about now has a symbol.
      *
-     * <p>Emitted on the UI thread, from inside {@code JobScheduler}'s drain — which is what makes
-     * storing it and announcing it safe to do together, and what lets a widget act on it directly.</p>
+     * <p>Posted from inside {@code JobScheduler}'s drain, once the symbol is stored; each listener hears it on its own
+     * document, so a widget acts on it directly.</p>
      */
-    private static final Signal.Value<Resource> RESOLVED = new Signal.Value<>();
+    private static final Broadcast<Resource> RESOLVED = Broadcast.create("library-symbols");
 
     @Override
     public Disposable onDidResolveSymbol(java.util.function.Consumer<Resource> listener) {
-        Connection subscription = RESOLVED.connect(listener::accept);
+        Connection subscription = RESOLVED.subscribe(listener);
         return subscription::disconnect;
     }
 

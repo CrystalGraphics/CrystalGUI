@@ -69,7 +69,7 @@ import javax.annotation.Nullable;
  * @param title     what the row says, already in the user's words — "Remove unused import"
  * @param kind      where it sorts, and what it is
  * @param edit      the change to apply, in offsets against {@link #version}, or null
- * @param commandId a {@code CommandRegistry} id to invoke, or null
+ * @param commandId a {@code Commands} id to invoke, or null
  * @param arguments what the command is about, by name — empty for an edit-only action
  * @param preferred whether this is <em>the</em> fix — LSP's {@code isPreferred}. It <b>ranks</b>, through
  *                  {@link #ORDER}: a preferred fix sorts first among its tier and so takes the popup's

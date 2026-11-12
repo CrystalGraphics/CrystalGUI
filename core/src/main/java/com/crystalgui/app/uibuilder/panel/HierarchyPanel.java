@@ -17,7 +17,7 @@ import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
 import com.crystalgui.app.uibuilder.canvas.BuilderContext;
 import com.crystalgui.app.uibuilder.canvas.Placement;
 import com.crystalgui.core.collection.tree.TreeDataSource;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -48,7 +48,7 @@ import dev.vfyjxf.taffy.style.FlexDirection;
  *
  * <pre>{@code
  * HierarchyPanel hierarchy = new HierarchyPanel(builder);
- * HierarchyActions.register(CommandRegistry.global());   // once, by the feature: New ▸ and the edit rows
+ * HierarchyActions.register(Commands.process());   // once, by the feature: New ▸ and the edit rows
  * }</pre>
  *
  * <p>Rows show the node's {@code id} where it has one and its kind where it does not, which is the way
@@ -186,7 +186,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         this.editing = new TreeEditing<>(tree, this, this::itemForRow, () -> withoutWritingBack(tree::refresh),
                 CLIPBOARD);
         editing.setModel(new HierarchyEditModel(builder));
-        editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(CONTEXT_MENU));
+        editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(CONTEXT_MENU));
         // ON THE TREE, NOT DECLARED: Ctrl+Shift+C is already Inspect Element application-wide, and an
         // element's own keymap is asked first -- so the chord copies a selector here and picks everywhere
         // else, whichever of the two registered first.

@@ -1,7 +1,6 @@
 package com.crystalgui.widget.canvas;
 
 import com.crystalgui.ui.service.Animation;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
@@ -726,8 +725,7 @@ public class CanvasView extends UIElement {
     }
 
     private static boolean isSpaceHeld() {
-        PlatformPort input = PlatformPort.current();
-        return input != null && input.isKeyDown(CgKeyCodes.KEY_SPACE);
+        return Input.isKeyDownNow(CgKeyCodes.KEY_SPACE);
     }
 
     /** Takes the RAW pointer position — {@code Drag} converts to local space itself. */

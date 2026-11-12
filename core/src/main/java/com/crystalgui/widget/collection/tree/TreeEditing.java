@@ -12,7 +12,7 @@ import java.util.function.Supplier;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgui.core.data.DataKey;
@@ -32,8 +32,8 @@ import com.crystalgui.widget.overlay.ContextMenu;
  *
  * editing = new TreeEditing<>(tree, this, this::itemForRow, tree::refresh, CLIPBOARD);
  * editing.setModel(new NodeModel());                              // performs the verbs; see TreeEditModel
- * editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(NODE_MENU));
- * TreeEditing.contributeMenu(CommandRegistry.global(), NODE_MENU); // once: its six rows in that menu
+ * editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(NODE_MENU));
+ * TreeEditing.contributeMenu(Commands.process(), NODE_MENU); // once: its six rows in that menu
  *
  * // the renderer
  * public UIElement createTemplate() { ... editing.installRow(row, icon, label, field); ... }
@@ -335,7 +335,7 @@ public final class TreeEditing<T> {
      * Opens {@code menu} on a right-click over the tree, making the clicked row the subject: a row outside the
      * selection becomes the selection, and one inside it keeps it, as Windows Explorer does.
      */
-    public void attachContextMenu(CommandRegistry registry, Supplier<ContextMenu> menu) {
+    public void attachContextMenu(Commands registry, Supplier<ContextMenu> menu) {
         tree.suppressDefaultContextMenu();
         ContextMenu.attach(tree, registry, element -> {
             int index = tree.indexOfRowElement(element);
@@ -345,7 +345,7 @@ public final class TreeEditing<T> {
     }
 
     /** Puts Cut, Copy, Paste and Duplicate, then Rename and Delete, into {@code menu}. Once per menu. */
-    public static Disposable contributeMenu(CommandRegistry registry, MenuId menu) {
+    public static Disposable contributeMenu(Commands registry, MenuId menu) {
         return TreeEditCommands.contributeTo(registry, menu);
     }
 }

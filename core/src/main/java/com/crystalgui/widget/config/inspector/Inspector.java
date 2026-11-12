@@ -78,17 +78,16 @@ public class Inspector extends UIElement implements DataProvider {
         addClass(INSPECTOR_CLASS);
         append(tabs);
 
-        // ALL THREE OUTLIVE THIS ELEMENT -- two are static and one belongs to the window -- so an
-        // inspector that subscribed and was then discarded would stay connected for the life of the
-        // process, holding a detached subtree behind it. @see UINode#whileConnected
+        // ALL THREE OUTLIVE THIS ELEMENT -- they are the document's -- so an inspector that subscribed and
+        // was then discarded would stay connected, holding a detached subtree behind it. @see UINode#whileConnected
         //
         // Blender's notifier: anything that changes what is inspected says so, and every inspector
         // re-asks. Deferred and deduplicated, so emitting freely is the intended usage.
-        whileConnected(() -> InspectorRegistry.onDidChangeSubject.connect(this::refresh));
+        whileConnected(() -> InspectorSubject.of(document()).onDidChange.connect(this::refresh));
         // AND A SUBJECT THAT HAS BEEN CLOSED, which the retention rules would otherwise hold forever:
         // a detached source is kept on purpose, and a source nothing can describe is kept on purpose, so
         // a document whose editor was released stayed on screen with its tabs intact. @see #forget
-        whileConnected(() -> InspectorRegistry.onDidCloseSubject.connect(this::forget));
+        whileConnected(() -> InspectorSubject.of(document()).onDidClose.connect(this::forget));
         // AND THE FOCUS OWNER, which is where the subject actually comes from -- see subjectFrom.
         whileConnected(() -> document().focus().onDidChangeFocus.connect(this::onFocusChanged));
         onConnected(() -> document().animation().every(this, this::tickFrame));
@@ -208,7 +207,7 @@ public class Inspector extends UIElement implements DataProvider {
     /** Set by {@link #forget}: this rebuild may blank the panel. Cleared once it has run. */
     private boolean forcing;
 
-    /** Re-ask about the current subject, next frame. What {@code onDidChangeSubject} calls. */
+    /** Re-ask about the current subject, next frame. What {@link InspectorSubject#onDidChange} calls. */
     public void refresh() {
         pending = true;
     }

@@ -1,6 +1,6 @@
 package com.crystalgui.core.notify;
 
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.Broadcast;
 
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import java.util.ArrayList;
@@ -24,7 +24,7 @@ import java.util.Set;
  * an application that has one.</p>
  *
  * <p>So a contribution announces, and an application decides what to do about it — exactly the split
- * {@link com.crystalgui.core.command.CommandRegistry} and
+ * {@link com.crystalgui.core.command.Commands} and
  * {@code InspectorRegistry} already make. {@code register(workbench)} now needs nothing else.</p>
  *
  * <h3>The history is the model, and it announces itself with one event</h3>
@@ -73,7 +73,7 @@ public final class Notifications {
      * <p>Nothing is displayed by default, deliberately: a core that drew its own toast would be deciding
      * a piece of application layout, and there is no window here to draw it in.</p>
      */
-    public static final Signal.Value<NotificationEvent> onDidChange = new Signal.Value<>();
+    public static final Broadcast<NotificationEvent> onDidChange = Broadcast.create("notifications");
 
     /**
      * How many have arrived since the user last looked — what the bell's badge shows.
@@ -86,7 +86,7 @@ public final class Notifications {
      * everything read alters no entry, and a view that redrew its column on it would be repainting for
      * something that only the bell can see.</p>
      */
-    public static final Signal.Value<Integer> onDidChangeUnread = new Signal.Value<>();
+    public static final Broadcast<Integer> onDidChangeUnread = Broadcast.create("notifications.unread");
 
     private static int unread;
 
@@ -184,7 +184,7 @@ public final class Notifications {
         Notification newest = HISTORY.isEmpty() ? null : HISTORY.get(HISTORY.size() - 1);
         if (notification.saysTheSameAs(newest)) {
             newest.markRepeated();
-            onDidChange.emit(NotificationEvent.changed(newest, HISTORY.size() - 1));
+            onDidChange.post(NotificationEvent.changed(newest, HISTORY.size() - 1));
             return HANDLES.get(newest);
         }
         HISTORY.add(notification);
@@ -194,12 +194,12 @@ public final class Notifications {
         // changes in the order they happened, and never briefly holds more than the model does.
         while (HISTORY.size() > HISTORY_LIMIT) {
             Notification dropped = HISTORY.remove(0);
-            onDidChange.emit(NotificationEvent.removed(dropped, 0));
+            onDidChange.post(NotificationEvent.removed(dropped, 0));
             closeHandle(dropped);
         }
         unread++;
-        onDidChange.emit(NotificationEvent.added(notification, HISTORY.size() - 1));
-        onDidChangeUnread.emit(unread);
+        onDidChange.post(NotificationEvent.added(notification, HISTORY.size() - 1));
+        onDidChangeUnread.post(unread);
         return HANDLES.get(notification);
     }
 
@@ -212,7 +212,7 @@ public final class Notifications {
     static void announceChanged(Notification notification) {
         int index = HISTORY.indexOf(notification);
         if (index < 0) return;
-        onDidChange.emit(NotificationEvent.changed(notification, index));
+        onDidChange.post(NotificationEvent.changed(notification, index));
     }
 
     /** @see NotificationHandle#close */
@@ -220,7 +220,7 @@ public final class Notifications {
         int index = HISTORY.indexOf(notification);
         if (index < 0) return;
         HISTORY.remove(index);
-        onDidChange.emit(NotificationEvent.removed(notification, index));
+        onDidChange.post(NotificationEvent.removed(notification, index));
         closeHandle(notification);
     }
 
@@ -243,7 +243,7 @@ public final class Notifications {
     public static void markAllRead() {
         if (unread == 0) return;
         unread = 0;
-        onDidChangeUnread.emit(0);
+        onDidChangeUnread.post(0);
     }
 
     /**
@@ -260,8 +260,8 @@ public final class Notifications {
         // SUPPRESSED IS NOT TOUCHED. "Clear all" empties a list; it is not a request to start being
         // interrupted again by everything the user has already said they never want to see.
         unread = 0;
-        onDidChange.emit(NotificationEvent.cleared());
-        onDidChangeUnread.emit(0);
+        onDidChange.post(NotificationEvent.cleared());
+        onDidChangeUnread.post(0);
     }
 
     /** How many are held. @see #isEmpty() */

@@ -2,11 +2,12 @@ package com.crystalgui.text.lang;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Where {@link ProjectSources} providers register, and the one place an engine asks.
@@ -23,15 +24,16 @@ import java.util.concurrent.CopyOnWriteArrayList;
  */
 public final class ProjectSourcesRegistry {
 
-    private static final List<ProjectSources> PROVIDERS = new CopyOnWriteArrayList<>();
+    private static final Contributions<ProjectSources> PROVIDERS =
+            Contributions.of("project-sources", provider -> provider, Contributions.Conflict.REJECT);
 
     private ProjectSourcesRegistry() {
     }
 
     /** Adds a provider. Idempotent by identity — a workbench may re-register on reload. */
     public static void contribute(ProjectSources provider) {
-        if (provider == null || PROVIDERS.contains(provider)) return;
-        PROVIDERS.add(provider);
+        if (provider == null) return;
+        PROVIDERS.add(Owner.PROCESS, provider);
     }
 
     public static boolean remove(ProjectSources provider) {
@@ -39,7 +41,7 @@ public final class ProjectSourcesRegistry {
     }
 
     public static boolean hasProvider() {
-        return !PROVIDERS.isEmpty();
+        return !PROVIDERS.all().isEmpty();
     }
 
     /**
@@ -50,7 +52,7 @@ public final class ProjectSourcesRegistry {
      * boolean cannot separate one live workbench from four dead ones.</p>
      */
     public static int size() {
-        return PROVIDERS.size();
+        return PROVIDERS.all().size();
     }
 
     /**
@@ -70,7 +72,7 @@ public final class ProjectSourcesRegistry {
         @Nullable
         public String sourceOf(String qualifiedName) {
             if (qualifiedName == null || qualifiedName.isEmpty()) return null;
-            for (ProjectSources provider : PROVIDERS) {
+            for (ProjectSources provider : PROVIDERS.all()) {
                 try {
                     String source = provider.sourceOf(qualifiedName);
                     if (source != null) return source;
@@ -89,7 +91,7 @@ public final class ProjectSourcesRegistry {
             if (qualifiedName == null || qualifiedName.isEmpty()) return null;
             // FIRST ANSWER WINS, exactly as sourceOf does -- the two must agree about which project owns
             // a name, or a hover would quote one file and Ctrl+B would open another.
-            for (ProjectSources provider : PROVIDERS) {
+            for (ProjectSources provider : PROVIDERS.all()) {
                 try {
                     String path = provider.pathOf(qualifiedName);
                     if (path != null) return path;
@@ -104,7 +106,7 @@ public final class ProjectSourcesRegistry {
         @Nullable
         public String awaitSourceOf(String qualifiedName) {
             if (qualifiedName == null || qualifiedName.isEmpty()) return null;
-            for (ProjectSources provider : PROVIDERS) {
+            for (ProjectSources provider : PROVIDERS.all()) {
                 try {
                     String source = provider.awaitSourceOf(qualifiedName);
                     if (source != null) return source;
@@ -119,7 +121,7 @@ public final class ProjectSourcesRegistry {
         @Nullable
         public String nameOf(String workspacePath) {
             if (workspacePath == null || workspacePath.isEmpty()) return null;
-            for (ProjectSources provider : PROVIDERS) {
+            for (ProjectSources provider : PROVIDERS.all()) {
                 try {
                     String name = provider.nameOf(workspacePath);
                     if (name != null) return name;
@@ -133,7 +135,7 @@ public final class ProjectSourcesRegistry {
         @Override
         public boolean declaresPackage(String packageName) {
             if (packageName == null) return false;
-            for (ProjectSources provider : PROVIDERS) {
+            for (ProjectSources provider : PROVIDERS.all()) {
                 try {
                     if (provider.declaresPackage(packageName)) return true;
                 } catch (RuntimeException failed) {
@@ -148,7 +150,7 @@ public final class ProjectSourcesRegistry {
             // MERGED and deduplicated, unlike sourceOf: "what exists" wants everything, and two projects
             // declaring different types is not the ambiguity one NAME resolving twice is.
             Set<String> merged = new LinkedHashSet<>();
-            for (ProjectSources provider : PROVIDERS) {
+            for (ProjectSources provider : PROVIDERS.all()) {
                 try {
                     merged.addAll(provider.declaredTypes());
                 } catch (RuntimeException failed) {
@@ -161,6 +163,6 @@ public final class ProjectSourcesRegistry {
 
     /** Drops every provider. Tests only — this is a static and it outlives a test class. */
     public static void resetForTesting() {
-        PROVIDERS.clear();
+        PROVIDERS.clearForTesting();
     }
 }

@@ -1,12 +1,13 @@
 package com.crystalgui.widget.texteditor;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.data.CommandTarget;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.ui.dom.UIElement;
@@ -130,7 +131,7 @@ public final class EditorCommands {
 
     /** Registers every editor command. Idempotent — re-registering the same ids is a no-op. */
     /**
-     * Registers into {@link CommandRegistry#global()}.
+     * Registers into {@link Commands#global()}.
      *
      * <p>Commands are global; a command is a fact about the application, and what varies per window is
      * what is <em>focused</em> — which is {@code DataContext}'s job. Registering per window meant every
@@ -149,7 +150,7 @@ public final class EditorCommands {
         // Edit > Cut/Copy/Paste, which are NOT ours: they resolve the position's own provider, so the one
         // menu row means files in the tree and text here. @see com.crystalgui.core.command.ClipboardCommands
         ClipboardCommands.register();
-        CommandRegistry.global().contribute(EditorCommands.class, EditorCommands::declare);
+        Commands.process().contribute(EditorCommands.class, EditorCommands::declare);
     }
 
     /** {@code Navigate ▸ Line/Column} — IntelliJ's own wording, binding and placeholder. */
@@ -203,7 +204,7 @@ public final class EditorCommands {
         editor.revealCaretCentred();
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         // ── Navigation ──────────────────────────────────────────────────────────────────────────
         // AN EDITOR COMMAND, though it opens a prompt. It was briefly in ChromeCommands on the grounds
         // that InputDialog lived in `chrome` -- which put an editor action in the shell's command set and
@@ -306,10 +307,14 @@ public final class EditorCommands {
         // unselected line did nothing whatever, which reads as the editor ignoring the key rather than as
         // a disabled command. @see TextEditor#selectionOrTouchedLines
         registry.register(editorCommand(PREFIX + "copy", "Copy")
-                .run(on(editor -> PlatformPort.current().setClipboard(editor.selectionOrTouchedLines()))));
+                .run(on(editor -> {
+                    String copied = editor.selectionOrTouchedLines();
+                    CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
+                })));
         registry.register(Command.of(PREFIX + "cut", "Cut")
                 .run(on(editor -> {
-                    PlatformPort.current().setClipboard(editor.selectionOrTouchedLines());
+                    String copied = editor.selectionOrTouchedLines();
+                    CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
                     // The line, not a collapsed selection: deleteSelections would remove nothing at all
                     // when there is none, so the text would be on the clipboard and still on screen.
                     if (editor.hasSelection()) editor.deleteSelections();
@@ -320,9 +325,10 @@ public final class EditorCommands {
                 .enabledWhen(when(editor -> !editor.isReadOnly())));
         registry.register(Command.of(PREFIX + "paste", "Paste")
                 .run(on(editor -> {
-                    String pasted = PlatformPort.current().clipboard();
                     // A LINE COMES BACK AS A LINE. @see TextEditor#pasteAtCaret
-                    if (pasted != null && !pasted.isEmpty()) editor.pasteAtCaret(pasted);
+                    CgHostThread.CLIENT.call(CgClipboard::get).then(pasted -> {
+                        if (!pasted.isEmpty()) editor.pasteAtCaret(pasted);
+                    });
                 }))
                 .enabledWhen(whenEditable()));
 

@@ -109,7 +109,7 @@ public class ClosingKeepsViewStateTest extends UiDocumentTestBase {
 
         Workspace workspace = Workspace.of(clientEnd);
         workbench = new Workbench(workspace);
-        workbench.kinds().register(DocumentKind.of("test:probe", "Probe")
+        workbench.kinds().contribute(workbench.owner(), DocumentKind.of("test:probe", "Probe")
                 .files(DocumentKind.FilePatterns.extension("probe"))
                 .model(bytes -> new BytesDocumentModel(bytes))
                 .editor(this::probeFor));

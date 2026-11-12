@@ -2,6 +2,7 @@ package com.crystalgui.app.frameprofiler;
 
 import com.crystalgraphics.trace.CgTraceAggregate;
 import com.crystalgraphics.trace.CgTraceSnapshot;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.display.SpanTrack;
@@ -244,7 +245,7 @@ public class FlameChart extends UIElement {
     private long workTo;
 
     /**
-     * One row list per thread, with depth derived from <b>time containment</b> rather than read off
+     * One row list per thread, or per sequence for a document's work, with depth derived from <b>time containment</b> rather than read off
      * the record.
      *
      * <p>The recorded depth is the recording thread's live stack at the moment a zone was stored, and
@@ -259,8 +260,27 @@ public class FlameChart extends UIElement {
         for (CgTraceSnapshot.ZoneView zone : zones) {
             byThread.computeIfAbsent(zone.thread(), ignored -> new ArrayList<>()).add(zone);
         }
+        // A LANE PER SEQUENCE, not per pool thread: a document's turns land on whichever thread is free, so its
+        // zones are found inside its turn's zone (UiSequence names it) and drawn in that sequence's lane.
+        Map<String, List<CgTraceSnapshot.ZoneView>> byLane = new LinkedHashMap<>();
+        for (Map.Entry<String, List<CgTraceSnapshot.ZoneView>> thread : byThread.entrySet()) {
+            List<CgTraceSnapshot.ZoneView> turns = new ArrayList<>();
+            for (CgTraceSnapshot.ZoneView zone : thread.getValue()) {
+                if (zone.name().startsWith(UiSequence.ZONE_PREFIX)) turns.add(zone);
+            }
+            for (CgTraceSnapshot.ZoneView zone : thread.getValue()) {
+                String lane = thread.getKey();
+                for (CgTraceSnapshot.ZoneView turn : turns) {
+                    if (turn.startNanos() <= zone.startNanos() && endOf(zone, frameEnd) <= endOf(turn, frameEnd)) {
+                        lane = turn.name();
+                        break;
+                    }
+                }
+                byLane.computeIfAbsent(lane, ignored -> new ArrayList<>()).add(zone);
+            }
+        }
         Map<String, List<SpanTrack.Span>> rows = new LinkedHashMap<>();
-        for (Map.Entry<String, List<CgTraceSnapshot.ZoneView>> entry : byThread.entrySet()) {
+        for (Map.Entry<String, List<CgTraceSnapshot.ZoneView>> entry : byLane.entrySet()) {
             rows.put(entry.getKey(), nest(entry.getValue(), frameEnd));
         }
         return rows;

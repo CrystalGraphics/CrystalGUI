@@ -5,7 +5,7 @@ import java.util.List;
 import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.ui.input.keymap.Keymap;
 
@@ -31,12 +31,12 @@ public final class TreeViewCommands {
     private TreeViewCommands() {
     }
 
-    /** Registers into {@link CommandRegistry#global()}. Idempotent. */
+    /** Registers into {@link Commands#global()}. Idempotent. */
     public static void register() {
-        CommandRegistry.global().contribute(TreeViewCommands.class, TreeViewCommands::declare);
+        Commands.process().contribute(TreeViewCommands.class, TreeViewCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(EXPAND_SELECTED, "Expand Selected")
                 .enabledWhereData(data -> canExpandSelected(treeIn(data)))
                 .runWithData(data -> {

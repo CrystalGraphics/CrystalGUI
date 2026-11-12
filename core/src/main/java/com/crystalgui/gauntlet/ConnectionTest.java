@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.screen.CgUiScreen;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -8,12 +9,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.net.CgAudience;
-import com.crystalgraphics.platform.world.CgPlayers;
 import com.crystalgraphics.platform.service.CgServers;
 import com.crystalgraphics.platform.service.CgGameSession;
 import com.crystalgraphics.platform.service.CgScreens;
@@ -34,7 +35,6 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.world.CgEntityQueries;
 import com.crystalgraphics.world.CgWorldQueries;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -239,22 +239,29 @@ public final class ConnectionTest extends CgGauntletController {
 
     private static final int WINDOW_ID = 4242;
 
-    /** Long enough for a world to load, a handshake to finish and a listing to cross. */
-    private static final int DEADLINE_TICKS = 20 * 90;
+    /** Five seconds of ticks: the run is in a world already, and a stalled probe ends the run rather than holding it. */
+    private static final int DEADLINE_TICKS = 20 * 5;
 
     /** So the watcher's two reports are two events rather than one coalesced change. */
     private static final int BETWEEN_WRITES = 40;
 
     private static final String SHARED_FILE = "two-client-probe.txt";
 
-    /** Declared with the class, which loads at the first client tick: before the hello names the namespaces. */
+    /** Declared by {@link #declare()}, at init: a namespace declared after the hello is one the peer never heard of. */
     private static final CgMessage<String> AUDIENCE = CgMessage.toClients("crystalgui:probe/audience", CgCodecs.STRING);
 
     private static final CgRequest<String, String> ASK =
             CgRequest.toServer("crystalgui:probe/ask", CgCodecs.STRING, CgCodecs.STRING);
 
+    /**
+     * Declares the test's message and request, and the server's answer, on a run that plays it. At init, before any
+     * connection opens: the test itself starts a world later, after the hello has named the namespaces.
+     */
+    public static void declare() {
+        ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
+    }
+
     private static boolean audienceSent;
-    private static boolean askAnswering;
     private static boolean asked;
     private static boolean audienceListening;
     private static volatile boolean elsewhereArrived;
@@ -283,8 +290,6 @@ public final class ConnectionTest extends CgGauntletController {
     private static boolean writeStarted;
     private static boolean desktopOpened;
     private static boolean loopAskStarted;
-    /** @see #isDrivingDesktop() */
-    private static volatile boolean drivingDesktop;
 
     /** How many times a screen may be closed before the probe stops fighting whoever opens it. */
     private static final int MAX_SCREEN_CLOSES = 40;
@@ -341,26 +346,18 @@ public final class ConnectionTest extends CgGauntletController {
         return CgServers.running() && !CgServers.dedicated() ? Topology.INTEGRATED : Topology.DEDICATED;
     }
 
-    /** The integrated server's connection to this client's player, or null before it has joined. */
+    /**
+     * The integrated server's connection to its one player, or null before they have joined. Found among the server's
+     * own: the client's player has no id there, being no server player.
+     */
     @Nullable
     private static CgProtocolConnection<Object> connectionToFirstPlayer() {
         if (!CgServers.running() || CgServers.dedicated()) return null;
-        Object local = CgPlayers.local();
-        return local == null ? null : CgNetwork.forPlayer(CgPlayers.idOf(local));
-    }
-
-    /**
-     * Whether the probe is the one asking for the desktop right now.
-     *
-     * <p><b>A host refuses every other request while a run is in progress</b>, and that is not tidiness:
-     * opening the desktop installs the client window host, which claims {@code ui/openWindow} from the
-     * probe's session mid-check and ends the run on an {@code IllegalStateException} out of the router.
-     * A probe run opens a real window somebody can see, and two different keys reached that path —
-     * the desktop keybind and the worked example's own — so gating the callers one at a time was
-     * treating symptoms. The host gates the door instead.</p>
-     */
-    public static boolean isDrivingDesktop() {
-        return drivingDesktop;
+        UUID[] first = new UUID[1];
+        CgNetwork.forEachPlayer(id -> {
+            if (first[0] == null) first[0] = id;
+        });
+        return first[0] == null ? null : CgNetwork.forPlayer(first[0]);
     }
 
     // ── The server half ─────────────────────────────────────────────────────────────────────────
@@ -368,10 +365,6 @@ public final class ConnectionTest extends CgGauntletController {
     /** Once per server tick. */
     private static void serverTick() {
         if (!enabled() || reported) return;
-        if (!askAnswering) {
-            askAnswering = true;
-            ASK.onServer((peer, text, reply) -> reply.ok(text + " from " + peer.id()));
-        }
         if (!audienceSent && clientReady) sendAudiences();
 
         if (server == null) {
@@ -570,8 +563,9 @@ public final class ConnectionTest extends CgGauntletController {
         // of every tick it had, because an unattended client has no window focus and Minecraft re-opens
         // its pause menu constantly. And closing it EVERY tick for ever makes the window unusable by a
         // person: Escape opens the menu and the next tick shuts it, so a run that has stalled cannot
-        // even be closed by hand. A diagnostic may not trap the person watching it.
-        if (CgScreens.anyOpen() && !done(WRITE)) {
+        // even be closed by hand. A diagnostic may not trap the person watching it. The desktop pauses nothing, which
+        // LOOP_ALIVE asserts, so it stays up.
+        if (CgScreens.anyOpen() && !CgUiScreen.isOpen() && !done(WRITE)) {
             if (screenCloses < MAX_SCREEN_CLOSES) {
                 screenCloses++;
                 CgScreens.closeFront();
@@ -746,6 +740,7 @@ public final class ConnectionTest extends CgGauntletController {
         if (!done(RESHAPE)) return;
         Workspace live = workspace();
         if (live == null) return;
+        if (!live.onHome(ConnectionTest::driveFiles)) return;
 
         if (!listingAsked) {
             listingAsked = true;
@@ -809,15 +804,14 @@ public final class ConnectionTest extends CgGauntletController {
 
         if (!desktopOpened) {
             desktopOpened = true;
-            drivingDesktop = true;
-            HostSession.session().openApplication();
+            CgUiScreen.openApplication();
             return;
         }
         if (!CgScreens.anyOpen() || loopAskStarted) return;
 
-        loopAskStarted = true;
         Workspace live = workspace();
-        if (live == null) return;
+        if (live == null || !live.onHome(ConnectionTest::driveLoopAlive)) return;
+        loopAskStarted = true;
         live.files().list(project())
                 .then(listing -> {
                     CrystalGuiCore.LOGGER.info("[connection] a round trip completed with the desktop UP "

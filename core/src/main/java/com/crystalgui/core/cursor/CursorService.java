@@ -1,8 +1,12 @@
 package com.crystalgui.core.cursor;
 
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.service.CgCursorService;
 import com.crystalgraphics.platform.service.CgCursorService.Image;
+
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Shows a mouse cursor — the seam between whoever <em>decides</em> on one and whoever <em>presents</em> it.
@@ -61,13 +65,31 @@ public final class CursorService {
     /** Stands in for "this keyword has no picture", which a null slot cannot say. */
     private static final Image NO_ART = Image.standard("");
 
+    /** The cursor asked for off the client thread, which the toolkit is bound to: only the newest is shown. */
+    private static final AtomicReference<Cursor> PENDING = new AtomicReference<>();
+    private static final AtomicBoolean QUEUED = new AtomicBoolean();
+
     /**
-     * Shows {@code cursor}.
+     * Shows {@code cursor}, from any thread: at once on the client thread, which the toolkit is bound to, and from a
+     * document's own once the client thread takes it, the newest ask winning.
      *
      * <p>Never receives {@link Cursor#AUTO}: the caller resolves that to a concrete value first, so
      * only something mappable or ignorable ever arrives.
      */
     public static void setCursor(Cursor cursor) {
+        // Recorded on every path, so a hop still queued shows this one rather than an older ask.
+        PENDING.set(cursor);
+        if (CgHostThread.CLIENT.isCurrent()) {
+            show(cursor);
+            return;
+        }
+        if (QUEUED.compareAndSet(false, true)) CgHostThread.CLIENT.run(() -> {
+            QUEUED.set(false);
+            show(PENDING.get());
+        });
+    }
+
+    private static void show(Cursor cursor) {
         CgPlatform.get(CgCursorService.SERVICE).show(imageFor(cursor));
     }
 

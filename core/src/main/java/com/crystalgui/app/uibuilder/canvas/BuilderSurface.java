@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -49,7 +49,7 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     /** @see BuilderContext#dropIndicator */
     private final DropIndicator dropIndicator = new DropIndicator();
 
-    private final BuilderSelection selection = new BuilderSelection();
+    private final BuilderSelection selection = new BuilderSelection(this::document);
 
     /** The editor this plane belongs to, for {@link UIBuilderView#UI_BUILDER}. Set once, straight after
      * construction — the editor cannot hand itself over from inside its own field initialiser. */
@@ -84,8 +84,7 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
         onMouseDown.attachListener((element, event) -> {
             if (!(event instanceof MouseEvent.Down down) || down.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             float x = down.getPosition().x(), y = down.getPosition().y();
-            PlatformPort input = PlatformPort.current();
-            noteBlankPress(picking().itemAt(x, y) == null && (input == null || input.modifiers() == 0), x, y);
+            noteBlankPress(picking().itemAt(x, y) == null && Input.modifiersNow() == 0, x, y);
         }, true, false);
         // LAST: an extension activated any earlier gets a surface whose document and artboard are null.
         ensureExtensions();

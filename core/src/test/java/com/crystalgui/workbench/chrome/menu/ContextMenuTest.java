@@ -2,7 +2,7 @@ package com.crystalgui.workbench.chrome.menu;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -31,7 +31,7 @@ import static org.junit.Assert.assertTrue;
 public class ContextMenuTest extends UiDocumentTestBase {
 
     private UIElement root;
-    private CommandRegistry registry;
+    private Commands registry;
     private final List<String> ran = new ArrayList<>();
 
     private boolean canDelete;
@@ -40,7 +40,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
     public void setUp() {
         ran.clear();
         canDelete = true;
-        registry = new CommandRegistry();
+        registry = new Commands();
         registry.register(Command.of("file.new", "New File").run(c -> ran.add("file.new")));
         registry.register(Command.of("file.rename", "Rename").run(c -> ran.add("file.rename")));
         registry.register(Command.of("file.delete", "Delete")
@@ -246,8 +246,8 @@ public class ContextMenuTest extends UiDocumentTestBase {
      * its author could add to. These pin the property that made the id worth having — a command declares
      * where it sits, and the menu is a query.</p>
      */
-    private CommandRegistry contributed() {
-        CommandRegistry local = new CommandRegistry();
+    private Commands contributed() {
+        Commands local = new Commands();
         local.register(Command.of("c.paste", "Paste").menu(MENU, "2_clipboard", 20).run(c -> { }));
         local.register(Command.of("c.copy", "Copy").menu(MENU, "2_clipboard", 10).run(c -> { }));
         local.register(Command.of("c.rename", "Rename").menu(MENU, "3_modify", 10).run(c -> { }));
@@ -275,13 +275,13 @@ public class ContextMenuTest extends UiDocumentTestBase {
     /**
      * <b>Disabled contributions are dimmed, not dropped.</b>
      *
-     * <p>This class's rule rather than {@code CommandRegistry.menu}'s, which filters. A menu whose items
+     * <p>This class's rule rather than {@code Commands.menu}'s, which filters. A menu whose items
      * move depending on what happens to apply is a menu whose items are never in the same place twice —
      * the same reasoning the header records for the palette that listed 1 of 9.</p>
      */
     @Test
     public void aDisabledContributionIsShownDimmedRatherThanOmitted() {
-        CommandRegistry local = contributed();
+        Commands local = contributed();
         local.register(Command.of("c.rename", "Rename").menu(MENU, "3_modify", 10)
                 .enabledWhen(c -> false).run(c -> { }));
 
@@ -293,7 +293,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
     /** A submenu is its own MenuId, so anything can contribute into it without touching the parent. */
     @Test
     public void aSubmenuIsItselfContributedInto() {
-        CommandRegistry local = contributed();
+        Commands local = contributed();
         local.register(Command.of("c.newFile", "File…").menu(NESTED, "1", 10).run(c -> { }));
 
         Menu menu = ContextMenu.of(MENU).build(local, root);
@@ -315,7 +315,7 @@ public class ContextMenuTest extends UiDocumentTestBase {
     /** The point of the whole thing: a stranger adds an item without the menu's owner knowing. */
     @Test
     public void aForeignCommandCanContributeWithoutTouchingTheMenu() {
-        CommandRegistry local = contributed();
+        Commands local = contributed();
         local.register(Command.of("other.thing", "Something Else")
                 .menu(MENU, "2_clipboard", 15).run(c -> { }));
 

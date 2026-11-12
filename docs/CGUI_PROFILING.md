@@ -102,7 +102,7 @@ cpu mark, so it shows as idle — the verdict names it.
 
 | Scene | Profile it for |
 |---|---|
-| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on; `-Dcrystalgui.harness.desktop.graphCost=true` measures the scratch shader graph: the desktop without it, open and idle, six constant edits, and closed again, in one process (`ShaderGraphCostProbe`, writes `graph-cost.txt`); `-Dcrystalgui.harness.desktop.hoverSweep=true` parks the pointer for 600 frames, then sweeps it across the editor window for 600 and prints work median and p95 per block plus the per-zone comparison (`HoverSweepProbe`, `[hover-sweep]` lines) |
+| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on; `-Dcrystalgui.harness.desktop.graphCost=true` measures the scratch shader graph: the desktop without it, open and idle, six constant edits, and closed again, in one process (`ShaderGraphCostProbe`, writes `graph-cost.txt`); `-Dcrystalgui.harness.desktop.baseline=true` measures the desktop as a user feels it and writes `baseline.txt` (`DesktopBaselineProbe`): the editor's first open, three applications opening, steady state, a theme switch every 30 frames and a 20,000-line file opened, each as the render thread's frame, how often a new picture shows (the taskbar's and every window's real rate), input to screen, and what ran during its longest freeze, on every thread, with the document's sequence as a timeline -- the before and after for any change to how the desktop runs; `-Dcrystalgui.harness.desktop.hoverSweep=true` parks the pointer for 600 frames, then sweeps it across the editor window for 600 and prints work median and p95 per block plus the per-zone comparison (`HoverSweepProbe`, `[hover-sweep]` lines) |
 | `cgui-gallery` | one widget, a page each |
 | `cgui-text-stress` | text shaping and layout under load |
 | `cgui-timeline` | the profiler's own tracks under 10,000 spans |
@@ -142,6 +142,7 @@ Every scene gets a run directory from the engine (`CgTraceRun`): `gl-debug-harne
   `report-after.txt` and `report-compare.txt` (per zone): the frames either side of the first such marker after 60
   frames without one, `-Dcrystalgraphics.trace.splitFrames` (300) each at most. The VFX showcase's beams against
   its blasts: `splitAt=vfx.blast` with `-Dcrystalgraphics.trace.frames=1500`, so the ring holds a whole cycle.
+- **JFR in a modern dev client**: `-PcgJvmArgs="-XX:StartFlightRecording=filename=build/client.jfr,settings=profile"`, as on 1.7.10.
 - `-Dcrystalgui.frameprofile=true` (1.7.10: `-PcgFrameProfile`) echoes each slow frame's line to the
   console too, and turns the frame channel on; `.floor=<ms>` (8) and `.every=<ms>` (1000) tune it.
 
@@ -157,6 +158,9 @@ opens that frame in the profiler.
   images. Saved to `apps/crystalgui.frameprofiler/settings.json`.
 - **Tabs**: Hints, Zones, Call tree (callers beside it), Counters, Chains (the `flow` spans), Compare,
   Screen (the frame's picture, with `images` on), Buffers.
+- **Lanes**: one per thread, and one per **sequence**: a document's turns land on whichever UI pool thread is free,
+  so each turn is a `sequence:<name>` zone (`crystalgui.frame`) and everything inside it is drawn in that
+  sequence's lane.
 - **Buffers** is live, not the selected frame's: every buffer a compute pass binds, a row per buffer and pass. Pick one
   and a page of its elements is read after that pass next runs, each field decoded by the kernel's declaration
   (CrystalGraphics' `CgBufferInspector`); **Follow** reads it again at the refresh rate. It watches from when it first
@@ -202,12 +206,15 @@ opens that frame in the profiler.
 | Language stack | frame, flow | `language/…/grammar`, `engine/AnalysedLanguageServices`, `java/*`, `js/JsLanguageServices` |
 | Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*` -- `sg-preview-lost` is a preview that had a picture painting none, a blink on screen. `widget/canvas`, `widget/graph`, `app/shadergraph`; the renderers under them are CrystalGraphics' `shadergraph` channel |
 | Hooks | frame | `anim-hooks`, `anim-after-layout-hooks`: live per-frame and post-layout hooks, a count that climbs while nothing happens being a leak (`UIDocument`) |
+| Work on the document's thread outside its frames | flow | `app:launch` (`desktop/app/ApplicationRegistry`), `profiler:open` (`app/frameprofiler/FrameProfiler`), `lang:analyzeNow` (`language/…/AnalysedLanguageServices`: a document opened with text is analysed before its services return) |
+| The desktop's screen on the render thread | flow | `screen:build`, `screen:shown` (an open's render-thread share), `screen:tick` (once a host frame), `screen:paint` (the viewport's frame at `HUD` or `SCREEN`) in `screen/CgUiScreen` |
 
 **Not instrumented** — zone these before any question that touches them:
 
 - **input dispatch** (`ui/service/Input`) inside `frame:input` — hit testing, the three-phase walk, the
   keymap — and key events, which dispatch as the host delivers them rather than in the frame;
 - **the desktop compositor** (`desktop/**`): window motion, the taskbar, snapshots, the switcher;
+- **the commit path** (`CgUiViewport`, `CommitQueue`): nothing zoned; `DesktopBaselineProbe` measures it from outside (`presentedCommit()`), and other work the sequence runs between frames shows only as its own zones;
 - **individual widgets' paint** outside the editor and SVG;
 - **Taffy's compute** inside `frame:layout`, and `UIText` measurement;
 - **the wire and the workspace** (`net/**`, `fs/**`) — spans where an action waits on them;

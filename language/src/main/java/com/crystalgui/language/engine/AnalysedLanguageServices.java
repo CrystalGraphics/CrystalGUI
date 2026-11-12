@@ -653,7 +653,11 @@ public abstract class AnalysedLanguageServices implements LanguageServices {
     /** Analyses on the calling thread — construction, and any caller with no scheduler. */
     private void analyzeNow() {
         if (closed) return;
-        install(analyse(buffer.document().toString(), buffer.version()));
+        // On the UI thread, often outside any frame (a file's open): without a zone it is a stretch of nothing.
+        long analysing = CgTrace.stamp(UiTrace.FLOW);
+        Analysis analysis = analyse(buffer.document().toString(), buffer.version());
+        CgTrace.zoneDone(UiTrace.FLOW, "lang:analyzeNow", analysing);
+        install(analysis);
     }
 
     /** UI thread. Swaps in the new analysis, releases the old, and tells everyone watching. */

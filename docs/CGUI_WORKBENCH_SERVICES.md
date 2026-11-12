@@ -369,13 +369,13 @@ The `when`-expression parser (`editorFocus && resourceExtname == .java`). Predic
 
 ## Commands
 
-`com.crystalgui.core.command` — `Command`, `CommandRegistry`, `MenuId`.
+`com.crystalgui.core.command` — `Command`, `Commands`, `MenuId`.
 
 One type. A command carries its id, title, enablement, default bindings **and** menu placement, and is
-registered into `CommandRegistry.global()`.
+registered into `Commands.process()`.
 
 ```java
-Disposable handle = CommandRegistry.global().register(Command.of("graph.delete", "Delete")
+Disposable handle = Commands.process().register(Command.of("graph.delete", "Delete")
         .binding("Delete", "Backspace")
         .menu(MenuId.GRAPH_CONTEXT, "modify", 10)
         .enabledWhereData(context -> context.has(GraphView.GRAPH_VIEW))
@@ -399,7 +399,13 @@ A command is a fact about the *application*. What varies per window is what is *
 to find "its" window before it could contribute, and one widget ended up calling `installCommands()`
 from a **frame ticker** — so its commands did not exist until a frame after it attached.
 
-`CommandRegistry` instances still exist and fall through to the global one. An instance is a place for
+`Commands.process()` is a published list of contributions: the lookup by id, the rows of every menu and the
+declared keymap are indices of one generation, built once and shared, so a command contributed from another
+sequence is whole at the next frame. A command runs on the sequence of the document its key or menu was in, with
+that document's data context; one with no document (a host's key binding, a call from a worker) runs on the
+services sequence and may only post.
+
+`Commands` instances still exist and fall through to the process one. An instance is a place for
 *overrides*; almost nothing needs one, and tests use them for isolation.
 
 ### The rule for whether a command may be global
@@ -421,14 +427,14 @@ same move that turned `GraphCommands.graphFor` from an `instanceof` walk into a 
 
 ```java
 class GraphView extends CanvasView {
-    @Override protected void registerCommands(CommandRegistry registry) { GraphCommands.register(); }
+    @Override protected void registerCommands(Commands registry) { GraphCommands.register(); }
     @Override protected void bindKeys() { GraphCommands.bindDefaults(keymap()); }
 }
 ```
 
 | Hook | Runs | For |
 |---|---|---|
-| `registerCommands(CommandRegistry)` | **once per concrete class** | the commands themselves — one application-wide fact each |
+| `registerCommands(Commands)` | **once per concrete class** | the commands themselves — one application-wide fact each |
 | `bindKeys()` | **once per instance** | chords scoped to *this* widget, on `keymap()` |
 
 The split is load-bearing. A command is registered once and resolves its subject from `DataContext`; a
@@ -452,7 +458,7 @@ later invocation to whichever instance was built first; the timing makes that ha
 
 ```java
 public static void register() {
-    CommandRegistry.global().contribute(GraphCommands.class, GraphCommands::declare);
+    Commands.process().contribute(GraphCommands.class, GraphCommands::declare);
 }
 ```
 
@@ -505,7 +511,7 @@ Two consequences that are easy to miss:
   the same "menu disagrees with the keystroke" failure their own javadoc warns about, from the other side.
 
 `menu(MenuId, group, order)` is what lets a widget contribute to a menu it does not own, instead of
-reaching the method that builds it. `CommandRegistry.menu(id, context)` returns the contributions in
+reaching the method that builds it. `Commands.menu(id, context)` returns the contributions in
 group-then-order, **omitting disabled ones** — a context menu is built for one position and an entry
 that cannot apply there is noise. A palette wants the opposite and asks `all()`, rendering enablement
 itself.
@@ -582,7 +588,7 @@ out instead of being maintained.
   order)`. If it were an entry kind, only the parent's author could add to it — the same coupling one
   level down.
 - **Disabled items are dimmed, not dropped** — `ContextMenu`'s rule, deliberately *not*
-  `CommandRegistry.menu`'s, which filters. A menu whose items move depending on what applies is a menu
+  `Commands.menu`'s, which filters. A menu whose items move depending on what applies is a menu
   whose items are never in the same place twice. A submenu with *nothing contributed* is dropped, which is
   a different thing: that is a registration that never happened.
 
@@ -1184,7 +1190,7 @@ the workbench, and the split is not ceremony: most openable things cannot be con
 image, a decompiled class — and some creatable things are not documents at all, such as a folder.
 
 ```java
-workbench.newDocuments().register(NewDocumentKind.of("mymod:notes", "Notes")
+workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of("mymod:notes", "Notes")
         .icon("crystalgui:file-text")
         .suffix(".notes")
         .where(NewDocumentContext::outsideSourceRoots)
@@ -1195,7 +1201,7 @@ workbench.newDocuments().register(NewDocumentKind.of("mymod:notes", "Notes")
 |---|---|
 | `NewDocumentKind` | the declaration: id, label, icon, suffix, placement, `where`, `template`, variants |
 | `NewDocumentContext` | where a New would land — the directory and the source root containing it |
-| `NewDocumentKinds` | the registry, per workbench. `register` answers a `Disposable`; a duplicate id is refused |
+| `NewDocumentKinds` | the process-wide registry, one `Contributions`. `contribute(owner, kind)` answers a `Disposable`; what an owner contributed is offered by every workbench while it runs and leaves with it; one owner contributing an id twice is refused |
 | `WorkbenchContext.newDocuments()` | how an extension reaches it |
 
 **The id is a command id.** A row is invocable like anything else, so the id is what a keymap and a
@@ -1482,7 +1488,7 @@ public final class NotesKind implements WorkbenchExtension {
     public NotesKind() { }                                  // ServiceLoader's rule
     @Override public String id() { return ID; }
     @Override public Disposable activate(WorkbenchContext workbench) {
-        return workbench.kinds().register(KIND);            // everything it registered, in one handle
+        return workbench.kinds().contribute(workbench.owner(), KIND);   // everything it contributed, in one handle
     }
 }
 ```
@@ -1647,7 +1653,8 @@ A contributor declares *what* it can describe and *how to read it*. Everything e
 | Deferring the rebuild off the event that caused it | `Inspector` (a frame later — never rebuild what is being clicked) |
 | Skipping the rebuild when the subject has not moved | `Inspector`, via `subjectKey` |
 | Releasing a replaced panel's subscriptions | `ConfiguratorPanel.clearRows()` |
-| Announcing that a **selection** moved | the widget that owns it — `GraphSelection` does it itself |
+| Announcing that a **selection** moved | the widget that owns it, through its document's `InspectorSubject` (`InspectorSubject.changed(node)`) — `GraphSelection` and `SurfaceEditor` do it themselves |
+| Letting go of a **closed** subject | its owner: `InspectorSubject.closed(document, element)`, the document named because a closed view is often already detached |
 
 > **Nothing outside a document could be inspected** until this moved. The application resolved the
 > subject as `workbench.activeDocument().view()`, so a section describing a file-tree row or a timeline
@@ -1716,24 +1723,25 @@ StatusBarEntryAccessor caret = StatusBar.addEntry(
 | **`addEntry` returns a handle; the handle is the identity and the lifetime** | A string key made withdrawal etiquette a writer had to remember, and made two writers on one id a silent collision — the same failure `onStatus` had, narrowed from one slot for everyone to one slot per string. Two registrations are two entries whatever they are called. Register it on a `Disposer` and it dies with its owner |
 | **Higher priority is further LEFT, in BOTH groups** | Not "closer to the outer edge", which sounds right and gets the right-hand group backwards. VS Code's own are selection 100, indentation 99, encoding 98, eol 97 |
 | **`name` is what the entry IS; `text` is what it shows** | A hide menu lists entries by `name` — you cannot offer "hide 51:39" as a checkbox, and the text changes on every keystroke. The split looks redundant until something enumerates the bar |
-| **`command` is a command ID, never a callback** | Keeps a clickable readout reachable from the palette and a keymap too. The view runs it as `CommandRegistry.global().run(id, CommandContext.of(element))` — **contextless `run(id)` builds an EMPTY DataContext**, so any command with `enabledWhereData` fails its guard and silently does nothing |
+| **`command` is a command ID, never a callback** | Keeps a clickable readout reachable from the palette and a keymap too. The view runs it as `Commands.process().run(id, CommandContext.of(element))` — **contextless `run(id)` builds an EMPTY DataContext**, so any command with `enabledWhereData` fails its guard and silently does nothing |
 | **`update` is silent when the entry is equal** | The record's own `equals`, not a hand-written field comparison — which is how adding a field to `StatusBarEntry` would otherwise silently skip the guard. The caret readout writes on every selection change |
 | **`onDidChange` carries nothing** | It carried the composed line, so `text()` walked every entry on every write whether or not anything wanted a string |
 | **`setHidden(id, …)` hides; `allEntries()` still lists it** | Or there is no way to switch it back on. `entries(alignment)` is what a bar renders; `allEntries()` is what a menu enumerates |
 
 ## The notification model
 
-`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`.
+`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`. Its changes are
+a `Broadcast`: posted, and heard on the subscriber's own document, a turn later.
 
 ```java
-Notifications.onDidChange.connect(event -> {
+whileConnected(() -> Notifications.onDidChange.subscribe(event -> {
     switch (event.kind()) {
         case ADDED   -> add(event.notification());
         case CHANGED -> restate(event.notification());   // a repeat, or a handle's updateMessage
         case REMOVED -> remove(event.notification());    // aged out, or withdrawn
         case CLEARED -> rebuild();                       // one event, not N removals
     }
-});
+}));
 NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
 handle.updateMessage("Reconnecting");   // arrives as CHANGED — not a new event, does not re-ring the bell
 handle.close();                          // arrives as REMOVED
@@ -1897,7 +1905,7 @@ registry.contributeMenu(MenuId.MAIN_WINDOW, (menu, context) -> {
   maintains is the intended cost, going to disk is not.
 - Keyed per menu, so opening File does not ask the Window menu's contributor anything.
 
-### Reading a menu — `CommandRegistry.sections`
+### Reading a menu — `Commands.sections`
 
 ```java
 List<MenuSection> sections = registry.sections(MenuId.MAIN_FILE, CommandContext.of(source));
@@ -1909,7 +1917,7 @@ tree to draw one row).
 
 > **Disabled rows are included, marked.** The registry states the answer and does not act on it. Both
 > current renderers dim rather than hide — see `MenuBuilder`'s class note for why, and for the 1-of-9
-> palette this repo already paid for. `CommandRegistry.menu()` is the deprecated flat, filtered view.
+> palette this repo already paid for. `Commands.menu()` is the deprecated flat, filtered view.
 
 ### Rendering — `MenuBuilder`
 
@@ -1934,7 +1942,7 @@ release.
 ### The bar — `MenuBarView`
 
 ```java
-MenuBarView bar = new MenuBarView(CommandRegistry.global());
+MenuBarView bar = new MenuBarView(Commands.process());
 MainMenuCommands.install(bar);      // the six standard titles, or call addMenu yourself
 workbench.appendStructural(bar);    // above content; the workbench is a column
 ```

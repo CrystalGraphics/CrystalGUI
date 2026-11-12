@@ -3,7 +3,7 @@ package com.crystalgui.workbench.chrome.problems;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -62,7 +62,7 @@ public class ProblemsMenuTest extends UiDocumentTestBase {
     /** Both commands exist under the ids the menu names — an unregistered id is a permanently dead row. */
     @Test
     public void theMenusCommandsAreRegistered() {
-        CommandRegistry registry = CommandRegistry.global();
+        Commands registry = Commands.process();
         assertNotNull(registry.get(ProblemsCommands.SHOW_QUICK_FIXES));
         assertNotNull(registry.get(ProblemsCommands.JUMP_TO_SOURCE));
     }
@@ -75,7 +75,7 @@ public class ProblemsMenuTest extends UiDocumentTestBase {
      */
     @Test
     public void theRowsAreDeadUntilThereIsAProblemToActOn() {
-        Command fixes = CommandRegistry.global().get(ProblemsCommands.SHOW_QUICK_FIXES);
+        Command fixes = Commands.process().get(ProblemsCommands.SHOW_QUICK_FIXES);
         assertNotNull(fixes);
         // Nothing right-clicked yet: there is no subject, so there is nothing to enable.
         assertFalse("a menu opened over nothing must not offer to fix it",

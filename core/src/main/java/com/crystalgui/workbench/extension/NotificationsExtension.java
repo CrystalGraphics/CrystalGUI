@@ -57,7 +57,7 @@ public final class NotificationsExtension implements WorkbenchExtension {
                         .view(view)
                         .toggle(SHOW)
                         .badge((ctx, set) -> {
-                            Connection watch = Notifications.onDidChangeUnread.connect(count ->
+                            Connection watch = Notifications.onDidChangeUnread.subscribe(count ->
                                     set.accept(count == null || count <= 0
                                             ? null : ViewContainerRegistry.DOT));
                             return watch::disconnect;

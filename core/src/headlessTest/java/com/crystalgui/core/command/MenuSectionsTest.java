@@ -14,7 +14,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * {@link CommandRegistry#sections} — the query every menu renderer reads.
+ * {@link Commands#sections} — the query every menu renderer reads.
  *
  * <h3>What is worth pinning here</h3>
  *
@@ -30,7 +30,7 @@ public class MenuSectionsTest {
      * A FRESH MENU ID PER TEST, because a submenu declaration is permanent.
      *
      * <p>{@link MenuId#submenu} records on the interned id itself, not on any registry, so
-     * {@link CommandRegistry#resetForTesting} cannot undo it — and one test nesting a child left every
+     * {@link Commands#resetForTesting} cannot undo it — and one test nesting a child left every
      * later test seeing a stray section. That is correct behaviour (a submenu is a structural fact about
      * a menu, like a class declaration) and it means a shared constant is the wrong shape for a test.</p>
      */
@@ -41,19 +41,19 @@ public class MenuSectionsTest {
     @Before
     @After
     public void reset() {
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         menu = MenuId.of("test/sections/" + counter++);
     }
 
     private List<MenuSection> sections() {
-        return CommandRegistry.global().sections(menu, CommandContext.of(null));
+        return Commands.process().sections(menu, CommandContext.of(null));
     }
 
     @Test
     public void groupsSurviveTheQuerySoASeparatorCanBeDrawn() {
-        CommandRegistry.global().register(Command.of("s.paste", "Paste").menu(menu, "2_clipboard", 20));
-        CommandRegistry.global().register(Command.of("s.new", "New").menu(menu, "1_new", 10));
-        CommandRegistry.global().register(Command.of("s.copy", "Copy").menu(menu, "2_clipboard", 10));
+        Commands.process().register(Command.of("s.paste", "Paste").menu(menu, "2_clipboard", 20));
+        Commands.process().register(Command.of("s.new", "New").menu(menu, "1_new", 10));
+        Commands.process().register(Command.of("s.copy", "Copy").menu(menu, "2_clipboard", 10));
 
         List<MenuSection> sections = sections();
         assertEquals("two groups must come back as two sections, not one flat run", 2, sections.size());
@@ -68,13 +68,13 @@ public class MenuSectionsTest {
      * The half of G2 that a flat, filtered list could not say at all.
      *
      * <p>A menu bar must keep File ▸ Save in the same place whether or not there is anything to save. If
-     * the registry filtered, the bar would have to re-derive enablement from {@link CommandRegistry#all()}
+     * the registry filtered, the bar would have to re-derive enablement from {@link Commands#all()}
      * itself — which is exactly the second derivation this method exists to remove.</p>
      */
     @Test
     public void aDisabledCommandIsReportedNotDropped() {
-        CommandRegistry.global().register(Command.of("s.on", "On").menu(menu, "g", 10));
-        CommandRegistry.global().register(Command.of("s.off", "Off").menu(menu, "g", 20)
+        Commands.process().register(Command.of("s.on", "On").menu(menu, "g", 10));
+        Commands.process().register(Command.of("s.off", "Off").menu(menu, "g", 20)
                 .enabledWhen(context -> false));
 
         List<MenuEntry> entries = sections().get(0).entries();
@@ -87,7 +87,7 @@ public class MenuSectionsTest {
     @Test
     public void aToggleReportsThatItIsCheckableAndWhichWayItPoints() {
         boolean[] state = {false};
-        CommandRegistry.global().register(Command.of("s.wrap", "Wrap").menu(menu, "g", 10)
+        Commands.process().register(Command.of("s.wrap", "Wrap").menu(menu, "g", 10)
                 .toggledWhen(context -> state[0]));
 
         MenuEntry.Item off = (MenuEntry.Item) sections().get(0).entries().get(0);
@@ -101,7 +101,7 @@ public class MenuSectionsTest {
 
     @Test
     public void anOrdinaryCommandIsNotCheckable() {
-        CommandRegistry.global().register(Command.of("s.plain", "Plain").menu(menu, "g", 10));
+        Commands.process().register(Command.of("s.plain", "Plain").menu(menu, "g", 10));
         assertFalse("reserving a mark column for every row would indent labels that have no mark",
                 ((MenuEntry.Item) sections().get(0).entries().get(0)).checkable());
     }
@@ -110,7 +110,7 @@ public class MenuSectionsTest {
     public void aSubmenuIsListedButNotExpanded() {
         MenuId child = MenuId.of("test/sections/child");
         menu.submenu(child, "More", "9_more", 0);
-        CommandRegistry.global().register(Command.of("s.deep", "Deep").menu(child, "g", 10));
+        Commands.process().register(Command.of("s.deep", "Deep").menu(child, "g", 10));
 
         List<MenuSection> sections = sections();
         MenuSection last = sections.get(sections.size() - 1);
@@ -130,8 +130,8 @@ public class MenuSectionsTest {
      */
     @Test
     public void aWithdrawnContributorStopsContributing() {
-        CommandRegistry.global().register(Command.of("s.a", "A").menu(menu, "1_static", 10));
-        Disposable handle = CommandRegistry.global().contributeMenu(menu, (target, context) -> List.of(
+        Commands.process().register(Command.of("s.a", "A").menu(menu, "1_static", 10));
+        Disposable handle = Commands.process().contributeMenu(menu, (target, context) -> List.of(
                 MenuEntry.Item.of(Command.of("s.computed", "Computed"), "1_static", 20)));
         assertEquals(List.of("s.a", "s.computed"), idsOf(sections().get(0)));
 
@@ -143,8 +143,8 @@ public class MenuSectionsTest {
 
     @Test
     public void aContributorsRowsMergeByGroupAndOrderLikeAnyOther() {
-        CommandRegistry.global().register(Command.of("s.a", "A").menu(menu, "1_static", 10));
-        CommandRegistry.global().contributeMenu(menu, (target, context) -> List.of(
+        Commands.process().register(Command.of("s.a", "A").menu(menu, "1_static", 10));
+        Commands.process().contributeMenu(menu, (target, context) -> List.of(
                 MenuEntry.Item.of(Command.of("s.computed", "Computed"), "1_static", 20)));
 
         assertEquals("a computed row is an ordinary participant, not something pinned to one end",
@@ -154,7 +154,7 @@ public class MenuSectionsTest {
     @Test
     public void aContributorIsAskedEveryTimeSoItsRowsCanChange() {
         int[] calls = {0};
-        CommandRegistry.global().contributeMenu(menu, (target, context) -> {
+        Commands.process().contributeMenu(menu, (target, context) -> {
             calls[0]++;
             return List.of(MenuEntry.Item.of(Command.of("s.n" + calls[0], "Row"), "g", 10));
         });
@@ -167,19 +167,19 @@ public class MenuSectionsTest {
     @Test
     public void aContributorIsNotAskedAboutOtherMenus() {
         int[] calls = {0};
-        CommandRegistry.global().contributeMenu(menu, (target, context) -> {
+        Commands.process().contributeMenu(menu, (target, context) -> {
             calls[0]++;
             return List.of();
         });
-        CommandRegistry.global().sections(MenuId.of("test/sections/other"), CommandContext.of(null));
+        Commands.process().sections(MenuId.of("test/sections/other"), CommandContext.of(null));
         assertEquals("keying by menu is what stops every open costing every contributor", 0, calls[0]);
     }
 
     @Test
     public void aResetForgetsContributorsAndNotOnlyCommands() {
-        CommandRegistry.global().contributeMenu(menu, (target, context) ->
+        Commands.process().contributeMenu(menu, (target, context) ->
                 List.of(MenuEntry.Item.of(Command.of("s.stale", "Stale"), "g", 10)));
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         assertTrue("a surviving contributor holds a lambda closing over the previous test's widgets",
                 sections().isEmpty());
     }
@@ -187,18 +187,6 @@ public class MenuSectionsTest {
     @Test
     public void anEmptyMenuIsAnEmptyListNotASectionWithNothingInIt() {
         assertTrue(sections().isEmpty());
-    }
-
-    /** The legacy flat view still filters, so the callers that wanted that shape are unchanged. */
-    @Test
-    @SuppressWarnings("deprecation")
-    public void theFlatViewStillDropsDisabledCommands() {
-        CommandRegistry.global().register(Command.of("s.on", "On").menu(menu, "g", 10));
-        CommandRegistry.global().register(Command.of("s.off", "Off").menu(menu, "g", 20)
-                .enabledWhen(context -> false));
-        List<Command> flat = CommandRegistry.global().menu(menu, CommandContext.of(null));
-        assertEquals(1, flat.size());
-        assertSame(CommandRegistry.global().get("s.on"), flat.get(0));
     }
 
     private static List<String> idsOf(MenuSection section) {

@@ -1,15 +1,14 @@
 package com.crystalgui.workbench.chrome.menu;
 
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.Name;
-import com.crystalgui.ui.box.Box;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -30,7 +29,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The main menu bar — File, Edit, View, … — as a query over {@link CommandRegistry}.
+ * The main menu bar — File, Edit, View, … — as a query over {@link Commands}.
  *
  * <h3>It holds no items</h3>
  *
@@ -93,7 +92,7 @@ public class MenuBarView extends UIElement {
     /** Fires when a menu opens or closes, carrying the open id or null. */
     public final Signal.Value<MenuId> onDidChangeOpenMenu = new Signal.Value<>();
 
-    private final CommandRegistry registry;
+    private final Commands registry;
     private final List<Title> titles = new ArrayList<>();
 
     /** The open chain, root first — attached to the window, discarded together. @see MenuBuilder#present */
@@ -105,7 +104,7 @@ public class MenuBarView extends UIElement {
     /** Whether the mnemonic underlines are currently drawn — the last answer {@link #tickFrame} saw. */
     private boolean mnemonicsShown;
 
-    public MenuBarView(CommandRegistry registry) {
+    public MenuBarView(Commands registry) {
         super(NAME);
         this.registry = registry;
         this.registry.contribute(MenuBarView.class, MainMenuCommands::register);
@@ -724,7 +723,7 @@ public class MenuBarView extends UIElement {
      * two cannot disagree about what is currently drawn.</p>
      */
     public boolean tickFrame(float deltaSeconds) {
-        boolean want = revealed || CgModifiers.hasAlt(PlatformPort.current().modifiers());
+        boolean want = revealed || CgModifiers.hasAlt(Input.modifiersNow());
         if (want == mnemonicsShown) return true;
         mnemonicsShown = want;
         for (Title title : titles) title.showMnemonic(want);

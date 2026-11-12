@@ -57,7 +57,7 @@ public class CommandRegistryGlobalTest {
     @Before
     @After
     public void reset() {
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         ran.clear();
     }
 
@@ -69,9 +69,9 @@ public class CommandRegistryGlobalTest {
     @Test
     public void anActionExistsBeforeAnyWindowDoes() {
         register(Command.of("test.thing", "Thing").run(() -> ran.add("thing")));
-        assertTrue(CommandRegistry.global().contains("test.thing"));
-        assertNotNull(CommandRegistry.global().get("test.thing"));
-        assertEquals(1, CommandRegistry.global().all().size());
+        assertTrue(Commands.process().contains("test.thing"));
+        assertNotNull(Commands.process().get("test.thing"));
+        assertEquals(1, Commands.process().all().size());
     }
 
     /**
@@ -86,7 +86,7 @@ public class CommandRegistryGlobalTest {
         register(Command.of("test.dup", "First").run(() -> ran.add("first")));
         register(Command.of("test.dup", "Second").run(() -> ran.add("second")));
 
-        assertEquals("Second", CommandRegistry.global().get("test.dup").getLabel());
+        assertEquals("Second", Commands.process().get("test.dup").getLabel());
         run("test.dup", CommandContext.of(null));
         assertEquals(List.of("second"), ran);
     }
@@ -192,14 +192,14 @@ public class CommandRegistryGlobalTest {
     @Test
     public void bindingsAreDeclaredWithTheAction() {
         register(Command.of("test.bound", "Bound").binding("Delete", "Backspace"));
-        assertEquals(List.of("Delete", "Backspace"), CommandRegistry.global().get("test.bound").bindings());
+        assertEquals(List.of("Delete", "Backspace"), Commands.process().get("test.bound").bindings());
     }
 
     /** Menus are interned, so a menu named twice is one menu. */
     @Test
     public void menuIdsAreInterned() {
         assertEquals(MenuId.GRAPH_CONTEXT, MenuId.of("graph/context"));
-        assertNull(CommandRegistry.global().get("nothing"));
+        assertNull(Commands.process().get("nothing"));
     }
 
     /**
@@ -212,13 +212,13 @@ public class CommandRegistryGlobalTest {
      */
     @Test
     public void registeringHandsBackTheWayToWithdraw() {
-        Disposable handle = CommandRegistry.global().register(Command.of("t.go", "Go"));
-        assertTrue("registered", CommandRegistry.global().contains("t.go"));
+        Disposable handle = Commands.process().register(Command.of("t.go", "Go"));
+        assertTrue("registered", Commands.process().contains("t.go"));
 
         handle.dispose();
 
         assertFalse("disposing the handle must take the command with it",
-                CommandRegistry.global().contains("t.go"));
+                Commands.process().contains("t.go"));
     }
 
     /**
@@ -230,20 +230,20 @@ public class CommandRegistryGlobalTest {
      */
     @Test
     public void withdrawingDoesNotTakeALaterOverrideWithIt() {
-        Disposable first = CommandRegistry.global().register(Command.of("t.go", "Go"));
-        CommandRegistry.global().register(Command.of("t.go", "Go, but the mod's"));
+        Disposable first = Commands.process().register(Command.of("t.go", "Go"));
+        Commands.process().register(Command.of("t.go", "Go, but the mod's"));
 
         first.dispose();
 
         assertNotNull("the override must survive the withdrawal of what it replaced",
-                CommandRegistry.global().get("t.go"));
-        assertEquals("Go, but the mod's", CommandRegistry.global().get("t.go").getLabel());
+                Commands.process().get("t.go"));
+        assertEquals("Go, but the mod's", Commands.process().get("t.go").getLabel());
     }
 
     // ── helpers ────────────────────────────────────────────────────────────────
 
     private static void register(Command... commands) {
-        for (Command command : commands) CommandRegistry.global().register(command);
+        for (Command command : commands) Commands.process().register(command);
     }
 
     private static CommandContext ctx(UIElement source) {
@@ -251,11 +251,18 @@ public class CommandRegistryGlobalTest {
     }
 
     private static boolean run(String id, CommandContext context) {
-        return CommandRegistry.global().run(id, context);
+        return Commands.process().run(id, context);
     }
 
+    /** The enabled commands of a menu, flat: what these tests ask of it. */
     private static List<Command> menu(MenuId menu, CommandContext context) {
-        return CommandRegistry.global().menu(menu, context);
+        List<Command> found = new ArrayList<>();
+        for (MenuSection section : Commands.process().sections(menu, context)) {
+            for (MenuEntry entry : section.entries()) {
+                if (entry instanceof MenuEntry.Item item && item.enabled()) found.add(item.command());
+            }
+        }
+        return found;
     }
 
 }

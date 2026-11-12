@@ -1,57 +1,71 @@
 package com.crystalgui.document;
 
+import com.crystalgui.core.async.Broadcast;
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 
 /**
- * The registered {@link NewDocumentKind}s — what <b>New ▸</b> is built from.
+ * The registered {@link NewDocumentKind}s: what <b>New ▸</b> is built from.
  *
- * <p>An instance rather than a static, and per workbench, for the reason {@link DocumentKinds} is: two
- * workbenches in one process is ordinary, and each keeps its own. A jar contributes through the same
- * {@code WorkbenchExtension} seam it contributes a panel or a document kind through.</p>
+ * <p>The creation-side twin of {@link DocumentKinds}, with the same one route and the same scoping: every workbench
+ * reads {@link #process()}, and what an application contributes is offered while its {@link Owner} runs. An instance
+ * of its own, for a test, is {@code new NewDocumentKinds()}.</p>
  *
  * <pre>{@code
- * workbench.newDocuments().register(NewDocumentKind.of("mymod:thing", "Thing")
+ * NewDocumentKinds.process().contribute(workbench.owner(), NewDocumentKind.of("mymod:thing", "Thing")
  *         .suffix(".thing")
  *         .template(target -> "{ \"name\": \"" + target.typeName() + "\" }"));
  * }</pre>
  *
- * <p>Registration answers a {@link Disposable}, so a mod that unloads takes its rows with it. A second
- * registration of the same id is refused rather than silently winning — which id applies would otherwise
- * depend on load order, and the id is a command id, so a keymap naming it would fire different things on
- * different launches.</p>
+ * <p>One owner contributing an id twice is refused: the id is a command id, so a keymap naming it would fire
+ * different things on different launches. Another owner contributing it is a second holder; the first is read.</p>
  */
 public final class NewDocumentKinds {
 
-    private final List<NewDocumentKind> kinds = new ArrayList<>();
+    private static final NewDocumentKinds PROCESS = new NewDocumentKinds();
 
-    /** A kind was registered or withdrawn — what an open New menu re-reads. */
-    public final Signal.Action onDidChange = new Signal.Action();
+    private final Contributions<NewDocumentKind> contributed =
+            Contributions.of("new-document-kinds", NewDocumentKind::id, Contributions.Conflict.SHARED);
 
-    /** @throws IllegalStateException if the id is already registered */
-    public Disposable register(NewDocumentKind kind) {
-        Objects.requireNonNull(kind, "kind");
-        for (NewDocumentKind existing : kinds) {
-            if (existing.id().equals(kind.id())) {
-                throw new IllegalStateException("a new-document kind '" + kind.id() + "' is already "
-                        + "registered — ids must be namespaced, e.g. 'mymod:" + kind.id() + "'");
-            }
-        }
-        kinds.add(kind);
-        onDidChange.emit();
-        return () -> {
-            if (kinds.remove(kind)) onDidChange.emit();
-        };
+    private final Contributions.Index<List<NewDocumentKind>> distinct = contributed.index(entries -> {
+        Map<String, NewDocumentKind> byId = new LinkedHashMap<>();
+        for (Contributions.Entry<NewDocumentKind> entry : entries) byId.putIfAbsent(entry.item().id(), entry.item());
+        return List.copyOf(byId.values());
+    });
+
+    /** The kinds every workbench reads. */
+    public static NewDocumentKinds process() {
+        return PROCESS;
     }
 
-    /** Every registered kind, in registration order. */
+    /** A kind was contributed or withdrawn: what an open New menu re-reads. */
+    public Broadcast<?> changes() {
+        return contributed.published().changes();
+    }
+
+    /** @throws IllegalStateException if another kind has the id */
+    public Disposable contribute(Owner owner, NewDocumentKind kind) {
+        Objects.requireNonNull(owner, "owner");
+        Objects.requireNonNull(kind, "kind");
+        return contributed.add(owner, kind);
+    }
+
+    /** Withdraws everything {@code owner} contributed. */
+    public void removeOwner(Owner owner) {
+        contributed.removeOwner(owner);
+    }
+
+    /** Every contributed kind, in the order contributed. */
     public List<NewDocumentKind> all() {
-        return List.copyOf(kinds);
+        return distinct.get();
     }
 
     /**
@@ -62,7 +76,7 @@ public final class NewDocumentKinds {
      */
     public List<NewDocumentKind> offeredAt(NewDocumentContext at) {
         List<NewDocumentKind> offered = new ArrayList<>();
-        for (NewDocumentKind kind : kinds) {
+        for (NewDocumentKind kind : distinct.get()) {
             if (kind.offeredAt(at)) offered.add(kind);
         }
         offered.sort(Comparator.comparing(NewDocumentKind::group)
@@ -72,7 +86,7 @@ public final class NewDocumentKinds {
 
     /** The kind with {@code id}, or null. */
     public NewDocumentKind byId(String id) {
-        for (NewDocumentKind kind : kinds) {
+        for (NewDocumentKind kind : distinct.get()) {
             if (kind.id().equals(id)) return kind;
         }
         return null;

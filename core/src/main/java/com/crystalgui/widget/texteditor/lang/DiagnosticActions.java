@@ -1,6 +1,7 @@
 package com.crystalgui.widget.texteditor.lang;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.text.diagnostic.Diagnostic;
 import com.crystalgui.text.lang.CodeAction;
 import com.crystalgui.text.lang.CodeActionKind;
@@ -66,7 +67,7 @@ final class DiagnosticActions {
     /**
      * Runs one, against the editor it was offered in.
      *
-     * <p>Dispatched here rather than through {@code CommandRegistry} because these are <b>about a
+     * <p>Dispatched here rather than through {@code Commands} because these are <b>about a
      * problem</b> and the registry resolves against the focused element, which during a hover is not
      * necessarily the editor. An id that is not one of ours returns false, so a future contributor can
      * route through the registry without this having to know.</p>
@@ -88,7 +89,8 @@ final class DiagnosticActions {
                 }
                 text = joined.toString();
             }
-            PlatformPort.current().setClipboard(text);
+            String copied = text;
+            CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
             return true;
         }
         return false;

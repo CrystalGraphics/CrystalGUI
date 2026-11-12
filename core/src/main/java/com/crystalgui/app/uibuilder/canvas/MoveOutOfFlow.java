@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import java.util.List;
 
 import javax.annotation.Nullable;
@@ -115,7 +115,7 @@ public final class MoveOutOfFlow extends UIElement {
         Drag.start(this, rawX, rawY, new Drag.Listener() {
             @Override
             public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                dragged(node, startX, startY, scale, dx, dy, modifiersNow());
+                dragged(node, startX, startY, scale, dx, dy, Input.modifiersNow());
             }
 
             @Override
@@ -278,8 +278,4 @@ public final class MoveOutOfFlow extends UIElement {
         document.apply(new BuilderEdit.SetInlineStyle(node, before, after));
     }
 
-    private static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 }

@@ -24,7 +24,7 @@ import javax.annotation.Nullable;
  * <p>Both references make almost every entry clickable: VS Code's encoding entry runs
  * {@code workbench.action.editor.changeEncoding}, IntelliJ's line-separator widget opens a popup. Naming a
  * command rather than holding a {@code Runnable} is what keeps that reachable from a keymap and a palette
- * as well as from the bar — the entry states <em>what</em> to do, and {@code CommandRegistry} owns how.</p>
+ * as well as from the bar — the entry states <em>what</em> to do, and {@code Commands} owns how.</p>
  *
  * @param name    what the entry is, for a hide menu and as the tooltip fallback. Never changes.
  * @param text    what the bar shows right now

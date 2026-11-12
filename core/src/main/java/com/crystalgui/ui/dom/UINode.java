@@ -2,7 +2,7 @@ package com.crystalgui.ui.dom;
 
 import java.util.function.Consumer;
 import com.crystalgraphics.job.CgHostThread;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsScope;
@@ -830,7 +830,11 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
         if (subscriptions == null) subscriptions = new ArrayList<>();
         Subscription subscription = new Subscription(subscribe);
         subscriptions.add(subscription);
-        if (isConnected()) subscription.start();
+        if (isConnected()) {
+            try (UIDocument.Running ignored = runningIn()) {
+                subscription.start();
+            }
+        }
         return () -> {
             if (subscriptions != null) subscriptions.remove(subscription);
             subscription.stop();
@@ -863,15 +867,27 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * mechanism exists to close.</p>
      */
     private void enterTree() {
-        if (subscriptions != null) {
-            // BY INDEX, and re-reading the size: an action below may register another subscription,
-            // and one added during the walk still belongs to this attach.
-            for (int i = 0; i < subscriptions.size(); i++) subscriptions.get(i).start();
+        try (UIDocument.Running ignored = runningIn()) {
+            if (subscriptions != null) {
+                // BY INDEX, and re-reading the size: an action below may register another subscription,
+                // and one added during the walk still belongs to this attach.
+                for (int i = 0; i < subscriptions.size(); i++) subscriptions.get(i).start();
+            }
+            if (onConnected != null) {
+                for (int i = 0; i < onConnected.size(); i++) onConnected.get(i).run();
+            }
+            connected();
         }
-        if (onConnected != null) {
-            for (int i = 0; i < onConnected.size(); i++) onConnected.get(i).run();
-        }
-        connected();
+    }
+
+    /**
+     * Makes this node's document the running one for an attach's hooks, unless it already is: what they subscribe to
+     * across sequences is then told on the document, wherever it runs once it has an owner. Null when nothing changes.
+     */
+    @Nullable
+    private UIDocument.Running runningIn() {
+        UIDocument mine = document;
+        return mine == null || UIDocument.current() == mine ? null : mine.makeCurrent();
     }
 
     /** The counterpart of {@link #enterTree}; same reason for living here. */
@@ -990,7 +1006,7 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
      * {@link #connected()} instead means the node is built, but it is still once per CLASS: register
      * per-instance things in the constructor.</p>
      */
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
     }
 
     /** This INSTANCE's chords, element-scoped. Runs on the first attach, after {@link #registerCommands}. */
@@ -1002,11 +1018,11 @@ public abstract class UINode implements KeymapScope, SettingsScope, StyleScope {
 
     void runCommandHooks() {
         // KEYED TO THE REGISTRY, never to a static set on this class. A static latch outlives
-        // `CommandRegistry.resetForTesting()`: the reset empties the registry, the next node of an
+        // `Commands.resetForTesting()`: the reset empties the registry, the next node of an
         // already-seen class registers nothing, and the command is simply absent -- no throw, no log,
         // just a key that stopped working. `contribute` records the contributor ON the registry, so
         // clearing one clears the other.
-        CommandRegistry.global().contribute(getClass(), this::registerCommands);
+        Commands.process().contribute(getClass(), this::registerCommands);
         if (!keysBound) {
             keysBound = true;
             bindKeys();

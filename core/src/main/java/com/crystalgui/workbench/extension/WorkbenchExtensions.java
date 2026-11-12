@@ -1,8 +1,11 @@
 package com.crystalgui.workbench.extension;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
-import java.util.concurrent.CopyOnWriteArrayList;
 
 import javax.annotation.Nullable;
 
@@ -50,45 +53,37 @@ public final class WorkbenchExtensions {
     private WorkbenchExtensions() {
     }
 
-    private static final List<WorkbenchExtension> CONTRIBUTED = new CopyOnWriteArrayList<>();
+    private static final Contributions<WorkbenchExtension> CONTRIBUTED =
+            Contributions.of("workbench-extensions", WorkbenchExtension::id, Contributions.Conflict.FIRST_WINS);
+    private static final Contributions.Index<Map<String, WorkbenchExtension>> BY_ID = CONTRIBUTED.index(entries -> {
+        Map<String, WorkbenchExtension> byId = new HashMap<>();
+        for (Contributions.Entry<WorkbenchExtension> entry : entries) byId.put(entry.item().id(), entry.item());
+        return byId;
+    });
 
     private static boolean bootstrapped;
 
     /**
-     * Adds an extension.
+     * Adds an extension. Two claiming one id is a packaging mistake: the first stays, and the second is logged.
      *
      * @return a handle that withdraws it, so a mod that unloads takes its feature with it
      */
     public static Disposable contribute(WorkbenchExtension extension) {
         if (extension == null) return () -> { };
-        for (WorkbenchExtension already : CONTRIBUTED) {
-            if (already.id().equals(extension.id())) {
-                // LAST ONE LOSES, and it is said out loud. Two extensions claiming one id is a packaging
-                // mistake -- a mod shipped twice, or two mods that picked the same string -- and the
-                // failure it produces otherwise is one feature silently replacing another's.
-                CrystalGuiCore.LOGGER.warn("[cgui] a workbench extension is already contributed under "
-                        + "'{}'; the second one is ignored", extension.id());
-                return () -> { };
-            }
-        }
-        CONTRIBUTED.add(extension);
-        return () -> CONTRIBUTED.remove(extension);
+        return CONTRIBUTED.add(Owner.PROCESS, extension);
     }
 
     /** Everything contributed, in contribution order — which is activation order. */
     public static List<WorkbenchExtension> all() {
         bootstrap();
-        return List.copyOf(CONTRIBUTED);
+        return CONTRIBUTED.all();
     }
 
     /** The one contributed under {@code id}, or null. */
     @Nullable
     public static WorkbenchExtension byId(String id) {
         bootstrap();
-        for (WorkbenchExtension each : CONTRIBUTED) {
-            if (each.id().equals(id)) return each;
-        }
-        return null;
+        return BY_ID.get().get(id);
     }
 
     /**
@@ -175,7 +170,7 @@ public final class WorkbenchExtensions {
 
     /** Empties the registry, bootstrap included. For tests that need isolation, never for production. */
     public static synchronized void resetForTesting() {
-        CONTRIBUTED.clear();
+        CONTRIBUTED.clearForTesting();
         bootstrapped = false;
     }
 }

@@ -788,6 +788,8 @@ if (!rootProject.extra.has("cgWarnedUnforwarded")
 tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
     jvmArgs("-XX:+UnlockExperimentalVMOptions", "-XX:+UseG1GC", "-XX:G1NewSizePercent=20", "-XX:G1ReservePercent=20",
         "-XX:MaxGCPauseMillis=50", "-XX:G1HeapRegionSize=32M")
+    // -PcgJvmArgs="-XX:StartFlightRecording=filename=build/client.jfr": JVM flags for the game, space-separated, as 1.7.10's.
+    providers.gradleProperty("cgJvmArgs").orNull?.let { jvmArgs(it.trim().split(Regex("\\s+"))) }
 }
 
 // Which API a 26.2+ client renders through, whatever options.txt says -- Minecraft resets a Vulkan

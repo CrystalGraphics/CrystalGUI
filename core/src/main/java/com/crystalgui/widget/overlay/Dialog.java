@@ -1,7 +1,6 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.ui.service.PlatformPort;
-import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.audio.CgSounds;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.style.StyleGroup;
@@ -131,7 +130,7 @@ public class Dialog extends UIElement {
      *
      * <p>Without it, window-scoped modality's failure mode reads as <em>this window ignores my
      * clicks</em>, which is indistinguishable from a bug. The visible half is a class the sheet
-     * transitions; the audible half a UI sound, {@code PlatformPort.playSound}.</p>
+     * transitions; the audible half a UI sound, {@code CgSounds.play2D}.</p>
      *
      * <p>The class is removed on the following frame rather than after a timer: a transition needs the
      * value to go back for the next press to move it again, and a one-frame round trip is enough because
@@ -143,7 +142,7 @@ public class Dialog extends UIElement {
         if (window == null || pulsing) return;
         pulsing = true;
         addClass(PULSE_CLASS);
-        PlatformPort.current().playSound("dialog_blocked");
+        CgSounds.play2D("dialog_blocked");
         window.animation().every(this, delta -> {
             removeClass(PULSE_CLASS);
             pulsing = false;

@@ -3,7 +3,7 @@ package com.crystalgui.desktop;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.desktop.app.Application;
@@ -78,7 +78,7 @@ public final class DesktopCommands {
     public static synchronized void register() {
         if (registered) return;
         registered = true;
-        CommandRegistry registry = CommandRegistry.global();
+        Commands registry = Commands.process();
 
         registry.register(Command.of(SWITCH_WINDOW, "Switch Window")
                 .binding("Mod+Tab")
@@ -226,7 +226,7 @@ public final class DesktopCommands {
                 .enabledWhen(context -> desktopFor(context) != null));
     }
 
-    /** Testing seam — {@code CommandRegistry.resetForTesting()} drops the registrations, not this flag. */
+    /** Testing seam — {@code Commands.resetForTesting()} drops the registrations, not this flag. */
     public static synchronized void resetForTesting() {
         registered = false;
     }
@@ -257,7 +257,7 @@ public final class DesktopCommands {
                 WindowCommands.GROUP_CLOSE, 1));
     }
 
-    private static void combineCommand(CommandRegistry registry, String id, String label, TaskbarCombine mode,
+    private static void combineCommand(Commands registry, String id, String label, TaskbarCombine mode,
                                        int order) {
         registry.register(Command.of(id, label)
                 .menu(MenuId.TASKBAR_CONTEXT, "5_combine", order)

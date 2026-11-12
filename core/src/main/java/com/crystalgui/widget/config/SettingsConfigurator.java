@@ -22,7 +22,7 @@ import java.util.List;
  *
  * <h3>This is the payoff for declarations being data</h3>
  * <p>A settings panel is <b>generated</b> here, the same way the command palette is generated from
- * {@code CommandRegistry}: nothing about which settings exist is written twice, so adding one is a single
+ * {@code Commands}: nothing about which settings exist is written twice, so adding one is a single
  * line in one place and it appears with a label, a control of the right kind and its value already in
  * it.</p>
  *

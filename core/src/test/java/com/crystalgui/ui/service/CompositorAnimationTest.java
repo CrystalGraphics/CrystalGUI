@@ -2,7 +2,7 @@ package com.crystalgui.ui.service;
 
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import com.crystalgui.style.property.visual.transform.Transform;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import org.junit.Test;
@@ -24,22 +24,22 @@ public class CompositorAnimationTest {
     }
 
     @Test
-    public void anAsyncDocumentHandsItToTheCompositorAndAnInlineOneDoesNot() {
+    public void aSequencedDocumentHandsItToTheCompositorAndAnInlineOneDoesNot() {
         UIDocument async = new UIDocument();
-        DocumentDriver<Void> driver = DocumentDriver.attach(async, DocumentDriver.Mode.ASYNC, "compositor");
+        CgUiViewport viewport = CgUiViewport.open(async, CgUiViewport.Threading.SEQUENCED, "compositor");
         try {
             UIElement window = new UIElement();
             CompositorAnimation played = flight(window);
-            assertTrue(driver.ask(() -> async.animation().playOnCompositor(played)));
-            assertSame(played, driver.ask(() -> async.animation().onCompositor(window)));
-            driver.run(() -> async.animation().stopOnCompositor(played));
-            assertNull(driver.ask(() -> async.animation().onCompositor(window)));
+            assertTrue(viewport.ask(() -> async.animation().playOnCompositor(played)));
+            assertSame(played, viewport.ask(() -> async.animation().onCompositor(window)));
+            viewport.run(() -> async.animation().stopOnCompositor(played));
+            assertNull(viewport.ask(() -> async.animation().onCompositor(window)));
         } finally {
-            driver.close();
+            viewport.close();
         }
 
         UIDocument inline = new UIDocument();
-        DocumentDriver.attach(inline, DocumentDriver.Mode.INLINE, "inline");
+        CgUiViewport.open(inline, CgUiViewport.Threading.INLINE, "inline");
         assertFalse(inline.animation().playOnCompositor(flight(new UIElement())));
         assertTrue(inline.animation().onCompositor().isEmpty());
     }

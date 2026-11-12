@@ -5,7 +5,7 @@ import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -218,7 +218,7 @@ public class Launcher extends Popover {
                 launch(row.kind);
             }, false, true);
             // OPEN AND PIN, the application's own menu, as Windows' Start offers on a right-click
-            ContextMenu.attach(row, CommandRegistry.global(), pressed -> ContextMenu.of(MenuId.APPLICATION));
+            ContextMenu.attach(row, Commands.process(), pressed -> ContextMenu.of(MenuId.APPLICATION));
             row.append(new WindowIcon());
             UIText name = new UIText("");
             name.addClass(ROW_NAME_CLASS);

@@ -160,10 +160,8 @@ public class ApplicationRetentionTest {
     private Map<String, Integer> census() {
         Map<String, Integer> counts = new LinkedHashMap<>();
         counts.put("Disposer.liveCount()", Disposer.liveCount());
-        counts.put("Notifications.onDidChange", Notifications.onDidChange.connectionCount());
-        counts.put("Notifications.onDidChangeUnread", Notifications.onDidChangeUnread.connectionCount());
-        counts.put("InspectorRegistry.onDidChangeSubject",
-                InspectorRegistry.onDidChangeSubject.connectionCount());
+        counts.put("Notifications.onDidChange", Notifications.onDidChange.subscriberCount());
+        counts.put("Notifications.onDidChangeUnread", Notifications.onDidChangeUnread.subscriberCount());
         counts.put("InspectorRegistry sections", InspectorRegistry.all().size());
         counts.put("ProjectSourcesRegistry", ProjectSourcesRegistry.size());
         counts.put("Workspace.onDidReconnect", workspace.onDidReconnect.connectionCount());

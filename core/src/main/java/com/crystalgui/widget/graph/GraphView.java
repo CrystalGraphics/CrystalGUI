@@ -1,6 +1,5 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -11,7 +10,6 @@ import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.input.keymap.KeymapScope;
 import com.crystalgui.widget.graph.node.NodeCreationMenu;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.core.data.ClipboardActions;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.signal.Signal;
@@ -31,7 +29,7 @@ import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.data.UiDataKeys;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.event.MouseEvent;
@@ -107,7 +105,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      * forgot had no Delete, no Select All and no framing, silently.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         GraphCommands.register();
         // Undo comes with any graph, because a graph is an UndoScope -- the stack is resolved from
         // focus, so this needs no element and binds to nothing.
@@ -892,7 +890,7 @@ public class GraphView extends SurfaceEditor implements GraphContext {
      * found from the pointer rather than from the press's target.</p>
      */
     private void installContextMenus() {
-        ContextMenu.attach(this, CommandRegistry.global(), target -> {
+        ContextMenu.attach(this, Commands.process(), target -> {
             UIDocument window = document();
             if (window == null || !isEnabled()) return null;
             // A FLOATING PANEL'S PRESS IS ITS OWN. The Blackboard and the Main Preview open their own menus,
@@ -987,13 +985,11 @@ public class GraphView extends SurfaceEditor implements GraphContext {
     }
 
     private static boolean isShiftHeld() {
-        PlatformPort input = PlatformPort.current();
-        return input != null && CgModifiers.hasShift(input.modifiers());
+        return CgModifiers.hasShift(Input.modifiersNow());
     }
 
     private static boolean isAltHeld() {
-        PlatformPort input = PlatformPort.current();
-        return input != null && CgModifiers.hasAlt(input.modifiers());
+        return CgModifiers.hasAlt(Input.modifiersNow());
     }
 
     // ── Framing ─────────────────────────────────────────────────────────────

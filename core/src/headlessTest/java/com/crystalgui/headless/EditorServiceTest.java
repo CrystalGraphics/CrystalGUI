@@ -8,6 +8,7 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
@@ -101,7 +102,7 @@ public class EditorServiceTest {
         kinds = new DocumentKinds();
         // A kind with a MODEL and no EDITOR, which is a real declaration and what lets this whole
         // suite be headless: everything asserted here is about the lane, not about a widget.
-        kinds.register(DocumentKind.of("test:text", "Text")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:text", "Text")
                 .files(DocumentKind.FilePatterns.extension("java"),
                         DocumentKind.FilePatterns.extension("md"))
                 .model(TextDocumentModel::of));
@@ -521,7 +522,7 @@ public class EditorServiceTest {
      */
     @Test
     public void openingAsANamedKindUsesThatKind() {
-        kinds.register(DocumentKind.of("test:notes", "Notes")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:notes", "Notes")
                 .files(DocumentKind.FilePatterns.extension("notes"))
                 .model(TextDocumentModel::of));
 
@@ -535,7 +536,7 @@ public class EditorServiceTest {
     /** ...and the ordinary open still takes the kind the NAME claims, which is the counter-control. */
     @Test
     public void openingWithoutAKindTakesTheOneTheNameClaims() {
-        kinds.register(DocumentKind.of("test:notes", "Notes")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:notes", "Notes")
                 .files(DocumentKind.FilePatterns.extension("notes"))
                 .model(TextDocumentModel::of));
 
@@ -561,7 +562,7 @@ public class EditorServiceTest {
      */
     @Test
     public void openingAsAKindAFileIsAlreadyOpenUnderIsRefused() {
-        kinds.register(DocumentKind.of("test:notes", "Notes")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:notes", "Notes")
                 .files(DocumentKind.FilePatterns.extension("notes"))
                 .model(TextDocumentModel::of));
         open(MAIN);
@@ -657,7 +658,7 @@ public class EditorServiceTest {
     }
 
     private void registerViewedKind() {
-        kinds.register(DocumentKind.of("test:viewed", "Viewed")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:viewed", "Viewed")
                 .files(DocumentKind.FilePatterns.extension("java"))
                 .model(TextDocumentModel::of)
                 .editor(document -> new RecordingView()));

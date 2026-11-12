@@ -8,7 +8,7 @@ import java.util.function.Predicate;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataContext;
@@ -25,7 +25,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
  * <pre>{@code
  * TreeEditCommands.register();                          // TreeEditing does this
  * TreeEditCommands.bindKeys(tree.keymap());             // and this
- * TreeEditing.contributeMenu(CommandRegistry.global(), NODE_MENU);   // a consumer does this, once
+ * TreeEditing.contributeMenu(Commands.process(), NODE_MENU);   // a consumer does this, once
  * }</pre>
  */
 public final class TreeEditCommands {
@@ -44,12 +44,12 @@ public final class TreeEditCommands {
     private TreeEditCommands() {
     }
 
-    /** Registers into {@link CommandRegistry#global()}. Idempotent. */
+    /** Registers into {@link Commands#global()}. Idempotent. */
     public static void register() {
-        CommandRegistry.global().contribute(TreeEditCommands.class, TreeEditCommands::declare);
+        Commands.process().contribute(TreeEditCommands.class, TreeEditCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         // Five of the six carry marks. Rename is the one without: the set has no rename glyph, and
         // `edit`'s pencil already means "open this for editing" on Jump to Source.
         //
@@ -97,7 +97,7 @@ public final class TreeEditCommands {
     }
 
     /** Puts the six rows into {@code menu}: Cut, Copy, Paste, Duplicate, then Rename and Delete. */
-    public static Disposable contributeTo(CommandRegistry registry, MenuId menu) {
+    public static Disposable contributeTo(Commands registry, MenuId menu) {
         register();
         return registry.contributeMenu(menu, (at, context) -> {
             List<MenuEntry> rows = new ArrayList<>(6);
@@ -115,7 +115,7 @@ public final class TreeEditCommands {
         });
     }
 
-    private static void row(List<MenuEntry> rows, CommandRegistry registry, String id, String group, int order,
+    private static void row(List<MenuEntry> rows, Commands registry, String id, String group, int order,
                             CommandContext context) {
         Command command = registry.get(id);
         if (command != null) rows.add(new MenuEntry.Item(command, group, order, command.isEnabled(context), false, false));

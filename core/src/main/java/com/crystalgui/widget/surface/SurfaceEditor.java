@@ -7,7 +7,7 @@ import java.util.Objects;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.core.undo.UndoCommands;
 import com.crystalgui.core.undo.UndoScope;
@@ -31,6 +31,7 @@ import org.joml.Vector2f;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.config.inspector.InspectorRegistry;
 import com.crystalgui.widget.config.inspector.InspectorSection;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 import com.crystalgui.widget.surface.edit.Clipboard;
 import com.crystalgui.widget.surface.edit.Edits;
 import com.crystalgui.widget.canvas.WorldRect;
@@ -263,8 +264,14 @@ public class SurfaceEditor extends CanvasView
                 + "does not override createPolicy()");
     }
 
+    /**
+     * The selection, announcing every change to this surface's document's inspectors, so a contribution never wires
+     * that itself: forgetting the line once produced a surface whose inspector tab never appeared.
+     */
     protected SurfaceSelection createSelection(SurfacePolicy policy) {
-        return new SurfaceSelection(policy::markSelected);
+        SurfaceSelection selection = new SurfaceSelection(policy::markSelected);
+        selection.onChanged.connect(() -> InspectorSubject.changed(this));
+        return selection;
     }
 
     /**
@@ -274,7 +281,7 @@ public class SurfaceEditor extends CanvasView
      * them and a surface dropped into a scene that forgot had no Delete and no Select All, silently.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         SurfaceCommands.register();
         // Undo comes with any surface, because a surface IS an undo scope -- the stack is resolved from
         // focus, so this needs no element and binds to nothing.
@@ -446,9 +453,9 @@ public class SurfaceEditor extends CanvasView
     @Override
     public Disposable registerCommand(Command command) {
         commands.add(command);
-        CommandRegistry.global().register(command);
+        Commands.process().register(command);
         return () -> {
-            if (commands.remove(command)) CommandRegistry.global().unregister(command.getId());
+            if (commands.remove(command)) Commands.process().unregister(command.getId());
         };
     }
 

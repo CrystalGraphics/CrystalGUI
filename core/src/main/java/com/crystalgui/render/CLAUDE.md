@@ -13,7 +13,7 @@
 `CgUiRenderer.View` handed out per place a document is drawn (`openView`), and every open view's textures freed when the
 graphics context goes (`contextDestroyed`). **A `CgUiRenderer.View` is per document**: its `CgUiPaintContext`, made at the first
 `paintContext()`, and its `UiPresenter`, which shows the context's target, so the two are closed together
-(`close()`, render thread). **A `DocumentDriver` owns its document's view** and hands it to its `Painter`; the document
+(`close()`, render thread). **A `CgUiViewport` owns its document's view** and opens its paint context's frame for its `Content`; the document
 owns none, since it is the DOM and runs on a dedicated server. A view is never shared: each document records on its
 own thread into a target of its own size, and its replay segments, surfaces and icon raster are keyed to its tree.
 Anything drawing without a driver (a rehearsal, a scene with no document) opens a view and closes it when done; one
@@ -44,8 +44,8 @@ CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage ->
 view.close();                                     // render thread, with the document
 ```
 
-A host never writes that by hand: `DocumentDriver.frame(stage, painter)` records into its view (on the document's
-sequence, or at the firing inline) and shows through its `presenter()`, and `DocumentDriver.close` closes the view; `HostSession` paints the desktop on both GUI stages.
+A host never writes that by hand: `CgUiViewport.frame(stage, content)` records into its view (on the document's
+sequence, or at the firing inline) and shows through its `presenter()`, and `CgUiViewport.close` closes the view; `CgUiScreen` paints the desktop on both GUI stages.
 
 | Group | Methods |
 |---|---|
@@ -155,8 +155,8 @@ did. Under a node the
 > `[damage-check]` where the two differ.
 
 > **Every arm of the desktop draws at CrystalGraphics' GUI stages**: `CgRenderStage.HUD` over the in-game HUD and
-> `CgRenderStage.SCREEN` over a screen, which CrystalGraphics' hosts fire once a frame. `HostSession.install` puts
-> the compositor on both at `HostSession.COMPOSITOR`, its frame included in the firing at its place: the HUD arm on
+> `CgRenderStage.SCREEN` over a screen, which CrystalGraphics' hosts fire once a frame. `CgUiScreen.install` puts
+> the compositor on both at `CgUiScreen.ORDER`, its frame included in the firing at its place: the HUD arm on
 > `HUD`; on `SCREEN` whichever arm is current -- our own screen's desktop (which draws nothing itself), the overlay
 > over somebody else's, or the HUD arm on the frame a screen closed itself while it drew. One arm a frame. While the
 > loading screen is up, `SCREEN` rehearses a throwaway desktop (`DesktopRehearsal`, `docs/CGUI_BUILDING_UIS.md` § 11b).
@@ -193,7 +193,7 @@ did. Under a node the
   **The tests run with `-Dcrystalgui.font.systemFonts=false`** (`core/build.gradle.kts`), so no result
   depends on the machine's fonts; `FontFamilyCache.useSystemFonts` hands a test its own. A Han
   character takes the language its own text shows (kana → Japanese, Hangul → Korean), else the
-  player's: `CgI18n.locale()`, pushed into `FontFamilyCache.useLocale` by `DesktopHost` each frame.
+  player's: `CgI18n.locale()`, pushed into `FontFamilyCache.useLocale` by the desktop's screen when it changes.
 
 ### Drawables — `render/texture/`
 

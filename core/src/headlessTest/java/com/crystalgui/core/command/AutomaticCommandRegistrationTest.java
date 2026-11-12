@@ -48,7 +48,7 @@ public class AutomaticCommandRegistrationTest {
     @Before
     public void setUp() {
         document = new UIDocument();
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         REGISTRATIONS.set(0);
         BINDINGS.set(0);
     }
@@ -56,7 +56,7 @@ public class AutomaticCommandRegistrationTest {
     /** A widget with commands of its own, declared the only way there is. */
     private static class Widget extends UIElement {
         @Override
-        protected void registerCommands(CommandRegistry registry) {
+        protected void registerCommands(Commands registry) {
             REGISTRATIONS.incrementAndGet();
             registry.register(Command.of("widget.doThing", "Do Thing").run(context -> {
             }));
@@ -71,7 +71,7 @@ public class AutomaticCommandRegistrationTest {
 
     private static class OtherWidget extends UIElement {
         @Override
-        protected void registerCommands(CommandRegistry registry) {
+        protected void registerCommands(Commands registry) {
             registry.register(Command.of("other.doThing", "Do Other Thing").run(context -> {
             }));
         }
@@ -80,7 +80,7 @@ public class AutomaticCommandRegistrationTest {
     @Test
     public void buildingAWidgetRegistersItsCommands() {
         attach(new Widget());
-        assertNotNull(CommandRegistry.global().get("widget.doThing"));
+        assertNotNull(Commands.process().get("widget.doThing"));
     }
 
     @Test
@@ -102,7 +102,7 @@ public class AutomaticCommandRegistrationTest {
     /**
      * <b>The failure a static latch produces, and the reason once-ness lives on the registry.</b>
      *
-     * <p>A {@code ClassValue} latch on {@code UIElement} outlives {@link CommandRegistry#resetForTesting()}:
+     * <p>A {@code ClassValue} latch on {@code UIElement} outlives {@link Commands#resetForTesting()}:
      * the reset empties the registry, the next widget of an already-seen class registers nothing, and the
      * command is simply absent — no throw, no log, just a key that stopped working. Keying the record to
      * the registry means clearing one clears the other.</p>
@@ -110,21 +110,21 @@ public class AutomaticCommandRegistrationTest {
     @Test
     public void aResetRegistryIsRepopulatedByTheNextWidget() {
         attach(new Widget());
-        assertNotNull(CommandRegistry.global().get("widget.doThing"));
+        assertNotNull(Commands.process().get("widget.doThing"));
 
-        CommandRegistry.global().resetForTesting();
-        assertNull(CommandRegistry.global().get("widget.doThing"));
+        Commands.process().resetForTesting();
+        assertNull(Commands.process().get("widget.doThing"));
 
         attach(new Widget());
-        assertNotNull(CommandRegistry.global().get("widget.doThing"));
+        assertNotNull(Commands.process().get("widget.doThing"));
     }
 
     @Test
     public void oneWidgetsRegistrationDoesNotSuppressAnothers() {
         attach(new Widget());
         attach(new OtherWidget());
-        assertNotNull(CommandRegistry.global().get("widget.doThing"));
-        assertNotNull(CommandRegistry.global().get("other.doThing"));
+        assertNotNull(Commands.process().get("widget.doThing"));
+        assertNotNull(Commands.process().get("other.doThing"));
     }
 
     /**
@@ -134,10 +134,10 @@ public class AutomaticCommandRegistrationTest {
      */
     @Test
     public void declaredBindingsSeeALaterGlobalRegistration() {
-        CommandRegistry local = new CommandRegistry();
+        Commands local = new Commands();
         assertNull(local.declaredBindings().chordFor("late.doThing"));
 
-        CommandRegistry.global().register(Command.of("late.doThing", "Do Thing Late").binding("F2").run(context -> {
+        Commands.process().register(Command.of("late.doThing", "Do Thing Late").binding("F2").run(context -> {
         }));
         assertNotNull(local.declaredBindings().chordFor("late.doThing"));
     }
@@ -146,7 +146,7 @@ public class AutomaticCommandRegistrationTest {
 
     @Test
     public void contributeRunsOnceAndReturnsTheRegistry() {
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         AtomicInteger runs = new AtomicInteger();
         for (int i = 0; i < 10; i++) registry.contribute(AutomaticCommandRegistrationTest.class, r -> runs.incrementAndGet());
         assertEquals(1, runs.get());
@@ -164,8 +164,8 @@ public class AutomaticCommandRegistrationTest {
     @Test
     public void twoRegistriesEachRunTheSameContributorOnce() {
         AtomicInteger runs = new AtomicInteger();
-        new CommandRegistry().contribute(AutomaticCommandRegistrationTest.class, r -> runs.incrementAndGet());
-        new CommandRegistry().contribute(AutomaticCommandRegistrationTest.class, r -> runs.incrementAndGet());
+        new Commands().contribute(AutomaticCommandRegistrationTest.class, r -> runs.incrementAndGet());
+        new Commands().contribute(AutomaticCommandRegistrationTest.class, r -> runs.incrementAndGet());
         assertEquals(2, runs.get());
     }
 }

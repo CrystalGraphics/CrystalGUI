@@ -30,7 +30,7 @@ import com.crystalgui.widget.graph.node.NodeFieldBinder;
 import com.crystalgui.widget.graph.GraphNode;
 import com.crystalgui.widget.graph.GraphSelection;
 import com.crystalgui.widget.graph.NodePort;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 import com.crystalgui.widget.config.inspector.InspectorSection;
 import com.crystalgui.widget.surface.extension.SectionSet;
 
@@ -600,7 +600,7 @@ public final class ShaderInspectorSections {
             UndoStack undo = editor.graph().undoStack();
             if (undo != null) undo.execute(edit); else edit.apply();
             editor.recompile();
-            InspectorRegistry.subjectChanged();
+            InspectorSubject.changed(editor);
         }
     }
 

@@ -8,7 +8,7 @@ import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.dispose.Disposable;
 import java.util.List;
 import java.util.Map;
@@ -122,13 +122,13 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
         // A UI-side call by construction: `.run.view` is the package that may name `com.crystalgui.ui`,
         // so nothing headless reaches this line and no dedicated server loads a grammar through it.
         LanguageRegistry.bootstrap();
-        CommandRegistry registry = CommandRegistry.global();
+        Commands registry = Commands.process();
         Path cacheRoot = workbench.cacheDirectory(CACHE_DIRECTORY);
         ScriptWorkbench[] installed = {install(registry, workbench, cacheRoot)};
         // A RUNTIME THAT ARRIVES LATER STILL GETS ITS PANEL. On a first launch the engine band may not be
         // open when the workbench is built, and a workbench asked only then kept no Run panel for its
-        // life. A band that opens later is announced as a capability change, on the UI thread.
-        Connection late = installed[0] != null ? null : LanguageRegistry.onCapabilityChanged.connect(() -> {
+        // life. A band that opens later is announced as a capability change, heard on this document.
+        Connection late = installed[0] != null ? null : LanguageRegistry.onCapabilityChanged.subscribe(() -> {
             if (installed[0] == null) installed[0] = withRuntimes(registry, workbench, cacheRoot);
         });
         return () -> {
@@ -157,10 +157,10 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
     private final RunConsole console;
     private final RunSessions sessions;
     private final RunPanel panel;
-    private final CommandRegistry registry;
+    private final Commands registry;
 
     private ScriptWorkbench(ScriptRuntimes runtimes, RunConsole console, RunSessions sessions,
-                            RunPanel panel, CommandRegistry registry) {
+                            RunPanel panel, Commands registry) {
         this.runtimes = runtimes;
         this.console = console;
         this.sessions = sessions;
@@ -174,7 +174,7 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
      * @param cacheRoot where compiled scripts are cached between launches; null for memory only
      */
     @Nullable
-    public static ScriptWorkbench install(CommandRegistry registry, WorkbenchContext workbench,
+    public static ScriptWorkbench install(Commands registry, WorkbenchContext workbench,
                                           @Nullable Path cacheRoot) {
         // BEFORE THE RUNTIME CHECK, deliberately. Remapping a file out of the runtime namespace needs the
         // platform's MAPPING and nothing else -- no engine, no analysis, no way to run anything. A host
@@ -188,7 +188,7 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
 
     /** {@link #install}'s runtime half: null while no language can open a runtime. */
     @Nullable
-    private static ScriptWorkbench withRuntimes(CommandRegistry registry, WorkbenchContext workbench,
+    private static ScriptWorkbench withRuntimes(Commands registry, WorkbenchContext workbench,
                                                 @Nullable Path cacheRoot) {
         ScriptRuntimes runtimes = ScriptRuntimes.open(cacheRoot);
         if (runtimes.isEmpty()) return null;
@@ -227,7 +227,7 @@ public final class ScriptWorkbench implements WorkbenchExtension, Closeable {
 
         panel.onClearRequested.connect(console::clear);
         // THE CONSOLE'S OWN VERBS, AND ITS RIGHT-CLICK MENU. Registered here rather than in RunPanels
-        // because this is where the CommandRegistry is -- and the menu is the reason they are commands at
+        // because this is where the Commands is -- and the menu is the reason they are commands at
         // all: a row is built from one, by design, and MenuBuilder being the single path is an invariant
         // this codebase has already paid for.
         ConsoleCommands.register(registry, panel);

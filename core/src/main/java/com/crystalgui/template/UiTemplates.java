@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicLong;
 
 import javax.annotation.Nullable;
 
@@ -14,7 +15,7 @@ import com.crystalgraphics.serialization.CgCodecException;
 import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgraphics.util.io.CgIO;
 
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.Broadcast;
 
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
@@ -50,9 +51,11 @@ public final class UiTemplates {
      * <p>Every connected {@code TemplateInstance} listens, which is what makes editing a template under
      * a running client show up without reopening the screen. A host drives it: F3+T on 1.7.10, the
      * resource-reload event on 1.20, a workspace change in the builder — all of them call
-     * {@link #reloadAll}.</p>
+     * {@link #reloadAll}. Carries the reload's number.</p>
      */
-    public static final Signal.Action onDidReload = new Signal.Action();
+    public static final Broadcast<Long> onDidReload = Broadcast.create("templates");
+
+    private static final AtomicLong RELOADS = new AtomicLong();
 
     /**
      * The document under {@code assetId}, parsed once.
@@ -141,13 +144,13 @@ public final class UiTemplates {
      */
     public static void reloadAll() {
         CACHE.clear();
-        onDidReload.emit();
+        onDidReload.post(RELOADS.incrementAndGet());
     }
 
     /** Drops one document. */
     public static void reload(String assetId) {
         CACHE.remove(assetId);
-        onDidReload.emit();
+        onDidReload.post(RELOADS.incrementAndGet());
     }
 
     /** Puts an already-parsed document in the cache under {@code assetId} — the builder's live copy. */

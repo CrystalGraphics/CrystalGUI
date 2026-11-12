@@ -1,6 +1,6 @@
 package com.crystalgui.language.js;
 
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.language.engine.EngineHost;
 import com.crystalgui.language.engine.EngineSource;
@@ -425,7 +425,7 @@ public class JsHostTest {
         AtomicInteger javaAsked = new AtomicInteger();
         ScriptRuntime java = new StubRuntime(Language.JAVA, javaAsked);
         ScriptRuntimes runtimes = ScriptRuntimes.of(java, host);
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         ScriptRuntime.Compiled compiled = compileOrFail(SINK + ".write('via the command');\n");
         ScriptCommands.register(registry, runtimes, asked -> compiled, Map::of, null, null);
 

@@ -1,12 +1,12 @@
 package com.crystalgui.fs.client;
 
+import com.crystalgui.core.async.Broadcast;
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.signal.Signal;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -22,10 +22,10 @@ import java.util.Objects;
  */
 public final class ContentProviders {
 
-    private static final Map<String, ContentProvider> BY_SCHEME = new LinkedHashMap<>();
+    private static final Contributions<Contribution> PROVIDERS = Contributions.of("content-providers", Contribution::scheme);
 
-    /** A provider was contributed or withdrawn — what a live {@link Workspace} re-reads. */
-    public static final Signal.Action onDidChange = new Signal.Action();
+    /** A provider was contributed or withdrawn: what a live {@link Workspace} re-reads. */
+    public static final Broadcast<?> onDidChange = PROVIDERS.published().changes();
 
     private ContentProviders() {
     }
@@ -36,29 +36,20 @@ public final class ContentProviders {
      * <p>Last registration wins, which is right for a hot reload and is why this answers a handle rather
      * than refusing. Every workspace alive at the time is told.</p>
      */
-    public static synchronized Disposable contribute(String scheme, ContentProvider provider) {
+    public static Disposable contribute(String scheme, ContentProvider provider) {
         Objects.requireNonNull(scheme, "scheme");
         Objects.requireNonNull(provider, "provider");
-        BY_SCHEME.put(scheme, provider);
-        onDidChange.emit();
-        return () -> {
-            synchronized (ContentProviders.class) {
-                if (BY_SCHEME.remove(scheme, provider)) onDidChange.emit();
-            }
-        };
+        return PROVIDERS.add(Owner.PROCESS, new Contribution(scheme, provider));
     }
 
     /** Every contribution, as {@code (scheme, provider)} pairs. What a workspace drains. */
-    public static synchronized List<Contribution> all() {
-        List<Contribution> out = new ArrayList<>(BY_SCHEME.size());
-        BY_SCHEME.forEach((scheme, provider) -> out.add(new Contribution(scheme, provider)));
-        return out;
+    public static List<Contribution> all() {
+        return new ArrayList<>(PROVIDERS.all());
     }
 
     /** For a test, which needs a clean slate and shares statics with every other test in the run. */
-    public static synchronized void resetForTesting() {
-        BY_SCHEME.clear();
-        onDidChange.emit();
+    public static void resetForTesting() {
+        PROVIDERS.clearForTesting();
     }
 
     public record Contribution(String scheme, ContentProvider provider) {

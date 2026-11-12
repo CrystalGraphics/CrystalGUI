@@ -11,7 +11,7 @@ import com.crystalgui.workbench.chrome.status.Breadcrumbs;
 import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.CommandTarget;
@@ -65,7 +65,7 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aMenuBarRemembersTheFocusOwnerThePressDestroys() {
         withDefaultStyles();
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         MenuId edit = menu("edit");
         AtomicReference<CommandTarget> seen = new AtomicReference<>();
         registry.register(Command.of("test.cut", "Cut")
@@ -126,7 +126,7 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
      */
     @Test
     public void aDisabledCommandStillGetsARow() {
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         MenuId id = menu("file");
         registry.register(Command.of("test.open", "Open").menu(id, "io", 0).run(() -> {
         }));
@@ -165,7 +165,7 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aMenuBarOpensAndClosesItsMenu() {
         withDefaultStyles();
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         MenuId view = menu("view");
         registry.register(Command.of("test.zoom", "Zoom In").menu(view, "zoom", 0).run(() -> {
         }));
@@ -257,7 +257,7 @@ public class ChromeBatchPortTest extends UiDocumentTestBase {
     @Test
     public void aMenuIsNeverLaidOutAtTheOriginBeforeItIsPlaced() {
         withDefaultStyles();
-        CommandRegistry registry = new CommandRegistry();
+        Commands registry = new Commands();
         MenuId file = menu("file");
         registry.register(Command.of("test.new", "New").menu(file, "io", 0).run(() -> {
         }));

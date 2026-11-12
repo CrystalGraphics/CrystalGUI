@@ -1,8 +1,8 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgui.screen.CgUiScreen;
 import com.crystalgraphics.harness.ui.HarnessServer;
 import com.crystalgraphics.harness.ui.HarnessUi;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.ui.service.Animation;
@@ -16,9 +16,13 @@ import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgraphics.trace.CgTraceSnapshot;
-import com.crystalgui.core.trace.UiTrace;
 import java.lang.management.GarbageCollectorMXBean;
 import java.lang.management.ManagementFactory;
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -40,7 +44,7 @@ import com.crystalgui.render.UiPresenter;
 import com.crystalgui.ui.dom.UIElement;
 import dev.vfyjxf.taffy.style.FlexDirection;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -69,9 +73,16 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.app.shadergraph.ShaderGraphDocument;
 import com.crystalgui.document.Document;
 import com.crystalgui.graph.NodeData;
+import com.crystalgui.harness.DesktopBaselineProbe;
 import com.crystalgui.harness.HoverSweepProbe;
 import com.crystalgui.harness.ShaderGraphCostProbe;
 import com.crystalgui.harness.TraceCostProbe;
+
+import com.crystalgui.app.vfxlab.VfxLab;
+import com.crystalgui.core.storage.CrystalGuiStorage;
+import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.style.theme.UiTheme;
+import com.crystalgui.style.theme.UiThemeManager;
 
 import javax.annotation.Nullable;
 
@@ -179,7 +190,7 @@ import org.joml.Vector2f;
  *
  * <h3>It is the harness's desktop</h3>
  *
- * <p>The desktop is the one the harness keeps over every 3D scene ({@code HarnessUi}, {@code HostSession}), opened at
+ * <p>The desktop is the one the harness keeps over every 3D scene ({@code HarnessUi}, {@code CgUiScreen}), opened at
  * the scene's start over an empty world, as a game's sits over its world: Escape closes it to game mode, where only
  * <b>pinned</b> windows paint over the world and keep ticking, and Escape opens it again. VFX Lab and the Frame Profiler
  * are in its launcher. F7 and F8 are the frame readout, the commands every desktop has.</p>
@@ -209,7 +220,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private UIDocument document;
     private Desktop desktop;
     /** The desktop's document's: on this thread, or on a sequence with {@code -Dcrystalgui.ui.async}. */
-    private DocumentDriver<?> driver;
+    private CgUiViewport viewport;
 
     /** The live geometry readout, refreshed per frame. */
     private UIText readout;
@@ -227,13 +238,14 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         ui.sceneKeys(this::desktopKey);
         ui.afterFrames(frame -> afterDesktop(ctx, frame));
         ui.openAtStart(() -> build(ctx));
-        document = HostSession.session().document();
-        driver = document.driver();
+        document = CgUiScreen.document();
+        viewport = CgUiScreen.viewport();
+        if (BASELINE) baseline = baselineProbe(ctx);
     }
 
     private void build(HarnessContext ctx) {
         // Here as well as in init: inline, this runs inside openAtStart, before init has read them
-        document = HostSession.session().document();
+        document = CgUiScreen.document();
         desktop = Desktop.of(document);
 
         WindowFrame welcome = desktop.addWindow(new WindowFrame("Welcome"));
@@ -299,7 +311,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
         // Where it writes and the arrangement it restores are the host's: every window here carries a key, which is
         // what the record names a window by, so each comes back where it was left.
-        if (EDITOR_AT <= 0) openEditorWindow();
+        // The baseline launches the editor itself, late, to time its first open.
+        if (EDITOR_AT <= 0 && !BASELINE) openEditorWindow();
     }
 
     /**
@@ -338,7 +351,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // Beside the scratch workspace, never inside it: a session record is private and must not become
         // part of a project a resource pack ships. The dock scene keeps its own for the same reason.
         editor = (WorkbenchApplication) desktop.applications().launch(CrystalEditor.KIND,
-                HostSession.session().workspace());
+                CgUiScreen.workspace());
         if (editor == null) return;
         if (GRAPH_COST) graphCost = graphCostProbe();
         if (HOVER_SWEEP) hoverSweep = hoverSweepProbe();
@@ -420,7 +433,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         int h = ctx.getScreenHeight();
         if (EDITOR_AT > 0 && frame.getFrameNumber() == EDITOR_AT) {
             // Posted, as a player's open arrives: on the document's thread when it has one
-            driver.post(() -> {
+            viewport.execute(() -> {
                 long at = System.nanoTime();
                 openEditorWindow();
                 System.out.println("[editor-open] launched in " + (System.nanoTime() - at) / 1_000_000L + " ms");
@@ -431,7 +444,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (PRESENT_AGAIN && frame.getFrameNumber() > 60 && frame.getFrameNumber() % 2 == 1) {
             long n = frame.getFrameNumber();
             ui.replaceNextFrame((stage, presenter) -> {
-                driver.run(() -> {
+                viewport.run(() -> {
                     float scale = document.boxes().uiScale();
                     document.frame(delta, w / scale, h / scale);
                 });
@@ -447,19 +460,20 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     /** After the desktop's frame: the probes, which read and drive the tree. */
     private void afterDesktop(HarnessContext ctx, FrameInfo frame) {
         // Waited for, which is why they are off unless asked.
-        if (probing()) driver.run(() -> afterFrame(ctx, frame, workStart));
+        if (probing()) viewport.run(() -> afterFrame(ctx, frame, workStart));
         if (FOLLOW_SHOT) driveFollowShot(ctx);
+        if (baseline != null && baseline.frame()) baselineDone = true;
         // Late enough that the first window's placement, the entry animations and the editor's own
         // deferred rebuilds have all settled -- a capture at frame 5 photographs a desktop that is
         // still assembling itself and every diff against it is noise. Counted in frames that showed the
         // document: one recording on its own presents nothing until its first frame is done.
-        if (driver.presentedFrames() == 40) ctx.getArtifactService().requestCapture("startup");
+        if (viewport.presentedFrames() == 40) ctx.getArtifactService().requestCapture("startup");
         // -Dcrystalgui.harness.desktop.splitLoop=true: the first split swung a little every frame from 100 to 500, as a hand
         // dragging it does -- what makes a document commit as fast as it can.
         if (SPLIT_LOOP) {
-            long shown = driver.presentedFrames();
+            long shown = viewport.presentedFrames();
             if (shown == 100) {
-                float[] at = driver.ask(() -> {
+                float[] at = viewport.ask(() -> {
                     SplitView split = firstSplit(document);
                     return split == null ? null : at(split.divider(), 0.5f, 0.5f);
                 });
@@ -483,7 +497,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // -Dcrystalgui.harness.desktop.everyFrame=FIRST..LAST: a capture of every presented frame in the range, for a
         // picture that is wrong for one frame at a time.
         if (EVERY_FRAME != null) {
-            long shown = driver.presentedFrames();
+            long shown = viewport.presentedFrames();
             if (shown >= EVERY_FRAME[0] && shown <= EVERY_FRAME[1] && shown != lastEveryFrame) {
                 lastEveryFrame = shown;
                 ctx.getArtifactService().requestCapture("f" + shown);
@@ -493,7 +507,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /** A pointer event into the desktop, through the host's input as a real one arrives. Render thread. */
     private static void pointer(CgSystemInput.Mouse.Event event) {
-        HostSession.session().input().consumeMouseEvent(event);
+        CgUiScreen.mouse().consumeMouseEvent(event);
     }
 
     // ── -Dcrystalgui.harness.desktop.follow=true: a window dragged across a busy document ──
@@ -513,8 +527,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private int followX, followY;
 
     private void driveFollowShot(HarnessContext ctx) {
-        long n = driver.presentedFrames();
-        if (n == 60) driver.run(() -> {
+        long n = viewport.presentedFrames();
+        if (n == 60) viewport.run(() -> {
             for (WindowFrame window : desktop.windows()) {
                 if (!window.isMaximized() && window.box() != null) {
                     desktop.activate(window);
@@ -527,7 +541,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         });
         if (followWindow == null || n < 90 || n > 135) return;
         if (n == 90) {
-            float[] at = driver.ask(() -> new float[] {followWindow.titleBar().box().worldX(), followWindow.titleBar().box().worldY(),
+            float[] at = viewport.ask(() -> new float[] {followWindow.titleBar().box().worldX(), followWindow.titleBar().box().worldY(),
                     followWindow.titleBar().box().height() * document.boxes().uiScale()});
             followX = Math.round(at[0] + 40f);
             followY = Math.round(at[1] + at[2] / 2f);
@@ -542,7 +556,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             if (n == 110) {
                 ctx.getArtifactService().requestCapture("follow-mid");
                 System.out.println("[follow-probe] mid-drag: pointer at " + x + ", document's window at "
-                        + driver.ask(() -> followWindow.left()) + " (layout px)");
+                        + viewport.ask(() -> followWindow.left()) + " (layout px)");
             }
             return;
         }
@@ -639,7 +653,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private void driveNodesShot(HarnessContext ctx, long frameNumber, int w, int h) {
         // The window to move goes on top first: one behind the maximised editor would move unseen.
         if (frameNumber == 30) {
-            driver.run(() -> {
+            viewport.run(() -> {
                 for (WindowFrame window : desktop.windows()) {
                     if (!window.isMaximized() && window.box() != null) {
                         desktop.activate(window);
@@ -650,8 +664,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
         if (frameNumber == 90) ctx.getArtifactService().requestCapture("nodes-before");
         if (frameNumber == 91) {
-            UiFrame shown = driver.presenter().presented();
-            if (shown == null || driver.isAsync()) {
+            UiFrame shown = viewport.presenter().presented();
+            if (shown == null || viewport.isSequenced()) {
                 System.out.println("[nodes-probe] SKIPPED: needs a presented frame, inline (-Dcrystalgui.ui.async=false)");
                 return;
             }
@@ -686,9 +700,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             return;
         }
         if (frameNumber == 92 && nodesWindow != null && nodesScroller != null) {
-            UiFrame presented = driver.presenter().presented();
+            UiFrame presented = viewport.presenter().presented();
             long before = presented == null ? -1 : presented.frameId();
-            driver.run(() -> {
+            viewport.run(() -> {
                 nodesWindow.moveTo(nodesWindow.left() + NODES_MOVE_X, nodesWindow.top() + NODES_MOVE_Y);
                 nodesScroller.setScroll(nodesScroller.scrollLeft(), nodesScroller.scrollTop() + NODES_SCROLL);
             });
@@ -735,9 +749,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private static final boolean MAXIMISE = "maximise".equals(System.getProperty("crystalgui.harness.desktop.minimise.action"));
 
     private void driveMinimiseShot(HarnessContext ctx) {
-        int n = (int) driver.presentedFrames();
+        int n = (int) viewport.presentedFrames();
         if (n == 99) {
-            minimiseTarget = driver.ask(() -> {
+            minimiseTarget = viewport.ask(() -> {
                 for (WindowFrame window : desktop.windows()) {
                     if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
                 }
@@ -751,17 +765,17 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         }
         switch (n) {
             case 99 -> ctx.getArtifactService().requestCapture("minimise-before");
-            case 100 -> driver.run(minimiseTarget::minimize);
+            case 100 -> viewport.run(minimiseTarget::minimize);
             case 106 -> ctx.getArtifactService().requestCapture("minimise-mid");
             case 150 -> ctx.getArtifactService().requestCapture("minimised");
             // Its taskbar preview: the surface it kept, drawn at rest.
-            case 151 -> driver.run(() -> {
+            case 151 -> viewport.run(() -> {
                 float[] entry = at(desktop.taskbar().entryFor(minimiseTarget), 0.5f, 0.5f);
                 document.input().consumeMouseEvent(new CgSystemInput.Mouse.Event((int) entry[0], (int) entry[1], 0, 0,
                         CgMouseCodes.NONE, false, 0f, -1L));
             });
             case 300 -> ctx.getArtifactService().requestCapture("minimised-preview");
-            case 310 -> driver.run(() -> minimiseTarget.show(true));
+            case 310 -> viewport.run(() -> minimiseTarget.show(true));
             case 316 -> ctx.getArtifactService().requestCapture("restore-mid");
             case 380 -> ctx.getArtifactService().requestCapture("restored");
             default -> { }
@@ -774,8 +788,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private void driveMaximise(int n) {
         switch (n) {
-            case 100, 220 -> driver.run(minimiseTarget::maximize);
-            case 160, 280 -> driver.run(minimiseTarget::restore);
+            case 100, 220 -> viewport.run(minimiseTarget::maximize);
+            case 160, 280 -> viewport.run(minimiseTarget::restore);
             case 210 -> CgTrace.clear();
             case 340 -> {
                 CgTrace.disable("crystalgui");
@@ -793,6 +807,99 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     private final TraceCostProbe traceCost = TRACE_COST ? new TraceCostProbe(240) : null;
     private boolean traceCostDone;
+
+    /**
+     * -Dcrystalgui.harness.desktop.baseline=true: the desktop as a user feels it, measured the same way every run: the
+     * editor's first open, three applications open, steady state, theme switches keeping the editor busy, a large file
+     * opened. Prints {@code [baseline]} lines, writes {@code baseline.txt} and exits. @see DesktopBaselineProbe
+     */
+    private static final boolean BASELINE = Boolean.getBoolean("crystalgui.harness.desktop.baseline");
+    /** The large file the baseline opens, generated in the scratch project on first use. */
+    private static final String BASELINE_FILE = "src/BaselineLarge.java";
+    private static final int BASELINE_FILE_METHODS = 2000;
+
+    @Nullable
+    private DesktopBaselineProbe baseline;
+    private boolean baselineDone;
+
+    private DesktopBaselineProbe baselineProbe(HarnessContext ctx) {
+        // Before the run, so the workspace has it before the open
+        writeLargeFile();
+        return new DesktopBaselineProbe(GRAPH_COST_WARMUP, new DesktopBaselineProbe.Target() {
+            @Override
+            public CgUiViewport viewport() {
+                return viewport;
+            }
+
+            @Override
+            public void openEditor() {
+                openEditorWindow();
+            }
+
+            @Override
+            public void openOthers() {
+                desktop.applications().launch(VfxLab.KIND, CgUiScreen.workspace());
+                FrameProfiler.openOn(desktop);
+            }
+
+            @Override
+            public void switchTheme() {
+                UiThemeManager themes = UiThemeManager.getInstance();
+                List<UiTheme> all = ThemeRegistry.themes();
+                if (all.size() < 2) return;
+                int at = 0;
+                for (int i = 0; i < all.size(); i++) if (all.get(i).id().equals(themes.activeThemeId())) at = i;
+                themes.setTheme(all.get((at + 1) % all.size()).id());
+            }
+
+            @Override
+            public void openLargeFile(Runnable onOpened) {
+                if (editor == null) return;
+                editor.workbench().openFile(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE), onOpened);
+            }
+
+            @Override
+            public void closeLargeFile() {
+                if (editor != null) editor.workbench().dock().closePanel(
+                        editor.workbench().refFor(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE)));
+            }
+
+            @Override
+            public float[] taskbarPoint(int which) {
+                return at(desktop.taskbar(), which == 0 ? 0.3f : 0.6f, 0.5f);
+            }
+
+            @Override
+            public void dispatch(CgSystemInput.Mouse.Event event) {
+                document.input().consumeMouseEvent(event);
+            }
+        }, Paths.get(ctx.getOutputSettings().getOutputDir()));
+    }
+
+    /** About 20,000 lines of Java, written once into the scratch project. */
+    private static void writeLargeFile() {
+        Path file = CrystalGuiStorage.projectsIn(Paths.get(".").toAbsolutePath().normalize())
+                .resolve("scratch").resolve(BASELINE_FILE);
+        if (Files.exists(file)) return;
+        StringBuilder source = new StringBuilder("public class BaselineLarge {").append('\n');
+        for (int i = 0; i < BASELINE_FILE_METHODS; i++) {
+            source.append("    /** Method ").append(i).append(", one of many, so the file is long. */").append('\n')
+                    .append("    public static int method").append(i).append("(int value) {").append('\n')
+                    .append("        int sum = value;").append('\n')
+                    .append("        for (int i = 0; i < ").append(i % 17 + 3).append("; i++) sum += i * value;").append('\n')
+                    .append("        String text = \"value \" + sum;").append('\n')
+                    .append("        if (text.length() > 12) return sum - ").append(i).append(";").append('\n')
+                    .append("        return sum + text.length();").append('\n')
+                    .append("    }").append('\n').append('\n');
+        }
+        source.append("}").append('\n');
+        try {
+            Files.createDirectories(file.getParent());
+            Files.write(file, source.toString().getBytes(StandardCharsets.UTF_8));
+        } catch (IOException failed) {
+            throw new IllegalStateException("could not write " + file, failed);
+        }
+    }
 
     /**
      * -Dcrystalgui.harness.desktop.hoverSweep=true: what moving the pointer across the editor costs a frame, against
@@ -1861,7 +1968,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (key != CgKeyCodes.KEY_F2 && key != CgKeyCodes.KEY_F3 && key != CgKeyCodes.KEY_F4 && key != CgKeyCodes.KEY_F5) {
             return false;
         }
-        driver.post(() -> {
+        viewport.execute(() -> {
             // F5 IS A CONVENIENCE, NOT THE AFFORDANCE. The designer is a registered command with its own
             // chord and a taskbar context-menu entry, so it is reachable identically here and in game --
             // this key exists only because a harness scene is where it gets opened forty times an hour.
@@ -1881,7 +1988,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
         if (ui.shown() || !event.pressed() || event.repeat()) return true;
         int key = event.key();
-        if (key == CgKeyCodes.KEY_F2 || key == CgKeyCodes.KEY_F3 || key == CgKeyCodes.KEY_F4) driver.post(() -> windowKey(key));
+        if (key == CgKeyCodes.KEY_F2 || key == CgKeyCodes.KEY_F3 || key == CgKeyCodes.KEY_F4) viewport.execute(() -> windowKey(key));
         return true;
     }
 
@@ -1985,7 +2092,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean isRunning() {
-        return !profilerShotDone && !traceCostDone && !graphCostDone && !hoverSweepDone;
+        return !profilerShotDone && !traceCostDone && !graphCostDone && !hoverSweepDone && !baselineDone;
     }
 
     @Override
@@ -2000,6 +2107,6 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     @Override
     public boolean shouldShutdownOnComplete() {
-        return PROFILER_SHOT || TRACE_COST;
+        return PROFILER_SHOT || TRACE_COST || BASELINE;
     }
 }

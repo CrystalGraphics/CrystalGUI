@@ -6,7 +6,7 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.layout.DockPanelRef;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.NewDocumentContext;
 import com.crystalgui.document.NewDocumentKind;
@@ -94,7 +94,7 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
         // AND THE ROW THAT MAKES ONE -- the graph's own declaration now, not the explorer's. A
         // starter graph (an output node, a couple of inputs) goes in `template`, which is handed the
         // file's name and its directory. @see NewDocumentKind
-        workbench.newDocuments().register(NewDocumentKind.of("shadergraph:new", "Shader Graph")
+        workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of("shadergraph:new", "Shader Graph")
                 .icon("crystalgui:filetypes/shader")
                 .suffix(".shadergraph")
                 .where(NewDocumentContext::outsideSourceRoots)
@@ -126,7 +126,7 @@ public final class ShaderGraphContribution implements WorkbenchExtension {
                     // right trade: they are derived numbers, not something being interacted with.
                     if (editor.blackboard() != null) {
                         editor.blackboard().onPropertySelected.connect(
-                                id -> InspectorRegistry.subjectChanged());
+                                id -> InspectorSubject.changed(editor));
                     }
                     return editor;
                 }),

@@ -200,7 +200,7 @@ public class LayeringTest {
      * to fix an edge and leaving the link that recreates it is a shape, not an accident.</p>
      *
      * <p>{@code core/} is deliberately NOT on this list. It names {@code ui} six times and every one is
-     * decided — {@code CommandRegistry} holds a {@code Keymap}, {@code UndoScope} walks a
+     * decided — {@code Commands} holds a {@code Keymap}, {@code UndoScope} walks a
      * {@code UIElement}, the clipboard commands resolve through {@code UiDataKeys} — which is
      * {@code plan/engine-port.md} D12, not drift.</p>
      */

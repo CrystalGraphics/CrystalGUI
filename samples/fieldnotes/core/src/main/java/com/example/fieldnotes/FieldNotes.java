@@ -4,7 +4,7 @@ import org.apache.logging.log4j.LogManager;
 import org.apache.logging.log4j.Logger;
 
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.host.HostSession;
+import com.crystalgui.screen.CgUiScreen;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.gauntlet.DesktopTest;
 
@@ -62,7 +62,7 @@ public final class FieldNotes {
 
     /** An unattended run opens the window, so the capture shows this jar's variant ran. */
     private static void launchForProbe() {
-        Desktop desktop = HostSession.isInstalled() ? HostSession.session().desktop() : null;
+        Desktop desktop = CgUiScreen.isInstalled() ? CgUiScreen.desktop() : null;
         if (desktop == null) {
             LOGGER.warn("[fieldnotes] probe: no desktop to open the window on");
             return;

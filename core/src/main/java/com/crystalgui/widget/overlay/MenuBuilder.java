@@ -2,7 +2,7 @@ package com.crystalgui.widget.overlay;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.command.MenuSection;
@@ -16,7 +16,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * Turns what {@link CommandRegistry#sections} says into rows on a {@link Menu}.
+ * Turns what {@link Commands#sections} says into rows on a {@link Menu}.
  *
  * <h3>One builder, because two would disagree</h3>
  *
@@ -55,7 +55,7 @@ public final class MenuBuilder {
      * @param source what every command resolves against: its enablement, its handler, and the keymap
      *               lookup for its accelerator
      */
-    public static Menu build(MenuId id, CommandRegistry registry, UIElement source) {
+    public static Menu build(MenuId id, Commands registry, UIElement source) {
         Menu menu = new Menu();
         appendSections(menu, id, registry, source);
         return menu;
@@ -69,7 +69,7 @@ public final class MenuBuilder {
      *
      * @return whether anything was added
      */
-    public static boolean appendSections(Menu menu, MenuId id, CommandRegistry registry, UIElement source) {
+    public static boolean appendSections(Menu menu, MenuId id, Commands registry, UIElement source) {
         CommandContext context = CommandContext.of(source);
 
         // RESOLVED FIRST, EMITTED SECOND, and the two-pass shape is what makes the separator rule true by
@@ -98,7 +98,7 @@ public final class MenuBuilder {
 
     /** How to add {@code entry}, or null if it would add nothing. */
     @Nullable
-    private static Runnable emitterFor(Menu menu, MenuEntry entry, CommandRegistry registry,
+    private static Runnable emitterFor(Menu menu, MenuEntry entry, Commands registry,
                                        UIElement source) {
         if (entry instanceof MenuEntry.Submenu nested) {
             Menu built = build(nested.menu(), registry, source);
@@ -185,7 +185,7 @@ public final class MenuBuilder {
      * and which way it points, and the accelerator. That is what keeps the menu, the palette and the
      * keyboard three views of one list rather than three lists.</p>
      */
-    public static MenuItem row(Menu menu, CommandRegistry registry, UIElement source,
+    public static MenuItem row(Menu menu, Commands registry, UIElement source,
                                String commandId, @Nullable String labelOverride) {
         Command command = registry.get(commandId);
         CommandContext context = CommandContext.of(source);
@@ -195,7 +195,7 @@ public final class MenuBuilder {
         return row(menu, registry, source, commandId, labelOverride, enabled, checkable, checked, command);
     }
 
-    private static MenuItem row(Menu menu, CommandRegistry registry, UIElement source,
+    private static MenuItem row(Menu menu, Commands registry, UIElement source,
                                 String commandId, @Nullable String labelOverride, boolean enabled,
                                 boolean checkable, boolean checked, @Nullable Command resolved) {
         // A command that is not registered still gets a row, disabled. Silently dropping it would make a

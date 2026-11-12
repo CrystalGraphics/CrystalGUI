@@ -7,7 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.net.command.CommandProtocol;
 import com.crystalgui.net.command.CommandProtocolBinding;
 import com.crystalgui.net.command.RemoteCommandPolicy;
@@ -40,7 +40,7 @@ import static org.junit.Assert.fail;
  * <h3>Most of what is asserted here is the trust boundary</h3>
  *
  * <p>This is the first message on the protocol that changes what the client's own machinery <b>does</b>
- * rather than what it shows, and {@code CommandRegistry.register} replaces by id on purpose. So the
+ * rather than what it shows, and {@code Commands.register} replaces by id on purpose. So the
  * interesting tests are the ones about what a server is <em>not</em> allowed to do — above all that it
  * cannot claim {@code edit.save} and turn the client's own Save into a packet.</p>
  */
@@ -50,7 +50,7 @@ public class ServerContributedCommandsTest {
     private CgProtocolConnection<Object> serverSide;
     private CgProtocolConnection<Object> clientSide;
 
-    private CommandRegistry registry;
+    private Commands registry;
     private ServerCommands<Object> server;
     private RemoteCommands<Object> client;
 
@@ -63,7 +63,7 @@ public class ServerContributedCommandsTest {
         serverSide = CgProtocols.open(link[0], CgPlainOps.INSTANCE, () -> { }, "alice");
         clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
 
-        registry = new CommandRegistry();
+        registry = new Commands();
         server = ServerCommands.forConnection(serverSide);
         client = RemoteCommands.install(clientSide, registry);
     }
@@ -189,7 +189,7 @@ public class ServerContributedCommandsTest {
     /**
      * <b>A server cannot claim an id the client defines.</b>
      *
-     * <p>The whole reason the policy exists. {@code CommandRegistry.register} replaces by id — that is how
+     * <p>The whole reason the policy exists. {@code Commands.register} replaces by id — that is how
      * a theme or a mod overrides a built-in — so without the namespace floor a server could register
      * {@code edit.save} and the client's own Save would quietly become a packet.</p>
      *
@@ -302,7 +302,7 @@ public class ServerContributedCommandsTest {
     /** A host may decline the whole mechanism. */
     @Test
     public void aHostMayRefuseServerCommandsOutright() {
-        CommandRegistry strict = new CommandRegistry();
+        Commands strict = new Commands();
         CgInMemoryTransport<Object>[] pair = CgInMemoryTransport.pair();
         CgProtocolConnection<Object> theirServer =
                 CgProtocols.open(pair[0], CgPlainOps.INSTANCE, () -> { }, "bob");

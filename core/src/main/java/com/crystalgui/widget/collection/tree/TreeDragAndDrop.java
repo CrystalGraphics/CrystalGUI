@@ -1,6 +1,5 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.ui.service.PlatformPort;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -220,7 +219,7 @@ final class TreeDragAndDrop<T> {
             }
             if (!accepts(items, spot)) return;
             // AT DROP TIME, so the destination is picked first and the key held after.
-            boolean copy = (PlatformPort.current().modifiers() & model.copyModifier()) != 0;
+            boolean copy = (Input.modifiersNow() & model.copyModifier()) != 0;
             if (copy) model.copy(items, spot.target());
             else model.move(items, spot.target());
         }, false, true);

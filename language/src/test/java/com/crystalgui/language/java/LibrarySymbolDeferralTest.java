@@ -1,5 +1,6 @@
 package com.crystalgui.language.java;
 
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.fs.Resource;
@@ -106,6 +107,8 @@ public class LibrarySymbolDeferralTest {
                 if (landed == null) Thread.sleep(10L);
             }
             assertNotNull("the deferred answer never landed, so the glyph never appears", landed);
+            // The announcement is posted to this thread, like every broadcast.
+            CgHostThread.drainFrames();
             assertTrue("nothing was told the answer had arrived, so no view re-reads it",
                     announced.get() > 0);
             assertNotNull("the answer was not kept, so every strip rebuild would schedule again",

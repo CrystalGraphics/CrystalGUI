@@ -1,13 +1,12 @@
 package com.crystalgui.widget.graph;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.render.InkOverflow;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.service.Drag;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -16,7 +15,6 @@ import com.crystalgui.graph.PortDirection;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.text.UIText;
-import com.crystalgui.widget.canvas.WorldRect;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import lombok.Getter;
@@ -274,8 +272,7 @@ public class GraphNode extends UIElement {
     }
 
     private static boolean isShiftHeld() {
-        PlatformPort input = PlatformPort.current();
-        return input != null && CgModifiers.hasShift(input.modifiers());
+        return CgModifiers.hasShift(Input.modifiersNow());
     }
 
     /**

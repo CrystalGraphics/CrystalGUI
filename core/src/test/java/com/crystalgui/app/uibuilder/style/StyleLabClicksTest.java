@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 
 import com.crystalgui.core.command.CommandContext;
 
@@ -228,9 +228,6 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         float[] shown = worldCentre(specimen.box());
         assertEquals("with the specimen in the middle", middle[0], shown[0], 1.5f);
         assertEquals(middle[1], shown[1], 1.5f);
-
-        // THE PICK IS EVERY LAB'S, so forget it: a later lab in this process would open on it.
-        StyleLab.forgetGroundPick();
     }
 
     /**
@@ -420,7 +417,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         for (UIElement each : labTitled("Shadow").composedSubtree()) {
             if (each.hasClass(LayerStack.ROW_CLASS)) rows.add(each);
         }
-        CommandRegistry commands = CommandRegistry.global();
+        Commands commands = Commands.process();
 
         assertFalse("the top row cannot go higher", commands.get(LayerStack.MOVE_TO_TOP).isEnabled(CommandContext.of(rows.get(0))));
         assertTrue(commands.run(LayerStack.MOVE_TO_TOP, CommandContext.of(rows.get(2))));
@@ -443,7 +440,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
             if (each.hasClass(LayerStack.ROW_CLASS)) rows.add(each);
         }
 
-        assertTrue(CommandRegistry.global().run(LayerStack.VISIBLE, CommandContext.of(rows.get(1))));
+        assertTrue(Commands.process().run(LayerStack.VISIBLE, CommandContext.of(rows.get(1))));
         frame();
         assertEquals("both are still in the stack", 2, CssValues.layerStack(shadows.get()).size());
         assertEquals("and only one is live", List.of("#000000FF 0px 1px 2px"), CssValues.layers(shadows.get()));

@@ -8,6 +8,7 @@ import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgraphics.job.reply.CgReplyError;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.document.DocumentKinds;
@@ -93,7 +94,7 @@ public class WorkspaceDocumentsTest {
 
         workspace = Workspace.of(clientSide).setStorage(new CgInMemoryConfigStorage());
         DocumentKinds kinds = new DocumentKinds();
-        kinds.register(DocumentKind.of("test:java", "Java")
+        kinds.contribute(Owner.PROCESS, DocumentKind.of("test:java", "Java")
                 .files(DocumentKind.FilePatterns.extension("java"),
                         DocumentKind.FilePatterns.extension("md"))
                 .model(TextDocumentModel::of));

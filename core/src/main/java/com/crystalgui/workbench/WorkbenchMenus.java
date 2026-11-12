@@ -2,7 +2,7 @@ package com.crystalgui.workbench;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuEntry;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.fs.CgPath;
@@ -42,7 +42,7 @@ public final class WorkbenchMenus {
      * <p>Idempotent through {@code contribute}, which matters because every {@link Workbench} calls this:
      * two workbenches must not produce the tool-window list twice.</p>
      */
-    public static void register(CommandRegistry registry) {
+    public static void register(Commands registry) {
         registry.contribute(WorkbenchMenus.class, target -> {
             target.contributeMenu(MenuId.MAIN_VIEW_TOOLWINDOWS, WorkbenchMenus::toolWindows);
             target.contributeMenu(MenuId.MAIN_WINDOW, WorkbenchMenus::openEditors);

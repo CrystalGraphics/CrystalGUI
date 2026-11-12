@@ -1,7 +1,6 @@
 package com.crystalgui.desktop.taskbar;
 
 import com.crystalgui.ui.data.UiDataKeys;
-import com.crystalgui.core.window.DesktopPresentation;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
@@ -25,7 +24,7 @@ import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.overlay.ContextMenu;
@@ -61,7 +60,7 @@ import java.util.Map;
  * so the corners stay free for whatever a shell later wants in them.</p>
  *
  * <p><b>It covers the real hotbar, deliberately.</b> The strip paints only while our own screen is up
- * ({@link DesktopPresentation#DESKTOP} — the HUD and overlay presentations paint pinned windows alone),
+ * ({@code CgUiScreen.Mode.DESKTOP} — the HUD and overlay modes paint pinned windows alone),
  * and with a screen up the hotbar cannot be used: the cursor is the screen's. Minecraft draws the
  * in-game HUD <em>before</em> every screen, so the hotbar is behind chat and inventories too, and a
  * full-width, near-opaque bar hides it where a translucent island the same size merely blurred it into
@@ -264,7 +263,7 @@ public class Taskbar extends UIElement {
         // A right-click on an ENTRY never reaches here, because the entry's own handler consumes it and
         // opens the jump list instead -- which is the distinction the two menus exist for. This one is
         // about the SET of windows; that one names a window. Nor is it the start button's.
-        ContextMenu.attach(this, CommandRegistry.global(),
+        ContextMenu.attach(this, Commands.process(),
                 pressed -> UINode.isShadowIncludingInclusiveAncestor(start, pressed)
                         ? null : ContextMenu.of(MenuId.TASKBAR_CONTEXT));
         // BOTH CHILDREN BEFORE ATTACH. Adding one later means inserting a Taffy node into a parent

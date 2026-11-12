@@ -1,6 +1,8 @@
 package com.crystalgui.widget.texteditor;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.ui.dom.UIElement;
 import org.joml.Vector3f;
 import org.joml.Vector2f;
@@ -13,7 +15,7 @@ import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
@@ -148,7 +150,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
      * and never shown had none at all.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         EditorCommands.register();
     }
 
@@ -1472,9 +1474,9 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             // Click count drives GRANULARITY, and the granularity is remembered for the whole drag --
             // see dragGranularity. 1 = character, 2 = word, 3 = line, as in VS Code's mouse handler.
             int clicks = Math.min(3, Math.max(1, event.getDetail()));
-            boolean extend = CgModifiers.hasShift(PlatformPort.current().modifiers());
-            boolean addCaret = CgModifiers.hasAlt(PlatformPort.current().modifiers());
-            int mods = PlatformPort.current().modifiers();
+            boolean extend = CgModifiers.hasShift(Input.modifiersNow());
+            boolean addCaret = CgModifiers.hasAlt(Input.modifiersNow());
+            int mods = Input.modifiersNow();
 
             // CTRL+CLICK IS GO-TO-DEFINITION, which the Alt branch below has named as the reason it leaves
             // Ctrl alone since multi-caret went in. It moves the caret FIRST and resolves from there: the
@@ -6525,7 +6527,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         @Override
         public void cut() {
-            PlatformPort.current().setClipboard(getSelectedText());
+            String copied = getSelectedText();
+            CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
             deleteSelections();
         }
 
@@ -6536,25 +6539,26 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
         @Override
         public void copy() {
-            PlatformPort.current().setClipboard(getSelectedText());
+            String copied = getSelectedText();
+            CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
         }
 
         @Override
         public boolean canPaste() {
-            // The SYSTEM clipboard, because that is the one an editor pastes from -- and it is why this
-            // question belongs to the provider rather than to the command.
-            String pending = PlatformPort.current().clipboard();
-            return !isReadOnly() && pending != null && !pending.isEmpty();
+            // Whatever the system clipboard holds: reading it is a hop to the client thread, and VS Code keeps
+            // Paste enabled too. An empty one pastes nothing.
+            return !isReadOnly();
         }
 
         @Override
         public void paste() {
-            String pending = PlatformPort.current().clipboard();
-            if (pending == null || pending.isEmpty()) return;
-            // RE-INDENTED TO WHERE IT LANDS, so a method copied out of one class arrives at the new
-            // one's depth. A shift and not a reformat -- see TypeOperations.reindentForPaste.
-            insertAtCaret(TypeOperations.reindentForPaste(
-                    buffer.document(), selections.primary().start(), pending, indentStyle()));
+            CgHostThread.CLIENT.call(CgClipboard::get).then(pending -> {
+                if (pending.isEmpty() || isReadOnly()) return;
+                // RE-INDENTED TO WHERE IT LANDS, so a method copied out of one class arrives at the new
+                // one's depth. A shift and not a reformat -- see TypeOperations.reindentForPaste.
+                insertAtCaret(TypeOperations.reindentForPaste(
+                        buffer.document(), selections.primary().start(), pending, indentStyle()));
+            });
         }
     };
 

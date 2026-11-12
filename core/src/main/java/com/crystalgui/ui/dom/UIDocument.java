@@ -1,10 +1,12 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.core.async.Broadcast;
+import com.crystalgui.core.async.Published;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.async.UiThread;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgraphics.trace.CgTrace;
@@ -16,7 +18,6 @@ import com.crystalgui.ui.box.BoxTree;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.service.Dismiss;
 import com.crystalgui.ui.service.Focus;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.ui.service.Input;
 import com.crystalgui.ui.service.Lifecycle;
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -25,6 +26,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -33,6 +35,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.Queue;
+import java.util.function.Function;
 import java.util.function.Supplier;
 import java.util.function.Consumer;
 import javax.annotation.Nullable;
@@ -54,7 +57,7 @@ import lombok.Getter;
  *       other thread is refused. A tree nothing frames (a test, a server) is free.</li>
  *   <li>{@code connected}, {@code disconnected} and {@code slotChanged} run after the outermost mutation, in queued
  *       order, with slots assigned first. A callback may mutate; an observer notification may not.</li>
- *   <li>A host normally runs a document through a {@link DocumentDriver}, not by calling {@link #frame} itself.</li>
+ *   <li>A host normally runs a document through a viewport ({@code CgUiViewport}), not by calling {@link #frame} itself.</li>
  * </ul>
  */
 public final class UIDocument extends UIElement {
@@ -76,11 +79,11 @@ public final class UIDocument extends UIElement {
     }
 
     /**
-     * This surface's own commands, beside {@code CommandRegistry.global()}: what a palette lists for this surface, so
+     * This surface's own commands, beside {@code Commands.process()}: what a palette lists for this surface, so
      * one window's verbs never show in another's picker.
      */
     @Getter
-    private final CommandRegistry commands = new CommandRegistry();
+    private final Commands commands = new Commands();
 
     @Nullable
     private volatile Thread frameThread;
@@ -131,43 +134,198 @@ public final class UIDocument extends UIElement {
         return this;
     }
 
+    // ── The owner ────────────────────────────────────────────────────────────
+
     /**
-     * Gives this tree to {@code sequence}: from now on it is touched only from the sequence's tasks, on whichever pool
-     * thread runs them, and {@link #require} asks the sequence rather than a thread. Null hands it back to whichever
-     * thread next runs a frame.
+     * Who runs a document's thread: a viewport, which frames it and feeds it input. Application code never implements
+     * one; it reaches the document's thread through {@link #execute}.
      *
      * <pre>{@code
-     * UiSequence sequence = UiSequence.create("desktop");
-     * document.runOn(sequence);
-     * sequence.execute(() -> document.frame(delta, w, h));
+     * UIDocument.Ownership owned = document.own(new UIDocument.Owner() {
+     *     public boolean isCurrent() { return sequence.isCurrent(); }
+     *     public void execute(Runnable work) { sequence.execute(work); }
+     *     public String name() { return sequence.name(); }
+     * });
+     * Runnable readings = owned.readExtracts();   // the host's side of a frame
+     * owned.release();                            // the viewport closed
      * }</pre>
      */
-    public UIDocument runOn(@Nullable UiSequence sequence) {
-        this.sequence = sequence;
+    public interface Owner {
+        /** Whether the calling code is on the document's thread now. */
+        boolean isCurrent();
+
+        /** Runs {@code work} on the document's thread, after what is queued there. */
+        void execute(Runnable work);
+
+        /** For messages: what runs the document. */
+        String name();
+
+        /** Whether a compositor moves and fades between the document's frames, so animations may be handed to it. */
+        default boolean compositesMotion() {
+            return false;
+        }
+    }
+
+    /**
+     * What {@link #own} hands its caller, and nobody else: the host's side of the document.
+     *
+     * <ul>
+     *   <li>{@link #readExtracts} runs on the host's thread, at its frame, never the document's.</li>
+     *   <li>After {@link #release} it does nothing; the document is free to be owned again.</li>
+     * </ul>
+     */
+    public final class Ownership {
+        private final Owner by;
+
+        private Ownership(Owner by) {
+            this.by = by;
+        }
+
+        /** The extracts' readings for this frame, taken on the calling thread; null when none is registered. */
+        @Nullable
+        public Runnable readExtracts() {
+            return owner == by ? extracts.read() : null;
+        }
+
+        /** Gives the document back: from now on the thread that next runs a frame owns it. */
+        public void release() {
+            if (owner != by) return;
+            owner = null;
+            frameThread = null;
+        }
+    }
+
+    @Nullable
+    private volatile Owner owner;
+
+    /**
+     * Gives this document to {@code owner}: from now on it is touched only on the owner's thread, which
+     * {@link #require} asks rather than a thread. Once: a viewport owns one document.
+     *
+     * @throws IllegalStateException if another owner holds it
+     */
+    public Ownership own(Owner owner) {
+        Objects.requireNonNull(owner, "owner");
+        if (this.owner != null) throw new IllegalStateException("The document is already owned by " + this.owner.name());
+        this.owner = owner;
         frameThread = null;
-        return this;
+        return new Ownership(owner);
     }
 
-    /** The sequence this tree runs on, or null when a thread owns it. */
-    @Nullable
-    public UiSequence sequence() {
-        return sequence;
+    /** Whether the calling code is on this document's thread: its owner's, else the one that framed it. */
+    public boolean isCurrent() {
+        Owner by = owner;
+        if (by != null) return by.isCurrent();
+        Thread known = frameThread;
+        return known == null || known == Thread.currentThread();
     }
 
-    @Nullable
-    private volatile UiSequence sequence;
-
-    @Nullable
-    private volatile DocumentDriver<?> driver;
-
-    /** What runs this document for its host, or null when nothing was attached. @see DocumentDriver#attach */
-    @Nullable
-    public DocumentDriver<?> driver() {
-        return driver;
+    /**
+     * Runs {@code work} on this document: at once on its thread, else after what is queued there, or at the start of
+     * its next frame when nothing owns it. From any thread.
+     *
+     * <pre>{@code
+     * connection.onWindow(spec -> document.execute(() -> desktop.open(spec)));
+     * }</pre>
+     */
+    public void execute(Runnable work) {
+        if (isCurrent()) {
+            work.run();
+            return;
+        }
+        Owner by = owner;
+        if (by == null) {
+            post(work);
+            return;
+        }
+        by.execute(() -> {
+            try (Running ignored = makeCurrent()) {
+                work.run();
+            }
+        });
     }
 
-    void useDriver(DocumentDriver<?> driver) {
-        this.driver = driver;
+    // ── Locals ───────────────────────────────────────────────────────────────
+
+    /**
+     * State a feature keeps per document, without the document knowing the feature (Blink's
+     * {@code Supplement<Document>}): made on first use, gone with the document, touched on its thread.
+     *
+     * <pre>{@code
+     * public static final UIDocument.Local<InspectorSubject> SUBJECT =
+     *         UIDocument.Local.of("inspector-subject", document -> new InspectorSubject());
+     *
+     * InspectorSubject subject = element.document().local(SUBJECT);
+     * }</pre>
+     *
+     * <ul>
+     *   <li>One key per kind of state, held in a {@code static final}: the key's identity is the slot.</li>
+     *   <li>The value is the document's, so it holds no node of another document and crosses no sequence.</li>
+     * </ul>
+     *
+     * @param <T> what the document keeps
+     */
+    public static final class Local<T> {
+        private final String name;
+        private final Function<UIDocument, T> make;
+
+        private Local(String name, Function<UIDocument, T> make) {
+            this.name = name;
+            this.make = make;
+        }
+
+        /** A slot named {@code name}, filled by {@code make} the first time a document is asked. */
+        public static <T> Local<T> of(String name, Function<UIDocument, T> make) {
+            return new Local<>(Objects.requireNonNull(name, "name"), Objects.requireNonNull(make, "make"));
+        }
+
+        @Override
+        public String toString() {
+            return "Local(" + name + ")";
+        }
+    }
+
+    /** Made on first use: most documents keep none. */
+    @Nullable
+    private Map<Local<?>, Object> locals;
+
+    /** This document's value for {@code key}, made on first ask. On the document's thread. */
+    @SuppressWarnings("unchecked")
+    public <T> T local(Local<T> key) {
+        require("A document local");
+        if (locals == null) locals = new IdentityHashMap<>();
+        Object held = locals.get(key);
+        if (held == null) {
+            held = Objects.requireNonNull(key.make.apply(this), key.name);
+            locals.put(key, held);
+        }
+        return (T) held;
+    }
+
+    /**
+     * Runs {@code work} on this document later, never at once: after what is queued on its owner, or at the start of
+     * its next frame while nothing owns it. From any thread. What a {@code Broadcast} delivers through, so an event
+     * never runs inside the post that caused it.
+     */
+    public void later(Runnable work) {
+        Owner by = owner;
+        if (by == null) {
+            post(work);
+            return;
+        }
+        by.execute(() -> {
+            try (Running ignored = makeCurrent()) {
+                work.run();
+            }
+        });
+    }
+
+    static {
+        // A subscriber made inside a running document is told on that document, wherever it runs by then.
+        Broadcast.deliverThrough(() -> {
+            UIDocument running = UIDocument.RUNNING.get();
+            return running == null ? null : running::later;
+        });
     }
 
     // ── Reading the host ─────────────────────────────────────────────────────
@@ -187,15 +345,9 @@ public final class UIDocument extends UIElement {
         inbox.add(work);
     }
 
-    /** The extracts' readings for this frame, taken on the calling thread; null when none is registered. */
-    @Nullable
-    Runnable readExtracts() {
-        return extracts.read();
-    }
-
     /** The first frame claims its thread, as does a frame after the claiming thread died. */
     private void claimFrameThread() {
-        if (sequence != null) {
+        if (owner != null) {
             require("A frame");
             return;
         }
@@ -209,15 +361,22 @@ public final class UIDocument extends UIElement {
     }
 
     @Nullable
-    public Thread frameThread() {
+    Thread frameThread() {
         return frameThread;
     }
 
-    /** Refuses a caller on any thread but the frame thread, once one has been claimed. */
+    /** Refuses a caller on any thread but the document's: its owner's, else the frame thread once one is claimed. */
     public void require(String what) {
-        UiSequence owner = sequence;
-        if (owner != null) UiThread.require(what, owner);
-        else UiThread.require(what, frameThread);
+        Owner by = owner;
+        if (by == null) {
+            UiThread.require(what, frameThread);
+            return;
+        }
+        if (!UiThread.isEnforcing() || by.isCurrent()) return;
+        UiSequence running = UiSequence.current();
+        throw new IllegalStateException(what + " must happen on the document's thread (" + by.name() + "), not on "
+                + (running == null ? "thread " + Thread.currentThread().getName() : running.name())
+                + ". Post it there: document.execute(...).");
     }
 
     // ── The running document ─────────────────────────────────────────────────
@@ -255,20 +414,6 @@ public final class UIDocument extends UIElement {
         };
     }
 
-    // ── The platform ─────────────────────────────────────────────────────────
-
-    private PlatformPort platform = PlatformPort.INLINE;
-
-    /** What this document asks of the platform: modifiers, keys, clipboard, sound, cursor. */
-    public PlatformPort platform() {
-        return platform;
-    }
-
-    /** Installs the port a host routes this document's platform calls through. */
-    public void usePlatform(PlatformPort port) {
-        this.platform = port == null ? PlatformPort.INLINE : port;
-    }
-
     // ── Style ────────────────────────────────────────────────────────────────
 
     public StyleEngine styles() {
@@ -297,7 +442,10 @@ public final class UIDocument extends UIElement {
 
     /** Timelines and the per-frame hooks a tree is allowed to have. */
     public Animation animation() {
-        if (animation == null) animation = new Animation(() -> driver != null && driver.compositesMotion());
+        if (animation == null) animation = new Animation(() -> {
+            Owner by = owner;
+            return by != null && by.compositesMotion();
+        });
         return animation;
     }
 
@@ -524,9 +672,10 @@ public final class UIDocument extends UIElement {
      * layout run once more, so {@code :hover} lands on the right element this frame. The host paints after.
      */
     public void frame(float deltaSeconds, float width, float height) {
-        try (Running ignored = makeCurrent()) {
-            // On a sequence this is work inside the host's frame, which alone opens one in the trace.
-            if (sequence == null) {
+        // A frame reads every published state (registries, preferences) at one generation.
+        try (Running ignored = makeCurrent(); Published.Pin pinned = Published.pin()) {
+            // Owned, this is work inside the host's frame, which alone opens one in the trace.
+            if (owner == null) {
                 UiTrace.frameBegin();
                 runFrame(deltaSeconds, width, height);
             } else {
@@ -540,8 +689,8 @@ public final class UIDocument extends UIElement {
     private void runFrame(float deltaSeconds, float width, float height) {
         claimFrameThread();
         for (Runnable arrived; (arrived = inbox.poll()) != null; ) arrived.run();
-        // With no driver the host calls this on its own thread, which is where an extract reads; a driver reads them itself.
-        if (driver == null) {
+        // Unowned, the host calls this on its own thread, which is where an extract reads; an owner reads them itself.
+        if (owner == null) {
             Runnable delivery = extracts.read();
             if (delivery != null) delivery.run();
         }
@@ -625,7 +774,7 @@ public final class UIDocument extends UIElement {
 
     /**
      * Paints the laid-out document into {@code ctx}, a frame its owner opened: the document owns no paint context, and
-     * a {@code DocumentDriver}'s view hands its painter one.
+     * a viewport opens one for its content.
      */
     public void paint(CgUiPaintContext ctx) {
         boxes().paint(ctx);

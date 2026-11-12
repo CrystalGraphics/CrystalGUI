@@ -1,5 +1,7 @@
 package com.crystalgui.ui.contract;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgraphics.serialization.CgStateMap;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -45,33 +47,52 @@ public final class WidgetContracts {
     private WidgetContracts() {
     }
 
-    // COPY ON WRITE: a widget's static initialiser registers, on whichever thread first loads the class,
-    // while documents on other threads read. Writes are a handful per class; reads take no lock.
-    private static volatile Map<Class<?>, WidgetContract<?>> contracts = Collections.emptyMap();
-    private static volatile Map<Class<?>, String> localOnly = Collections.emptyMap();
+    private record LocalOnly(Class<?> type, String reason) {
+    }
+
+    // A widget static initialiser registers, on whichever thread first loads the class, while documents on
+    // other threads read: the lookups are per-generation indices.
+    private static final Contributions<WidgetContract<?>> CONTRACTS =
+            Contributions.of("widget-contracts", WidgetContract::type, Contributions.Conflict.REJECT);
+    private static final Contributions<LocalOnly> LOCAL_ONLY =
+            Contributions.of("local-only-widgets", LocalOnly::type, Contributions.Conflict.REJECT);
+    private static final Contributions.Index<Map<Class<?>, WidgetContract<?>>> CONTRACT_INDEX =
+            CONTRACTS.index(entries -> {
+                Map<Class<?>, WidgetContract<?>> byType = new LinkedHashMap<>();
+                for (Contributions.Entry<WidgetContract<?>> entry : entries) {
+                    byType.put(entry.item().type(), entry.item());
+                }
+                return Collections.unmodifiableMap(byType);
+            });
+    private static final Contributions.Index<Map<Class<?>, String>> LOCAL_ONLY_INDEX =
+            LOCAL_ONLY.index(entries -> {
+                Map<Class<?>, String> byType = new LinkedHashMap<>();
+                for (Contributions.Entry<LocalOnly> entry : entries) {
+                    byType.put(entry.item().type(), entry.item().reason());
+                }
+                return Collections.unmodifiableMap(byType);
+            });
 
     /**
      * Registers {@code contract} for its own class.
      *
-     * <p>Called from the widget's own static initialiser, so a contract exists exactly when the class
-     * does. Re-registering the same class is refused rather than silently replacing it — two contracts
-     * for one widget means whichever class-initialises last decides what the widget is.</p>
+     * <p>Called from the widget own static initialiser, so a contract exists exactly when the class
+     * does. Registering a second contract for one class is refused rather than silently replacing it: whichever
+     * class-initialises last would decide what the widget is. The same contract again is a no-op.</p>
      */
-    public static synchronized <W> WidgetContract<W> register(WidgetContract<W> contract) {
+    public static <W> WidgetContract<W> register(WidgetContract<W> contract) {
         Class<?> type = contract.type();
-        WidgetContract<?> existing = contracts.get(type);
+        if (LOCAL_ONLY_INDEX.get().containsKey(type)) {
+            throw new IllegalStateException(
+                    type.getName() + " is registered as local-only and cannot also be contracted.");
+        }
+        WidgetContract<?> existing = CONTRACT_INDEX.get().get(type);
         if (existing != null && existing != contract) {
             throw new IllegalStateException(
                     type.getName() + " already has a contract (" + existing + "). Two contracts for one "
                             + "widget means whichever class initialises last decides what it is.");
         }
-        if (localOnly.containsKey(type)) {
-            throw new IllegalStateException(
-                    type.getName() + " is registered as local-only and cannot also be contracted.");
-        }
-        Map<Class<?>, WidgetContract<?>> next = new LinkedHashMap<>(contracts);
-        next.put(type, contract);
-        contracts = Collections.unmodifiableMap(next);
+        CONTRACTS.add(Owner.PROCESS, contract);
         return contract;
     }
 
@@ -80,26 +101,24 @@ public final class WidgetContracts {
      *
      * @param reason read by a human in a test failure. Say what KIND of not-travelling this is
      */
-    public static synchronized void localOnly(Class<?> type, String reason) {
+    public static void localOnly(Class<?> type, String reason) {
         if (reason == null || reason.trim().isEmpty()) {
             throw new IllegalArgumentException(
                     type.getName() + " was marked local-only with no reason. The reason is the whole "
                             + "point: it is what separates a decision from an omission.");
         }
-        if (contracts.containsKey(type)) {
+        if (CONTRACT_INDEX.get().containsKey(type)) {
             throw new IllegalStateException(
                     type.getName() + " has a contract and cannot also be local-only.");
         }
-        Map<Class<?>, String> next = new LinkedHashMap<>(localOnly);
-        next.put(type, reason);
-        localOnly = Collections.unmodifiableMap(next);
+        LOCAL_ONLY.replace(Owner.PROCESS, new LocalOnly(type, reason));
     }
 
     /** The contract for {@code type}, or null if it has none. Exact class, never a supertype's. */
     @SuppressWarnings("unchecked")
     @Nullable
     public static <W> WidgetContract<W> of(Class<?> type) {
-        return (WidgetContract<W>) contracts.get(type);
+        return (WidgetContract<W>) CONTRACT_INDEX.get().get(type);
     }
 
     /**
@@ -123,11 +142,11 @@ public final class WidgetContracts {
     /** Why {@code type} does not travel, or null if it is not marked. */
     @Nullable
     public static String localOnlyReason(Class<?> type) {
-        return localOnly.get(type);
+        return LOCAL_ONLY_INDEX.get().get(type);
     }
 
     public static boolean isLocalOnly(Class<?> type) {
-        return localOnly.containsKey(type);
+        return LOCAL_ONLY_INDEX.get().containsKey(type);
     }
 
     // ── What UIElement calls ─────────────────────────────────────────────────
@@ -142,24 +161,24 @@ public final class WidgetContracts {
      */
     @SuppressWarnings("unchecked")
     public static <W, T> void writeState(W widget, CgStateMap<T> out) {
-        WidgetContract<W> contract = (WidgetContract<W>) contracts.get(widget.getClass());
+        WidgetContract<W> contract = (WidgetContract<W>) CONTRACT_INDEX.get().get(widget.getClass());
         if (contract != null) contract.write(widget, out);
     }
 
     /** Applies {@code widget}'s contracted state, or nothing if it has no contract. */
     @SuppressWarnings("unchecked")
     public static <W, T> void readState(W widget, CgStateMap<T> in) {
-        WidgetContract<W> contract = (WidgetContract<W>) contracts.get(widget.getClass());
+        WidgetContract<W> contract = (WidgetContract<W>) CONTRACT_INDEX.get().get(widget.getClass());
         if (contract != null) contract.read(widget, in);
     }
 
     /** Everything contracted, in registration order: a snapshot, not a live view. */
     public static Map<Class<?>, WidgetContract<?>> all() {
-        return contracts;
+        return CONTRACT_INDEX.get();
     }
 
     /** Everything explicitly marked local-only, with its reason: a snapshot, not a live view. */
     public static Map<Class<?>, String> allLocalOnly() {
-        return localOnly;
+        return LOCAL_ONLY_INDEX.get();
     }
 }

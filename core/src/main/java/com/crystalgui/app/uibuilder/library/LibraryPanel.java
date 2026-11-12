@@ -17,7 +17,7 @@ import com.crystalgui.app.uibuilder.glyph.GlyphView;
 import com.crystalgui.core.collection.list.ItemSizeStrategy;
 import com.crystalgui.core.collection.list.VariableHeightStrategy;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.core.data.DataProvider;
@@ -261,7 +261,7 @@ public final class LibraryPanel extends UIElement implements DataProvider {
 
         // A MENU BY WHAT WAS PRESSED: a card's, a user's group's, or the panel's.
         tree().suppressDefaultContextMenu();
-        ContextMenu.attach(tree(), CommandRegistry.global(), this::menuFor);
+        ContextMenu.attach(tree(), Commands.process(), this::menuFor);
 
         // THE LIST'S SELECTION IS THE COMPACT ROWS' SELECTION, so the arrows move the detail strip as a click does.
         whileConnected(() -> tree().onSelectionChanged.connect(indices -> {

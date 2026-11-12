@@ -1,6 +1,6 @@
 package com.crystalgui.desktop.switcher;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.core.window.WindowState;
@@ -402,7 +402,7 @@ public class WindowSwitcher extends UIElement {
         if (holdingMask != 0) {
             // RELEASED, so commit. Checked before the reveal below, which is what makes a fast tap
             // produce no panel at all rather than a frame of one.
-            if ((currentModifiers() & holdingMask) == 0) {
+            if ((Input.modifiersNow() & holdingMask) == 0) {
                 finish();
                 return false;
             }
@@ -428,10 +428,6 @@ public class WindowSwitcher extends UIElement {
         return true;
     }
 
-    private static int currentModifiers() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 
     private void wake() {
         UIDocument window = document();

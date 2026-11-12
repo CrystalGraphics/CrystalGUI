@@ -20,8 +20,9 @@ import com.crystalgui.fs.client.Backup;
 import com.crystalgui.fs.client.Workspace;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 import com.crystalgui.workbench.Workbench;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -582,11 +583,15 @@ public final class EditorService implements Disposable {
         private final DocumentEditor editor;
         /** Asked of the editor once: everything done with a view has to be done to the same element. */
         private final UIElement element;
+        /** Where the element was last shown: an inspector there may still hold it after it leaves. */
+        @Nullable
+        private UIDocument shownIn;
         private boolean disposed;
 
         private View(DocumentEditor editor) {
             this.editor = editor;
             this.element = editor.view();
+            element.onConnected(() -> shownIn = element.document());
         }
 
         public DocumentEditor editor() {
@@ -607,7 +612,7 @@ public final class EditorService implements Disposable {
             disposed = true;
             // BEFORE disposing it, while its element is still worth naming. An inspector RETAINS a detached subject
             // on purpose, so without this a closed document kept its sections on screen over whatever was opened next.
-            InspectorRegistry.subjectClosed(element);
+            InspectorSubject.closed(element.document() != null ? element.document() : shownIn, element);
             editor.disposeView();
         }
     }

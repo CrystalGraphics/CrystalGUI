@@ -1,5 +1,7 @@
 package com.crystalgui.app.vfxlab;
 
+import com.crystalgui.screen.CgUiScreen;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.mesh.CgMesh;
 import com.crystalgraphics.api.mesh.CgMeshShapes;
@@ -31,12 +33,10 @@ import com.crystalgraphics.job.CgHostThread;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.host.HostSession;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.service.PlatformPort;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
 import com.crystalgui.widget.composite.SearchField;
@@ -373,7 +373,7 @@ public class VfxLab extends UIElement {
                 lab.render(seconds);
             }).whilePaused(true);
             // After the world's firing, whose size the viewport renders at; before the desktop paints over it
-            viewportDraw = CgRenderStage.HUD.register(HostSession.COMPOSITOR - 1,
+            viewportDraw = CgRenderStage.HUD.register(CgUiScreen.ORDER - 1,
                     frame -> lab.drawViewport(frame.host().width(), frame.host().height()));
         }
 
@@ -502,7 +502,8 @@ public class VfxLab extends UIElement {
             out.append(")\n");
             count++;
         }
-        PlatformPort.current().setClipboard(out.toString());
+        String copied = out.toString();
+        CgHostThread.CLIENT.run(() -> CgClipboard.set(copied));
         tell("Copied " + count + " values");
     }
 

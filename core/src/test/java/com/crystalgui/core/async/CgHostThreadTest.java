@@ -2,6 +2,8 @@ package com.crystalgui.core.async;
 
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.platform.CgPlatform;
+import com.crystalgraphics.platform.input.CgClipboard;
 import org.junit.After;
 import org.junit.Test;
 
@@ -106,5 +108,59 @@ public class CgHostThreadTest {
         assertTrue(reply.error().is(CgHostThread.UNAVAILABLE));
         CgHostThread.SERVER.run(() -> ran[0] = true);
         assertFalse(ran[0]);
+    }
+
+    /** A copy and a paste from a document's sequence reach the clipboard on the client thread; the paste answers back. */
+    @Test
+    public void aDocumentsClipboardIsTheClientThreads() throws Exception {
+        CgHostThread.Queue client = new CgHostThread.Queue();
+        FakeGameThreads.bind(CgHostThread.CLIENT, client);
+        AtomicReference<String> held = new AtomicReference<>("");
+        AtomicReference<Thread> touchedOn = new AtomicReference<>();
+        CgPlatform.provide(CgClipboard.HOST, new CgClipboard.Host() {
+            @Override
+            public String get() {
+                touchedOn.set(Thread.currentThread());
+                return held.get();
+            }
+
+            @Override
+            public void set(String text) {
+                touchedOn.set(Thread.currentThread());
+                held.set(text);
+            }
+        });
+        try {
+            Thread clientThread = new Thread(client::drain, "client");
+            clientThread.start();
+            clientThread.join();   // the client thread is now named
+
+            CountDownLatch asked = new CountDownLatch(1);
+            AtomicReference<String> pasted = new AtomicReference<>();
+            AtomicReference<UiSequence> pastedOn = new AtomicReference<>();
+            CountDownLatch answered = new CountDownLatch(1);
+            sequence.execute(() -> {
+                CgHostThread.CLIENT.run(() -> CgClipboard.set("copied"));
+                CgHostThread.CLIENT.call(CgClipboard::get).then(text -> {
+                    pasted.set(text);
+                    pastedOn.set(UiSequence.current());
+                    answered.countDown();
+                });
+                asked.countDown();
+            });
+            assertTrue(asked.await(10, TimeUnit.SECONDS));
+            assertEquals("the clipboard was touched before the client thread ran", "", held.get());
+
+            Thread clientAgain = new Thread(client::drain, "client-again");
+            clientAgain.start();
+            clientAgain.join();
+            assertSame("the clipboard was touched off the client thread", clientAgain, touchedOn.get());
+            assertTrue("the paste never answered", answered.await(10, TimeUnit.SECONDS));
+            assertEquals("copied", pasted.get());
+            assertSame(sequence, pastedOn.get());
+        } finally {
+            CgPlatform.provide(CgClipboard.HOST, CgClipboard.Host.NONE);
+            FakeGameThreads.bind(CgHostThread.CLIENT, null);
+        }
     }
 }

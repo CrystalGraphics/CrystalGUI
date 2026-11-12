@@ -4,7 +4,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.WeakHashMap;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -100,18 +99,22 @@ public final class StyleLab {
     private static final float LAB_GAP = 8f;
 
     /**
-     * The plate a person picked for every lab, {@link #DARK_CLASS} or {@link #LIGHT_CLASS}, or "" before anyone has —
-     * which means each lab contrasts with its text. One for the process: a person judging values against white
-     * judges the next lab against white too, and an open lab follows a switch.
+     * What a window's labs share: the plate a person picked, {@link #DARK_CLASS} or {@link #LIGHT_CLASS}, or "" before
+     * anyone has (each lab then contrasts with its text), and the lab the window has open. A person judging values
+     * against white judges the next lab against white too, and an open lab follows a switch.
      */
-    private static final Property<String> GROUND = Property.of("");
+    private static final class Labs {
+        final Property<String> ground = Property.of("");
+        @Nullable
+        StyleLab open;
+    }
+
+    private static final UIDocument.Local<Labs> LABS = UIDocument.Local.of("style-labs", window -> new Labs());
 
     /** The text color a lab left to itself contrasts its plate with, or null for the dark plate. @see #contrastWith */
     @Nullable
     private Supplier<Integer> contrast;
 
-    /** The lab each window has open, so opening one closes the last. @see #open() */
-    private static final Map<UIDocument, StyleLab> OPEN = new WeakHashMap<>();
 
     private final UIElement anchor;
 
@@ -195,14 +198,10 @@ public final class StyleLab {
         return this;
     }
 
-    /** Forgets a pick, so every lab contrasts with its text again. For a test that picked one. */
-    static void forgetGroundPick() {
-        GROUND.set("");
-    }
-
     /** The plate shown: the pick, else the one that contrasts with the text, else dark. */
     private String groundShown() {
-        String picked = GROUND.get();
+        UIDocument window = stage.document();
+        String picked = window == null ? "" : window.local(LABS).ground.get();
         if (!picked.isEmpty()) return picked;
         Integer argb = contrast == null ? null : contrast.get();
         if (argb == null) return DARK_CLASS;
@@ -501,7 +500,8 @@ public final class StyleLab {
         pick.addClass(tone);
         pick.setHitTest(true);
         pick.onMouseDown.attachListener((element, event) -> {
-            GROUND.set(tone);
+            UIDocument window = stage.document();
+            if (window != null) window.local(LABS).ground.set(tone);
             event.preventDefault();
         }, false, true);
         picks.add(pick);
@@ -535,7 +535,9 @@ public final class StyleLab {
     public StyleLab open() {
         UIDocument window = anchor.document();
         if (window == null) return this;
-        StyleLab showing = OPEN.put(window, this);
+        Labs labs = window.local(LABS);
+        StyleLab showing = labs.open;
+        labs.open = this;
         if (showing != null && showing != this) showing.close();
 
         if (dialog.parentElement() == null) window.topLayerNode().append(dialog);

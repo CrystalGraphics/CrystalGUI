@@ -6,7 +6,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.notify.Notifications;
@@ -64,11 +64,11 @@ public final class WorkbenchApplicationCommands {
      * right layout each, which the captured version could not have done at all.</p>
      */
     public static void register() {
-        CommandRegistry.global().contribute(WorkbenchApplicationCommands.class,
+        Commands.process().contribute(WorkbenchApplicationCommands.class,
                 WorkbenchApplicationCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(SAVE_FILE, "Save File")
                 .icon(ActionIcons.SAVE)
                 .binding("Mod+S")

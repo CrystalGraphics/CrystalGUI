@@ -50,17 +50,12 @@ tree observer, and document-level `DataProvider`s.
   rebuilt whenever its subtree is hidden or restructured, so a flag written onto one is lost.
 - `addDataProvider` — document-level, because the consumer of a key is often not an ancestor of the
   thing that asks.
+- **`execute(work)` is the way onto the document's thread from anywhere**: at once when already there, else
+  posted. Never reach for a sequence: a document has one seam in, `own(Owner)`, which only its viewport calls and
+  whose `Ownership` alone reads extracts and gives the document back.
 
-**`DocumentDriver` is how a host runs one** — recording on a sequence while the render thread presents (the
-default), on a sequence in lockstep (`-Dcrystalgui.ui.sequence=true`), or inline on the host's thread
-(`-Dcrystalgui.ui.async=false`). Threading is the engine's: a host attaches the driver to an empty
-document, builds the tree through `driver.run`, and frames it from a renderer at a GUI stage (`driver.frame(stage, painter)`,
-which takes the stage's size and target and `CgFrameClock`'s time, and shows the frame through `driver.presenter()`),
-and sends its input and anything else that touches the tree through it, running the same code in every mode.
-`HostSession` (the game's desktop) and the harness scenes are its hosts, all async by default. Four scenes pin `Mode.INLINE` because they measure or
-photograph exact frames: `cgui-text-stress`, `cgui-timeline`, `cgui-text-gamma`, `cgui-visual-layers`. A
-capture or script counts `driver.presentedFrames()`, not frame numbers: async presents nothing until the
-first frame is recorded.
+**A host runs a document through a `CgUiViewport`** (`com.crystalgui.viewport`, its own guide): sequenced by
+default, in lockstep, or inline on the host's thread. The document knows only its `Owner`, which the viewport is.
 
 **UI code reaches the game through `CgHostThread`** (`core.async`), never directly: `CgHostThread.CLIENT.run(...)`,
 `CgHostThread.SERVER.call(...)` answering a `CgReply` on the UI's thread, and `UINode.extract(read, use)` for a value read

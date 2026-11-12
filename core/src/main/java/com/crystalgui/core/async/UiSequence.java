@@ -3,7 +3,10 @@ package com.crystalgui.core.async;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.platform.service.CgGameThreads;
 import com.crystalgraphics.job.CgJobLoop;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.trace.UiTrace;
 
 import javax.annotation.Nullable;
 import java.util.Queue;
@@ -22,8 +25,8 @@ import java.util.concurrent.locks.LockSupport;
  *
  * <pre>{@code
  * UiSequence sequence = UiSequence.create("desktop");
- * document.runOn(sequence);                                   // the document now belongs to it
  * sequence.execute(() -> document.frame(delta, w, h));        // from the render thread
+ * // A document's driver owns it on its sequence: UIDocument.own, with an Owner over isCurrent and execute.
  * }</pre>
  *
  * <p>Each sequence has its own {@link JobScheduler}: {@link JobScheduler#shared()} answers it inside a task, and its
@@ -43,6 +46,11 @@ public final class UiSequence implements Executor {
 
     private static final ThreadLocal<UiSequence> CURRENT = new ThreadLocal<>();
 
+    /** Off by default. Read once: which sequences exist is decided at startup. */
+    private static final CgVar.Bool SINGLE_SEQUENCE = CgVar.bool("crystalgui.ui.singleSequence", false,
+            CgVar.DEV | CgVar.RESTART,
+            "Runs every document and the services on one sequence. A bug that goes away with it is a threading bug.");
+
     static {
         // A CgHostThread answer goes back to the sequence that asked, so its then() may touch the tree.
         CgHostThread.answerThrough(() -> {
@@ -52,7 +60,11 @@ public final class UiSequence implements Executor {
     }
 
     private final String name;
+    /** The zone a turn is recorded under, so the profiler draws this sequence a lane of its own. */
+    private final String zone;
     private final Executor pool;
+    /** The services sequence, or the single sequence of the switch: outlives every document, so close leaves it. */
+    private final boolean shared;
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean scheduled = new AtomicBoolean();
     private volatile boolean closed;
@@ -61,19 +73,55 @@ public final class UiSequence implements Executor {
     private volatile Thread running;
     private volatile JobScheduler jobs;
 
-    private UiSequence(String name, Executor pool) {
+    private UiSequence(String name, Executor pool, boolean shared) {
         this.name = name;
+        this.zone = ZONE_PREFIX + name;
         this.pool = pool;
+        this.shared = shared;
     }
+
+    /** What a turn's zone starts with: how the profiler knows a sequence's lane. */
+    public static final String ZONE_PREFIX = "sequence:";
 
     /** A sequence on the shared UI pool. */
     public static UiSequence create(String name) {
-        return new UiSequence(name, Pool.EXECUTOR);
+        return new UiSequence(name, Pool.EXECUTOR, false);
     }
 
     /** A sequence on {@code pool}: a test's own executor, or a dedicated thread an application asked for. */
     public static UiSequence create(String name, Executor pool) {
-        return new UiSequence(name, pool);
+        return new UiSequence(name, pool, false);
+    }
+
+    /**
+     * A document's sequence: one of its own, or with {@code -Dcrystalgui.ui.singleSequence=true} the one sequence
+     * every document and the services share.
+     *
+     * <pre>{@code
+     * UiSequence sequence = UiSequence.forDocument("crystalgui:editor");
+     * sequence.close();      // when the document closes; the shared one keeps running
+     * }</pre>
+     */
+    public static UiSequence forDocument(String name) {
+        return SINGLE_SEQUENCE.get() ? Shared.SINGLE : create(name);
+    }
+
+    /**
+     * The services sequence: where owned services live (the workspace, notifications, the clipboard), and where a
+     * command invoked with no document runs. It never lays out or paints, so a document's work never holds it up.
+     *
+     * <pre>{@code
+     * UiSequence.services().execute(() -> notifications.add(posted));
+     * }</pre>
+     */
+    public static UiSequence services() {
+        return SINGLE_SEQUENCE.get() ? Shared.SINGLE : Shared.SERVICES;
+    }
+
+    /** Built on first use: a dedicated server that never asks makes neither. */
+    private static final class Shared {
+        static final UiSequence SERVICES = new UiSequence("services", Pool.EXECUTOR, true);
+        static final UiSequence SINGLE = new UiSequence("single", Pool.EXECUTOR, true);
     }
 
     /** The sequence running the calling task, or null on any thread outside one. */
@@ -157,8 +205,9 @@ public final class UiSequence implements Executor {
         return running;
     }
 
-    /** Drops what is queued and refuses what comes after. */
+    /** Drops what is queued and refuses what comes after. The services sequence and the single sequence stay open. */
     public void close() {
+        if (shared) return;
         closed = true;
         tasks.clear();
     }
@@ -192,6 +241,7 @@ public final class UiSequence implements Executor {
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);
         running = Thread.currentThread();
+        long turn = CgTrace.stamp(UiTrace.FRAME);
         try (CgJobLoop.Scope ignored = jobs().loop().enter()) {
             for (int i = 0; i < TASKS_PER_TURN && !closed; i++) {
                 Runnable task = tasks.poll();
@@ -203,6 +253,7 @@ public final class UiSequence implements Executor {
                 }
             }
         } finally {
+            CgTrace.zoneDone(UiTrace.FRAME, zone, turn);
             running = null;
             CURRENT.set(outer);
             scheduled.set(false);

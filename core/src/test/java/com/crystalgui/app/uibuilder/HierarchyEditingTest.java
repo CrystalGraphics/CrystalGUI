@@ -25,7 +25,7 @@ import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
 import com.crystalgui.app.uibuilder.panel.HierarchyActions;
 import com.crystalgui.app.uibuilder.panel.HierarchyPanel;
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.undo.UndoStack;
@@ -200,11 +200,11 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
     @Test
     public void theRowMenuOffersTheAttributesAndCopySelector() {
         Disposable builder = BuilderCommands.register();
-        Disposable rows = HierarchyActions.register(CommandRegistry.global());
+        Disposable rows = HierarchyActions.register(Commands.process());
         try {
             editor.selection().selectOnly(title);
             settle();
-            Menu menu = ContextMenu.of(HierarchyPanel.CONTEXT_MENU).build(CommandRegistry.global(), hierarchy.tree());
+            Menu menu = ContextMenu.of(HierarchyPanel.CONTEXT_MENU).build(Commands.process(), hierarchy.tree());
             List<String> labels = new ArrayList<>();
             MenuItem copyAttributes = null;
             for (MenuItem item : menu.getItems()) {
@@ -287,9 +287,9 @@ public class HierarchyEditingTest extends UiDocumentTestBase {
 
     @Test
     public void newOffersEachKindUnderItsOwnNameAndGlyph() {
-        Disposable rows = HierarchyActions.register(CommandRegistry.global());
+        Disposable rows = HierarchyActions.register(Commands.process());
         try {
-            Menu menu = ContextMenu.of(HierarchyPanel.NEW_MENU).build(CommandRegistry.global(), hierarchy.tree());
+            Menu menu = ContextMenu.of(HierarchyPanel.NEW_MENU).build(Commands.process(), hierarchy.tree());
             MenuItem button = null;
             for (MenuItem item : menu.getItems()) {
                 if ("Button".equals(item.getText())) button = item;

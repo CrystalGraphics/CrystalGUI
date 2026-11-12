@@ -1,6 +1,7 @@
 package com.crystalgui.widget.collection.tree;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -33,7 +34,7 @@ public final class TreeClipboard<T> {
         items.clear();
         items.addAll(held);
         mode = intent;
-        if (!items.isEmpty()) PlatformPort.current().setClipboard(text);
+        if (!items.isEmpty()) CgHostThread.CLIENT.run(() -> CgClipboard.set(text));
     }
 
     public boolean isEmpty() {

@@ -30,12 +30,12 @@ public final class ClipboardCommands {
     public static final String COPY = "edit.copy";
     public static final String PASTE = "edit.paste";
 
-    /** Registers into {@link CommandRegistry#global()}. Idempotent. */
+    /** Registers into {@link Commands#global()}. Idempotent. */
     public static void register() {
-        CommandRegistry.global().contribute(ClipboardCommands.class, ClipboardCommands::declare);
+        Commands.process().contribute(ClipboardCommands.class, ClipboardCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(CUT, "Cut")
                 .icon(ActionIcons.CUT)
                 .menu(MenuId.MAIN_EDIT, "2_clipboard", 10)

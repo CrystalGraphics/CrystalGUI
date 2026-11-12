@@ -11,7 +11,7 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.testsupport.TestPlatformService;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.service.Input;
@@ -69,7 +69,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         // by INHERITING somebody else's leaked flag, so it broke the moment the leak was closed; the
         // two tests that are ABOUT the animation turn it back on themselves, in a finally.
         Desktop.setAnimationsEnabled(false);
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         WindowCommands.resetForTesting();
 
         UIElement root = new UIElement().layout(l -> l.width(800).height(600));
@@ -177,7 +177,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         frame.setToolWindow(true);
         settle();
 
-        Command fullscreen = CommandRegistry.global().get(WindowCommands.FULLSCREEN);
+        Command fullscreen = Commands.process().get(WindowCommands.FULLSCREEN);
         assertNotNull(fullscreen);
         assertFalse("a tool document was offered Full Screen",
                 fullscreen.isEnabled(CommandContext.of(frame)));
@@ -186,7 +186,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     /** F11 is the chord, and unlike Alt+Space it is not the host's. */
     @Test
     public void fullscreenIsOnF11() {
-        Command fullscreen = CommandRegistry.global().get(WindowCommands.FULLSCREEN);
+        Command fullscreen = Commands.process().get(WindowCommands.FULLSCREEN);
         assertNotNull(fullscreen);
         assertTrue("Full Screen lost its chord", fullscreen.bindings().contains("F11"));
     }

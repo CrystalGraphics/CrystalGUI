@@ -1,9 +1,5 @@
 package com.crystalgui.app.uibuilder.live;
 
-import java.util.Collections;
-import java.util.Map;
-import java.util.WeakHashMap;
-
 import javax.annotation.Nullable;
 
 import com.crystalgui.app.uibuilder.BuilderSelection;
@@ -32,26 +28,22 @@ import com.crystalgui.ui.dom.UIElement;
  */
 public final class LiveSubject implements DataProvider {
 
-    /** One per document, weakly held so closing a window drops it. */
-    private static final Map<UIDocument, LiveSubject> BY_DOCUMENT =
-            Collections.synchronizedMap(new WeakHashMap<>());
+    /** One per document, gone with it. */
+    private static final UIDocument.Local<LiveSubject> LOCAL = UIDocument.Local.of("live-subject", document -> {
+        LiveSubject installed = new LiveSubject(document);
+        document.addDataProvider(installed);
+        return installed;
+    });
 
-    private final BuilderSelection selection = new BuilderSelection();
+    private final BuilderSelection selection;
 
-    private LiveSubject() {
+    private LiveSubject(@Nullable UIDocument document) {
+        selection = new BuilderSelection(() -> document);
     }
 
-    /** The subject for {@code document}, installing one the first time it is asked for. */
-    public static LiveSubject on(UIDocument document) {
-        if (document == null) return new LiveSubject();
-        synchronized (BY_DOCUMENT) {
-            LiveSubject existing = BY_DOCUMENT.get(document);
-            if (existing != null) return existing;
-            LiveSubject installed = new LiveSubject();
-            BY_DOCUMENT.put(document, installed);
-            document.addDataProvider(installed);
-            return installed;
-        }
+    /** The subject for {@code document}, installing one the first time it is asked for. On its thread. */
+    public static LiveSubject on(@Nullable UIDocument document) {
+        return document == null ? new LiveSubject(null) : document.local(LOCAL);
     }
 
     /** What is picked. The same selection type the builder's own canvas uses, so the inspector sections

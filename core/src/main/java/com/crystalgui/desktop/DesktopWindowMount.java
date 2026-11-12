@@ -1,12 +1,10 @@
-package com.crystalgui.desktop.host;
+package com.crystalgui.desktop;
 
 import javax.annotation.Nullable;
-import java.util.concurrent.Executor;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
@@ -19,6 +17,7 @@ import com.crystalgui.net.window.ScopedSheets;
 import com.crystalgui.net.window.SheetSupply;
 import com.crystalgui.net.window.UiType;
 import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.net.window.WindowProtocol;
 import com.crystalgui.style.Styleable;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
@@ -108,15 +107,12 @@ public final class DesktopWindowMount implements WindowMount {
      */
     public void bind(@Nullable CgProtocolConnection<Object> connection, @Nullable WindowMount preferred) {
         if (connection == null || connection == boundTo) return;
+        // The connection test owns ui/openWindow for its run: installing the window host would take it.
+        if (WindowProtocol.clientHostStandsDown()) return;
         boundTo = connection;
-        // The desktop's tree belongs to its sequence, so CrystalGUI's own methods are delivered there. Only those:
-        // the connection is shared, and every other mod's handlers are promised the game thread.
-        Executor onSequence = work -> {
-            UiSequence sequence = document.sequence();
-            if (sequence == null || sequence.isCurrent()) work.run();
-            else sequence.execute(work);
-        };
-        for (String family : TREE_METHODS) connection.dispatchThrough(family, onSequence);
+        // CrystalGUI's own methods are delivered on the document's thread. Only those: the connection is shared, and
+        // every other mod's handlers are promised the game thread.
+        for (String family : TREE_METHODS) connection.dispatchThrough(family, document::execute);
         WindowMount mount = preferred == null ? this : preferred;
         ClientWindows.of(connection)
                 .setSheetSupply(sheetSupply())

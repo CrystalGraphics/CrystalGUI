@@ -113,7 +113,7 @@ window.getInputHandler().consumeKeyboardEvent(event);
 That is the whole contract. **`UIDocument` is not a Minecraft screen** — it deliberately implements no
 Minecraft interface, so you own the host: a screen of the engine's (CrystalGraphics' `CgScreens`) to take the
 cursor and the keys, painted at `CgRenderStage.SCREEN` and fed from `CgInputStage.SCREEN`. The desktop's
-`desktop.host.HostSession` is a working example to copy.
+`screen.CgUiScreen` is a working example to copy.
 
 > **`init` is required.** Selectors do not match on a detached tree, so without it your UI has no
 > styling at all — everything lays out at its default size and nothing looks wrong enough to explain
@@ -1055,8 +1055,8 @@ public final class NotesKind {
             .model((resource, bytes) -> NotesModel.decode(bytes))   // what it IS
             .editor(NotesView::new);                                 // one way of looking at it
 
-    public static Disposable register(DocumentKinds kinds) {
-        return kinds.register(KIND);
+    public static Disposable register(DocumentKinds kinds, Owner owner) {
+        return kinds.contribute(owner, KIND);
     }
 }
 ```
@@ -1357,13 +1357,13 @@ the question gets answered while it is still cheap.
 Something that is not a widget -- a badge over the HUD, a crosshair effect, a picture behind every screen -- draws
 at one of CrystalGraphics' **GUI stages**, `CgRenderStage.SCREEN` (over a screen, CrystalGUI's or any other) and
 `CgRenderStage.HUD` (over the in-game HUD). CrystalGUI's desktop -- its own screen, and the pinned windows over the HUD
-and over other screens -- is a renderer on each at `HostSession.COMPOSITOR`, so the order you register at says which
+and over other screens -- is a renderer on each at `CgUiScreen.ORDER`, so the order you register at says which
 side of it you land on.
 
 ```java
 CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // declares #pragma cg_use quad
 
-CgRenderStage.Registration badge = CgRenderStage.HUD.register(HostSession.COMPOSITOR + 1, frame ->   // over the windows
+CgRenderStage.Registration badge = CgRenderStage.HUD.register(CgUiScreen.ORDER + 1, frame ->   // over the windows
         frame.canvas().quad(material).at(8f, 8f).size(32f, 32f).color(0xFFFF8800).submit());
 badge.close();   // and it stops
 ```

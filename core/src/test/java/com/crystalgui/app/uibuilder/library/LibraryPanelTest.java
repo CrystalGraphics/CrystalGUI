@@ -14,7 +14,7 @@ import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.Name;
@@ -143,7 +143,7 @@ public class LibraryPanelTest extends UiDocumentTestBase {
 
     @Test
     public void aCardsMenuActsOnThatCardInItsOwnGroup() {
-        Disposable commands = LibraryActions.register(CommandRegistry.global());
+        Disposable commands = LibraryActions.register(Commands.process());
         try {
             UserLibrary mine = UserLibrary.in(null);
             panel.useLibrary(mine);
@@ -155,7 +155,7 @@ public class LibraryPanelTest extends UiDocumentTestBase {
             int removable = 0;
             for (PreviewCard card : panel.realisedCards()) {
                 if (!card.entry().kind().equals(Button.NAME)) continue;
-                Menu menu = ContextMenu.of(LibraryPanel.CARD_MENU).build(CommandRegistry.global(), card);
+                Menu menu = ContextMenu.of(LibraryPanel.CARD_MENU).build(Commands.process(), card);
                 for (MenuItem item : menu.getItems()) {
                     if ("Remove from Group".equals(item.getText()) && item.isEnabled()) removable++;
                 }
@@ -169,7 +169,7 @@ public class LibraryPanelTest extends UiDocumentTestBase {
     /** Delete takes a card out of the user's group it was clicked in. */
     @Test
     public void deleteTakesTheClickedCardOutOfItsGroup() {
-        Disposable commands = LibraryActions.register(CommandRegistry.global());
+        Disposable commands = LibraryActions.register(Commands.process());
         try {
             UserLibrary mine = UserLibrary.in(null);
             panel.useLibrary(mine);

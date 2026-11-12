@@ -14,7 +14,7 @@ import javax.annotation.Nullable;
  * to add later, because adding it means changing every handler signature.</p>
  *
  * @param source the element the command was invoked from — the focused element for a keystroke, the
- *               clicked item for a menu. Null for a programmatic {@code CommandRegistry.run(id)}.
+ *               clicked item for a menu. Null for a programmatic {@code Commands.run(id)}.
  * @param args   binding-supplied payload, or null
  */
 public record CommandContext(@Nullable CommandTarget source, @Nullable Object args) {

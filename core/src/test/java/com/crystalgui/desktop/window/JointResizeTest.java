@@ -5,7 +5,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.input.ButtonState;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.service.Input;
@@ -61,7 +61,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         // detaches and `close()` destroys only once the flight ends, so the assertion reads the state
         // BEFORE the gesture took effect and the numbers it does get are mid-flight fractions.
         Desktop.setAnimationsEnabled(false);
-        CommandRegistry.global().resetForTesting();
+        Commands.process().resetForTesting();
         WindowCommands.resetForTesting();
 
         UIElement root = new UIElement().layout(l -> l.width(800).height(600));

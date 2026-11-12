@@ -1,12 +1,14 @@
 package com.crystalgui.core.command.when;
 
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.core.data.DataKey;
 
 import javax.annotation.Nullable;
 import java.util.Collection;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
+import java.util.HashMap;
 import java.util.function.Function;
 
 /**
@@ -38,21 +40,32 @@ public final class ContextKeys {
     private ContextKeys() {
     }
 
-    private static final Map<String, Function<DataContext, Object>> DEFINED = new ConcurrentHashMap<>();
+    private record Definition(String name, Function<DataContext, Object> value) {
+    }
+
+    private static final Contributions<Definition> DEFINED = Contributions.of("context-keys", Definition::name);
+    private static final Contributions.Index<Map<String, Function<DataContext, Object>>> BY_NAME =
+            DEFINED.index(entries -> {
+                Map<String, Function<DataContext, Object>> byName = new HashMap<>();
+                for (Contributions.Entry<Definition> entry : entries) {
+                    byName.put(entry.item().name(), entry.item().value());
+                }
+                return byName;
+            });
 
     /**
      * Names a derived fact, for the cases {@link DataKey} cannot express.
      *
-     * <p>Replaces any previous definition, like {@code CommandRegistry.register} and for the same reason:
-     * overriding a built-in is how a host customises one, and refusing would make that impossible.</p>
+     * <p>Replaces any previous definition, like {@code Commands.register} and for the same reason: overriding a
+     * built-in is how a host customises one, and refusing would make that impossible.</p>
      */
     public static void define(String name, Function<DataContext, Object> value) {
-        DEFINED.put(name, value);
+        DEFINED.replace(Owner.PROCESS, new Definition(name, value));
     }
 
     /** Forgets a definition. Returns whether there was one. */
     public static boolean undefine(String name) {
-        return DEFINED.remove(name) != null;
+        return DEFINED.removeIf(definition -> definition.name().equals(name));
     }
 
     /**
@@ -63,7 +76,7 @@ public final class ContextKeys {
      */
     @Nullable
     public static Object resolve(String name, DataContext context) {
-        Function<DataContext, Object> defined = DEFINED.get(name);
+        Function<DataContext, Object> defined = BY_NAME.get().get(name);
         if (defined != null) return defined.apply(context);
         DataKey<?> key = DataKey.find(name);
         return key == null ? null : context.get(key);
@@ -97,6 +110,6 @@ public final class ContextKeys {
 
     /** For tests, which must not inherit definitions from each other. */
     public static void resetForTesting() {
-        DEFINED.clear();
+        DEFINED.clearForTesting();
     }
 }

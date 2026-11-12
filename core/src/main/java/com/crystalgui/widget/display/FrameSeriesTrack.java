@@ -1,6 +1,6 @@
 package com.crystalgui.widget.display;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -82,8 +82,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
         onMouseScroll.attachListener((element, event) -> {
             float notches = event.getScroll();
             if (notches == 0f || frameCount() == 0) return;
-            PlatformPort input = PlatformPort.current();
-            int modifiers = input == null ? 0 : input.modifiers();
+            int modifiers = Input.modifiersNow();
             if (KeyStroke.hasMod(modifiers)) return;
             if (CgModifiers.hasShift(modifiers)) {
                 panBy(notches * visible() * PAN_PER_NOTCH);

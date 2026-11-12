@@ -2,7 +2,7 @@ package com.crystalgui.ui.input.keymap;
 
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.signal.Signal;
 
@@ -39,7 +39,7 @@ public final class KeymapResolver {
      */
     private static final long CHORD_TIMEOUT_MILLIS = 5_000L;
 
-    private final CommandRegistry commands;
+    private final Commands commands;
 
     /** Strokes accepted so far toward a longer chord. Empty whenever nothing is pending. */
     private final List<KeyStroke> pending = new ArrayList<>();
@@ -54,7 +54,7 @@ public final class KeymapResolver {
      */
     public final Signal.Value<KeyChord> onPendingChanged = new Signal.Value<>();
 
-    public KeymapResolver(CommandRegistry commands) {
+    public KeymapResolver(Commands commands) {
         this.commands = commands;
     }
 
@@ -251,7 +251,7 @@ public final class KeymapResolver {
         if (prefixMatched) return PREFIX;
 
         // No SCOPE claimed it. Fall back to the defaults commands declared for themselves, which are
-        // application-wide by construction -- see CommandRegistry.declaredBindings(). Last, so an
+        // application-wide by construction -- see Commands.declaredBindings(). Last, so an
         // element-scoped binding always wins and one chord can still mean different things in different
         // widgets.
         for (KeyBinding binding : commands.declaredBindings().bindings()) {

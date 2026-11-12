@@ -517,14 +517,14 @@ public class RpgConsoleScene extends UiDocumentScene {
         // a frozen bar and a correct one look identical at rest. Null on every page but the gallery.
         elapsed += frame.getDeltaTime();
         float fraction = (elapsed % 4f) / 4f;
-        driver().post(() -> {
+        viewport().execute(() -> {
             if (walking != null && walking.document() != null) walking.setFraction(fraction);
         });
     }
 
     @Override
     protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
-        if (driver().presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
+        if (viewport().presentedFrames() == 5) ctx.getArtifactService().requestCapture("startup");
     }
 
 }

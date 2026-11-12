@@ -292,7 +292,7 @@ b.setEnabled(false);                        // inherited from UINode
 ```
 
 Activates on press-then-release **over the same element** (dragging off cancels), and on Space/Enter
-when focused. Plays `button_click` through `PlatformPort.playSound` (CrystalGraphics' `CgSounds.play2D`); silent where the host has no such sound or no audio output.
+when focused. Plays `button_click` through CrystalGraphics' `CgSounds.play2D`; silent where the host has no such sound or no audio output.
 
 - Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (Button page)
@@ -505,8 +505,8 @@ something that is — you cannot reach `-5` without passing through a bare `-`.
 filter: a `0..100` integer field silently drops `-`, a `-50..50` one admits it.
 
 Also: caret blink (`setCaretBlinkSeconds`, `isCaretVisible`, via `UIFrameTicker`), selection
-(`selectAll`, `clearSelection`, `getSelectedText`, `getSelectionStart/End`), clipboard through
-`PlatformPort.clipboard()`, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
+(`selectAll`, `clearSelection`, `getSelectedText`, `getSelectionStart/End`), paste answered from
+the client thread's clipboard, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
 
 Six style properties drive its text: `color`, `font-size`, `font-family`, `line-height` (vertical
 centring only), `caret-width`, `selection-color`.
@@ -1399,8 +1399,8 @@ private static final TreeClipboard<Node> CLIPBOARD = new TreeClipboard<>();   //
 
 editing = new TreeEditing<>(tree, this, this::itemForRow, tree::refresh, CLIPBOARD);
 editing.setModel(new NodeModel());
-editing.attachContextMenu(CommandRegistry.global(), () -> ContextMenu.of(NODE_MENU));
-TreeEditing.contributeMenu(CommandRegistry.global(), NODE_MENU);   // once, by the feature; dispose it with the feature
+editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(NODE_MENU));
+TreeEditing.contributeMenu(Commands.process(), NODE_MENU);   // once, by the feature; dispose it with the feature
 
 // the renderer
 public UIElement createTemplate() { ... editing.installRow(row, field); ... }

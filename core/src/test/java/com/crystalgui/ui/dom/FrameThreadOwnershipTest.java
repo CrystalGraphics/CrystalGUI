@@ -113,7 +113,7 @@ public class FrameThreadOwnershipTest extends UiDocumentTestBase {
         }
     }
 
-    /** {@code DesktopHost} builds its document unclaimed; until its first frame claimed it, nothing was checked. */
+    /** The desktop's screen builds its document unclaimed; until its first frame claimed it, nothing was checked. */
     @Test
     public void aDocumentNobodyClaimedIsClaimedByItsFirstFrame() throws Exception {
         UIDocument unclaimed = new UIDocument();

@@ -3,7 +3,7 @@ package com.crystalgui.core.undo;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 
 /**
@@ -72,10 +72,10 @@ public final class UndoCommands {
      * anything.</p>
      */
     public static void register() {
-        CommandRegistry.global().contribute(UndoCommands.class, UndoCommands::declare);
+        Commands.process().contribute(UndoCommands.class, UndoCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(UNDO, "Undo")
                         .binding(UNDO_CHORD)
                         // THE MENU BAR IS A QUERY, so a command states where it appears and the bar never
@@ -100,7 +100,7 @@ public final class UndoCommands {
 
     // There is deliberately no bindDefaults/install pair here any more.
     //
-    // Both chords are declared on the commands themselves (see .binding above), and CommandRegistry's
+    // Both chords are declared on the commands themselves (see .binding above), and Commands's
     // declaredBindings() is the resolver's outermost scope -- so undo is application-wide with nothing
     // binding it to any element. The old pair bound the same three chords onto a root keymap, which is
     // now a second copy of one fact: rebinding undo through a keymap would leave the declared chord

@@ -1,7 +1,11 @@
 package com.crystalgui.core.signal;
 
+import com.crystalgui.core.async.UiSequence;
+
 import java.util.ArrayList;
 import java.util.List;
+
+import javax.annotation.Nullable;
 
 /**
  * Shared connection machinery for all signal variants.
@@ -11,12 +15,19 @@ import java.util.List;
  * {@link Signal.Pair}) extend this and add their type-safe {@code emit(...)}
  * and {@code connect(...)} methods.</p>
  *
- * <p><b>Single-thread only.</b> All connections, disconnections, and emissions
- * must happen on the same thread (typically the UI thread).</p>
+ * <p><b>Local: one document's, on its sequence.</b> A signal binds to the sequence that first uses it, and a connect,
+ * disconnect or emit from anywhere else throws, naming the signal and both threads (Chromium's
+ * {@code SEQUENCE_CHECKER}). Use outside every sequence (a tree built on the render thread before its document is
+ * handed to a sequence) neither binds nor is checked. Across sequences, use a
+ * {@link com.crystalgui.core.async.Broadcast}.</p>
  *
  * @param <L> the listener type for this signal variant
  */
 public abstract class SignalBase<L> {
+
+    /** The sequence this signal belongs to, once one has used it. */
+    @Nullable
+    private UiSequence bound;
 
     /**
      * Optional debug hook for signal connect/disconnect logging.
@@ -56,6 +67,7 @@ public abstract class SignalBase<L> {
      */
     protected final Connection addSlot(L listener) {
         if (listener == null) throw new IllegalArgumentException("listener must not be null");
+        checkSequence("connected");
         final SlotEntry<L> entry = new SlotEntry<>(listener);
         slots.add(entry);
         final String className = getClass().getSimpleName();
@@ -65,6 +77,7 @@ public abstract class SignalBase<L> {
             @Override
             public void disconnect() {
                 if (!entry.connected) return;
+                checkSequence("disconnected");
                 entry.connected = false;
                 DebugHook dh = debugHook;
                 if (dh != null) dh.onDisconnect(className);
@@ -95,7 +108,22 @@ public abstract class SignalBase<L> {
 
     /** Marks emission as started. Must be called before iterating slots. */
     protected final void beginEmit() {
+        checkSequence("emitted");
         emitDepth++;
+    }
+
+    /** Binds to the first sequence that uses this signal; throws on use from anywhere else after. */
+    private void checkSequence(String what) {
+        UiSequence here = UiSequence.current();
+        UiSequence mine = bound;
+        if (mine == null) {
+            if (here != null) bound = here;
+            return;
+        }
+        if (here == mine) return;
+        throw new IllegalStateException(getClass().getSimpleName() + " belongs to sequence '" + mine.name()
+                + "' and was " + what + " from " + (here == null ? "" : "sequence '" + here.name() + "' on ")
+                + "thread " + Thread.currentThread().getName() + ". Across sequences, use a Broadcast.");
     }
 
     /**
@@ -128,6 +156,7 @@ public abstract class SignalBase<L> {
      * {@code entry.connected} — and defers the removal.</p>
      */
     public final void disconnectAll() {
+        checkSequence("disconnected");
         for (int i = 0; i < slots.size(); i++) {
             SlotEntry<L> entry = slots.get(i);
             entry.connected = false;

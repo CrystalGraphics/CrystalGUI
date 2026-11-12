@@ -5,7 +5,7 @@ import com.crystalgui.core.collection.pick.QuickPickItem;
 import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataKey;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -20,7 +20,7 @@ import java.util.Map;
 import javax.annotation.Nullable;
 
 /**
- * Fills a {@link QuickPick} from a {@link CommandRegistry} — the command palette.
+ * Fills a {@link QuickPick} from a {@link Commands} — the command palette.
  *
  * <h3>The focus trap, which is the whole reason this class is not three lines</h3>
  *
@@ -95,7 +95,7 @@ public final class CommandPalette {
         UIElement invokedFrom = window.focus().focused();
         UIElement source = invokedFrom != null ? invokedFrom : window;
 
-        CommandRegistry registry = window.getCommands();
+        Commands registry = window.getCommands();
         List<QuickPickItem> items = itemsFor(registry, source);
 
         QuickPick pick = new QuickPick();
@@ -116,7 +116,7 @@ public final class CommandPalette {
      * <p>Public and static so a test can assert the candidate set without a window on screen — the
      * enablement filter is the part worth pinning, and it does not need pixels.</p>
      */
-    public static List<QuickPickItem> itemsFor(CommandRegistry registry, @Nullable UIElement source) {
+    public static List<QuickPickItem> itemsFor(Commands registry, @Nullable UIElement source) {
         Map<String, KeyChord> accelerators = Keymap.acceleratorsFrom(source);
         CommandContext here = CommandContext.of(source);
         // "ANYWHERE" IS THE ROOT, NOT NULL, and the difference is the whole measurement.

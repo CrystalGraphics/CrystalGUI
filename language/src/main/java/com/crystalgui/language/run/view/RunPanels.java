@@ -1,7 +1,7 @@
 package com.crystalgui.language.run.view;
 
 import com.crystalgui.ui.dom.Attribute;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.ClipboardCommands;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
@@ -201,7 +201,7 @@ public final class RunPanels {
      * {@link ConsoleCommands} appears here without this method changing — which is the property the whole
      * {@code MenuId} design exists to buy.</p>
      */
-    static void attachContextMenu(CommandRegistry registry, RunPanel panel) {
+    static void attachContextMenu(Commands registry, RunPanel panel) {
         ContextMenu.attach(panel.view().element(), registry, element -> ContextMenu.builder()
                 .item(EditorCommands.PREFIX + "copy")
                 .item(EditorCommands.PREFIX + "selectAll")

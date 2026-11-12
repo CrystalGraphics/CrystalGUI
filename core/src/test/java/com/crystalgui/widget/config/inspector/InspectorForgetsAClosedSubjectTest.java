@@ -78,7 +78,7 @@ public class InspectorForgetsAClosedSubjectTest extends UiDocumentTestBase {
         assertTrue("the section describes it while it is open; tabs=" + tabsOf(inspector),
                 hasTab(inspector, TAB));
 
-        InspectorRegistry.subjectClosed(editor);
+        InspectorSubject.closed(document, editor);
         document.frame(0.016f, W, H);
         assertFalse("and lets go of it once it is closed; tabs=" + tabsOf(inspector),
                 hasTab(inspector, TAB));
@@ -101,7 +101,7 @@ public class InspectorForgetsAClosedSubjectTest extends UiDocumentTestBase {
         assertTrue("the inner element resolves through its editor; tabs=" + tabsOf(inspector),
                 hasTab(inspector, TAB));
 
-        InspectorRegistry.subjectClosed(editor);
+        InspectorSubject.closed(document, editor);
         document.frame(0.016f, W, H);
         assertFalse("closing the editor forgets what was inside it; tabs=" + tabsOf(inspector),
                 hasTab(inspector, TAB));
@@ -133,7 +133,7 @@ public class InspectorForgetsAClosedSubjectTest extends UiDocumentTestBase {
         document.frame(0.016f, W, H);
         assertTrue("retained while nothing better can be described", hasTab(inspector, TAB));
 
-        InspectorRegistry.subjectClosed(editor);
+        InspectorSubject.closed(document, editor);
         document.frame(0.016f, W, H);
         assertFalse("and the close is allowed to blank it; tabs=" + tabsOf(inspector),
                 hasTab(inspector, TAB));

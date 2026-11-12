@@ -1,5 +1,6 @@
 package com.crystalgui.core.async;
 
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.job.CgJobKey;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgui.core.notify.Notifications;
@@ -226,7 +227,7 @@ public class JobProgressTest {
     @Test
     public void anAnnouncedFailureNotifiesAndAQuietOneDoesNot() {
         List<String> raised = new ArrayList<>();
-        Notifications.onDidChange.connect(event -> {
+        Notifications.onDidChange.subscribe(event -> {
             if (event.notification() != null) raised.add(event.notification().getMessage());
         });
         try {
@@ -238,6 +239,7 @@ public class JobProgressTest {
             scheduler.drain();
             now += 10_000L;
             scheduler.drain();
+            CgHostThread.drainFrames();
             assertTrue("a job nobody could see raised a notification", raised.isEmpty());
 
             scheduler.job(key("loud-failure"), CgJobLane.BACKGROUND, context -> {
@@ -248,6 +250,7 @@ public class JobProgressTest {
             now += JobScheduler.DEFAULT_SHOW_AFTER_MILLIS;
             scheduler.drain();
 
+            CgHostThread.drainFrames();
             assertFalse("an announced failure said nothing", raised.isEmpty());
             assertTrue(raised.toString(),
                     raised.stream().anyMatch(message -> message.contains("Downloading engine band")));

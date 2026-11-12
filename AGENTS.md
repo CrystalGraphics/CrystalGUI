@@ -244,10 +244,11 @@ The buffer and mesh ownership map is `CrystalGraphics/AGENTS.md`.
 `core/` names no `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*` or `org.lwjgl.*`: the import guard on
 `compileJava` fails the build, with no exemptions.
 
-**The platform seam is CrystalGraphics' `CgPlatform`**; CrystalGUI has no registry of its own. **UI code reaches
-keys, modifiers, the clipboard, sounds and the cursor through `PlatformPort.current()`**, never `CgPlatform`
-directly — that bypasses a document's own thread. Presenting a cursor is `core.cursor`'s `CursorService`. The
-bundle and its slots, and what is reached where: [`docs/CGUI_ARCHITECTURE.md`](docs/CGUI_ARCHITECTURE.md) § *The platform seam*.
+**The platform seam is CrystalGraphics' `CgPlatform`**; CrystalGUI has no registry of its own. **UI code reads
+held keys and modifiers from its document's `Input`** (`Input.modifiersNow()`), as of the event it handles, never
+`CgInput`; it plays sounds with `CgSounds.play2D` and sets the cursor with `CursorService`, both callable from any
+thread; and it reaches the clipboard through `CgHostThread.CLIENT` (`run` to write, `call(CgClipboard::get).then(...)`
+to read). The bundle and its slots, and what is reached where: [`docs/CGUI_ARCHITECTURE.md`](docs/CGUI_ARCHITECTURE.md) § *The platform seam*.
 
 ## Lombok
 

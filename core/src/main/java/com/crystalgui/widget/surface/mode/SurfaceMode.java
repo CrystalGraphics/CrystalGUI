@@ -1,5 +1,6 @@
 package com.crystalgui.widget.surface.mode;
 
+import com.crystalgui.ui.service.Input;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 
 import com.crystalgui.ui.dom.UIDocument;
@@ -45,7 +46,7 @@ final class SurfaceMode implements InputMode {
         Tool tool = modes.current();
         if (tool == null || button != LEFT) return false;
         if (!ctx.surface().contains(x, y)) return false;
-        int modifiers = SelectTool.modifiersNow();
+        int modifiers = Input.modifiersNow();
         if (!pressed) return tool.pointerUp(x, y, button, modifiers);
         // WHAT FLOATS OVER THE CANVAS KEEPS ITS OWN PRESS, and this is asked BEFORE the modal exemption
         // below. The gate above is positional, and the top layer is not on the plane: a popover, a menu
@@ -76,7 +77,7 @@ final class SurfaceMode implements InputMode {
     public boolean pointerMoved(float x, float y) {
         Tool tool = modes.current();
         if (tool == null || !ctx.surface().contains(x, y)) return false;
-        return tool.pointerMoved(x, y, SelectTool.modifiersNow());
+        return tool.pointerMoved(x, y, Input.modifiersNow());
     }
 
     @Override

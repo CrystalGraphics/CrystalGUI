@@ -4,7 +4,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.widget.config.inspector.Inspector;
-import com.crystalgui.widget.config.inspector.InspectorRegistry;
+import com.crystalgui.widget.config.inspector.InspectorSubject;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.region.DockRegion;
@@ -64,8 +64,9 @@ public final class InspectorExtension implements WorkbenchExtension {
         // startup until something else moves, which is exactly what "I have to click something first" is.
         lifetime.add(workbench.onDidOpenDocument().connect(path -> seed(workbench, inspector)));
         // AND ON ANY ANNOUNCED CHANGE -- "what is being looked at has moved", which is what a selection
-        // produces.
-        lifetime.add(InspectorRegistry.onDidChangeSubject.connect(() -> seed(workbench, inspector)));
+        // produces. Said in the document the inspector is in, so heard while it is in one.
+        lifetime.add(inspector.whileConnected(() ->
+                InspectorSubject.of(inspector.document()).onDidChange.connect(() -> seed(workbench, inspector))));
 
         return () -> {
             lifetime.disconnectAll();

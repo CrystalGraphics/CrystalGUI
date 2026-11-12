@@ -4,7 +4,7 @@ import java.util.List;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.command.Command;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.data.DataContext;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.region.DockRegion;
@@ -49,12 +49,12 @@ public final class StripeCommands {
     private StripeCommands() {
     }
 
-    /** Registers into {@link CommandRegistry#global()}. Idempotent. */
+    /** Registers into {@link Commands#global()}. Idempotent. */
     public static void register() {
-        CommandRegistry.global().contribute(StripeCommands.class, StripeCommands::declare);
+        Commands.process().contribute(StripeCommands.class, StripeCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(HIDE, "Hide")
                 .enabledWhereData(data -> managerIn(data) != null && typeIn(data) != null)
                 .runWithData(data -> {

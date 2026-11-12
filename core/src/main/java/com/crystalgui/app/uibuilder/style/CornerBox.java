@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgModifiers;
@@ -389,7 +389,6 @@ public final class CornerBox extends ValueControl<double[]> {
     }
 
     private static int modifiers() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
+        return Input.modifiersNow();
     }
 }

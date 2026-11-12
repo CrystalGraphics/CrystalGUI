@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -136,7 +136,7 @@ public final class ReorderInFlow extends UIElement {
                     public void onDragUpdate(float x, float y, float sx, float sy, float dx, float dy) {
                         Vector2f raw = toRaw(x, y);
                         if (!activated) activate();
-                        update(raw.x, raw.y, modifiersNow());
+                        update(raw.x, raw.y, Input.modifiersNow());
                     }
 
                     @Override
@@ -157,7 +157,7 @@ public final class ReorderInFlow extends UIElement {
         activated = true;
         UIDocument window = document();
         if (window != null) window.input().setCursorOverride(Cursor.GRABBING);
-        pan.start(() -> update(lastRawX, lastRawY, modifiersNow()));
+        pan.start(() -> update(lastRawX, lastRawY, Input.modifiersNow()));
     }
 
     /**
@@ -266,8 +266,4 @@ public final class ReorderInFlow extends UIElement {
         return box == null ? new Vector2f(x, y) : Transform2D.apply(box.localToWorld(), x, y);
     }
 
-    private static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 }

@@ -286,7 +286,7 @@ public final class NotesKind implements WorkbenchExtension {
 
     @Override
     public Disposable activate(WorkbenchContext workbench) {
-        return workbench.kinds().register(KIND);
+        return workbench.kinds().contribute(workbench.owner(), KIND);
     }
 }
 ```
@@ -334,8 +334,8 @@ puts a row in the explorer's `New ▸` and in `File ▸ New`:
 @Override
 public Disposable activate(WorkbenchContext workbench) {
     return Disposable.of(
-            workbench.kinds().register(KIND),
-            workbench.newDocuments().register(NewDocumentKind.of(ID, "Notes")
+            workbench.kinds().contribute(workbench.owner(), KIND),
+            workbench.newDocuments().contribute(workbench.owner(), NewDocumentKind.of(ID, "Notes")
                     .icon("crystalgui:file-text")
                     .suffix(".notes")
                     // What a brand new one starts out as. Omit it and the file is empty.
@@ -389,7 +389,7 @@ is how a Java template knows to omit its `package` line rather than write an emp
 A command is one declaration that a keybinding, a menu row and the palette all point at.
 
 ```java
-CommandRegistry commands = CommandRegistry.global();
+Commands commands = Commands.process();
 Disposable handle = commands.register(Command.of("mymod.reload", "Reload Recipes")
         .binding("Mod+Alt+R")
         .menu(MenuId.MAIN_FILE, "5_tools", 10)          // menu, group, order within it
@@ -716,10 +716,10 @@ public final class MyFeature implements WorkbenchExtension {
 | I want to add… | Call | Handle |
 |---|---|---|
 | An activity-bar panel | `workbench.registerToolWindow(ToolWindowKind.of(...))` | returned |
-| A file type | `workbench.kinds().register(kind)` | returned |
+| A file type | `workbench.kinds().contribute(workbench.owner(), kind)` | returned; goes with the workbench |
 | …plus its extensions | `workbench.contribute(kind, "recipe", "rcp")` | with the workbench |
-| A command | `CommandRegistry.global().register(Command.of(...))` | returned |
-| A menu's computed rows | `CommandRegistry.global().contributeMenu(menuId, contributor)` | returned |
+| A command | `Commands.process().register(Command.of(...))` | returned |
+| A menu's computed rows | `Commands.process().contributeMenu(menuId, contributor)` | returned |
 | A status entry | `workbench.statusBar().addEntry(entry, id, alignment, priority)` | `accessor.dispose()` |
 | An explorer decoration | `workbench.decorations().addProvider(p)` | returned |
 | Diagnostics | `workbench.markers().forResource(r).changeOne(owner, list)` | `remove(owner)` |

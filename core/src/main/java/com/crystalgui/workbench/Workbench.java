@@ -32,6 +32,7 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.document.Document;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.DocumentKind;
+import com.crystalgui.core.async.Owner;
 import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.document.DocumentState;
@@ -99,7 +100,7 @@ import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.notify.StatusBar;
 import com.crystalgui.text.diagnostic.Markers;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.workbench.chrome.menu.MainMenuCommands;
 import com.crystalgui.workbench.chrome.menu.MenuBarView;
 import com.crystalgui.core.undo.UndoCommands;
@@ -224,8 +225,11 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     public final Workspace workspace;
 
-    /** Every kind of document this workbench can open. An instance, so two workbenches differ. */
-    public final DocumentKinds kinds = new DocumentKinds();
+    /** Who this workbench is to the process-wide registries: what it contributes leaves when it is disposed. */
+    private final Owner owner = Owner.of("workbench");
+
+    /** Every kind of document the process can open: what this workbench contributes is read by all of them. */
+    public final DocumentKinds kinds = DocumentKinds.process();
 
     /**
      * What <b>New ▸</b> can make here — the creation-side twin of {@link #kinds}.
@@ -234,7 +238,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * how to OPEN something that already exists, and most of those cannot be conjured from nothing (an
      * image, a decompiled class). A kind here says what a new one starts out as. @see NewDocumentKinds
      */
-    public final NewDocumentKinds newDocuments = new NewDocumentKinds();
+    public final NewDocumentKinds newDocuments = NewDocumentKinds.process();
 
     /** The open documents, and the wire underneath them. */
     public final WorkspaceDocuments documents;
@@ -446,7 +450,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * <p>It holds no items. Every row in every one of its menus is a {@code .menu(...)} declaration on a
      * command that already existed for the keyboard and the palette. @see MenuBarView</p>
      */
-    private final MenuBarView menuBar = new MenuBarView(CommandRegistry.global());
+    private final MenuBarView menuBar = new MenuBarView(Commands.process());
 
     /**
      * Files opened most recently — what {@code File ▸ Open Recent} lists.
@@ -605,7 +609,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // ATTACHED WORKBENCHES ONLY, for the reason above it: this is a listener on a PROCESS-LIVED
         // static, so a workbench that subscribed from its constructor would stay reachable for ever and
         // keep an entire editor tree alive behind it.
-        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.connect(projectSources::attachLateServices));
+        capabilityWatch.add(LanguageRegistry.onCapabilityChanged.subscribe(projectSources::attachLateServices));
         // A LIBRARY TYPE'S KIND ARRIVING LATE is the same event as a project file's declaration arriving
         // late, so it sets the same flag and is coalesced with it. `symbolOf` is allowed to answer "not
         // yet" precisely so that working it out cannot land on a frame; this is the other half of that
@@ -634,7 +638,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     /** The explorer's verbs come with the explorer. Global, so no window is needed. */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         ExplorerCommands.register();
         EditorTabCommands.register();
         // THE PROJECT INDEX IS *NOT* CONTRIBUTED HERE, and it was, and that was the whole of S4 being
@@ -894,7 +898,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         opener.contribute(TextFileKind.declare(this));
         // THE NEW MENU'S OWN BUILT-INS, through the seam a contributor uses. A workbench with none of
         // these registered has an empty New menu, which is the honest test of the seam.
-        BuiltInNewDocuments.registerInto(newDocuments);
+        BuiltInNewDocuments.registerInto(newDocuments, owner);
 
         dock = new DockArea(registry, defaultLayout());
         // WHAT AN EMPTY EDITOR SAYS, named here because these are THIS application's ways in -- the dock is
@@ -1026,7 +1030,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // The two menu sections that cannot be registered ahead of time. Wired here because this is where
         // the workbench's parts are introduced to each other, and because neither the View menu nor the
         // Window menu may go looking for a workbench itself -- both read it from the data context.
-        WorkbenchMenus.register(CommandRegistry.global());
+        WorkbenchMenus.register(Commands.process());
 
         content.addClass(CONTENT_CLASS);
         append(content);
@@ -1214,6 +1218,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // signals and whose commands are in the global registry.
         for (Disposable handle : new ArrayList<>(toolWindowHandles)) handle.dispose();
         toolWindowHandles.clear();
+        kinds.removeOwner(owner);
+        newDocuments.removeOwner(owner);
         // EXTENSIONS FIRST, in reverse activation order -- a later one may have been built from an
         // earlier one's contribution, which is the same argument Disposer makes about children.
         for (int i = activeExtensions.size() - 1; i >= 0; i--) activeExtensions.get(i).dispose();
@@ -1347,8 +1353,8 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         if (command != null) {
             // GLOBAL, and resolved from the data context rather than captured: a captured workbench
             // makes a second window's command toggle a panel in the first.
-            if (!CommandRegistry.global().contains(command)) {
-                CommandRegistry.global().register(Command.of(command, "Show " + kind.displayName())
+            if (!Commands.process().contains(command)) {
+                Commands.process().register(Command.of(command, "Show " + kind.displayName())
                         .runWithData(data -> {
                             Workbench workbench = data.get(WORKBENCH);
                             if (workbench != null) workbench.revealPanel(kind.id());
@@ -1381,7 +1387,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
                 // THE COMMAND AND ITS KEY, which are process-wide and would otherwise point at a panel
                 // type nothing builds. The panel type and its views stay: the registry holding them
                 // belongs to this workbench and goes when it does.
-                if (command != null) CommandRegistry.global().unregister(command);
+                if (command != null) Commands.process().unregister(command);
                 toolWindowHandles.remove(this);
             }
         };
@@ -1877,7 +1883,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         return editors;
     }
 
-    /** Every kind of document this workbench can open. @see #contribute */
+    @Override
+    public Owner owner() {
+        return owner;
+    }
+
+    /** What <b>New ▸</b> can make: the process-wide kinds. */
     public NewDocumentKinds newDocuments() {
         return newDocuments;
     }

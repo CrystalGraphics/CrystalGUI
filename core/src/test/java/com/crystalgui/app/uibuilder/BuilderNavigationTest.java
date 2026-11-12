@@ -323,7 +323,7 @@ public class BuilderNavigationTest extends UiDocumentTestBase {
     }
 
     private void run(String commandId) {
-        assertTrue(commandId + " did not run", com.crystalgui.core.command.CommandRegistry.global()
+        assertTrue(commandId + " did not run", com.crystalgui.core.command.Commands.process()
                 .run(commandId, com.crystalgui.core.command.CommandContext.of(editor.surface())));
         document.update(W, H);
     }

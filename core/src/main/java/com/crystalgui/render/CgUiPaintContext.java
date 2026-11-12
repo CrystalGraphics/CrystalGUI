@@ -51,7 +51,7 @@ import com.crystalgraphics.platform.rhi.format.CgFormat;
 /**
  * A document's paint context: it records a frame of the document onto a {@link CgCanvas}, touching no GPU, and hands
  * back a sealed {@link UiFrame} that a {@link UiPresenter} shows at a GUI stage. One per {@link CgUiRenderer.View}, which a
- * {@code DocumentDriver} owns for its document and hands its painter.
+ * {@code CgUiViewport} owns for its document and opens for its content.
  *
  * <pre>{@code
  * CgUiPaintContext ctx = view.paintContext();

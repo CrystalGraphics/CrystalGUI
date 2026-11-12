@@ -55,7 +55,7 @@ public abstract class EditorTestBase extends UiDocumentTestBase {
      * <b>The editor's commands, registered by this fixture rather than inherited.</b>
      *
      * <p>{@code EditorCommands.register()} contributes into the GLOBAL registry, and several other
-     * fixtures call {@code CommandRegistry.global().resetForTesting()} in their own setup -- so
+     * fixtures call {@code Commands.process().resetForTesting()} in their own setup -- so
      * whether {@code editor.foldAll} exists here depended entirely on which class JUnit happened to
      * run first. Seven fold tests failed with "must be registered" on a build where nothing about
      * folding had changed, which reads as the commands having been dropped. Registration is

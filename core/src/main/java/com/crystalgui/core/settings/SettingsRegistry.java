@@ -1,6 +1,7 @@
 package com.crystalgui.core.settings;
 
-import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.Contributions;
+import com.crystalgui.core.async.Owner;
 
 import javax.annotation.Nullable;
 import java.util.ArrayList;
@@ -16,10 +17,10 @@ import java.util.Map;
  * <p>Ported from VS Code's {@code IConfigurationRegistry}
  * ({@code src/vs/platform/configuration/common/configurationRegistry.ts}), MIT.</p>
  *
- * <h3>Shaped like {@code CommandRegistry}, deliberately</h3>
+ * <h3>Shaped like {@code Commands}, deliberately</h3>
  * <p>Insertion-ordered so {@link #all} is stable — a panel wants that and a test needs it — and a
  * re-registration <b>replaces and logs</b> rather than being rejected, because that is how a theme or a
- * mod overrides a built-in declaration. Both decisions are copied from {@code CommandRegistry} rather
+ * mod overrides a built-in declaration. Both decisions are copied from {@code Commands} rather
  * than re-argued, since the two registries answer the same question about the same kind of thing.</p>
  *
  * <p>The one divergence: this is not per-{@code UIWindow}. A <b>declaration</b> is a fact about the code
@@ -37,28 +38,30 @@ public final class SettingsRegistry {
         return INSTANCE;
     }
 
-    private final Map<String, Setting<?>> byId = new LinkedHashMap<>();
+    private final Contributions<Setting<?>> declared = Contributions.of("settings", Setting::getId);
+    private final Contributions.Index<Map<String, Setting<?>>> byId = declared.index(entries -> {
+        Map<String, Setting<?>> map = new LinkedHashMap<>();
+        for (Contributions.Entry<Setting<?>> entry : entries) map.put(entry.item().getId(), entry.item());
+        return Collections.unmodifiableMap(map);
+    });
 
     /** Registers {@code setting}, replacing and logging any previous declaration of the same id. */
     public <T> Setting<T> register(Setting<T> setting) {
-        Setting<?> previous = byId.put(setting.getId(), setting);
-        if (previous != null && previous != setting) {
-            CrystalGuiCore.LOGGER.info("Setting '{}' was replaced by a later declaration", setting.getId());
-        }
+        declared.add(Owner.PROCESS, setting);
         return setting;
     }
 
     @Nullable
     public Setting<?> get(String id) {
-        return byId.get(id);
+        return byId.get().get(id);
     }
 
     public boolean contains(String id) {
-        return byId.containsKey(id);
+        return byId.get().containsKey(id);
     }
 
     public Collection<Setting<?>> all() {
-        return Collections.unmodifiableCollection(byId.values());
+        return byId.get().values();
     }
 
     /**
@@ -71,14 +74,15 @@ public final class SettingsRegistry {
     public List<Setting<?>> section(String section) {
         List<Setting<?>> found = new ArrayList<>();
         String prefix = section + ".";
-        for (Setting<?> setting : byId.values()) {
+        for (Setting<?> setting : byId.get().values()) {
             if (setting.getId().equals(section) || setting.getId().startsWith(prefix)) found.add(setting);
         }
         return found;
     }
 
     public SettingsRegistry unregister(String id) {
-        byId.remove(id);
+        Setting<?> setting = byId.get().get(id);
+        if (setting != null) declared.remove(setting);
         return this;
     }
 }

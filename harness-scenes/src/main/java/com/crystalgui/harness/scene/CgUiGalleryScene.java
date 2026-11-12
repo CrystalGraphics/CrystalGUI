@@ -38,7 +38,7 @@ import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.text.syntax.KeywordTokenizer;
 import com.crystalgui.ui.box.Box;
-import com.crystalgui.ui.dom.DocumentDriver;
+import com.crystalgui.viewport.CgUiViewport;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -2872,12 +2872,12 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
     @Override
     protected void tick(HarnessContext ctx, FrameInfo frame) {
-        driver().post(this::attachPreviews);
+        viewport().execute(this::attachPreviews);
     }
 
     @Override
     protected void afterFrame(HarnessContext ctx, FrameInfo frame) {
-        DocumentDriver<Void> driver = driver();
+        CgUiViewport viewport = viewport();
         // OPEN ON A NAMED PAGE, AND PHOTOGRAPH IT. `-Dcrystalgui.gallery.page=glass` with `--seconds=N`
         // turns this scene into an unattended diagnostic: a run that leaves a PNG of ONE page on disk.
         // The property prefix must be crystalgui. or crystalgraphics. -- the build forwards only those
@@ -2887,8 +2887,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
         // during paint, and anything animating behind it has barely moved. 90 is about a second and a
         // half in, by which point the drift has travelled and a stale capture would be obvious.
         String wanted = System.getProperty("crystalgui.gallery.page");
-        if (wanted != null && driver.presentedFrames() == 2) {
-            driver.post(() -> {
+        if (wanted != null && viewport.presentedFrames() == 2) {
+            viewport.execute(() -> {
                 for (int i = 0; i < pages.getTabCount(); i++) {
                     if (wanted.equalsIgnoreCase(pages.getTab(i).getText())) {
                         pages.selectIndex(i);
@@ -2907,7 +2907,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         // hand on the slider.
         int captureFrame = wanted == null ? 5
                 : Integer.getInteger("crystalgui.gallery.captureFrame", 90);
-        if (driver.presentedFrames() == captureFrame) {
+        if (viewport.presentedFrames() == captureFrame) {
             ctx.getArtifactService().requestCapture(wanted == null ? "startup" : wanted);
         }
     }

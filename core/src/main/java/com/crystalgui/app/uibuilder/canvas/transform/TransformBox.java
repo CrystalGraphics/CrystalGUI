@@ -1,6 +1,6 @@
 package com.crystalgui.app.uibuilder.canvas.transform;
 
-import com.crystalgui.ui.service.PlatformPort;
+import com.crystalgui.ui.service.Input;
 import java.util.List;
 import java.util.Objects;
 
@@ -263,7 +263,7 @@ public final class TransformBox extends UIElement {
 
     /** What a press at this point would do, with Ctrl read live. @see #grip */
     private Grip gripAt(float viewportX, float viewportY) {
-        return grip(viewportX, viewportY, CgModifiers.hasCtrl(modifiersNow()));
+        return grip(viewportX, viewportY, CgModifiers.hasCtrl(Input.modifiersNow()));
     }
 
     /**
@@ -277,10 +277,6 @@ public final class TransformBox extends UIElement {
         return artAngle;
     }
 
-    private static int modifiersNow() {
-        PlatformPort input = PlatformPort.current();
-        return input == null ? 0 : input.modifiers();
-    }
 
     /**
      * What the pointer says a press would do here.

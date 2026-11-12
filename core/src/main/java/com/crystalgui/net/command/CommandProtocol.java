@@ -3,7 +3,7 @@ package com.crystalgui.net.command;
 /**
  * The {@code command/*} vocabulary — a server contributing actions to a client's command registry.
  *
- * <p>{@code CommandRegistry}'s javadoc has anticipated this since it was written ("a server-driven UI can
+ * <p>{@code Commands}'s javadoc has anticipated this since it was written ("a server-driven UI can
  * have two windows open whose {@code edit.save} legitimately mean different things"), and {@code Protocols}
  * makes the namespace ordinary: {@code command/*} beside {@code ui/*} and {@code fs.*}, bound to every
  * connection the same way the workspace is.</p>
@@ -29,7 +29,7 @@ public final class CommandProtocol {
      * Server → client. Commands to add, or to redefine.
      *
      * <p>Carries {@link #COMMANDS}, a list of {@code {id, label, enabled}}. Re-contributing an id
-     * replaces it, matching {@code CommandRegistry.register}, which allows replacement on purpose — that
+     * replaces it, matching {@code Commands.register}, which allows replacement on purpose — that
      * is how a label is updated without a withdraw/contribute pair racing the palette.</p>
      */
     public static final String CONTRIBUTE = "command/contribute";

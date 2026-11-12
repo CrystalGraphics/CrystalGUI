@@ -42,6 +42,13 @@ build. There are currently **no exemptions** — the guard is clean.
 ```
 com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing else. The platform
                                registry it used to hold now lives in CrystalGraphics; see below.
+  .async                       UiSequence (a document's sequence; services(), the one owned services
+                               live on; forDocument, which -Dcrystalgui.ui.singleSequence=true makes
+                               one for all), Broadcast<T> (an event across sequences: posted, heard on
+                               the subscriber's), Published<T> (state as immutable generations; a document's frame pins each one it
+                               reads), Contributions<T> + Owner (what modules and applications declare:
+                               a published list of (owner, item), indices per generation, an owner's
+                               contributions leave together), JobScheduler, UiThread, UiBudget
   .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
                                ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
   .dispose                     Disposable, Disposable.Gl, Disposer — the ownership tree. NOT a
@@ -71,14 +78,16 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
   .cache                       Only the CLAUDE.md of the downloads guide; the machinery (CgDownloads,
                                CgDownloadLocations, CgCacheFiles, CgTarArchive) is CrystalGraphics',
                                and CrystalGuiDownloads (in .storage) binds it to download/locations.json
-  .command                     Command (a named invocable action), CommandContext, CommandRegistry —
+  .command                     Command (a named invocable action), CommandContext, Commands —
                                what a key binding, a menu item and the palette all point at. Plus the
                                MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested
                                submenus), MenuSection (a group + its rows — what a separator is drawn
                                from), MenuEntry (Item/Submenu, sealed; an Item carries enabled/checkable/
                                checked so the RENDERER decides), MenuContributor (rows computed at open
-                               time — the Window menu's editor list). CommandRegistry.sections() is the
-                               one query every menu renderer reads; menu() is its deprecated flat view.
+                               time — the Window menu's editor list). Commands.sections() is the
+                               one query every menu renderer reads. Commands is a Contributions list: the lookup by id, each
+                               menu's rows and the declared keymap are indices of its generation, and a
+                               command with no document runs on the services sequence.
                                ActionIcons is the VOCABULARY of marks a row may draw -- a constant per
                                shipped icon, since an id naming no file draws an empty column and
                                reports nothing -- and carriesItsOwnPalette() is the line between a
@@ -137,13 +146,8 @@ com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing
                                plan/platform-trace-engine.md
   .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
                                DOCUMENT, never per window
-  .window                      WindowState, WindowPolicy, DesktopPresentation — three types BOTH engines
-                               name, so a package both may name. The D27 rule that gave 6.3
-                               `core.collection` and 6.4 `graph.port`; a pure enum, a policy record and a
-                               presentation enum, none of them naming an engine type at all. ScreenOverlay
-                               was the fourth candidate and does NOT qualify: it holds a document and reads
-                               its focus owner, so it is a facade OVER the engine rather than an SPI a host
-                               implements, and it lives in `desktop.host`. plan/engine-port.md 6.6
+  .window                      WindowState, WindowPolicy — types BOTH engines name, so a package both
+                               may name: a pure enum and a policy record, naming no engine type.
 
 com.crystalgui.widget.texteditor  THE EDITOR ON THE NEW ENGINE (M6.5) — TextEditor and
                                EditorCommands (its named actions). TWO files at the root; everything
@@ -183,11 +187,7 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
   .taskbar                     Taskbar (the registry RENDERED), TaskbarEntryMotion, TaskbarPreviews,
                                TaskbarDesigner, WindowPreview, WindowThumbnail
   .switcher                    WindowSwitcher — Mod+Tab, MRU order, live thumbnails
-  .host                        HostSession, ScreenOverlay, DesktopHost, DesktopWindowMount — the one
-                               desktop a client has. It asks CrystalGraphics where private files go, how
-                               big the window is, whether there is a connection and what language the
-                               player reads, and gives a desktop, a workspace that follows the wire, and
-                               somewhere for a server's windows to land
+  DesktopWindowMount           where a server's windows land on this desktop
   .launcher                    WHAT CAN RUN: LauncherButton (the taskbar's start button) and Launcher
                                (the ApplicationRegistry, rendered -- searched by name, id and the
                                keywords() slot that was deliberately withheld until this existed to
@@ -295,6 +295,15 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
                                vocabulary class: a kind is a string an Event declares, unique only
                                within its own widget's contract, so a third party mints one without
                                editing anything of ours. plan/engine-rewrite.md M1
+
+com.crystalgui.screen          THE CLIENT'S ONE DESKTOP: CgUiScreen (static: install, open, close, Mode, the
+                               tick, the paint at HUD and SCREEN), CgUiScreenInput (the one input router),
+                               DesktopConnection, GameState, DesktopContent per Mode, HitRegions, the
+                               rehearsal. Names `viewport` and `desktop`; neither names it.
+
+com.crystalgui.viewport        ONE DOCUMENT ON SCREEN: CgUiViewport (owns the document's thread, input, frames,
+                               readouts) over a DocumentThread per threading (inline, lockstep, sequenced),
+                               CommitQueue and CompositorMotion. Names `ui.dom`; nothing in `ui` names it.
 
 com.crystalgui.ui              A NAMESPACE, with nothing at its root -- a root with no shared subject
                                is where things land when nobody decides.
@@ -420,7 +429,7 @@ com.crystalgui.document        WHAT AN OPEN DOCUMENT IS, headless and below `wid
                                IntelliJ's name-and-kind prompt with no widget of its own),
                                NewDocumentContext (where a New would land: the directory and the
                                source root holding it, asked per CLICK rather than at registration)
-                               and NewDocumentKinds (the registry, per workbench, reached through
+                               and NewDocumentKinds (the process-wide registry, scoped by owner, reached through
                                WorkbenchContext.newDocuments()). Most openable things cannot be
                                conjured from nothing and some creatable things are not documents, so
                                the two registries do not merge
@@ -542,13 +551,13 @@ one a capability, each read through its owner and carrying its own absent-value.
 
 | Need | Reached via | Lives in |
 |---|---|---|
-| Modifier, key and button state, the clipboard, UI sounds, the cursor — **from UI code** | `PlatformPort.current()` | `ui/service/PlatformPort`: the running document's port, which a document on its own thread routes to the render thread (plan engine-threaded-ui). Calling the services below directly from a widget bypasses that |
-| What is held, a toolkit's codes in the engine's | `CgInput` — hosts and `PlatformPort.INLINE` only | `platform/input/CgInput` |
-| The clipboard | `CgClipboard` — `PlatformPort.INLINE` only | `platform/input/CgClipboard` |
-| UI sounds | `PlatformPort.playSound` → CrystalGraphics' `CgSounds.play2D`: a host sound event or a file, unplaced in the `UI` class | `com.crystalgraphics.audio.CgSounds` |
+| Modifier, key and button state — **from UI code** | `document.input().modifiers()`/`isKeyDown`/`isButtonDown`, or `Input.modifiersNow()` for the running document | `ui/service/Input`: as of the event being handled. A document on its own thread answers from the events it dispatched, the modifiers reconciled with the platform once a host frame |
+| What is held, a toolkit's codes in the engine's | `CgInput` — hosts, and `Input` for a document on the client thread | `platform/input/CgInput` |
+| The clipboard | `CgClipboard`, on the client thread: from UI code `CgHostThread.CLIENT.run(() -> CgClipboard.set(text))`, and `CgHostThread.CLIENT.call(CgClipboard::get).then(paste)`, answered on the document's thread | `platform/input/CgClipboard` |
+| UI sounds | `CgSounds.play2D`, from any thread: a host sound event or a file, unplaced in the `UI` class | `com.crystalgraphics.audio.CgSounds` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
-| **Presenting a cursor** | `CursorService.setCursor(...)` | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
+| **Presenting a cursor** | `CursorService.setCursor(...)`, from any thread (the last asked wins) | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
 | The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades: `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCamera`, `CgSounds` — never their slots | `platform/world/` |
 
 **A slot is read through its facade, never `CgPlatform.get(X.SERVICE)`**: one SPI per concern, one static facade per

@@ -12,7 +12,7 @@ import com.crystalgui.app.shadergraph.ShaderPropertyForm;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.data.DataKey;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.signal.Signal;
@@ -1185,7 +1185,7 @@ public class BlackboardPanel extends UIElement implements DataProvider {
      * which is a check that answers a different question than the one it looks like it asks.</p>
      */
     @Override
-    protected void registerCommands(CommandRegistry registry) {
+    protected void registerCommands(Commands registry) {
         // The row menu is DECLARED here, not built in openRowMenu. Group `1_modify` acts on what is
         // there; `2_create` makes something new, which is why Duplicate is separated -- Unity splits it
         // the same way, and the separator falls out of the group boundary rather than being asked for.
@@ -1309,7 +1309,7 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         // caching it would freeze both. ContextMenu.attach discards its previous menu per press for the
         // same reason -- see the Taffy child-index note there for what a retained promoted menu costs.
         if (rowMenu != null) rowMenu.removeSelf();
-        rowMenu = ContextMenu.of(MenuId.BLACKBOARD_CONTEXT).build(CommandRegistry.global(), this);
+        rowMenu = ContextMenu.of(MenuId.BLACKBOARD_CONTEXT).build(Commands.process(), this);
         // Must be IN the tree to be promoted to the top layer -- a Menu is a Popover, and an unparented
         // one has nothing to promote from. showFor can attach itself through its anchor; showAt has no
         // anchor to find a host from, so it throws. Internal, because this is a composite. The Main

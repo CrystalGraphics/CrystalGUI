@@ -5,7 +5,7 @@ import javax.annotation.Nullable;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
-import com.crystalgui.core.command.CommandRegistry;
+import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
@@ -38,12 +38,12 @@ public final class EditorTabCommands {
     private EditorTabCommands() {
     }
 
-    /** Registers into {@link CommandRegistry#global()}. Idempotent. */
+    /** Registers into {@link Commands#global()}. Idempotent. */
     public static void register() {
-        CommandRegistry.global().contribute(EditorTabCommands.class, EditorTabCommands::declare);
+        Commands.process().contribute(EditorTabCommands.class, EditorTabCommands::declare);
     }
 
-    private static void declare(CommandRegistry registry) {
+    private static void declare(Commands registry) {
         registry.register(Command.of(CLOSE_UNMODIFIED, "Close Unmodified Tabs in Group")
                 .menu(MenuId.EDITOR_TAB_CONTEXT, "1_close", 40)
                 .run(context -> {
