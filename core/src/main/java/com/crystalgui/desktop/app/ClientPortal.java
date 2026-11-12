@@ -46,10 +46,17 @@ public final class ClientPortal extends UIElement {
             if (shell != null) shell.execute(this::repaint);
         });
         onMouseMove.attachListener((element, event) -> pointer(event.getPosition(), -1, false, 0f), false, true);
-        onMouseDown.attachListener((element, event) -> pointer(event.getPosition(), event.getButtonId(), true, 0f),
-                false, true);
-        onMouseUp.attachListener((element, event) -> pointer(event.getPosition(), event.getButtonId(), false, 0f),
-                false, true);
+        // A PRESS CAPTURES THE POINTER, so a drag that leaves the window keeps its moves and its release, as in any window.
+        onMouseDown.attachListener((element, event) -> {
+            pointer(event.getPosition(), event.getButtonId(), true, 0f);
+            UIDocument shell = document();
+            if (shell != null) shell.input().setPointerCapture(this);
+        }, false, true);
+        onMouseUp.attachListener((element, event) -> {
+            pointer(event.getPosition(), event.getButtonId(), false, 0f);
+            UIDocument shell = document();
+            if (shell != null && shell.input().pointerCaptureTarget() == this) shell.input().releasePointerCapture();
+        }, false, true);
         onMouseScroll.attachListener((element, event) -> pointer(event.getPosition(), -1, false, event.getScroll()),
                 false, true);
         onMouseLeave.attachListener((element, event) -> pointer(event.getPosition(), -1, false, 0f), false, true);
@@ -89,7 +96,13 @@ public final class ClientPortal extends UIElement {
                 button, pressed, wheel, System.currentTimeMillis()));
     }
 
+    /**
+     * Hands a key to the application, and keeps the shell from acting on it as well: Tab moves the application's focus,
+     * not the shell's. What the application leaves goes back to the host with the desktop's own unhandled keys.
+     */
     private void key(KeyboardEvent event, boolean pressed) {
+        event.stopPropagation();
+        event.preventDefault();
         appDocument.key(new CgSystemInput.Keyboard.Event(event.getCharacter(), event.getKeyCode(), pressed,
                 event.isRepeat(), event.getMillis()));
     }

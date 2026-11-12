@@ -48,10 +48,16 @@ final class PopupPortal extends UIElement {
             if (layer.occupied() != null && !within(event.getTarget() instanceof UIElement hit ? hit : null)) appDocument.dismissPopups();
         }, true, false));
         onMouseMove.attachListener((element, event) -> pointer(event.getPosition(), -1, false, 0f), false, true);
-        onMouseDown.attachListener((element, event) -> pointer(event.getPosition(), event.getButtonId(), true, 0f),
-                false, true);
-        onMouseUp.attachListener((element, event) -> pointer(event.getPosition(), event.getButtonId(), false, 0f),
-                false, true);
+        onMouseDown.attachListener((element, event) -> {
+            pointer(event.getPosition(), event.getButtonId(), true, 0f);
+            UIDocument shell = document();
+            if (shell != null) shell.input().setPointerCapture(this);
+        }, false, true);
+        onMouseUp.attachListener((element, event) -> {
+            pointer(event.getPosition(), event.getButtonId(), false, 0f);
+            UIDocument shell = document();
+            if (shell != null && shell.input().pointerCaptureTarget() == this) shell.input().releasePointerCapture();
+        }, false, true);
         onMouseScroll.attachListener((element, event) -> pointer(event.getPosition(), -1, false, event.getScroll()),
                 false, true);
     }

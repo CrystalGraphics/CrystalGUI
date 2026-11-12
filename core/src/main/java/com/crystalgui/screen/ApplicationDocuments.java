@@ -109,7 +109,11 @@ final class ApplicationDocuments implements AppDocuments {
             gone.scale.disconnect();
             gone.viewport.close();
         }
-        for (Entry entry : open) entry.viewport.frame(stage, entry.content);
+        for (Entry entry : open) {
+            entry.viewport.frame(stage, entry.content);
+            // What the application left, such as an Escape nothing in it took, goes where the desktop's own go.
+            CgUiScreen.input().returnUnhandledKeys(entry.viewport);
+        }
     }
 
     /** Ends every document, as the client shuts down. Render thread. */
