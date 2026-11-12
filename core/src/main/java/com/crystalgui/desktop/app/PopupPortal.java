@@ -92,19 +92,22 @@ final class PopupPortal extends UIElement {
             return;
         }
         float w = occupied[2] - occupied[0], h = occupied[3] - occupied[1];
-        float[] area = workArea(shell);
-        float x = clamp(windowBox.worldX() + occupied[0], area[0], area[2] - w);
-        float y = clamp(windowBox.worldY() + occupied[1], area[1], area[3] - h);
+        float scale = shell.boxes().uiScale();
+        float[] area = workArea(shell, scale);
+        // A box's world position is in surface pixels and a style's left and top are logical: the window's is converted.
+        float x = clamp(windowBox.worldX() / scale + occupied[0], area[0], area[2] - w);
+        float y = clamp(windowBox.worldY() / scale + occupied[1], area[1], area[3] - h);
         originX = occupied[0];
         originY = occupied[1];
         setPlace(x, y, w, h);
     }
 
-    /** The work area, {x0, y0, x1, y1}, or the document's own when the shell declares none. */
-    private static float[] workArea(UIDocument shell) {
+    /** The work area, {x0, y0, x1, y1} in logical pixels, or the document's own when the shell declares none. */
+    private static float[] workArea(UIDocument shell, float scale) {
         Box box = shell.workArea().box();
         if (box == null) return new float[] {0f, 0f, Float.MAX_VALUE, Float.MAX_VALUE};
-        return new float[] {box.worldX(), box.worldY(), box.worldX() + box.width(), box.worldY() + box.height()};
+        float x = box.worldX() / scale, y = box.worldY() / scale;
+        return new float[] {x, y, x + box.width(), y + box.height()};
     }
 
     /** {@code value} held in {@code [low, high]}; {@code low} when the range is empty. */
