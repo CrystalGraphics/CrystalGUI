@@ -17,8 +17,11 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.overlay.Popover;
 import com.crystalgui.widget.text.UIText;
+
+import dev.vfyjxf.taffy.style.TaffyPosition;
 
 /** Where the shell puts an application's popups, on the shell's real styles: over where the application drew them. */
 public class PopupPlacementTest extends UiDocumentTestBase {
@@ -64,6 +67,7 @@ public class PopupPlacementTest extends UiDocumentTestBase {
     private PopupLayer layer;
     private PopupPortal portal;
     private Popover menu;
+    private UIDocument own;
 
     /** A menu open in a window of an application with its own document, on a shell at UI scale 2, settled. */
     private void openMenu() {
@@ -75,7 +79,7 @@ public class PopupPlacementTest extends UiDocumentTestBase {
         document.boxes().setUiScale(2f);
         Desktop desktop = Desktop.of(document);
         document.workArea().layout(l -> l.height(workAreaHeight));
-        UIDocument own = new UIDocument();
+        own = new UIDocument();
         own.boxes().setUiScale(2f);
         own.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET));
         layer = new PopupLayer();
@@ -169,6 +173,35 @@ public class PopupPlacementTest extends UiDocumentTestBase {
         assertTrue("the application heard the pointer go", !backend.mouse.isEmpty());
         CgSystemInput.Mouse.Event last = backend.mouse.get(backend.mouse.size() - 1);
         assertTrue("and where it went, not where it was", Math.abs(last.x() - centre[0]) > 20f);
+    }
+
+    @Test
+    public void theSpaceBetweenTwoPopupsIsTheShells() {
+        openMenu();
+        UIElement other = new UIElement();
+        own.append(other);
+        other.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).left(300f).top(220f).width(50f).height(30f));
+        own.promote(other);
+        for (int i = 0; i < 6; i++) own.frame(0.016f, 400, 300);
+        layer.committed();
+        for (int i = 0; i < 12; i++) frame();
+        assertEquals("two popups are shown", 2, layer.rectangles().length);
+        Box window = application.active().box();
+        float scale = document.boxes().uiScale();
+        float[] a = layer.rectangles()[0], b = layer.rectangles()[1];
+        float gapX = ((a[0] + a[2]) / 2f + (b[0] + b[2]) / 2f) / 2f * scale;
+        float gapY = ((a[1] + a[3]) / 2f + (b[1] + b[3]) / 2f) / 2f * scale;
+        backend.mouse.clear();
+        move(window.worldX() + gapX, window.worldY() + gapY);
+        frame();
+        assertTrue("the shell, not the popups, has the pointer there",
+                !(document.input().hoverTarget() instanceof UIElement hit) || !within(hit));
+        assertTrue("and the application heard nothing of a pointer over nothing of its", backend.mouse.size() <= 1);
+    }
+
+    private boolean within(UIElement node) {
+        for (UIElement at = node; at != null; at = at.parentElement()) if (at == portal) return true;
+        return false;
     }
 
     @Test

@@ -1,5 +1,8 @@
 package com.crystalgui.desktop.app;
 
+import java.util.Arrays;
+import java.util.List;
+
 import javax.annotation.Nullable;
 
 import com.crystalgui.render.Surface;
@@ -32,9 +35,13 @@ public final class PopupLayer extends UIElement implements Surface.Owner {
     /** Where the popups are, in the document's logical pixels as {x0, y0, x1, y1}; null when none. */
     @Nullable
     private volatile float[] occupied;
+    /** One {x0, y0, x1, y1} per popup, in the same pixels as {@link #occupied}; empty when none. */
+    private volatile float[][] shapes = NONE;
     private long seenRevision = -1L;
     @Nullable
     private volatile Runnable changed;
+
+    private static final float[][] NONE = new float[0][];
 
     public PopupLayer() {
         super(UIDocument.TOP_LAYER);
@@ -53,6 +60,14 @@ public final class PopupLayer extends UIElement implements Surface.Owner {
         return occupied;
     }
 
+    /**
+     * The rectangle of each popup, {x0, y0, x1, y1} in the document's logical pixels: what the shell takes the pointer
+     * over, since the space between two popups is not theirs. Empty when none is shown.
+     */
+    public float[][] rectangles() {
+        return shapes;
+    }
+
     /** What runs, on the application's thread, when the popups or their picture changed. */
     public void onChanged(@Nullable Runnable then) {
         this.changed = then;
@@ -62,30 +77,43 @@ public final class PopupLayer extends UIElement implements Surface.Owner {
     void committed() {
         Box box = box();
         boolean shown = box != null && !box.children().isEmpty();
-        float[] now = shown ? bounds(box) : null;
+        float[][] rects = shown ? rectangles(box) : NONE;
+        float[] now = shown ? union(rects) : null;
         if (shown != hasClass(CLASS)) {
             if (shown) addClass(CLASS);
             else removeClass(CLASS);
         }
         long revision = box == null ? -1L : box.innerRevision();
         float[] before = occupied;
+        float[][] shapesBefore = shapes;
         occupied = now;
-        if (revision == seenRevision && sameBounds(before, now)) return;
+        shapes = rects;
+        if (revision == seenRevision && sameBounds(before, now) && Arrays.deepEquals(shapesBefore, rects)) return;
         seenRevision = revision;
         Runnable then = changed;
         if (then != null) then.run();
     }
 
-    private static float[] bounds(Box layer) {
-        float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
+    private static float[][] rectangles(Box layer) {
         // A box's world position is in surface pixels and its size is logical: the position is converted first.
         float scale = layer.tree().uiScale();
-        for (Box each : layer.children()) {
+        List<Box> popups = layer.children();
+        float[][] out = new float[popups.size()][];
+        for (int i = 0; i < out.length; i++) {
+            Box each = popups.get(i);
             float x = each.worldX() / scale, y = each.worldY() / scale;
-            x0 = Math.min(x0, x);
-            y0 = Math.min(y0, y);
-            x1 = Math.max(x1, x + each.width());
-            y1 = Math.max(y1, y + each.height());
+            out[i] = new float[] {x, y, x + each.width(), y + each.height()};
+        }
+        return out;
+    }
+
+    private static float[] union(float[][] rects) {
+        float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
+        for (float[] r : rects) {
+            x0 = Math.min(x0, r[0]);
+            y0 = Math.min(y0, r[1]);
+            x1 = Math.max(x1, r[2]);
+            y1 = Math.max(y1, r[3]);
         }
         return new float[] {x0, y0, x1, y1};
     }
