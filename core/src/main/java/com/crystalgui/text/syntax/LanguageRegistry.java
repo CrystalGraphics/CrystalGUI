@@ -190,6 +190,7 @@ public final class LanguageRegistry {
         return TABLE.get().rules().patterns();
     }
 
+    // Threads: guarded by LanguageRegistry.class: every method is synchronized.
     private static final List<String> CONTRIBUTORS = new ArrayList<>();
 
     private static boolean bootstrapped;

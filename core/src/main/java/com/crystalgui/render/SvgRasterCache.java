@@ -15,6 +15,7 @@ import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.render.texture.svg.SvgScene;
+import org.jetbrains.annotations.Nullable;
 
 import org.joml.Matrix4f;
 
@@ -58,9 +59,10 @@ import com.crystalgraphics.platform.rhi.format.CgFormat;
  * an icon moving or growing looks as it does at rest, shadow included, and builds a dozen rasters rather than
  * one a frame. Before, it left for the direct path on every frame off the grid and flickered between the two.</p>
  *
- * <p>One atlas, {@value #ATLAS_SIZE} square, filled shelf by shelf. When it is full everything is
- * dropped and rasterised again on demand — simpler than an eviction policy, and a working set that
- * fills it is thousands of icons.</p>
+ * <p>One atlas for the process ({@link SvgAtlas}), {@value SvgAtlas#SIZE} square, filled shelf by shelf and shared by
+ * every document: a cell is built by the document that asks first and drawn by the others once its build has
+ * executed. When it is full everything is dropped and rasterised again on demand — simpler than an eviction
+ * policy, and a working set that fills it is thousands of icons. Drop shadows are per document.</p>
  *
  * <h3>Drop shadows</h3>
  *
@@ -74,9 +76,7 @@ public final class SvgRasterCache {
     /** Draws taller than this, in device pixels, take the direct path. */
     public static final int MAX_DEVICE_PX = 128;
 
-    private static final int ATLAS_SIZE = 1024;
-
-    /** Pixels of empty atlas around a raster, so its antialiased edge and the sampling never meet a neighbour. */
+        /** Pixels of empty atlas around a raster, so its antialiased edge and the sampling never meet a neighbour. */
     private static final int MARGIN = 1;
 
     /**
@@ -108,57 +108,10 @@ public final class SvgRasterCache {
      * Half floats: a cell's contribution is often a fiftieth of a level, and eight bits would round every
      * one of them to zero. Colour is premultiplied by construction — every cell adds {@code colour × area}.
      */
-    private static final CgFormat ATLAS_FORMAT =
-            CgFormat.RGBA16_FLOAT;
+    private static final CgFormat ATLAS_FORMAT = SvgAtlas.FORMAT;
 
-    /**
-     * A raster's identity. Mutable so every draw looks up through {@link #probe} and only a miss stores a copy:
-     * an icon draw is per frame, and a key per draw was a steady stream for nothing.
-     */
-    private static final class Key {
-        SvgDocument document;
-        int op, deviceScaleBits, halfWidthBits;
-        boolean flat;
-
-        Key set(SvgDocument document, int op, int deviceScaleBits, boolean flat, int halfWidthBits) {
-            this.document = document;
-            this.op = op;
-            this.deviceScaleBits = deviceScaleBits;
-            this.flat = flat;
-            this.halfWidthBits = halfWidthBits;
-            return this;
-        }
-
-        Key copy() {
-            return new Key().set(document, op, deviceScaleBits, flat, halfWidthBits);
-        }
-
-        @Override
-        public boolean equals(Object other) {
-            return other instanceof Key key && key.document == document && key.op == op
-                    && key.deviceScaleBits == deviceScaleBits && key.flat == flat && key.halfWidthBits == halfWidthBits;
-        }
-
-        @Override
-        public int hashCode() {
-            int h = System.identityHashCode(document);
-            h = 31 * h + op;
-            h = 31 * h + deviceScaleBits;
-            h = 31 * h + (flat ? 1 : 0);
-            return 31 * h + halfWidthBits;
-        }
-    }
-
-    /** @see Key */
-    private final Key probe = new Key();
-
-    /** One rasterised fill: its atlas rect, and where the document's origin sits inside it, in device pixels. */
-    private static final class Entry {
-        int x, y, width, height;
-        float originX, originY;
-        /** The fill's own colours are in the raster, premultiplied; otherwise it is straight-alpha white coverage. */
-        boolean baked;
-    }
+    /** @see SvgAtlas.Key */
+    private final SvgAtlas.Key probe = new SvgAtlas.Key();
 
     /** One blurred shadow raster, and where the document's origin sits inside it, in raster pixels. */
     private static final class Shadow {
@@ -174,18 +127,12 @@ public final class SvgRasterCache {
     private static final boolean ENABLED = !"false".equals(System.getProperty("crystalgui.svg.raster"));
 
     private final CgUiPaintContext ctx;
-    private final Map<Key, Entry> entries = new HashMap<>();
-    private final Map<Key, Shadow> shadows = new HashMap<>();
+    private final SvgAtlas atlas = SvgAtlas.SHARED;
+    private final Map<SvgAtlas.Key, Shadow> shadows = new HashMap<>();
     /** A shadow's coverage, then its first axis; grown to the largest asked for. */
     private CgGraphTexture shadowCoverage;
     private int shadowsCreated;
     private boolean sigmaClampLogged;
-    /** Made when the first frame that rasterises executes, and kept; cleared when it is full. */
-    private CgGraphTexture atlas;
-    private int shelfX, shelfY, shelfHeight;
-    private int generation;
-    /** Times the atlas was cleared and its icons placed again. @see #resets() */
-    private int resets;
 
     SvgRasterCache(CgUiPaintContext ctx) {
         this.ctx = ctx;
@@ -226,7 +173,7 @@ public final class SvgRasterCache {
     private static final float LADDER_STEPS = 16f;
 
     /** {@link #probe}, set to op {@code op}'s raster at {@code rasterScale} for a draw at {@code scale}. */
-    private Key rasterKey(SvgDocument document, int op, float rasterScale, float scale, boolean flat, boolean stroke,
+    private SvgAtlas.Key rasterKey(SvgDocument document, int op, float rasterScale, float scale, boolean flat, boolean stroke,
                           float halfWidth) {
         float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
         float override = stroke && halfWidth > 0f ? halfWidth * atlasPerLogical : 0f;
@@ -262,19 +209,23 @@ public final class SvgRasterCache {
                      float halfWidth) {
         boolean stroke = !document.ops().get(op).fill();
         float rasterScale = exactScale(document, scale);
-        Entry entry = entries.get(rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth));
+        SvgAtlas.Entry entry = atlas.find(rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth));
         if (entry == null && !onPixel(x, y)) {
             rasterScale = rung(rasterScale);
-            entry = entries.get(rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth));
+            entry = atlas.find(rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth));
         }
         // Atlas pixels per LOGICAL pixel, which is the device scale exactly while nothing is floored or laddered -- and
         // is what every conversion below has to read once the two can differ.
         float atlasPerLogical = scale > 0f ? rasterScale / scale : rasterScale;
-        Key key = rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth);
+        SvgAtlas.Key key = rasterKey(document, op, rasterScale, scale, flat, stroke, halfWidth);
         float override = stroke && halfWidth > 0f ? halfWidth * atlasPerLogical : 0f;
-        if (entry == null) {
-            entry = rasterise(document, op, rasterScale, flat, override);
-            entries.put(key.copy(), entry);
+        if (entry == null) entry = rasterise(document, op, rasterScale, flat, override, key);
+        // Another document's cell whose build has not executed yet holds nothing: this frame draws without it, and
+        // its segments are painted again once it is ready (SvgAtlas).
+        if (entry == null || !entry.ready && entry.owner != this) {
+            atlas.missed();
+            CgTrace.add(UiTrace.FRAME, "svg-raster-pending", 1);
+            return;
         }
 
         // LOGICAL PIXELS PER ATLAS PIXEL. Was `/ device`, which is the same number until the raster is
@@ -283,11 +234,11 @@ public final class SvgRasterCache {
         float perAtlasPx = 1f / atlasPerLogical;
         float left = x + entry.originX * perAtlasPx, top = y + entry.originY * perAtlasPx;
         float width = entry.width * perAtlasPx, height = entry.height * perAtlasPx;
-        float u0 = (float) entry.x / ATLAS_SIZE, u1 = (float) (entry.x + entry.width) / ATLAS_SIZE;
+        float u0 = (float) entry.x / SvgAtlas.SIZE, u1 = (float) (entry.x + entry.width) / SvgAtlas.SIZE;
         // V flipped: the atlas is drawn into under the same inverted ortho as the frame, so its row 0 is
         // at the bottom of the texture -- the convention drawLayer already documents.
-        float v0 = 1f - (float) entry.y / ATLAS_SIZE, v1 = 1f - (float) (entry.y + entry.height) / ATLAS_SIZE;
-        CgTexture texture = atlas;
+        float v0 = 1f - (float) entry.y / SvgAtlas.SIZE, v1 = 1f - (float) (entry.y + entry.height) / SvgAtlas.SIZE;
+        CgTexture texture = entry.atlas.texture;
         CgTrace.add(UiTrace.FRAME, "svg-raster-draws", 1);
 
         if (!entry.baked) {
@@ -318,7 +269,7 @@ public final class SvgRasterCache {
         if (shadow == null || (shadow.argb() >>> 24) == 0) return;
         float rasterScale = exactScale(document, scale);
         // A negative op names the group starting at that op, so it never meets a fill or stroke's key
-        Key key = probe.set(document, -1 - first, Float.floatToIntBits(rasterScale), false, 0);
+        SvgAtlas.Key key = probe.set(document, -1 - first, Float.floatToIntBits(rasterScale), false, 0);
         Shadow entry = shadows.get(key);
         if (entry == null && !onPixel(x, y)) {
             rasterScale = rung(rasterScale);
@@ -430,10 +381,15 @@ public final class SvgRasterCache {
     }
 
     /**
+     * The cell for this raster, placed in the shared atlas and built if this document is the first to ask; null when
+     * the atlas is another document's to clear first.
+     *
      * @param halfWidth a stroke's overriding half-width in DEVICE pixels, or 0 for the file's own;
      *                  the slot grows by it, since the bounds were measured from the file's
      */
-    private Entry rasterise(SvgDocument document, int op, float rasterScale, boolean flat, float halfWidth) {
+    @Nullable
+    private SvgAtlas.Entry rasterise(SvgDocument document, int op, float rasterScale, boolean flat, float halfWidth,
+                                     SvgAtlas.Key key) {
         float[] bounds = document.bounds();
         SvgDocument.DrawOp drawn = document.ops().get(op);
         int pad = MARGIN + (int) Math.ceil(halfWidth);
@@ -443,7 +399,9 @@ public final class SvgRasterCache {
         }
         int width = (int) Math.ceil((bounds[2] - bounds[0]) * rasterScale) + 2 * pad;
         int height = (int) Math.ceil((bounds[3] - bounds[1]) * rasterScale) + 2 * pad;
-        Entry entry = allocate(Math.max(1, width), Math.max(1, height));
+        SvgAtlas.Entry entry = atlas.claim(key, Math.max(1, width), Math.max(1, height), this);
+        if (entry == null || !entry.needsBuild) return entry;
+        entry.needsBuild = false;
         // The document origin lands at bounds' corner, which floors so the artwork's own integer
         // coordinates stay on the atlas's pixel grid -- the alignment the whole raster is for.
         float cornerX = (float) Math.floor(bounds[0] * rasterScale), cornerY = (float) Math.floor(bounds[1] * rasterScale);
@@ -451,10 +409,24 @@ public final class SvgRasterCache {
         entry.originY = cornerY - pad;
         float atlasX = entry.x + pad - cornerX, atlasY = entry.y + pad - cornerY;
         entry.baked = drawn.fill() && !flat && drawn.colours() != null;
+        CgGraphTexture texture = entry.atlas.texture;
+        if (entry.releases != null) {
+            ctx.releaseTexture(entry.releases);
+            entry.releases = null;
+            CgTrace.add(UiTrace.FRAME, "svg-raster-resets", 1);
+        }
+        if (entry.clears) {
+            // A new generation is cleared by this recording, and opens to the others once that has executed.
+            entry.clears = false;
+            ctx.beginLayerFbo(texture, true);
+            ctx.endLayerFbo();
+            SvgAtlas.Generation generation = entry.atlas;
+            ctx.afterExecuted(texture, () -> atlas.ready(generation));
+        }
 
         CgTrace.add(UiTrace.FRAME, "svg-raster-builds", 1);
         long timed = CgTrace.stamp(UiTrace.FRAME);
-        ctx.beginLayerFbo(atlas, false);
+        ctx.beginLayerFbo(texture, false);
         ScissorStack.Saved scissor = ctx.suspendScissor();
         PoseStack pose = ctx.getPoseStack();
         pose.pushPose();
@@ -477,54 +449,20 @@ public final class SvgRasterCache {
             ctx.resumeScissor(scissor);
             ctx.endLayerFbo();
         }
+        SvgAtlas.Entry built = entry;
+        ctx.afterExecuted(texture, () -> atlas.ready(built));
         CgTrace.zoneDone(UiTrace.FRAME, "svg-raster:build", timed);
         return entry;
     }
 
-    /** A rect in the atlas, shelf-packed; resets the whole atlas when it is full. */
-    private Entry allocate(int width, int height) {
-        if (width > ATLAS_SIZE || height > ATLAS_SIZE) {
-            throw new IllegalArgumentException("SVG raster " + width + "x" + height + " exceeds the atlas");
-        }
-        ensureAtlas();
-        if (shelfX + width > ATLAS_SIZE) {
-            shelfY += shelfHeight;
-            shelfX = 0;
-            shelfHeight = 0;
-        }
-        if (shelfY + height > ATLAS_SIZE) reset();
-        Entry entry = new Entry();
-        entry.x = shelfX;
-        entry.y = shelfY;
-        entry.width = width;
-        entry.height = height;
-        shelfX += width;
-        shelfHeight = Math.max(shelfHeight, height);
-        return entry;
-    }
-
-    /** How many times the atlas has been cleared: an icon drawn before a reset is elsewhere after it. */
+    /** Times the shared atlas was cleared and its icons placed again. */
     int resets() {
-        return resets;
+        return atlas.resets();
     }
 
-    private void ensureAtlas() {
-        if (atlas != null) return;
-        atlas = ctx.requestTexture("cgui_svg_raster_" + generation++, ATLAS_SIZE, ATLAS_SIZE, ATLAS_FORMAT);
-        clear();
-    }
-
-    private void reset() {
-        resets++;
-        entries.clear();
-        shelfX = shelfY = shelfHeight = 0;
-        clear();
-        CgTrace.add(UiTrace.FRAME, "svg-raster-resets", 1);
-    }
-
-    private void clear() {
-        ctx.beginLayerFbo(atlas, true);
-        ctx.endLayerFbo();
+    /** What a replayed segment is keyed under: moves when an icon's place did, or a pending one became drawable. */
+    int epoch() {
+        return atlas.epoch();
     }
 
     private static CgMaterial accumulate() {
@@ -539,14 +477,18 @@ public final class SvgRasterCache {
         return CgCanvasMaterials.SCREEN.strokeCoverage();
     }
 
+    /** This document's view closes: its shadows go, and so does what it left half-built in the shared atlas. */
     void delete() {
-        entries.clear();
+        atlas.abandon(this);
         for (Shadow shadow : shadows.values()) deleteNow(shadow.texture);
         shadows.clear();
         deleteNow(shadowCoverage);
-        deleteNow(atlas);
-        shadowCoverage = atlas = null;
-        shelfX = shelfY = shelfHeight = 0;
+        shadowCoverage = null;
+    }
+
+    /** A frame was abandoned: what it built will never execute. */
+    void abandoned() {
+        atlas.abandon(this);
     }
 
     /** Teardown: no frame will record a release. */

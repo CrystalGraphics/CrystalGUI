@@ -12,6 +12,7 @@ import com.crystalgui.harness.scene.CgUiStylingScene;
 import com.crystalgui.harness.scene.CgUiSvgIconScene;
 import com.crystalgui.harness.scene.CgUiTextGammaScene;
 import com.crystalgui.harness.scene.CgUiTextScene;
+import com.crystalgui.harness.scene.CgUiConcurrencyScene;
 import com.crystalgui.harness.scene.CgUiTextStressScene;
 import com.crystalgui.harness.scene.CgUiTimelineScene;
 import com.crystalgui.harness.scene.CgUiVisualLayersScene;
@@ -76,6 +77,18 @@ public final class CrystalGuiHarness implements HarnessExtension {
                 .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
                 .build(),
             () -> new CgUiTextScene()
+        );
+
+        reg.register(
+            SceneDescriptor.builder("cgui-concurrency")
+                .description("Ten documents on ten sequences relaying out and repainting through the shared caches for 30 s, with text, icons and theme switches; prints problems=N and captures 'final', which must equal the -Dcrystalgui.ui.singleSequence=true run's")
+                .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
+                .category(SceneDescriptor.Category.SCENE)
+                .needsFbo(false)
+                .needsDepthBuffer(false)
+                .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
+                .build(),
+            () -> new CgUiConcurrencyScene()
         );
 
         reg.register(

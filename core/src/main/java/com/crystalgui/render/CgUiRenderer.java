@@ -39,6 +39,7 @@ public final class CgUiRenderer {
     private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_color_field.shader"};
 
     /** Every view with a paint context made and not closed: what {@link #contextDestroyed} frees. */
+    // Threads: guarded by its own monitor.
     private static final Set<View> PAINTING = new LinkedHashSet<>();
 
     private CgUiRenderer() {
@@ -81,6 +82,7 @@ public final class CgUiRenderer {
             views = new ArrayList<>(PAINTING);
         }
         for (View view : views) view.releaseGpu();
+        SvgAtlas.SHARED.destroy();
     }
 
     /**

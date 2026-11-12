@@ -39,6 +39,7 @@ public final class ServerCommands<T> {
      * and same reason as a workspace attachment, which was itself written after two
      * clients on one connection threw on a duplicate {@code fs.changed}.</p>
      */
+    // Threads: guarded by ServerCommands.class (forConnection is synchronized).
     private static final Map<CgProtocolConnection<?>, ServerCommands<?>> BY_CONNECTION = new WeakHashMap<>();
 
     private final CgProtocolConnection<T> connection;

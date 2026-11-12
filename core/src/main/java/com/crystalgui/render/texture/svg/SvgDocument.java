@@ -87,7 +87,11 @@ public final class SvgDocument {
      * reads exactly 0 / 1 with it, and a stroke with no ramp is simply aliased.</p>
      */
 
-    /** Path to parsed document; see {@link #of}. */
+    /**
+     * Path to parsed document; see {@link #of}. <b>Threads:</b> any. A document is shared by every paint context:
+     * its ops are built once under a lock into a volatile, its coarser tiers sit in a concurrent map, and nothing
+     * a draw reads changes after. The per-frame mesh budget is the paint context's, not the document's.
+     */
     private static final Map<String, SvgDocument> CACHE = new ConcurrentHashMap<>();
 
     /** Moves whenever a cached document is dropped. @see #generation */

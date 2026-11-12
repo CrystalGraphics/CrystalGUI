@@ -305,7 +305,7 @@ public final class ConnectionTest extends CgGauntletController {
     private static boolean writerEditing;
     private static int writerCreatedAt;
 
-    private static final Set<String> HEARD = new LinkedHashSet<>();
+    private static final Set<String> HEARD = java.util.Collections.synchronizedSet(new LinkedHashSet<>());
 
     private static int ticks;
 

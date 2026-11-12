@@ -72,6 +72,7 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
     private static final int RECENT_LIMIT = 6;
 
     /** Newest first, by name. Per process: a pick is a habit of this session, not something worth a file. */
+    // Threads: guarded by its own monitor.
     private static final Deque<String> RECENT = new ArrayDeque<>();
 
     static final String HINTS = "↑↓ to choose · Enter to add · Esc to close";

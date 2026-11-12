@@ -37,6 +37,7 @@ public final class GradientLab {
     static final String RADIAL = "Radial";
     private static final List<String> TYPES = List.of(LINEAR, RADIAL);
     private static final List<String> SHAPES = List.of("Ellipse", "Circle");
+    // Threads: filled once by the static initialiser, read-only after.
     private static final List<String> SIZES = new ArrayList<>(Gradient.Radial.EXTENTS);
 
     static {

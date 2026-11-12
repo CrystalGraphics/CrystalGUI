@@ -262,5 +262,6 @@ public final class JavaLanguageServices extends AnalysedLanguageServices {
         return TYPE_INDICES.get(classpath);
     }
 
+    // Threads: guarded by JavaLanguageServices.class: its accessors are synchronized.
     private static final Map<List<String>, TypeIndex> TYPE_INDICES = new HashMap<>();
 }

@@ -59,6 +59,7 @@ public final class RefusedTypes {
      * <em>calls</em> one, because that emits an instruction and the visitor adds it by owner. It is only
      * the pool walk that cannot tell the two apart.</p>
      */
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Set<String> BOOTSTRAP_SURFACE = new LinkedHashSet<>(java.util.Arrays.asList(
             "java.lang.invoke.StringConcatFactory",
             "java.lang.invoke.LambdaMetafactory",

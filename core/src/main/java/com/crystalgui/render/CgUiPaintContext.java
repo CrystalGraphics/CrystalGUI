@@ -317,6 +317,7 @@ public final class CgUiPaintContext {
      */
     public void abortFrame() {
         if (!frameActive) return;
+        svgRaster.abandoned();
         recorder.abandon();
         recording.reset();
         surfaces.abort();
@@ -908,7 +909,7 @@ public final class CgUiPaintContext {
      * atlas, the text gamma changes or the kept snapshots are dropped.
      */
     public long replayEpoch() {
-        return segments.epoch(svgRaster.resets());
+        return segments.epoch(svgRaster.epoch());
     }
 
     // ── Spatial and effect nodes ─────────────────────────────────────────────
@@ -1504,6 +1505,16 @@ public final class CgUiPaintContext {
      */
     public CgGraphTexture requestLayer(String name, int width, int height) {
         return requestTexture(name, width, height, LAYER_FORMAT);
+    }
+
+    /**
+     * Runs {@code body} on the render thread once everything recorded so far that writes {@code after} has executed:
+     * how a cell built in this frame is told to the other documents.
+     */
+    void afterExecuted(CgGraphTexture after, Runnable body) {
+        requireFrame();
+        drain();
+        recording.callback("cgui.svg.ready", null, body, after);
     }
 
     /** Frees a requested texture's storage once what was recorded before has executed; between frames, at the next. */

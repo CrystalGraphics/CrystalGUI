@@ -289,7 +289,7 @@ public final class SystemMenu {
     }
 
     /** Owner → the strip whose previews it silenced. @see #discardFor */
-    private static final Map<Object, Taskbar> SUPPRESSED = new WeakHashMap<>();
+    private static final Map<Object, Taskbar> SUPPRESSED = java.util.Collections.synchronizedMap(new WeakHashMap<>());
 
     /**
      * Owner (a window, or a pin's entry) → its live chain.
@@ -298,5 +298,5 @@ public final class SystemMenu {
      * whole content subtree and its documents reachable from a static map for the life of the process.
      * The same reason {@code StyleEngine} keeps its applied-slot record weakly.</p>
      */
-    private static final Map<Object, List<Menu>> LIVE = new WeakHashMap<>();
+    private static final Map<Object, List<Menu>> LIVE = java.util.Collections.synchronizedMap(new WeakHashMap<>());
 }

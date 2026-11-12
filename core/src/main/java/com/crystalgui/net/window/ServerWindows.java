@@ -102,7 +102,7 @@ public final class ServerWindows {
      * connection: a mod declares once, at registration, what its clients may open. Per-connection
      * differences are the resolver's to make — it is handed the viewer.</p>
      */
-    private static final Map<String, Openable<?, ?>> OPENABLE = new LinkedHashMap<>();
+    private static final Map<String, Openable<?, ?>> OPENABLE = java.util.Collections.synchronizedMap(new LinkedHashMap<>());
 
     /** A declared type, the authority that decides each request for it, and where it opens. */
     private record Openable<P extends UIElement & Networked<M>, M>(UiType<P, M> type,

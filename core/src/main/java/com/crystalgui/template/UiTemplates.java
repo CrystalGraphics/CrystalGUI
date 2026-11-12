@@ -43,6 +43,7 @@ public final class UiTemplates {
     private UiTemplates() {
     }
 
+    /** Path to parsed template. <b>Threads:</b> any; a template is immutable and each inflation builds its own tree. */
     private static final Map<String, UiTemplate> CACHE = new ConcurrentHashMap<>();
 
     /**

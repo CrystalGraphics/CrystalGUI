@@ -44,6 +44,9 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>{@code -Dcrystalgui.font.systemFonts=false} turns off names, generic families and the implicit
  *       fallback, leaving resource paths. The tests run that way, so no result depends on the machine.</li>
  *   <li>A stack where nothing loads draws in the platform's sans-serif; with system fonts off it throws.</li>
+ *   <li><b>Threads:</b> any. The three caches are concurrent maps, and a family is built at most once in effect
+ *       (a race builds it twice and one wins); the locale and system fonts are volatile, and a change of locale
+ *       clears the caches. Every document's sequence reads it at once.</li>
  *   <li>A generic is recognised quoted or not — the parser drops quotes — so {@code "serif"} is the
  *       generic, not a font named serif.</li>
  * </ul>

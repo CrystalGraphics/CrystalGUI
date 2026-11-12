@@ -54,6 +54,7 @@ public final class JsKeywords {
      * failure means the keyword and not the surrounding syntax. Insertion-ordered so the offered list is
      * stable between runs — a completion list whose rows move between sessions is its own bug report.</p>
      */
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<String, String> PROBES = new LinkedHashMap<>();
 
     static {

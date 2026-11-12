@@ -164,7 +164,9 @@ public class Desktop extends UIElement implements DataProvider {
         if (existing != null) return existing;
         Desktop desktop = new Desktop();
         document.append(desktop);
-        BY_DOCUMENT.put(document, desktop);
+        synchronized (BY_DOCUMENT) {
+            BY_DOCUMENT.put(document, desktop);
+        }
         return desktop;
     }
 
@@ -182,6 +184,7 @@ public class Desktop extends UIElement implements DataProvider {
      * may not name a compositor: the compositor names the document. Weak keys, so a document that
      * goes away takes its entry with it.</p>
      */
+    // Threads: guarded by its own monitor.
     private static final java.util.Map<UIDocument, Desktop> BY_DOCUMENT = new java.util.WeakHashMap<>();
 
     /**
@@ -202,7 +205,10 @@ public class Desktop extends UIElement implements DataProvider {
         // ...and a SUSPENDED one, which is not a child of anything. Only a suspended desktop is
         // answered from the map: a desktop that was destroyed or replaced must not be resurrected by
         // it, and being attached is otherwise the honest test.
-        Desktop remembered = BY_DOCUMENT.get(document);
+        Desktop remembered;
+        synchronized (BY_DOCUMENT) {
+            remembered = BY_DOCUMENT.get(document);
+        }
         return remembered != null && remembered.isSuspended() ? remembered : null;
     }
 

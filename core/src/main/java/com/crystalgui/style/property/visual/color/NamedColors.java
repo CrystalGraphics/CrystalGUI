@@ -15,6 +15,7 @@ import java.util.Map;
  */
 public final class NamedColors {
 
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<String, Integer> NAMED = new HashMap<>(256);
 
     static {

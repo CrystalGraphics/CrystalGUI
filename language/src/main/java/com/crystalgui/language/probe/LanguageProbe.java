@@ -379,7 +379,7 @@ public final class LanguageProbe {
         }
     }
 
-    private static final List<Probe> PENDING = new ArrayList<>();
+    private static final List<Probe> PENDING = java.util.Collections.synchronizedList(new ArrayList<>());
 
     private static void openProbe(String what, String source, String upTo) {
         openProbe(what, source, upTo, null);
