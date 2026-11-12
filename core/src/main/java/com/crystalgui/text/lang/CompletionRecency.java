@@ -1,6 +1,7 @@
 package com.crystalgui.text.lang;
 
 
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -19,12 +20,19 @@ import java.util.Map;
  * <p>Building the real thing means a persisted store keyed by context, which is a feature with a storage
  * format and a migration story rather than a weigher. Recorded here rather than half-built.</p>
  *
- * <h3>Global, and deliberately so</h3>
+ * <h3>Owned, and shared by the applications of a desktop</h3>
  *
- * <p>"What this person reaches for" is a fact about the person, not about a document — accepting
- * {@code println} in one file should make it rise in the next. IntelliJ's is global for the same reason.
- * The cost is one static, which is why it is a real object with a shared instance rather than a bag of
- * static methods: a test can build its own and the shared one can be cleared.</p>
+ * <p>"What this person reaches for" is a fact about the person, not about a text buffer — accepting
+ * {@code println} in one file should make it rise in the next. So it is a service a desktop owns, thread-safe, and
+ * read as a {@link Snapshot}: a ranking asks once per sort, never per comparison, and never sees a half-updated
+ * list.</p>
+ *
+ * <pre>{@code
+ * CompletionRecency recency = EditorSuggest.recencyOf(editor.document());   // the desktop's
+ * recency.note(accepted);                                                // on accept
+ * CompletionRecency.Snapshot ranks = recency.snapshot();                 // once per sort
+ * int rank = ranks.rankOf(item);                                         // higher is more recent, 0 for never
+ * }</pre>
  *
  * <h3>Keyed by kind and insertion text, never by label</h3>
  *
@@ -45,13 +53,6 @@ public final class CompletionRecency {
      */
     private static final int CAPACITY = 200;
 
-    /** The application-wide one. See the class note on why this is global. */
-    private static final CompletionRecency SHARED = new CompletionRecency();
-
-    public static CompletionRecency shared() {
-        return SHARED;
-    }
-
     /**
      * Access-ordered, so reading an entry moves it to the front and the eldest is the true LRU.
      *
@@ -68,37 +69,45 @@ public final class CompletionRecency {
             };
 
     /** Records that {@code item} was accepted. */
-    public void note(CompletionItem item) {
+    public synchronized void note(CompletionItem item) {
         if (item == null) return;
         accepted.put(keyOf(item.kind(), item.textToInsert()), Boolean.TRUE);
     }
 
     /**
-     * How recently {@code item} was accepted — higher is more recent, {@code 0} for never.
-     *
-     * <p>A rank rather than a timestamp, so it needs no clock and cannot be perturbed by how long the
-     * application has been open. {@code TransitionEngine} is the standing example of what a hidden clock
-     * costs a test.</p>
+     * The ranks now, immutable: {@code 0} for never accepted, higher for more recent. A rank rather than a timestamp,
+     * so it needs no clock and cannot be perturbed by how long the application has been open.
      */
-    public int rankOf(CompletionItem item) {
-        if (item == null || accepted.isEmpty()) return 0;
-        String wanted = keyOf(item.kind(), item.textToInsert());
-        // The map is access-ordered, so iteration runs least-recent first: a hit at position i out of n
-        // scores i + 1, and the most recent scores n.
+    public synchronized Snapshot snapshot() {
+        Map<String, Integer> ranks = new HashMap<>();
+        // The map is access-ordered, so iteration runs least-recent first: position i of n scores i + 1.
         int position = 0;
-        for (String key : accepted.keySet()) {
-            position++;
-            if (key.equals(wanted)) return position;
+        for (String key : accepted.keySet()) ranks.put(key, ++position);
+        return new Snapshot(ranks);
+    }
+
+    /** One reading of the recency, for a sort. */
+    public static final class Snapshot {
+        private final Map<String, Integer> ranks;
+
+        private Snapshot(Map<String, Integer> ranks) {
+            this.ranks = ranks;
         }
-        return 0;
+
+        /** How recently {@code item} was accepted — higher is more recent, {@code 0} for never. */
+        public int rankOf(CompletionItem item) {
+            if (item == null || ranks.isEmpty()) return 0;
+            Integer rank = ranks.get(keyOf(item.kind(), item.textToInsert()));
+            return rank == null ? 0 : rank;
+        }
     }
 
     /** Forgets everything. For tests, and for a future "reset my completion history". */
-    public void clear() {
+    public synchronized void clear() {
         accepted.clear();
     }
 
-    private static String keyOf(SymbolKind kind, String insertText) {
+    static String keyOf(SymbolKind kind, String insertText) {
         return (kind == null ? "?" : kind.name()) + ":" + (insertText == null ? "" : insertText);
     }
 }

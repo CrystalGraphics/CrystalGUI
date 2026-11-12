@@ -8,7 +8,7 @@ import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.project.SourceRoots;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.protocol.FsError;
 import com.crystalgui.render.texture.asset.FileIconTheme;
@@ -232,7 +232,7 @@ public final class SaveActions {
      *
      * <p><b>Who is EDITING, not who has it open.</b> That is the question that matters and the one
      * presence could not answer: two people found out they were both editing a file when the second one
-     * saved and was refused. @see Workspace.Presence#whoIsEditing</p>
+     * saved and was refused. @see WorkspaceClient.Presence#whoIsEditing</p>
      */
     @Nullable
     public String othersEditing(@Nullable CgPath target) {

@@ -54,7 +54,7 @@ public final class UiTrace {
 
     /** Phases and counters inside a frame: {@code paint:tree}, {@code frame:layout}, {@code drawcalls}. */
     static {
-        CgTraceRun.budget(() -> FrameStats.get().budgetMs());
+        CgTraceRun.budget(() -> FrameStats.compositor().budgetMs());
     }
 
     public static final CgTraceChannel FRAME = CgTrace.channel("crystalgui.frame");
@@ -155,11 +155,17 @@ public final class UiTrace {
             String at = frame.getClassName();
             if (at.equals(UiTrace.class.getName()) || ignored(at, ignorePackages)) continue;
             int dot = at.lastIndexOf('.');
-            SITES.merge(what + '@' + (dot < 0 ? at : at.substring(dot + 1)) + '.' + frame.getMethodName() + ':'
-                    + frame.getLineNumber(), weight, Integer::sum);
+            blame(what + '@' + (dot < 0 ? at : at.substring(dot + 1)) + '.' + frame.getMethodName() + ':'
+                    + frame.getLineNumber(), weight);
             return;
         }
-        SITES.merge(what + "(unattributed)", weight, Integer::sum);
+        blame(what + "(unattributed)", weight);
+    }
+
+    private static void blame(String site, int weight) {
+        synchronized (SITES) {
+            SITES.merge(site, weight, Integer::sum);
+        }
     }
 
     private static boolean ignored(String className, String[] packages) {
@@ -174,14 +180,17 @@ public final class UiTrace {
      * would fill the ring with the evidence for a single finding.
      */
     private static void flushBlame() {
-        if (!SITES.isEmpty() && CgTrace.isEnabled(BLAME)) {
-            List<Map.Entry<String, Integer>> sites = new ArrayList<>(SITES.entrySet());
+        List<Map.Entry<String, Integer>> sites;
+        synchronized (SITES) {
+            sites = SITES.isEmpty() ? List.of() : new ArrayList<>(SITES.entrySet());
+            SITES.clear();
+        }
+        if (!sites.isEmpty() && CgTrace.isEnabled(BLAME)) {
             sites.sort((a, b) -> Integer.compare(b.getValue(), a.getValue()));
             for (int i = 0; i < Math.min(MAX_BLAME_MARKERS, sites.size()); i++) {
                 CgTrace.marker(BLAME, "invalidated-by", sites.get(i).getKey() + " x" + sites.get(i).getValue());
             }
         }
-        SITES.clear();
         blamesThisFrame = 0;
     }
 
@@ -191,6 +200,7 @@ public final class UiTrace {
     private static final int BLAME_EXACTLY = 256;
     private static final int BLAME_STRIDE = 16;
 
+    // Threads: guarded by its own monitor (blame is a diagnostic, off by default).
     private static final Map<String, Integer> SITES = new LinkedHashMap<>();
     private static int blamesThisFrame;
 

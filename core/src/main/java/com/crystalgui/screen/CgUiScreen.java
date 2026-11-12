@@ -18,13 +18,16 @@ import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopWindowMount;
 import com.crystalgui.desktop.app.Application;
+import com.crystalgui.desktop.app.AppDocument;
 import com.crystalgui.desktop.app.ServerWindowHost;
+import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.render.UiPresenter;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.theme.ThemeRegistry;
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.viewport.CgUiViewport;
@@ -78,7 +81,7 @@ public final class CgUiScreen {
     /** The theme a first run starts with: the editor's own default. */
     public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
 
-    /** Logical pixels to the surface's: on the box tree's root transform, applied nowhere else. */
+    /** The scale a host starts with; the user's own is {@code Preferences.current().uiScale()}, which defaults to it. */
     public static final float UI_SCALE = 2f;
 
     /** What the desktop is showing this host frame. */
@@ -153,6 +156,8 @@ public final class CgUiScreen {
     private static volatile CgUiViewport viewport;
     @Nullable
     private static volatile DesktopContent[] contents;
+    /** What the applications that run in documents of their own are framed from, before the desktop. */
+    private static final ApplicationDocuments appDocuments = new ApplicationDocuments();
     /** The primary application, once launched. Written on the document. */
     @Nullable
     private static volatile Application primary;
@@ -165,6 +170,8 @@ public final class CgUiScreen {
     private static volatile boolean raiseOnShow;
     /** A launch was wanted and could not be done; retried each host frame until a window exists. */
     private static volatile boolean launchPending;
+    /** Whether the last session's applications were relaunched. On the document. */
+    private static boolean sessionRestored;
 
     /** The close waiting for the desktop to play itself off, and since when. */
     @Nullable
@@ -308,7 +315,7 @@ public final class CgUiScreen {
     private static void resumeDesktop() {
         Desktop shown = desktop;
         // exitHudMode FIRST: it puts back the windows the HUD hid, onto the desktop the resume brings back.
-        shown.exitHudMode();
+        shown.windowManager().exitHudMode();
         shown.resume();
         if (!onScreen) shown.arrive();
         onScreen = true;
@@ -318,7 +325,7 @@ public final class CgUiScreen {
     private static void putDesktopAway() {
         Desktop away = desktop;
         onScreen = false;
-        if (away.hasPinnedWindows()) away.enterHudMode();
+        if (away.windowManager().hasPinnedWindows()) away.windowManager().enterHudMode();
         else away.suspend();
     }
 
@@ -401,34 +408,34 @@ public final class CgUiScreen {
         GameState state = new GameState();
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
         FontFamilyCache.useLocale(state.locale());
-        UIDocument built = new UIDocument();
-        built.boxes().setUiScale(UI_SCALE);
-        // NOT INSTALLED FOR YOU: without the sheets nothing matches, and without a theme every token falls back.
-        UiThemeManager themes = UiThemeManager.getInstance();
-        themes.installInto(built.styles());
-        ThemeRegistry.registerBuiltins();
-        if (themes.activeThemeId() == null) themes.setTheme(DEFAULT_THEME);
+        UIDocument built = newDocument();
+        Preferences.PUBLISHED.changes().subscribe(
+                () -> built.execute(() -> built.boxes().setUiScale(Preferences.current().uiScale())));
         // THE HOST SAYS WHERE crystalgui/ IS AND NOTHING ELSE: the desktop derives its config, its cache and its
         // arrangement from that one directory.
         Desktop made = Desktop.of(built).useStorage(state.installationDirectory());
         CrystalGuiDownloads.LOCATIONS.useCacheRoot(made.cacheRoot());
         made.useLocalWorld(state::localWorldDirectory);
-        DesktopWindowMount mount = new DesktopWindowMount(built);
+        DesktopWindowMount mount = new DesktopWindowMount(built, () -> appDocuments.openServer("connection"));
         // WHERE A SERVER'S WINDOW IS OFFERED FIRST: the primary application takes what it recognises and hands the
         // rest back, so a client with it closed still gets every window.
         DesktopConnection wire = new DesktopConnection(built, mount, () -> {
             Application app = primary;
-            return app instanceof ServerWindowHost host ? host.windowMount(mount) : null;
+            if (!(app instanceof ServerWindowHost host)) return null;
+            // Built on the application's own thread: the workbench's panels are its.
+            AppDocument home = made.applications().documentOf(app);
+            WindowMount offered = home == null ? host.windowMount(mount) : home.ask(() -> host.windowMount(mount));
+            return offered == null ? null : new DesktopWindowMount.Preferred(offered, home);
         });
         made.useWorkspace(wire::workspace);
         made.useConnection(wire::bound);
         made.persistAs(DESKTOP_ID);
-        built.addClass(ROOT_CLASS);
 
         game = state;
         document = built;
         desktop = made;
         connection = wire;
+        made.applications().useDocuments(appDocuments);
         viewport = CgUiViewport.open(built, CgUiViewport.Threading.fromFlags(), "desktop");
         Mode[] modes = Mode.values();
         DesktopContent[] byMode = new DesktopContent[modes.length];
@@ -439,11 +446,34 @@ public final class CgUiScreen {
     }
 
     /**
+     * A document as the desktop and every application have it: at the user's scale, with the themes' sheets and the
+     * theme in force. The caller follows the scale preference and gives the document a viewport.
+     */
+    static UIDocument newDocument() {
+        UIDocument built = new UIDocument();
+        // Logical pixels to the surface's: the user's preference, on the box tree's root transform and nowhere else.
+        built.boxes().setUiScale(Preferences.current().uiScale());
+        // NOT INSTALLED FOR YOU: without the sheets nothing matches, and without a theme every token falls back.
+        UiThemeManager themes = UiThemeManager.getInstance();
+        themes.installInto(built.styles());
+        ThemeRegistry.registerBuiltins();
+        if (themes.activeThemeId() == null) themes.setTheme(DEFAULT_THEME);
+        built.addClass(ROOT_CLASS);
+        return built;
+    }
+
+    /**
      * On the document: the primary application forward, if that was asked for; launched if nothing runs it. The bare
      * desktop key launches nothing, so an empty desktop stays empty.
      */
     private static void bringForward() {
         Desktop shown = desktop;
+        if (shown != null && !sessionRestored) {
+            // THE LAST SESSION'S APPLICATIONS, once the desktop is first shown: each in its own document, with its state.
+            sessionRestored = true;
+            connection.bind(game.connection());
+            shown.applications().restoreSession(connection.workspace());
+        }
         if (shown == null || !raiseOnShow) return;
         if (shown.applications().primary() == null) {
             raiseOnShow = false;
@@ -459,7 +489,7 @@ public final class CgUiScreen {
         }
         launchPending = false;
         raiseOnShow = false;
-        WindowFrame window = app.mainWindow();
+        WindowFrame window = app.mainWindow().frame();
         if (app != primary) {
             primary = app;
             // Its X quits it: the next open launches a fresh one rather than reporting one that is gone
@@ -469,7 +499,7 @@ public final class CgUiScreen {
             trace("launch");
         }
         if (window.state() == WindowState.HIDDEN) window.show(true);
-        shown.activate(window);
+        shown.windowManager().activate(window);
     }
 
     // ── Rehearsing ──────────────────────────────────────────────────────────────────────────────
@@ -495,9 +525,9 @@ public final class CgUiScreen {
             // The arrangement first, with every window still up
             gone.savePersistedState();
             // Every application quits, not the primary alone: one holding ticks or stage draws releases them here
-            for (Application app : new ArrayList<>(gone.applications().running())) app.dispose();
+            for (Application app : new ArrayList<>(gone.applications().running())) gone.applications().dispose(app);
             // A copy: destroying a window takes it out of the list being walked
-            for (WindowFrame frame : new ArrayList<>(gone.windows())) frame.destroy();
+            for (WindowFrame frame : new ArrayList<>(gone.windowManager().windows())) frame.destroy();
             gone.suspend();
         };
         CgUiViewport shown = viewport;
@@ -506,6 +536,7 @@ public final class CgUiScreen {
             shown.run(down);
             shown.close();
         }
+        appDocuments.dispose();
         installed = false;
         INPUT.reset();
         viewport = null;
@@ -520,6 +551,7 @@ public final class CgUiScreen {
         foreignScreenWasUp = false;
         raiseOnShow = false;
         launchPending = false;
+        sessionRestored = false;
         closing = null;
         left = false;
         onScreen = true;
@@ -551,7 +583,7 @@ public final class CgUiScreen {
 
     /** The workspace on the client's connection; null before a tick has bound one. */
     @Nullable
-    public static Workspace workspace() {
+    public static WorkspaceClient workspace() {
         DesktopConnection wire = connection;
         return wire == null ? null : wire.workspace();
     }
@@ -679,12 +711,14 @@ public final class CgUiScreen {
         }
         long painting = CgTrace.stamp(UiTrace.FLOW);
         try {
+            // THE CLIENTS FIRST: their surfaces have executed when the desktop's frame draws them.
+            appDocuments.frame(stage);
             if (shown.frame(stage, byMode[now.ordinal()])) painted = true;
             CgTrace.zoneDone(UiTrace.FLOW, "screen:paint", painting);
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] the desktop's paint failed; leaving HUD mode", failed);
             Desktop gone = desktop;
-            if (gone != null) execute(gone::exitHudMode);
+            if (gone != null) execute(gone.windowManager()::exitHudMode);
         }
     }
 

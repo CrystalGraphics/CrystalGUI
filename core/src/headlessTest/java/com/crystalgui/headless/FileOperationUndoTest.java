@@ -7,7 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -51,7 +51,7 @@ public class FileOperationUndoTest {
     private CgProtocolConnection<Object> clientSide;
     private InMemoryFileSystem files;
     private WorkspaceService service;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private FileOperations ops;
 
     @Before
@@ -69,7 +69,7 @@ public class FileOperationUndoTest {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, PEER,
                 CgPlainOps.INSTANCE).installOn(serverSide::onRequest);
 
-        workspace = Workspace.of(clientSide);
+        workspace = WorkspaceClient.of(clientSide);
         ops = workspace.files();
         pump();
     }

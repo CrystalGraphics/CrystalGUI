@@ -173,8 +173,8 @@ com.crystalgui.widget.texteditor  THE EDITOR ON THE NEW ENGINE (M6.5) — TextEd
 com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (the compositor, found with
                                `Desktop.of(document)` and never built by a caller: the engine may not
                                name a compositor, so the compositor names the document), DesktopCommands,
-                               DesktopSession, DesktopKinds (the layer's NodeKinds service). FOUR classes
-                               at the root, which is the whole of what a layer root is for.
+                               DesktopKinds (the layer's NodeKinds service), DesktopWindowMount, SnapPreview.
+                               The session record is `.manager.SessionRecord`.
   .window                      WindowFrame and everything a window IS: WindowChrome, WindowCommands,
                                WindowRegistry, WindowIcon, WindowMove, WindowKeyboardMove, SnapZones,
                                SystemMenu
@@ -208,7 +208,9 @@ com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (t
                                handlerFor — a launcher, "open with" and taskbar grouping all answerable
                                with nothing running; runs the ApplicationKinds services once per
                                DESKTOP, since discovery is per process and installing is per shell),
-                               LaunchContext (the Exec line's arguments)
+                               AppContext (what a launch is handed: its windows(), storage, cache and files),
+                               AppWindows / AppWindow / WindowSpec (how an application asks for a window and
+                               holds a handle on it: it never builds or names a frame)
 
 com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platform SPI, which CrystalGUI
                                consumes. Listed here because the engine's input, sound and clipboard
@@ -332,7 +334,10 @@ com.crystalgui.widget          THE WIDGETS, layered so a build fails when a laye
 
 com.crystalgui.desktop         CRYSTALOS. Desktop (found with Desktop.of(document), never built by a
                                caller: the engine may not name a compositor, so the compositor names
-                               the document), .window, .motion, .taskbar, .switcher, .host.
+                               the document), .manager (WindowManager: stacking, the active window, placement, snapping, the HUD; WindowRecord: one
+                               window's identity, state and geometry), .window (WindowFrame composes a WindowCaption, the title bar,
+                               and the content slot),
+                               .motion, .taskbar, .switcher.
 com.crystalgui.workbench       The shell, and THE ROOT IS THE HUB ONLY. Everything whose imports
                                point at ONE sub-package now lives in it; what is left at the top is
                                Workbench plus what genuinely coordinates several of them, which is the
@@ -466,7 +471,10 @@ com.crystalgui.fs              FOUR classes, and each is vocabulary every tier b
                                pair into a RENAME; `update` is a host's ONE call a tick, and it owns the
                                reconcile cadence, stat-ing on its own JobScheduler off the host's thread),
                                WorkspaceAudit, RecentOperations
-  .client                      Workspace (the entry point; facades by noun — files(), presence(),
+  .client                      Workspace (the desktop's owned service, one per connection, on the services
+                               sequence: wire, greeting, watches, stores, fan-out of saves),
+                               WorkspaceClient (one per application, made on its sequence; facades by
+                               noun — files(), presence(),
                                capabilities(), health() — and the ONE door a provider is reached
                                through, which is where UiBudget times it), FileOperations (every answer
                                a Reply, serialised per resource, undoable), FsCall (coalescing, cancel,

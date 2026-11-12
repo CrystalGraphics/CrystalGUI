@@ -7,7 +7,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
@@ -40,7 +40,7 @@ import static org.junit.Assert.assertTrue;
  *
  * <p>Every other test covers one segment: the watcher into {@code drainFileEvents}, or hand-made events
  * through the hub, or the hub into a client. Nothing joined them, so a break anywhere between the OS and
- * {@code Workspace.Watch#onChanged} was invisible to the suite and visible only by running the harness.</p>
+ * {@code WorkspaceClient.Watch#onChanged} was invisible to the suite and visible only by running the harness.</p>
  *
  * <p>The arrangement is the explorer's: <b>one recursive watch on the project root and no per-file watch
  * on anything</b>, which is what a file nobody has open is covered by.</p>
@@ -56,7 +56,7 @@ public class WatcherReachesTheClientTest {
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverSide;
     private CgProtocolConnection<Object> clientSide;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private final List<FsMessages.FileChange> heard = new ArrayList<>();
 
     @Before
@@ -75,7 +75,7 @@ public class WatcherReachesTheClientTest {
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
-        workspace = Workspace.of(clientSide);
+        workspace = WorkspaceClient.of(clientSide);
         // THE EXPLORER'S SUBSCRIPTION, and the only one: no document is open here.
         workspace.watch(Resource.of(CgPath.parse(PROJECT + ":")), true).onChanged
                 .connect(heard::addAll);

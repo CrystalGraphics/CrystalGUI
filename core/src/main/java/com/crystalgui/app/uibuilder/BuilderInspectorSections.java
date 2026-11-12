@@ -861,6 +861,7 @@ public final class BuilderInspectorSections {
     }
 
     /** One untouched instance per kind, what "set" is measured against. */
+    // Threads: guarded by its own monitor (pristineOf).
     private static final Map<Name, UIElement> PRISTINE = new HashMap<>();
 
     /**
@@ -873,7 +874,9 @@ public final class BuilderInspectorSections {
     private static UIElement pristineOf(UIElement node) {
         Name kind = node.name();
         if (!UIElementRegistry.isBuildable(kind)) return null;
-        return PRISTINE.computeIfAbsent(kind, UIElementRegistry::create);
+        synchronized (PRISTINE) {
+            return PRISTINE.computeIfAbsent(kind, UIElementRegistry::create);
+        }
     }
 
     /**

@@ -10,7 +10,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgui.core.undo.UndoScope;
 import com.crystalgui.core.undo.UndoStack;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -221,14 +221,14 @@ public class ProjectFileTree extends UIElement
     }
 
     /** The workspace this tree is a view of — what a row asks when it wants a symbol. */
-    private final Workspace workspace;
+    private final WorkspaceClient workspace;
 
-    public Workspace workspace() {
+    public WorkspaceClient workspace() {
         return workspace;
     }
 
     /** @param source and {@code decorations} are the WORKBENCH's; see the field note. */
-    public ProjectFileTree(Workspace workspace, WorkspaceTreeSource source, FileDecorations decorations) {
+    public ProjectFileTree(WorkspaceClient workspace, WorkspaceTreeSource source, FileDecorations decorations) {
         super(NAME);
         this.workspace = workspace;
         this.source = source;
@@ -542,7 +542,7 @@ public class ProjectFileTree extends UIElement
      * hidden panel deliberately waits. Idempotent, and safe to call from anywhere: a reconnect is not a
      * frame event and arrives whenever the wire happens to move.</p>
      *
-     * @see com.crystalgui.fs.client.Workspace#onDidReconnect
+     * @see com.crystalgui.fs.client.WorkspaceClient#onDidReconnect
      */
     public void markListingsStale() {
         staleListings = true;

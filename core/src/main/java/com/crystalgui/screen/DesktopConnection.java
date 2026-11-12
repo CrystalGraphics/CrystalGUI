@@ -1,9 +1,11 @@
 package com.crystalgui.screen;
 
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgui.core.settings.Preferences;
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopWindowMount;
 import com.crystalgui.fs.client.Workspace;
-import com.crystalgui.net.window.WindowMount;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.ui.dom.UIDocument;
 
@@ -21,7 +23,7 @@ final class DesktopConnection {
     private final UIDocument document;
     private final DesktopWindowMount mount;
     /** Where a server's window is offered first: the primary application's places, else null. On the document. */
-    private final Supplier<WindowMount> preferred;
+    private final Supplier<DesktopWindowMount.Preferred> preferred;
 
     /** What the render thread last posted. Render thread. */
     @Nullable
@@ -31,11 +33,14 @@ final class DesktopConnection {
 
     /** The document's. Volatile: a host reads them from its own thread. */
     @Nullable
-    private volatile Workspace workspace;
+    private volatile Workspace service;
+    @Nullable
+    private volatile WorkspaceClient workspace;
     @Nullable
     private volatile CgProtocolConnection<Object> bound;
 
-    DesktopConnection(UIDocument document, DesktopWindowMount mount, Supplier<WindowMount> preferred) {
+    DesktopConnection(UIDocument document, DesktopWindowMount mount,
+                      Supplier<DesktopWindowMount.Preferred> preferred) {
         this.document = document;
         this.mount = mount;
         this.preferred = preferred;
@@ -43,7 +48,9 @@ final class DesktopConnection {
 
     /** Posts to the document what moved since the last frame: the connection, the language. Render thread. */
     void frame(GameState game) {
-        Locale locale = game.locale();
+        // The user's language wins; the platform's is the answer until they choose one.
+        Locale chosen = Preferences.current().locale();
+        Locale locale = chosen != null ? chosen : game.locale();
         if (!locale.equals(postedLocale)) {
             postedLocale = locale;
             document.execute(() -> FontFamilyCache.useLocale(locale));
@@ -60,15 +67,16 @@ final class DesktopConnection {
      */
     void bind(@Nullable CgProtocolConnection<Object> live) {
         if (live != null) {
-            Workspace current = workspace;
+            WorkspaceClient current = workspace;
             if (current == null) {
                 // AN ATTACHMENT ON THE CONNECTION, not a constructor: this wire is shared, and a second workspace on it
                 // would be a second subscriber to fs.changed. A backup store is given by the application once the
                 // server has greeted, when which workspace this is can be known.
-                workspace = Workspace.of(live);
+                service = Workspace.of(live).useStores(Desktop.of(document)::workspaceStore);
+                workspace = service.client("Desktop");
                 bound = live;
             } else if (bound != live) {
-                current.rebind(live);
+                service.rebind(live);
                 bound = live;
             }
         }
@@ -79,7 +87,7 @@ final class DesktopConnection {
 
     /** The workspace on the client's connection; null before one was bound. */
     @Nullable
-    Workspace workspace() {
+    WorkspaceClient workspace() {
         return workspace;
     }
 

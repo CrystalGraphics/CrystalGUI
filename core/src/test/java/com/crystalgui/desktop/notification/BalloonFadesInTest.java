@@ -1,8 +1,8 @@
-package com.crystalgui.workbench.chrome.notification;
+package com.crystalgui.desktop.notification;
 
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.core.notify.Notification;
-import com.crystalgui.core.notify.Notifications;
+import com.crystalgui.core.notify.NotificationService;
 import com.crystalgui.ui.dom.UIElement;
 
 import org.junit.Test;
@@ -30,13 +30,15 @@ public class BalloonFadesInTest extends UiDocumentTestBase {
 
     @Test
     public void aBalloonRaisedBeforeTheFrameIsStillTransparentDuringIt() {
+        NotificationService service = new NotificationService();
+        NotificationService.install(service, () -> service, () -> null);
         NotificationBalloons layer = new NotificationBalloons();
         document.append(layer);
         frame();
 
         // RAISED BETWEEN FRAMES, which is where off-thread work lands: JobScheduler drains at the top of
         // the frame, so this is ahead of the animation phase rather than after it.
-        Notifications.show(Notification.info("File Changed").withDetail("a.java was changed"));
+        service.show(Notification.info("File Changed").withDetail("a.java was changed"));
         frame();
 
         UIElement card = cardIn(layer);

@@ -7,7 +7,7 @@ import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.diff.ConflictDialog;
@@ -45,7 +45,7 @@ public final class ExplorerBinding {
      *
      * <p>Runs whenever the listing changes rather than once, because it can change: a reconnect
      * re-lists, and a project opened or closed on the server moves the set. Re-taking a root already
-     * watched would cost a second subscription — {@code Workspace.watch} would hand back the same
+     * watched would cost a second subscription — {@code WorkspaceClient.watch} would hand back the same
      * object with its holder count bumped, and this would add a second listener to it — so a root
      * already in the map is left alone.</p>
      */
@@ -59,7 +59,7 @@ public final class ExplorerBinding {
 
         for (CgPath root : roots) {
             if (workbench.rootWatches.containsKey(root)) continue;
-            Workspace.Watch watch = workbench.workspace.watch(Resource.of(root), true);
+            WorkspaceClient.Watch watch = workbench.workspace.watch(Resource.of(root), true);
             Connection listener = watch.onChanged.connect(changes -> {
                 for (FsMessages.FileChange change : changes) {
                     CgPath moved = CgPath.parse(change.path());

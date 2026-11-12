@@ -71,7 +71,7 @@ com/crystalgui/app/frameprofiler/BuffersTab
   field public,static,final PAGE I
   field public,static,final SITES_CLASS Ljava/lang/String;
   field public,static,final STATUS_CLASS Ljava/lang/String;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public sites ()Lcom/crystalgui/widget/collection/table/TableView;
   method public statusText ()Ljava/lang/String;
 com/crystalgui/app/frameprofiler/CallTreeTab
@@ -203,9 +203,9 @@ com/crystalgui/app/frameprofiler/FrameProfiler
   field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
   field public,static,final OPEN_COMMAND Ljava/lang/String;
   field public,static,final WINDOW_KEY Ljava/lang/String;
-  method public,static open (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/window/WindowFrame;
-  method public,static openAt (Lcom/crystalgui/ui/dom/UIDocument;J)Lcom/crystalgui/desktop/window/WindowFrame;
-  method public,static openOn (Lcom/crystalgui/desktop/Desktop;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public,static open (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public,static openAt (Lcom/crystalgui/ui/dom/UIDocument;J)Lcom/crystalgui/desktop/app/AppWindow;
+  method public,static openOn (Lcom/crystalgui/desktop/Desktop;)Lcom/crystalgui/desktop/app/AppWindow;
   method public,static register ()V
   method public,static resetForTesting ()V
 com/crystalgui/app/frameprofiler/FrameProfilerExtension
@@ -240,7 +240,7 @@ com/crystalgui/app/frameprofiler/FrameProfilerPanel
   field public,static,final SPACER_CLASS Ljava/lang/String;
   field public,static,final STATS_CLASS Ljava/lang/String;
   field public,static,final TOOLBAR_CLASS Ljava/lang/String;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public buffers ()Lcom/crystalgui/app/frameprofiler/BuffersTab;
   method public callTree ()Lcom/crystalgui/app/frameprofiler/CallTreeTab;
   method public callTreeTab ()Lcom/crystalgui/widget/layout/Tab;
@@ -303,6 +303,7 @@ com/crystalgui/app/frameprofiler/ProfilerModel
   field public,static,final MAX_HINT_FRAMES I
   field public,static,final VIEWER Lcom/crystalgraphics/trace/CgTraceChannel;
   method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public channelNames ()Ljava/util/List;
   method public comparableFrom ()I
   method public compare ()Ljava/util/List;
@@ -415,18 +416,20 @@ com/crystalgui/app/frameprofiler/ProfilerSettings
   field public,static,final STOP_AFTER_MS Lcom/crystalgui/core/settings/Setting;
   field public,static,final TARGET Lcom/crystalgui/core/settings/Setting;
   field public,static,final ZONES_PER_FRAME Lcom/crystalgui/core/settings/Setting;
+  method public <init> ()V
+  method public atLaunch ()V
+  method public budgetNanos ()J
+  method public channels ()Ljava/util/List;
+  method public firstFrames ()I
+  method public frames ()I
+  method public get (Lcom/crystalgui/core/settings/Setting;)Ljava/lang/Object;
+  method public refreshSeconds ()F
+  method public set (Lcom/crystalgui/core/settings/Setting;Ljava/lang/Object;)V
+  method public store ()Lcom/crystalgui/core/settings/Settings;
+  method public useStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
+  method public zonesPerFrame ()I
   method public,static all ()Ljava/util/List;
-  method public,static atLaunch (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
-  method public,static budgetNanos ()J
-  method public,static channels ()Ljava/util/List;
-  method public,static firstFrames ()I
-  method public,static frames ()I
-  method public,static get (Lcom/crystalgui/core/settings/Setting;)Ljava/lang/Object;
-  method public,static refreshSeconds ()F
-  method public,static set (Lcom/crystalgui/core/settings/Setting;Ljava/lang/Object;)V
-  method public,static store ()Lcom/crystalgui/core/settings/Settings;
-  method public,static useStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
-  method public,static zonesPerFrame ()I
+  method public,static of (Lcom/crystalgui/desktop/Desktop;)Lcom/crystalgui/app/frameprofiler/ProfilerSettings;
 com/crystalgui/app/frameprofiler/ProfilerSettings$Section
   access public,final,record
   extends java/lang/Record
@@ -444,7 +447,7 @@ com/crystalgui/app/frameprofiler/ProfilerSettingsPage
   field public,static,final SUMMARY_CLASS Ljava/lang/String;
   field public,static,final TITLES_CLASS Ljava/lang/String;
   field public,static,final TITLE_CLASS Ljava/lang/String;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/app/frameprofiler/ProfilerSettings;)V
   method public doneButton ()Lcom/crystalgui/widget/control/Button;
   method public onDone (Ljava/lang/Runnable;)Lcom/crystalgui/app/frameprofiler/ProfilerSettingsPage;
   method public panel ()Lcom/crystalgui/widget/config/ConfiguratorPanel;
@@ -2913,7 +2916,6 @@ com/crystalgui/app/vfxlab/VfxLab
   method public delete ()V
   method public drawViewport (II)V
   method public render (D)V
-  method public,static openOn (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/app/vfxlab/VfxLab;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/core/CrystalGuiCore
   access public
   extends java/lang/Object
@@ -3088,16 +3090,15 @@ com/crystalgui/core/attribute/AttributeCarrier
   extends java/lang/Object
   method public,abstract copyAttributes ()Lcom/crystalgui/core/attribute/AttributeSet;
   method public,abstract pasteAttributes (Lcom/crystalgui/core/attribute/AttributeSet;)V
-com/crystalgui/core/attribute/AttributeClipboard
+com/crystalgui/core/attribute/AttributeClip
   access public,final
   extends java/lang/Object
-  method public,static clear ()V
-  method public,static hasSomething ()Z
-  method public,static pending (Ljava/lang/String;)Lcom/crystalgui/core/attribute/AttributeSet;
-  method public,static put (Lcom/crystalgui/core/attribute/AttributeSet;)V
-  method public,static remember (Lcom/crystalgui/core/attribute/AttributeSet;)V
-  method public,static remembered (Lcom/crystalgui/core/attribute/AttributeSet;)Lcom/crystalgui/core/attribute/AttributeSet;
-  method public,static remembersAChoice ()Z
+  method public accepts (Ljava/lang/String;)Z
+  method public attributes ()Lcom/crystalgui/core/attribute/AttributeSet;
+  method public remember (Lcom/crystalgui/core/attribute/AttributeSet;)V
+  method public remembered ()Lcom/crystalgui/core/attribute/AttributeSet;
+  method public remembersAChoice ()Z
+  method public,static of (Lcom/crystalgui/core/attribute/AttributeSet;)Lcom/crystalgui/core/attribute/AttributeClip;
 com/crystalgui/core/attribute/AttributeSet
   access public,final
   extends java/lang/Object
@@ -3849,6 +3850,7 @@ com/crystalgui/core/notify/Notification
   extends java/lang/Object
   field public,static,final DEFAULT_GROUP Ljava/lang/String;
   method public actions ()Ljava/util/List;
+  method public from (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/notify/Notification;
   method public getAttribution ()Ljava/lang/String;
   method public getDetail ()Ljava/lang/String;
   method public getGroupId ()Ljava/lang/String;
@@ -3856,6 +3858,8 @@ com/crystalgui/core/notify/Notification
   method public getNeverShowAgainId ()Ljava/lang/String;
   method public getRepeats ()I
   method public getSeverity ()Lcom/crystalgui/core/notify/Notification$Severity;
+  method public getSourceId ()Ljava/lang/String;
+  method public getSourceName ()Ljava/lang/String;
   method public getTimestamp ()J
   method public inGroup (Ljava/lang/String;)Lcom/crystalgui/core/notify/Notification;
   method public saysTheSameAs (Lcom/crystalgui/core/notify/Notification;)Z
@@ -3921,14 +3925,14 @@ com/crystalgui/core/notify/NotificationEvent$Kind
 com/crystalgui/core/notify/NotificationGroups
   access public,final
   extends java/lang/Object
-  field public,static,final onDidChangeDisplay Lcom/crystalgui/core/async/Broadcast;
-  method public,static displayOf (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationDisplay;
-  method public,static group (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationGroups$Group;
-  method public,static isOverridden (Ljava/lang/String;)Z
-  method public,static register (Ljava/lang/String;Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
-  method public,static registered ()Ljava/util/List;
-  method public,static resetForTesting ()V
-  method public,static setDisplay (Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
+  field public,final onDidChangeDisplay Lcom/crystalgui/core/async/Broadcast;
+  method public <init> ()V
+  method public displayOf (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationDisplay;
+  method public group (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationGroups$Group;
+  method public isOverridden (Ljava/lang/String;)Z
+  method public register (Ljava/lang/String;Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
+  method public registered ()Ljava/util/List;
+  method public setDisplay (Ljava/lang/String;Lcom/crystalgui/core/notify/NotificationDisplay;)V
 com/crystalgui/core/notify/NotificationGroups$Group
   access public,final,record
   extends java/lang/Record
@@ -3947,26 +3951,39 @@ com/crystalgui/core/notify/NotificationHandle
   method public isOpen ()Z
   method public notification ()Lcom/crystalgui/core/notify/Notification;
   method public updateMessage (Ljava/lang/String;)V
+com/crystalgui/core/notify/NotificationService
+  access public,final
+  extends java/lang/Object
+  field public,final onDidChange Lcom/crystalgui/core/async/Broadcast;
+  field public,final onDidChangeUnread Lcom/crystalgui/core/async/Broadcast;
+  field public,static,final HISTORY_LIMIT I
+  method public <init> ()V
+  method public clear ()V
+  method public closeFrom (Ljava/lang/String;)V
+  method public error (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public groups ()Lcom/crystalgui/core/notify/NotificationGroups;
+  method public history ()Ljava/util/List;
+  method public historyFrom (Ljava/lang/String;)Ljava/util/List;
+  method public info (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public isEmpty ()Z
+  method public isSuppressed (Ljava/lang/String;)Z
+  method public markAllRead ()V
+  method public resetForTesting ()V
+  method public show (Lcom/crystalgui/core/notify/Notification;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public size ()I
+  method public suppress (Ljava/lang/String;)V
+  method public suppressed ()Ljava/util/List;
+  method public unread ()I
+  method public unsuppress (Ljava/lang/String;)V
+  method public warning (Ljava/lang/String;)Lcom/crystalgui/core/notify/NotificationHandle;
+  method public,static current ()Lcom/crystalgui/core/notify/NotificationService;
+  method public,static install (Lcom/crystalgui/core/notify/NotificationService;Ljava/util/function/Supplier;Ljava/util/function/Supplier;)V
 com/crystalgui/core/notify/Notifications
   access public,final
   extends java/lang/Object
-  field public,static,final HISTORY_LIMIT I
-  field public,static,final onDidChange Lcom/crystalgui/core/async/Broadcast;
-  field public,static,final onDidChangeUnread Lcom/crystalgui/core/async/Broadcast;
-  method public,static clear ()V
   method public,static error (Ljava/lang/String;)V
-  method public,static history ()Ljava/util/List;
   method public,static info (Ljava/lang/String;)V
-  method public,static isEmpty ()Z
-  method public,static isSuppressed (Ljava/lang/String;)Z
-  method public,static markAllRead ()V
-  method public,static resetForTesting ()V
   method public,static show (Lcom/crystalgui/core/notify/Notification;)Lcom/crystalgui/core/notify/NotificationHandle;
-  method public,static size ()I
-  method public,static suppress (Ljava/lang/String;)V
-  method public,static suppressed ()Ljava/util/List;
-  method public,static unread ()I
-  method public,static unsuppress (Ljava/lang/String;)V
   method public,static warning (Ljava/lang/String;)V
 com/crystalgui/core/notify/StatusBar
   access public,final
@@ -4170,6 +4187,38 @@ com/crystalgui/core/search/SearchQuery$Options
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/core/settings/Preferences
+  access public,final
+  extends java/lang/Object
+  field public,static,final LOCALE Ljava/lang/String;
+  field public,static,final PUBLISHED Lcom/crystalgui/core/async/Published;
+  field public,static,final SCHEME Ljava/lang/String;
+  field public,static,final THEME Ljava/lang/String;
+  field public,static,final UI_SCALE Ljava/lang/String;
+  method public asMap ()Ljava/util/Map;
+  method public keymap ()Ljava/util/Map;
+  method public locale ()Ljava/util/Locale;
+  method public raw (Ljava/lang/String;)Ljava/lang/String;
+  method public scheme ()Ljava/lang/String;
+  method public theme ()Ljava/lang/String;
+  method public tokenOverrides ()Ljava/util/Map;
+  method public uiScale ()F
+  method public with (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/settings/Preferences;
+  method public withAll (Ljava/util/Map;)Lcom/crystalgui/core/settings/Preferences;
+  method public withKeys (Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/core/settings/Preferences;
+  method public withLocale (Ljava/util/Locale;)Lcom/crystalgui/core/settings/Preferences;
+  method public withTokenOverride (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/settings/Preferences;
+  method public withUiScale (F)Lcom/crystalgui/core/settings/Preferences;
+  method public,static current ()Lcom/crystalgui/core/settings/Preferences;
+  method public,static declare (Ljava/lang/String;)V
+  method public,static isDesktopWide (Ljava/lang/String;)Z
+  method public,static update (Ljava/util/function/UnaryOperator;)Lcom/crystalgui/core/settings/Preferences;
+com/crystalgui/core/settings/PreferencesStore
+  access public,final
+  extends java/lang/Object
+  field public,static,final FILE Ljava/lang/String;
+  method public,static attach (Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
+  method public,static detachForTesting ()V
 com/crystalgui/core/settings/SetSettingEdit
   access public,final,record
   extends java/lang/Record
@@ -4415,9 +4464,31 @@ com/crystalgui/core/storage/CrystalGuiStorage
   field public,static,final WORKSPACE_CONFIG Ljava/lang/String;
   method public,static configIn (Ljava/nio/file/Path;)Ljava/nio/file/Path;
   method public,static projectsIn (Ljava/nio/file/Path;)Ljava/nio/file/Path;
+com/crystalgui/core/trace/FrameLog
+  access public,final
+  extends java/lang/Object
+  field public,static,final CAPACITY I
+  implements com/crystalgui/core/trace/FrameSource
+  method public <init> ()V
+  method public clear ()V
+  method public committed (JJ)V
+  method public count ()J
+  method public counters (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
+  method public frames ()Ljava/util/List;
+  method public zones (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
+com/crystalgui/core/trace/FrameSource
+  access public,abstract,interface
+  extends java/lang/Object
+  field public,static,final TRACE Lcom/crystalgui/core/trace/FrameSource;
+  method public,abstract clear ()V
+  method public,abstract count ()J
+  method public,abstract counters (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
+  method public,abstract frames ()Ljava/util/List;
+  method public,abstract zones (Lcom/crystalgraphics/trace/CgFrameRecord;)Ljava/util/List;
 com/crystalgui/core/trace/FrameStats
   access public,final
   extends java/lang/Object
+  method public <init> (Lcom/crystalgui/core/trace/FrameSource;)V
   method public bestMs ()F
   method public budgetMs ()F
   method public counts ()Ljava/util/Map;
@@ -4452,7 +4523,7 @@ com/crystalgui/core/trace/FrameStats
   method public spreadHealth ()Lcom/crystalgui/core/trace/FrameStats$Health;
   method public windowSeconds ()F
   method public worstMs ()F
-  method public,static get ()Lcom/crystalgui/core/trace/FrameStats;
+  method public,static compositor ()Lcom/crystalgui/core/trace/FrameStats;
   method public,static isCollecting ()Z
 com/crystalgui/core/trace/FrameStats$Detail
   access public,final,enum
@@ -4611,19 +4682,12 @@ com/crystalgui/desktop/Desktop
   field public,static,final LIVE_CLASS Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final OVERLAY_LAYER_CLASS Ljava/lang/String;
-  field public,static,final SNAP_PREVIEW_CLASS Ljava/lang/String;
   field public,static,final STARTING_CLASS Ljava/lang/String;
   field public,static,final WINDOW_LAYER_CLASS Ljava/lang/String;
   implements com/crystalgui/core/data/DataProvider
   method protected connected ()V
   method protected disconnected ()V
   method public <init> ()V
-  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;Z)V
-  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;ZZ)V
-  method public activateByUser (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public activateTopmost ()V
-  method public activeWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public addWindow (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public addWindow (Lcom/crystalgui/desktop/window/WindowFrame;Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public applications ()Lcom/crystalgui/desktop/app/ApplicationRegistry;
@@ -4631,58 +4695,44 @@ com/crystalgui/desktop/Desktop
   method public cacheRoot ()Ljava/nio/file/Path;
   method public config ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
-  method public deactivate ()V
   method public desktopSettings ()Lcom/crystalgui/desktop/DesktopSettings;
   method public endStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public enterHudMode ()V
-  method public exitHudMode ()V
   method public extensionStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
-  method public fullscreenChanged ()V
   method public getData (Lcom/crystalgui/core/data/DataKey;)Ljava/lang/Object;
-  method public hasPinnedWindows ()Z
-  method public hideSnapPreview ()V
-  method public hideSnapPreviewNow ()V
-  method public isHudMode ()Z
   method public isLive ()Z
-  method public isShowingDesktop ()Z
   method public isStarting (Lcom/crystalgui/desktop/app/ApplicationKind;)Z
   method public isSuspended ()Z
-  method public jointResize (Lcom/crystalgui/desktop/window/WindowFrame;IIFF)V
   method public keyboardMove ()Lcom/crystalgui/desktop/window/WindowKeyboardMove;
   method public leave (Ljava/lang/Runnable;)V
   method public moveModifier ()I
+  method public notifications ()Lcom/crystalgui/core/notify/NotificationService;
   method public openStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public overlayLayer ()Lcom/crystalgui/ui/dom/UIElement;
   method public persistAs (Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public persistTo (Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/lang/String;)Lcom/crystalgui/desktop/Desktop;
   method public pins ()Lcom/crystalgui/desktop/taskbar/TaskbarPins;
-  method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public reattach (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
   method public rememberPlacement (Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public renormaliseStack ()V
   method public reportFailure (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)V
   method public reportFailure (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)V
   method public resetWindowPlacements ()V
   method public resume ()V
   method public savePersistedState ()V
+  method public saveSoon ()V
+  method public service (Ljava/lang/Class;Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public setCoversSurface (Z)V
   method public setMoveModifier (I)Lcom/crystalgui/desktop/Desktop;
-  method public showSnapPreview (Lcom/crystalgui/desktop/window/SnapZones$Zone;Lcom/crystalgui/desktop/window/WindowFrame;)V
-  method public snapFrameTo (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/SnapZones$Zone;)V
+  method public snapPreview ()Lcom/crystalgui/desktop/SnapPreview;
   method public suspend ()V
   method public switcher ()Lcom/crystalgui/desktop/switcher/WindowSwitcher;
   method public taskbar ()Lcom/crystalgui/desktop/taskbar/Taskbar;
-  method public toggleShowDesktop ()V
   method public useConnection (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public useLocalWorld (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
   method public useStorage (Ljava/nio/file/Path;)Lcom/crystalgui/desktop/Desktop;
   method public useWorkspace (Ljava/util/function/Supplier;)Lcom/crystalgui/desktop/Desktop;
-  method public visibleWindows ()Ljava/util/List;
   method public windowLayer ()Lcom/crystalgui/ui/dom/UIElement;
-  method public windows ()Ljava/util/List;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public windowManager ()Lcom/crystalgui/desktop/manager/WindowManager;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public workspaceStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public,static animationsEnabled ()Z
   method public,static ifPresent (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/desktop/Desktop;
@@ -4713,34 +4763,6 @@ com/crystalgui/desktop/DesktopKinds
   implements com/crystalgui/ui/dom/NodeKinds
   method public <init> ()V
   method public register ()V
-com/crystalgui/desktop/DesktopSession
-  access public,final
-  extends java/lang/Object
-  field public,static,final VERSION I
-  method public <init> (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
-  method public read (Ljava/lang/String;)Ljava/util/List;
-  method public readMruOrder (Ljava/lang/String;)Ljava/util/List;
-  method public readPins (Ljava/lang/String;)Ljava/util/List;
-  method public save (Ljava/lang/String;)V
-  method public toJson ()Ljava/lang/String;
-  method public,static ahead ()V
-  method public,static fileNameFor (Ljava/lang/String;)Ljava/lang/String;
-com/crystalgui/desktop/DesktopSession$Placement
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/lang/String;FFFFZZLjava/lang/String;)V
-  method public app ()Ljava/lang/String;
-  method public height ()F
-  method public hidden ()Z
-  method public isUsable ()Z
-  method public key ()Ljava/lang/String;
-  method public left ()F
-  method public maximized ()Z
-  method public top ()F
-  method public width ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
 com/crystalgui/desktop/DesktopSettings
   access public,final
   extends java/lang/Object
@@ -4755,8 +4777,113 @@ com/crystalgui/desktop/DesktopWindowMount
   extends java/lang/Object
   implements com/crystalgui/net/window/WindowMount
   method public <init> (Lcom/crystalgui/ui/dom/UIDocument;)V
-  method public bind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/net/window/WindowMount;)V
+  method public <init> (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Supplier;)V
+  method public bind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/desktop/DesktopWindowMount$Preferred;)V
   method public mount (Lcom/crystalgui/net/window/ClientWindowContext;)Lcom/crystalgui/net/window/WindowMount$MountedWindow;
+com/crystalgui/desktop/DesktopWindowMount$Preferred
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Lcom/crystalgui/net/window/WindowMount;Lcom/crystalgui/desktop/app/AppDocument;)V
+  method public document ()Lcom/crystalgui/desktop/app/AppDocument;
+  method public mount ()Lcom/crystalgui/net/window/WindowMount;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/desktop/SnapPreview
+  access public,final
+  extends java/lang/Object
+  field public,static,final CLASS Ljava/lang/String;
+  method public hide ()V
+  method public hideNow ()V
+  method public isShowing ()Z
+  method public show (Lcom/crystalgui/desktop/window/SnapZones$Zone;Lcom/crystalgui/desktop/window/WindowFrame;)V
+com/crystalgui/desktop/app/AppContext
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;Ljava/util/List;)V
+  method public <init> (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;Ljava/util/List;Lcom/crystalgui/desktop/app/AppDocument;)V
+  method public cache ()Ljava/nio/file/Path;
+  method public desktop ()Lcom/crystalgui/desktop/Desktop;
+  method public document ()Lcom/crystalgui/desktop/app/AppDocument;
+  method public first ()Lcom/crystalgui/fs/Resource;
+  method public kind ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public open ()Ljava/util/List;
+  method public restoreState (Ljava/util/function/Consumer;)Z
+  method public saveState (Ljava/lang/String;)V
+  method public storage ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
+  method public windows ()Lcom/crystalgui/desktop/app/AppWindows;
+  method public withDocument (Lcom/crystalgui/desktop/app/AppDocument;)Lcom/crystalgui/desktop/app/AppContext;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static of (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/AppContext;
+com/crystalgui/desktop/app/AppDocument
+  access public,final
+  extends java/lang/Object
+  method public <init> (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/desktop/app/AppDocument$Backend;)V
+  method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
+  method public callShell (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Supplier;)Ljava/lang/Object;
+  method public close ()V
+  method public committed ()V
+  method public dismissPopups ()V
+  method public document ()Lcom/crystalgui/ui/dom/UIDocument;
+  method public execute (Ljava/lang/Runnable;)V
+  method public openClient (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/ClientRoot;
+  method public popups ()Lcom/crystalgui/desktop/app/PopupLayer;
+  method public portalTo (Lcom/crystalgui/desktop/app/ClientRoot;)Lcom/crystalgui/desktop/app/ClientPortal;
+  method public removeClient (Lcom/crystalgui/desktop/app/ClientRoot;)V
+  method public run (Ljava/lang/Runnable;)V
+  method public showPopupsIn (Lcom/crystalgui/ui/dom/UIDocument;)V
+com/crystalgui/desktop/app/AppDocument$Backend
+  access public,abstract,interface
+  extends java/lang/Object
+  implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
+  implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
+  method public,abstract close ()V
+com/crystalgui/desktop/app/AppDocuments
+  access public,abstract,interface
+  extends java/lang/Object
+  method public openServer (Ljava/lang/String;)Lcom/crystalgui/desktop/app/AppDocument;
+  method public,abstract open (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/app/AppDocument;
+com/crystalgui/desktop/app/AppWindow
+  access public,final
+  extends java/lang/Object
+  method public activate ()V
+  method public addSettingsAction (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow$CaptionAction;
+  method public close ()Z
+  method public content ()Lcom/crystalgui/ui/dom/UIElement;
+  method public destroy ()V
+  method public equals (Ljava/lang/Object;)Z
+  method public execute (Ljava/lang/Runnable;)V
+  method public frame ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public hashCode ()I
+  method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public isActive ()Z
+  method public maximise ()V
+  method public minimise ()V
+  method public moveTo (FF)Lcom/crystalgui/desktop/app/AppWindow;
+  method public onCloseRequested (Ljava/util/function/BooleanSupplier;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public onClosed (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public openOwned (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public resizeTo (FF)Lcom/crystalgui/desktop/app/AppWindow;
+  method public restore ()V
+  method public setContent (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public state ()Lcom/crystalgui/core/window/WindowState;
+  method public title ()Ljava/lang/String;
+  method public title (Ljava/lang/String;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public,static of (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/app/AppWindow;
+com/crystalgui/desktop/app/AppWindow$CaptionAction
+  access public,final
+  extends java/lang/Object
+  method public lit (Z)V
+com/crystalgui/desktop/app/AppWindows
+  access public,final
+  extends java/lang/Object
+  method public active ()Lcom/crystalgui/desktop/app/AppWindow;
+  method public all ()Ljava/util/List;
+  method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public,static addFloat (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/desktop/app/Application
   access public,abstract,interface
   extends java/lang/Object
@@ -4764,15 +4891,17 @@ com/crystalgui/desktop/app/Application
   method public storageScope ()Ljava/lang/String;
   method public,abstract activate ()V
   method public,abstract kind ()Lcom/crystalgui/desktop/app/ApplicationKind;
-  method public,abstract mainWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public,abstract mainWindow ()Lcom/crystalgui/desktop/app/AppWindow;
   method public,abstract open (Lcom/crystalgui/fs/Resource;)Z
 com/crystalgui/desktop/app/ApplicationKind
   access public,final
   extends java/lang/Object
+  field public,static,final DATA_KEY Lcom/crystalgui/core/data/DataKey;
   method public action (Ljava/util/function/Consumer;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public autostart (Ljava/util/function/Consumer;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public displayName ()Ljava/lang/String;
   method public handles (Lcom/crystalgui/fs/Resource;)Z
+  method public hasSeparateDocument ()Z
   method public hasStartingWindow ()Z
   method public icon ()Ljava/lang/String;
   method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
@@ -4785,15 +4914,25 @@ com/crystalgui/desktop/app/ApplicationKind
   method public opens ([Lcom/crystalgui/document/DocumentKind$Matcher;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public preventPinning ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public requiresConnection ()Z
+  method public separateDocument ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public singleInstance ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public standalone ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public startingWindow ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public threading ()Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
+  method public threading (Lcom/crystalgui/desktop/app/ApplicationKind$Threading;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public windowFraction ()F
   method public windowFraction (F)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public windowHeight ()F
   method public windowSize (FF)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public windowWidth ()F
   method public,static of (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
+com/crystalgui/desktop/app/ApplicationKind$Threading
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final INLINE Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
+  field public,static,final SEQUENCED Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
+  method public,static values ()[Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
 com/crystalgui/desktop/app/ApplicationKinds
   access public,abstract,interface
   extends java/lang/Object
@@ -4803,45 +4942,97 @@ com/crystalgui/desktop/app/ApplicationRegistry
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
-  method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
+  method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
   method public autostart ()V
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public dispose (Lcom/crystalgui/desktop/app/Application;)V
+  method public documentOf (Lcom/crystalgui/desktop/app/Application;)Lcom/crystalgui/desktop/app/AppDocument;
+  method public expect (Ljava/util/List;)V
   method public forget (Lcom/crystalgui/desktop/app/Application;)V
   method public handlerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/desktop/app/ApplicationKind;
   method public install (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;
   method public installPrimary (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/core/dispose/Disposable;
   method public installed ()Ljava/util/List;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/LaunchContext;)Lcom/crystalgui/desktop/app/Application;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
-  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
-  method public launchInStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/Workspace;)V
-  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
-  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
-  method public openPrimary (Lcom/crystalgui/fs/client/Workspace;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/AppContext;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
+  method public launch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
+  method public launchInStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)V
+  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/desktop/app/Application;
+  method public open (Lcom/crystalgui/fs/Resource;Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/Application;
+  method public openPrimary (Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
   method public primary ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public restoreSession (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public running ()Ljava/util/List;
   method public running (Lcom/crystalgui/desktop/app/ApplicationKind;)Ljava/util/List;
-com/crystalgui/desktop/app/LaunchContext
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;Ljava/util/List;)V
-  method public cache ()Ljava/nio/file/Path;
-  method public desktop ()Lcom/crystalgui/desktop/Desktop;
-  method public first ()Lcom/crystalgui/fs/Resource;
-  method public kind ()Lcom/crystalgui/desktop/app/ApplicationKind;
-  method public open ()Ljava/util/List;
-  method public storage ()Lcom/crystalgraphics/storage/config/CgConfigStorage;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static of (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgraphics/storage/config/CgConfigStorage;Ljava/nio/file/Path;)Lcom/crystalgui/desktop/app/LaunchContext;
+  method public sessionApps ()Ljava/util/List;
+  method public useDocuments (Lcom/crystalgui/desktop/app/AppDocuments;)V
+com/crystalgui/desktop/app/ClientPortal
+  access public,final
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  method public application ()Lcom/crystalgui/desktop/app/AppDocument;
+  method public client ()Lcom/crystalgui/desktop/app/ClientRoot;
+  method public paintContent (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
+com/crystalgui/desktop/app/ClientRoot
+  access public,final
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  field public,static,final SHEET Ljava/lang/String;
+  implements com/crystalgui/render/Surface$Owner
+  method public <init> ()V
+  method public content ()Lcom/crystalgui/ui/dom/UIElement;
+  method public keepsSurface ()Z
+  method public onChanged (Ljava/lang/Runnable;)V
+  method public picture ()Lcom/crystalgui/render/Surface;
+  method public setClientSize (FF)V
+  method public setContent (Lcom/crystalgui/ui/dom/UIElement;)V
+  method public surface (Lcom/crystalgui/render/Surface;)V
+com/crystalgui/desktop/app/PopupLayer
+  access public,final
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final SHEET Ljava/lang/String;
+  implements com/crystalgui/render/Surface$Owner
+  method public <init> ()V
+  method public keepsSurface ()Z
+  method public occupied ()[F
+  method public onChanged (Ljava/lang/Runnable;)V
+  method public picture ()Lcom/crystalgui/render/Surface;
+  method public surface (Lcom/crystalgui/render/Surface;)V
 com/crystalgui/desktop/app/ServerWindowHost
   access public,abstract,interface
   extends java/lang/Object
   method public,abstract windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/net/window/WindowMount;
+com/crystalgui/desktop/app/WindowSpec
+  access public,final
+  extends java/lang/Object
+  method public at (FF)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public background ()Lcom/crystalgui/desktop/app/WindowSpec;
+  method public content ()Lcom/crystalgui/ui/dom/UIElement;
+  method public content (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public height ()F
+  method public hideOnClose ()Lcom/crystalgui/desktop/app/WindowSpec;
+  method public icon ()Ljava/lang/String;
+  method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public key ()Ljava/lang/String;
+  method public key (Ljava/lang/String;)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public left ()F
+  method public ownedBy (Lcom/crystalgui/desktop/app/AppWindow;)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public owner ()Lcom/crystalgui/desktop/app/AppWindow;
+  method public pinned ()Z
+  method public pinned (Z)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public placed ()Z
+  method public policy ()Lcom/crystalgui/core/window/WindowPolicy;
+  method public policy (Lcom/crystalgui/core/window/WindowPolicy;)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public size (FF)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public takesFocus ()Z
+  method public title ()Ljava/lang/String;
+  method public titleShown ()Z
+  method public titleShown (Z)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public top ()F
+  method public width ()F
+  method public,static titled (Ljava/lang/String;)Lcom/crystalgui/desktop/app/WindowSpec;
 com/crystalgui/desktop/dialog/FailureWindow
   access public,final
   extends java/lang/Object
@@ -4879,6 +5070,149 @@ com/crystalgui/desktop/launcher/LauncherButton
   method public <init> ()V
   method public launcher ()Lcom/crystalgui/desktop/launcher/Launcher;
   method public toggle ()V
+com/crystalgui/desktop/manager/SessionRecord
+  access public,final
+  extends java/lang/Object
+  field public,static,final VERSION I
+  method public <init> (Lcom/crystalgui/desktop/manager/WindowManager;Lcom/crystalgraphics/storage/config/CgConfigStorage;)V
+  method public read (Ljava/lang/String;)Ljava/util/List;
+  method public readApplications (Ljava/lang/String;)Ljava/util/List;
+  method public readMruOrder (Ljava/lang/String;)Ljava/util/List;
+  method public readPins (Ljava/lang/String;)Ljava/util/List;
+  method public save (Ljava/lang/String;Ljava/util/Collection;Ljava/util/List;Ljava/util/List;)V
+  method public toJson (Ljava/util/Collection;Ljava/util/List;Ljava/util/List;)Ljava/lang/String;
+  method public,static ahead ()V
+  method public,static fileNameFor (Ljava/lang/String;)Ljava/lang/String;
+  method public,static isPersistable (Lcom/crystalgui/desktop/window/WindowFrame;)Z
+com/crystalgui/desktop/manager/SessionRecord$App
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;Ljava/lang/String;)V
+  method public id ()Ljava/lang/String;
+  method public state ()Ljava/lang/String;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/desktop/manager/SessionRecord$Placement
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;FFFFZZLjava/lang/String;)V
+  method public app ()Ljava/lang/String;
+  method public height ()F
+  method public hidden ()Z
+  method public isUsable ()Z
+  method public key ()Ljava/lang/String;
+  method public left ()F
+  method public maximized ()Z
+  method public shown ()Lcom/crystalgui/desktop/manager/SessionRecord$Placement;
+  method public top ()F
+  method public width ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static of (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/manager/SessionRecord$Placement;
+com/crystalgui/desktop/manager/WindowManager
+  access public,final
+  extends java/lang/Object
+  field public,static,final DIALOG_BAND I
+  field public,static,final PINNED_BAND I
+  method public <init> (Lcom/crystalgui/desktop/manager/WindowManager$Shell;)V
+  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;Z)V
+  method public activate (Lcom/crystalgui/desktop/window/WindowFrame;ZZ)V
+  method public activateByUser (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public activateTopmost ()V
+  method public activeWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public deactivate ()V
+  method public enterHudMode ()V
+  method public exitHudMode ()V
+  method public fullscreenChanged ()V
+  method public hasPinnedWindows ()Z
+  method public isHudMode ()Z
+  method public isShowingDesktop ()Z
+  method public jointResize (Lcom/crystalgui/desktop/window/WindowFrame;IIFF)V
+  method public placeByCascade (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public raise (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public registry ()Lcom/crystalgui/desktop/window/WindowRegistry;
+  method public renormaliseStack ()V
+  method public sizeByDefault (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public snapFrameTo (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/desktop/window/SnapZones$Zone;)V
+  method public splitX ()F
+  method public splitY ()F
+  method public stackTop ()I
+  method public toggleShowDesktop ()V
+  method public visibleWindows ()Ljava/util/List;
+  method public windows ()Ljava/util/List;
+com/crystalgui/desktop/manager/WindowManager$Shell
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract document ()Lcom/crystalgui/ui/dom/UIDocument;
+  method public,abstract setTaskbarVisible (Z)V
+  method public,abstract visibleFrames ()Ljava/util/List;
+  method public,abstract workArea ()Lcom/crystalgui/ui/box/Box;
+com/crystalgui/desktop/manager/WindowRecord
+  access public,final
+  extends java/lang/Object
+  method public <init> (Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public application ()Lcom/crystalgui/desktop/app/ApplicationKind;
+  method public application (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public applicationMain ()Z
+  method public applicationMain (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public badge ()Ljava/lang/String;
+  method public badge (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public demandingAttention ()Z
+  method public demandingAttention (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public frame ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public fullscreen ()Z
+  method public fullscreen (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public iconName ()Ljava/lang/String;
+  method public iconName (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public key ()Ljava/lang/String;
+  method public key (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public maximized ()Z
+  method public maximized (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public maximizedBeforeFullscreen ()Z
+  method public maximizedBeforeFullscreen (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public owner ()Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public owner (Lcom/crystalgui/desktop/manager/WindowRecord;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public pinned ()Z
+  method public pinned (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public placed ()Z
+  method public placed (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public placedLeft ()F
+  method public placedLeft (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public placedTop ()F
+  method public placedTop (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public policy ()Lcom/crystalgui/core/window/WindowPolicy;
+  method public policy (Lcom/crystalgui/core/window/WindowPolicy;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public progress ()F
+  method public progress (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreHeight ()F
+  method public restoreHeight (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreLeft ()F
+  method public restoreLeft (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreTop ()F
+  method public restoreTop (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public restoreWidth ()F
+  method public restoreWidth (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public sized ()Z
+  method public sized (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public snappedZone ()Lcom/crystalgui/desktop/window/SnapZones$Zone;
+  method public snappedZone (Lcom/crystalgui/desktop/window/SnapZones$Zone;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public stackOrder ()I
+  method public stackOrder (I)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public state ()Lcom/crystalgui/core/window/WindowState;
+  method public state (Lcom/crystalgui/core/window/WindowState;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public title ()Ljava/lang/String;
+  method public title (Ljava/lang/String;)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public titleShown ()Z
+  method public titleShown (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public toolWindow ()Z
+  method public toolWindow (Z)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public wantedLeft ()F
+  method public wantedLeft (F)Lcom/crystalgui/desktop/manager/WindowRecord;
+  method public wantedTop ()F
+  method public wantedTop (F)Lcom/crystalgui/desktop/manager/WindowRecord;
 com/crystalgui/desktop/motion/BoxFlights
   access public,final
   extends java/lang/Object
@@ -4927,6 +5261,41 @@ com/crystalgui/desktop/motion/WindowMotion
   extends java/lang/Object
   implements com/crystalgui/ui/service/Animation$Hook
   method public,abstract cancel ()V
+com/crystalgui/desktop/notification/NotificationBalloons
+  access public
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final BALLOON_CLASS Ljava/lang/String;
+  field public,static,final FADE_MS F
+  field public,static,final HIDDEN_CLASS Ljava/lang/String;
+  field public,static,final LAYER_CLASS Ljava/lang/String;
+  field public,static,final LINGER_MS F
+  field public,static,final MAX_VISIBLE I
+  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  method protected connected ()V
+  method public <init> ()V
+  method public liveCount ()I
+com/crystalgui/desktop/notification/NotificationCard
+  access public
+  extends com/crystalgui/ui/dom/UIElement
+  field public,static,final ACTIONS_CLASS Ljava/lang/String;
+  field public,static,final ACTION_CLASS Ljava/lang/String;
+  field public,static,final ACTION_SECONDARY_CLASS Ljava/lang/String;
+  field public,static,final ATTRIBUTION_CLASS Ljava/lang/String;
+  field public,static,final ATTRIBUTION_DOT_CLASS Ljava/lang/String;
+  field public,static,final ATTRIBUTION_TEXT_CLASS Ljava/lang/String;
+  field public,static,final CLOSE_CLASS Ljava/lang/String;
+  field public,static,final DETAIL_CLASS Ljava/lang/String;
+  field public,static,final ENTRY_CLASS Ljava/lang/String;
+  field public,static,final ENTRY_HEAD_CLASS Ljava/lang/String;
+  field public,static,final HAS_ACTIONS_CLASS Ljava/lang/String;
+  field public,static,final ICON_CLASS Ljava/lang/String;
+  field public,static,final MESSAGE_CLASS Ljava/lang/String;
+  field public,static,final SEVERITY_PREFIX Ljava/lang/String;
+  field public,static,final TIME_CLASS Ljava/lang/String;
+  method public <init> (Lcom/crystalgui/core/notify/Notification;)V
+  method public notification ()Lcom/crystalgui/core/notify/Notification;
+  method public restate ()V
+  method public withClose (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/notification/NotificationCard;
 com/crystalgui/desktop/switcher/WindowSwitcher
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -5255,6 +5624,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public pressBlocked (Lcom/crystalgui/ui/dom/UIElement;)V
   method public progress ()F
   method public reclamp ()V
+  method public record ()Lcom/crystalgui/desktop/manager/WindowRecord;
   method public recordedHeight ()F
   method public recordedWidth ()F
   method public releaseChrome ()V
@@ -5606,7 +5976,7 @@ com/crystalgui/document/NewDocumentKinds
 com/crystalgui/document/RecentFiles
   access public,final
   extends java/lang/Object
-  field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
+  field public,final onDidChange Lcom/crystalgui/core/async/Broadcast;
   field public,static,final DEFAULT_LIMIT I
   method public <init> ()V
   method public <init> (I)V
@@ -5899,58 +6269,77 @@ com/crystalgui/fs/client/LocalHistory$Entry
 com/crystalgui/fs/client/Workspace
   access public,final
   extends java/lang/Object
+  method public client ()Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public client (Ljava/lang/String;)Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public clientCount ()I
+  method public dispose ()V
+  method public greet ()V
+  method public hasGreeted ()Z
+  method public rebind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)V
+  method public rebind (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)V
+  method public server ()Lcom/crystalgui/fs/protocol/FsHello;
+  method public setStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/fs/client/Workspace;
+  method public useIdentity (Ljava/lang/String;)V
+  method public useStores (Ljava/util/function/Function;)Lcom/crystalgui/fs/client/Workspace;
+  method public,static of (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)Lcom/crystalgui/fs/client/Workspace;
+  method public,static over (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)Lcom/crystalgui/fs/client/Workspace;
+com/crystalgui/fs/client/WorkspaceClient
+  access public,final
+  extends java/lang/Object
   field public,final onDidGreet Lcom/crystalgui/core/signal/Signal$Value;
   field public,final onDidReconnect Lcom/crystalgui/core/signal/Signal$Action;
   implements com/crystalgui/core/dispose/Disposable
-  method public askCapabilities ()Lcom/crystalgraphics/job/reply/CgReply;
   method public backup ()Lcom/crystalgui/fs/client/Backup;
-  method public capabilities ()Lcom/crystalgui/fs/client/Workspace$Capabilities;
+  method public capabilities ()Lcom/crystalgui/fs/client/WorkspaceClient$Capabilities;
   method public dispose ()V
   method public documentKeyStrategy ()Ljava/util/function/UnaryOperator;
   method public files ()Lcom/crystalgui/fs/client/FileOperations;
-  method public greet ()Lcom/crystalgraphics/job/reply/CgReply;
+  method public greet ()V
   method public hasGreeted ()Z
   method public health ()Lcom/crystalgui/fs/client/Health;
   method public history ()Lcom/crystalgui/fs/client/LocalHistory;
   method public isReadOnly (Lcom/crystalgui/fs/Resource;)Z
+  method public name ()Ljava/lang/String;
   method public onHome (Ljava/lang/Runnable;)Z
-  method public presence ()Lcom/crystalgui/fs/client/Workspace$Presence;
+  method public presence ()Lcom/crystalgui/fs/client/WorkspaceClient$Presence;
   method public projects ()Lcom/crystalgraphics/job/reply/CgReply;
   method public providerFor (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/fs/client/ContentProvider;
   method public providers ()Ljava/util/List;
   method public read (Lcom/crystalgui/fs/Resource;)Lcom/crystalgraphics/job/reply/CgReply;
   method public rebind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)V
-  method public rebind (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/Workspace$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)V
+  method public rebind (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)V
   method public registerScheme (Ljava/lang/String;Lcom/crystalgui/fs/client/ContentProvider;)Lcom/crystalgui/core/dispose/Disposable;
   method public server ()Lcom/crystalgui/fs/protocol/FsHello;
+  method public service ()Lcom/crystalgui/fs/client/Workspace;
   method public setEditing (Lcom/crystalgui/fs/Resource;Z)Lcom/crystalgraphics/job/reply/CgReply;
-  method public setStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/fs/client/Workspace;
-  method public watch (Lcom/crystalgui/fs/Resource;Z)Lcom/crystalgui/fs/client/Workspace$Watch;
-  method public,static of (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)Lcom/crystalgui/fs/client/Workspace;
-  method public,static over (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/Workspace$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)Lcom/crystalgui/fs/client/Workspace;
-com/crystalgui/fs/client/Workspace$Capabilities
+  method public setStorage (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public useIdentity (Ljava/lang/String;)V
+  method public watch (Lcom/crystalgui/fs/Resource;Z)Lcom/crystalgui/fs/client/WorkspaceClient$Watch;
+  method public,static of (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;)Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public,static over (Lcom/crystalgui/fs/client/FsCall$Caller;Lcom/crystalgui/fs/client/WorkspaceClient$Subscriber;Lcom/crystalgraphics/serialization/CgDynamicOps;)Lcom/crystalgui/fs/client/WorkspaceClient;
+com/crystalgui/fs/client/WorkspaceClient$Capabilities
   access public,final
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public caseSensitive ()Z
   method public isValidName (Ljava/lang/String;)Z
   method public mayRead (Lcom/crystalgui/fs/Resource;)Z
   method public mayWrite (Lcom/crystalgui/fs/Resource;)Z
   method public scriptingMode (Lcom/crystalgui/fs/Resource;)Lcom/crystalgui/fs/protocol/ScriptingMode;
   method public sizeTierOf (J)Lcom/crystalgui/fs/protocol/FsHello$SizeTier;
-com/crystalgui/fs/client/Workspace$Presence
+com/crystalgui/fs/client/WorkspaceClient$Presence
   access public,final
   extends java/lang/Object
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
-  method public <init> ()V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public whoElseHasOpen (Lcom/crystalgui/fs/Resource;)Ljava/util/List;
   method public whoIsEditing (Lcom/crystalgui/fs/Resource;)Ljava/util/List;
-com/crystalgui/fs/client/Workspace$Subscriber
+com/crystalgui/fs/client/WorkspaceClient$Subscriber
   access public,abstract,interface
   extends java/lang/Object
   method public,abstract subscribe (Ljava/lang/String;Ljava/util/function/Consumer;)V
-com/crystalgui/fs/client/Workspace$Watch
+com/crystalgui/fs/client/WorkspaceClient$Watch
   access public,final
   extends java/lang/Object
   field public,final onChanged Lcom/crystalgui/core/signal/Signal$Value;
@@ -5968,7 +6357,7 @@ com/crystalgui/fs/client/WorkspaceDocuments
   field public,final onWillSave Ljava/util/List;
   field public,static,final BACKUP_DEBOUNCE_MILLIS J
   implements com/crystalgui/core/dispose/Disposable
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/document/DocumentKinds;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgui/document/DocumentKinds;)V
   method public all ()Ljava/util/List;
   method public dirty ()Ljava/util/List;
   method public discardBackup (Lcom/crystalgui/fs/Resource;)V
@@ -7781,7 +8170,7 @@ com/crystalgui/net/window/ClientScope
   method public qualify (Ljava/lang/String;)Ljava/lang/String;
   method public session ()Lcom/crystalgui/net/ClientUiSession;
   method public window ()Lcom/crystalgui/net/window/ClientWindowContext;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/net/window/ClientWindowContext
   access public,abstract,interface
   extends java/lang/Object
@@ -8145,6 +8534,8 @@ com/crystalgui/render/CgUiRenderer$View
   access public,final
   extends java/lang/Object
   method public close ()V
+  method public frameLog ()Lcom/crystalgui/core/trace/FrameLog;
+  method public frameStats ()Lcom/crystalgui/core/trace/FrameStats;
   method public isClosed ()Z
   method public paintContext ()Lcom/crystalgui/render/CgUiPaintContext;
   method public presenter ()Lcom/crystalgui/render/UiPresenter;
@@ -8262,6 +8653,7 @@ com/crystalgui/render/UiPaintWarmup
 com/crystalgui/render/UiPresenter
   access public,final
   extends java/lang/Object
+  method public composites (Z)V
   method public present (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/render/UiFrame;)V
   method public presentAgain (Lcom/crystalgraphics/render/stage/CgStageFrame;)Z
   method public presented ()Lcom/crystalgui/render/UiFrame;
@@ -8504,7 +8896,7 @@ com/crystalgui/render/texture/CgUiRect
   method public withFill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect;
   method public withFillColor (I)Lcom/crystalgui/render/texture/CgUiRect;
   method public withFillSprite (Lcom/crystalgui/render/texture/CgUiSprite;)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withFillTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect;
+  method public withFillTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect;
   method public,static ofColor (I)Lcom/crystalgui/render/texture/CgUiRect;
 com/crystalgui/render/texture/CgUiRect$Draw
   access public,final
@@ -8518,7 +8910,7 @@ com/crystalgui/render/texture/CgUiRect$Draw
   method public fill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public fillColor (I)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public fillSprite (Lcom/crystalgui/render/texture/CgUiSprite;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public fillTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
+  method public fillTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public radii (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public radius (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public size (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -8548,8 +8940,8 @@ com/crystalgui/render/texture/CgUiRect$Fill$Texture
   access public,final,record
   extends java/lang/Record
   implements com/crystalgui/render/texture/CgUiRect$Fill
-  method public <init> (Lcom/crystalgraphics/gl/texture/CgTexture2D;)V
-  method public texture ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
+  method public <init> (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)V
+  method public texture ()Lcom/crystalgraphics/gpu/resource/CgTexture2D;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
@@ -8603,6 +8995,7 @@ com/crystalgui/render/texture/CgUiShape$Kind
 com/crystalgui/render/texture/CgUiSprite
   access public,final
   extends java/lang/Object
+  field public,static,final PIXELS Lcom/crystalgraphics/gpu/resource/CgTextureSettings;
   method public <init> ()V
   method public borderSumX ()F
   method public borderSumY ()F
@@ -8616,7 +9009,7 @@ com/crystalgui/render/texture/CgUiSprite
   method public getBorderTop ()F
   method public getRepeatX ()Lcom/crystalgui/render/texture/CgUiRepeat;
   method public getRepeatY ()Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public getTexture ()Lcom/crystalgraphics/gl/texture/CgTexture2D;
+  method public getTexture ()Lcom/crystalgraphics/gpu/resource/CgTexture2D;
   method public getTint ()I
   method public getU0 ()F
   method public getU1 ()F
@@ -8634,7 +9027,7 @@ com/crystalgui/render/texture/CgUiSprite
   method public setFillCenter (Z)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setRepeat (Lcom/crystalgui/render/texture/CgUiRepeat;Lcom/crystalgui/render/texture/CgUiRepeat;)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setSprite (IIII)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setTexture (Lcom/crystalgraphics/gl/texture/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiSprite;
+  method public setTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setTexture (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setTextureSizeReference (II)Lcom/crystalgui/render/texture/CgUiSprite;
   method public setTint (I)Lcom/crystalgui/render/texture/CgUiSprite;
@@ -8684,7 +9077,6 @@ com/crystalgui/render/texture/asset/FileIconTheme
   method public,static getVariant ()Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;
   method public,static invalidateCache ()V
   method public,static of (Ljava/lang/String;)Lcom/crystalgui/render/texture/asset/FileIconTheme;
-  method public,static setVariant (Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)V
   method public,static toResourcePath (Ljava/lang/String;)Ljava/lang/String;
   method public,static withVariant (Ljava/lang/String;)Ljava/lang/String;
   method public,static withVariant (Ljava/lang/String;Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)Ljava/lang/String;
@@ -9051,7 +9443,7 @@ com/crystalgui/screen/CgUiScreen
   method public,static textInputArea ()[F
   method public,static tick ()V
   method public,static viewport ()Lcom/crystalgui/viewport/CgUiViewport;
-  method public,static workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public,static workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/screen/CgUiScreen$Mode
   access public,final,enum
   extends java/lang/Enum
@@ -9511,6 +9903,22 @@ com/crystalgui/style/ScopeGroup
   method public remove (Lcom/crystalgui/style/StyleScope;)V
   method public scopes (Lcom/crystalgui/style/StyleScope;)Z
   method public styleScopeParent ()Lcom/crystalgui/style/StyleScope;
+com/crystalgui/style/StyleContext
+  access public,final
+  extends java/lang/Object
+  field public,static,final PUBLISHED Lcom/crystalgui/core/async/Published;
+  field public,static,final SCHEME Lcom/crystalgui/style/sheet/StyleSheet;
+  field public,static,final THEME Lcom/crystalgui/style/sheet/StyleSheet;
+  method public <init> (Ljava/util/Map;Lcom/crystalgui/style/sheet/StyleSheet;Lcom/crystalgui/style/sheet/StyleSheet;Ljava/lang/String;Ljava/lang/String;Z)V
+  method public light ()Z
+  method public prepared ()Lcom/crystalgui/style/StyleContext;
+  method public renewed ()Lcom/crystalgui/style/StyleContext;
+  method public resolve (Lcom/crystalgui/style/sheet/StyleSheet;)Lcom/crystalgui/style/sheet/StyleSheet;
+  method public schemeId ()Ljava/lang/String;
+  method public themeId ()Ljava/lang/String;
+  method public variables ()Ljava/util/Map;
+  method public,static current ()Lcom/crystalgui/style/StyleContext;
+  method public,static number ()J
 com/crystalgui/style/StyleEngine
   access public,final
   extends java/lang/Object
@@ -9521,6 +9929,7 @@ com/crystalgui/style/StyleEngine
   method public calculateStyle (F)V
   method public classDescendantKeysFrom (Ljava/lang/String;)Ljava/util/Set;
   method public computedChanged (Lcom/crystalgui/style/Styleable;)V
+  method public effectiveSheets ()Ljava/util/List;
   method public getSheets ()Ljava/util/List;
   method public getSheets (Lcom/crystalgui/style/StyleScope;)Ljava/util/List;
   method public getTransitionEngine ()Lcom/crystalgui/style/transition/TransitionEngine;
@@ -9541,7 +9950,6 @@ com/crystalgui/style/StyleEngine
   method public,static carriesAny (Lcom/crystalgui/style/Styleable;Ljava/util/Set;)Z
   method public,static declarationIndexOf (J)I
   method public,static reloadStylesheets ()I
-  method public,static restyleAllWindows ()I
   method public,static ruleOrderOf (J)I
   method public,static sheetIndexOf (J)I
 com/crystalgui/style/StyleGroup
@@ -10740,16 +11148,18 @@ com/crystalgui/style/sheet/StyleSheet
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT Lcom/crystalgui/style/sheet/StyleSheet;
+  method public bound (Ljava/util/Map;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public candidatesFor (Lcom/crystalgui/style/Styleable;)Ljava/util/List;
   method public classDescendantsFrom (Ljava/lang/String;)Ljava/util/Set;
   method public getOrigin ()Lcom/crystalgui/style/StyleOrigin;
   method public getRules ()Ljava/util/List;
   method public hasUnboundedStateDescendants ()Z
-  method public refillFrom (Lcom/crystalgui/style/sheet/StyleSheet;)V
+  method public sameSourceAs (Lcom/crystalgui/style/sheet/StyleSheet;)Z
   method public source ()Ljava/lang/String;
   method public stateDescendantKeys ()Ljava/util/Set;
   method public stateDescendantsFrom (Ljava/lang/String;)Ljava/util/Set;
   method public stateDescendantsFromAnyAncestor ()Ljava/util/Set;
+  method public usesVariables ()Z
   method public warmValues ()V
   method public,static parse (Ljava/lang/String;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static parse (Ljava/lang/String;Ljava/util/Map;)Lcom/crystalgui/style/sheet/StyleSheet;
@@ -10758,8 +11168,7 @@ com/crystalgui/style/sheet/StyleSheetRegistry
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT_SHEET_PARTS Ljava/util/List;
-  method public,static bindVariables (Ljava/util/Map;)V
-  method public,static boundVariables ()Ljava/util/Map;
+  method public,static loaded ()Ljava/util/Collection;
   method public,static of (Ljava/lang/String;)Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static reloadAll ()I
 com/crystalgui/style/sheet/source/CssEdits
@@ -10866,18 +11275,15 @@ com/crystalgui/style/theme/UiTheme$Role
 com/crystalgui/style/theme/UiThemeManager
   access public,final
   extends java/lang/Object
-  field public,final onChanged Lcom/crystalgui/core/signal/Signal$Action;
   method public activeSchemeId ()Ljava/lang/String;
   method public activeThemeId ()Ljava/lang/String;
   method public installInto (Lcom/crystalgui/style/StyleEngine;)V
   method public overrides ()Ljava/util/Map;
   method public reloadFromDisk ()I
   method public resetForTesting ()V
-  method public schemeSheet ()Lcom/crystalgui/style/sheet/StyleSheet;
   method public setOverrides (Ljava/util/Map;)V
   method public setScheme (Ljava/lang/String;)Z
   method public setTheme (Ljava/lang/String;)Z
-  method public themeSheet ()Lcom/crystalgui/style/sheet/StyleSheet;
   method public,static getInstance ()Lcom/crystalgui/style/theme/UiThemeManager;
 com/crystalgui/style/transition/ActiveTransition
   access public,final,record
@@ -12150,8 +12556,11 @@ com/crystalgui/text/lang/CompletionRecency
   method public <init> ()V
   method public clear ()V
   method public note (Lcom/crystalgui/text/lang/CompletionItem;)V
+  method public snapshot ()Lcom/crystalgui/text/lang/CompletionRecency$Snapshot;
+com/crystalgui/text/lang/CompletionRecency$Snapshot
+  access public,final
+  extends java/lang/Object
   method public rankOf (Lcom/crystalgui/text/lang/CompletionItem;)I
-  method public,static shared ()Lcom/crystalgui/text/lang/CompletionRecency;
 com/crystalgui/text/lang/DeclarationSite
   access public,final,record
   extends java/lang/Record
@@ -13046,7 +13455,6 @@ com/crystalgui/ui/contract/WidgetContracts
 com/crystalgui/ui/data/UiDataKeys
   access public,final
   extends java/lang/Object
-  field public,static,final APPLICATION_KIND Lcom/crystalgui/core/data/DataKey;
   field public,static,final CLIPBOARD Lcom/crystalgui/core/data/DataKey;
   field public,static,final SELECTION Lcom/crystalgui/core/data/DataKey;
   field public,static,final SETTINGS_HOST Lcom/crystalgui/core/data/DataKey;
@@ -13350,6 +13758,7 @@ com/crystalgui/ui/dom/UIDocument
   method public topLayerNode ()Lcom/crystalgui/ui/dom/UIElement;
   method public topLayerNodeIfPresent ()Lcom/crystalgui/ui/dom/UIElement;
   method public update (FF)V
+  method public useTopLayer (Lcom/crystalgui/ui/dom/UIElement;)V
   method public workArea ()Lcom/crystalgui/ui/dom/UIElement;
   method public,static current ()Lcom/crystalgui/ui/dom/UIDocument;
 com/crystalgui/ui/dom/UIDocument$Local
@@ -13526,6 +13935,7 @@ com/crystalgui/ui/dom/UIElementRegistry
   method public,static contractFor (Lcom/crystalgui/ui/dom/Name;)Lcom/crystalgui/ui/dom/NodeContract;
   method public,static create (Lcom/crystalgui/ui/dom/Name;)Lcom/crystalgui/ui/dom/UIElement;
   method public,static describe (Lcom/crystalgui/ui/dom/Name;Lcom/crystalgui/ui/dom/KindInfo;)V
+  method public,static generation ()J
   method public,static infoOf (Lcom/crystalgui/ui/dom/Name;)Lcom/crystalgui/ui/dom/KindInfo;
   method public,static isBuildable (Lcom/crystalgui/ui/dom/Name;)Z
   method public,static isRegistered (Lcom/crystalgui/ui/dom/Name;)Z
@@ -14183,11 +14593,6 @@ com/crystalgui/ui/service/Drag$Listener
   method public onDragCancel ()V
   method public onDragEnd (FF)V
   method public,abstract onDragUpdate (FFFFFF)V
-com/crystalgui/ui/service/DragData
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract as (Ljava/lang/Class;)Ljava/lang/Object;
-  method public,static find (Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;
 com/crystalgui/ui/service/Focus
   access public,final
   extends java/lang/Object
@@ -14307,6 +14712,33 @@ com/crystalgui/ui/service/RotationCursor
   access public,final
   extends java/lang/Object
   method public,static paint (Lcom/crystalgui/render/CgUiPaintContext;FFF)V
+com/crystalgui/ui/service/TransferData
+  access public,abstract,interface
+  extends java/lang/Object
+  method public text ()Ljava/lang/String;
+  method public,abstract as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public,static find (Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;
+  method public,static of ([Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
+com/crystalgui/ui/service/TransferData$Forms
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/ui/service/TransferData
+  method public <init> (Ljava/util/List;)V
+  method public as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public held ()Ljava/util/List;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/ui/service/UiClipboard
+  access public,final
+  extends java/lang/Object
+  method public <init> ()V
+  method public clear ()V
+  method public has (Ljava/lang/Class;)Z
+  method public peek (Ljava/lang/Class;)Ljava/lang/Object;
+  method public put (Lcom/crystalgui/ui/service/TransferData;)V
+  method public read (Ljava/lang/Class;)Lcom/crystalgraphics/job/reply/CgReply;
+  method public,static process ()Lcom/crystalgui/ui/service/UiClipboard;
 com/crystalgui/ui/text/HighlightRegistry
   access public,final
   extends java/lang/Object
@@ -16966,6 +17398,7 @@ com/crystalgui/widget/overlay/PasteAttributesDialog
   field public,static,final SECTION_CLASS Ljava/lang/String;
   field public,static,final VALUE_CLASS Ljava/lang/String;
   method public,static open (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/attribute/AttributeSet;Ljava/lang/String;Ljava/util/function/Consumer;)Lcom/crystalgui/widget/overlay/Dialog;
+  method public,static open (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/core/attribute/AttributeSet;Ljava/lang/String;Ljava/util/function/Consumer;Ljava/util/function/Consumer;)Lcom/crystalgui/widget/overlay/Dialog;
 com/crystalgui/widget/overlay/Popover
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -17292,17 +17725,12 @@ com/crystalgui/widget/surface/edit/Clipboard
   access public,abstract,interface
   extends java/lang/Object
   method public isEmpty (Ljava/lang/Object;)Z
+  method public text (Ljava/lang/Object;)Ljava/lang/String;
+  method public transfer (Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
   method public,abstract copy ()Ljava/lang/Object;
   method public,abstract paste (Ljava/lang/Object;FF)V
   method public,abstract pasteBy (Ljava/lang/Object;FF)V
   method public,abstract type ()Ljava/lang/Class;
-com/crystalgui/widget/surface/edit/Clipboards
-  access public,final
-  extends java/lang/Object
-  method public,static clear ()V
-  method public,static has (Ljava/lang/Class;)Z
-  method public,static store (Ljava/lang/Object;)V
-  method public,static stored (Ljava/lang/Class;)Ljava/lang/Object;
 com/crystalgui/widget/surface/edit/Edits
   access public,final
   extends java/lang/Object
@@ -18572,6 +19000,7 @@ com/crystalgui/widget/texteditor/suggest/CompletionSession
   method public setSelectedIndex (I)V
   method public visibleRows ()Ljava/util/List;
   method public,static open (Lcom/crystalgui/text/TextBuffer;Lcom/crystalgui/text/lang/CompletionProvider;ILcom/crystalgui/text/lang/CompletionProvider$TriggerKind;Ljava/lang/String;)Lcom/crystalgui/widget/texteditor/suggest/CompletionSession;
+  method public,static open (Lcom/crystalgui/text/TextBuffer;Lcom/crystalgui/text/lang/CompletionProvider;ILcom/crystalgui/text/lang/CompletionProvider$TriggerKind;Ljava/lang/String;Lcom/crystalgui/text/lang/CompletionRecency;)Lcom/crystalgui/widget/texteditor/suggest/CompletionSession;
 com/crystalgui/widget/texteditor/suggest/CompletionSession$Row
   access public,final,record
   extends java/lang/Record
@@ -18597,6 +19026,7 @@ com/crystalgui/widget/texteditor/suggest/EditorSuggest
   method public session ()Lcom/crystalgui/widget/texteditor/suggest/CompletionSession;
   method public trigger ()V
   method public updateAnchor ()V
+  method public,static recencyOf (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/text/lang/CompletionRecency;
   method public,static trace (Ljava/lang/String;)V
 com/crystalgui/workbench/DocumentTabs
   access public,final
@@ -18676,7 +19106,7 @@ com/crystalgui/workbench/Workbench
   field public,final rootWatches Ljava/util/Map;
   field public,final saveActions Lcom/crystalgui/workbench/SaveActions;
   field public,final snapshotOver Ljava/util/Set;
-  field public,final workspace Lcom/crystalgui/fs/client/Workspace;
+  field public,final workspace Lcom/crystalgui/fs/client/WorkspaceClient;
   field public,static,final CONTENT_CLASS Ljava/lang/String;
   field public,static,final DIRTY_MARKER Ljava/lang/String;
   field public,static,final DOCK_CLASS Ljava/lang/String;
@@ -18699,8 +19129,8 @@ com/crystalgui/workbench/Workbench
   method protected connected ()V
   method protected disconnected ()V
   method protected registerCommands (Lcom/crystalgui/core/command/Commands;)V
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Ljava/util/List;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Ljava/util/List;)V
   method public activeDocument ()Lcom/crystalgui/document/Document;
   method public activeEditor ()Lcom/crystalgui/widget/texteditor/TextEditor;
   method public activeFilePath ()Lcom/crystalgui/fs/CgPath;
@@ -18779,12 +19209,12 @@ com/crystalgui/workbench/Workbench
   method public useConfig (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/workbench/Workbench;
   method public useExtensionStores (Ljava/util/function/Function;)Lcom/crystalgui/workbench/Workbench;
   method public windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/workbench/NetworkedPanels;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/workbench/Workbench$RootWatch
   access public,final
   extends java/lang/Object
   implements com/crystalgui/core/dispose/Disposable
-  method public <init> (Lcom/crystalgui/fs/client/Workspace$Watch;Lcom/crystalgui/core/signal/Connection;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient$Watch;Lcom/crystalgui/core/signal/Connection;)V
   method public dispose ()V
 com/crystalgui/workbench/WorkbenchContext
   access public,abstract,interface
@@ -18830,7 +19260,7 @@ com/crystalgui/workbench/WorkbenchContext
   method public,abstract showPanel (Ljava/lang/String;)Z
   method public,abstract statusBar ()Lcom/crystalgui/core/notify/StatusBar;
   method public,abstract toolWindowManager ()Lcom/crystalgui/workbench/toolwindow/ToolWindowManager;
-  method public,abstract workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public,abstract workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/workbench/WorkbenchKinds
   access public,final
   extends java/lang/Object
@@ -18904,7 +19334,7 @@ com/crystalgui/workbench/app/WorkbenchApplication
   method public giveInitialFocus ()V
   method public kind ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public loadPreferences ()V
-  method public mainWindow ()Lcom/crystalgui/desktop/window/WindowFrame;
+  method public mainWindow ()Lcom/crystalgui/desktop/app/AppWindow;
   method public open (Lcom/crystalgui/fs/Resource;)Z
   method public restoreLayout (Lcom/crystalgraphics/serialization/CgDynamicOps;)Z
   method public saveLayout (Lcom/crystalgraphics/serialization/CgDynamicOps;II)Ljava/lang/Object;
@@ -18914,8 +19344,8 @@ com/crystalgui/workbench/app/WorkbenchApplication
   method public settingsHost ()Lcom/crystalgui/core/settings/Settings;
   method public windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/net/window/WindowMount;
   method public workbench ()Lcom/crystalgui/workbench/Workbench;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
-  method public,static of (Lcom/crystalgui/desktop/app/LaunchContext;)Lcom/crystalgui/workbench/app/WorkbenchApplication$Builder;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
+  method public,static of (Lcom/crystalgui/desktop/app/AppContext;)Lcom/crystalgui/workbench/app/WorkbenchApplication$Builder;
 com/crystalgui/workbench/app/WorkbenchApplication$Builder
   access public,final
   extends java/lang/Object
@@ -18979,19 +19409,6 @@ com/crystalgui/workbench/chrome/menu/MenuBarView
   method public toggleMainMenu ()V
   method public,static mnemonicIndexOf (Ljava/lang/String;)I
   method public,static strip (Ljava/lang/String;)Ljava/lang/String;
-com/crystalgui/workbench/chrome/notification/NotificationBalloons
-  access public
-  extends com/crystalgui/ui/dom/UIElement
-  field public,static,final BALLOON_CLASS Ljava/lang/String;
-  field public,static,final FADE_MS F
-  field public,static,final HIDDEN_CLASS Ljava/lang/String;
-  field public,static,final LAYER_CLASS Ljava/lang/String;
-  field public,static,final LINGER_MS F
-  field public,static,final MAX_VISIBLE I
-  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
-  method protected connected ()V
-  method public <init> ()V
-  method public liveCount ()I
 com/crystalgui/workbench/chrome/notification/NotificationsView
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -19891,7 +20308,7 @@ com/crystalgui/workbench/editor/EditorService
   field public,final onDidOpen Lcom/crystalgui/core/signal/Signal$Value;
   field public,final onDidRestoreUnsavedWork Lcom/crystalgui/core/signal/Signal$Value;
   implements com/crystalgui/core/dispose/Disposable
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/fs/client/WorkspaceDocuments;Lcom/crystalgui/document/DocumentKinds;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgui/fs/client/WorkspaceDocuments;Lcom/crystalgui/document/DocumentKinds;)V
   method public activate (Lcom/crystalgui/workbench/editor/EditorService$Tab;)V
   method public active ()Lcom/crystalgui/workbench/editor/EditorService$Tab;
   method public activeDocument ()Lcom/crystalgui/document/Document;
@@ -20047,7 +20464,7 @@ com/crystalgui/workbench/explorer/ProjectFileTree
   implements com/crystalgui/workbench/view/FocusableView
   implements com/crystalgui/workbench/view/TitleActionsContributor
   method protected connected ()V
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;Lcom/crystalgui/workbench/explorer/WorkspaceTreeSource;Lcom/crystalgui/workbench/decoration/FileDecorations;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;Lcom/crystalgui/workbench/explorer/WorkspaceTreeSource;Lcom/crystalgui/workbench/decoration/FileDecorations;)V
   method public beginNew (Lcom/crystalgui/fs/CgPath;ZLjava/util/function/Consumer;)V
   method public cancelEdit ()V
   method public closeFind ()V
@@ -20080,7 +20497,7 @@ com/crystalgui/workbench/explorer/ProjectFileTree
   method public toggleFindMode ()V
   method public treeView ()Lcom/crystalgui/widget/collection/tree/TreeView;
   method public undoStack ()Lcom/crystalgui/core/undo/UndoStack;
-  method public workspace ()Lcom/crystalgui/fs/client/Workspace;
+  method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
   method public,static isWellFormedName (Ljava/lang/String;)Z
 com/crystalgui/workbench/explorer/ProjectFileTree$RowParts
   access public,final,record
@@ -20116,7 +20533,7 @@ com/crystalgui/workbench/explorer/WorkspaceTreeSource
   field public,static,final MAX_INDEXED_DIRECTORIES I
   implements com/crystalgui/core/collection/tree/TreeDataSource
   implements com/crystalgui/fs/client/WorkspaceProjects
-  method public <init> (Lcom/crystalgui/fs/client/Workspace;)V
+  method public <init> (Lcom/crystalgui/fs/client/WorkspaceClient;)V
   method public announceRowsChanged ()V
   method public beginPendingNew (Lcom/crystalgui/fs/CgPath;Z)Lcom/crystalgui/fs/CgPath;
   method public children (Lcom/crystalgui/fs/CgPath;)Ljava/util/List;

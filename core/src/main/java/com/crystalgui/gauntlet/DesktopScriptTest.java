@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.screen.CgUiScreen;
 import java.util.List;
 
@@ -225,7 +226,7 @@ public final class DesktopScriptTest extends CgGauntletController {
                 }
                 if (frame.state() == WindowState.HIDDEN) frame.show(true);
                 Desktop desktop = desktop();
-                if (desktop != null) desktop.activate(frame);
+                if (desktop != null) desktop.windowManager().activate(frame);
                 step = Step.SHOOT_RESTORE_MID;
                 waitTicks = 3;
                 break;
@@ -270,7 +271,8 @@ public final class DesktopScriptTest extends CgGauntletController {
                     return;
                 }
                 say("opening " + JAVA_PROBE_FILE);
-                workbench.editors().open(Resource.parse(JAVA_PROBE_FILE));
+                // ON THE EDITOR'S OWN DOCUMENT: its services belong to that sequence, not the desktop's.
+                CgUiScreen.application().mainWindow().execute(() -> workbench.editors().open(Resource.parse(JAVA_PROBE_FILE)));
                 step = Step.SHOOT_JAVA;
                 // The open is a round trip to the workspace, and the first analysis has to open an
                 // engine band before it can answer anything.
@@ -357,7 +359,7 @@ public final class DesktopScriptTest extends CgGauntletController {
     /** Puts the OS cursor over the middle of {@code frame}, in surface pixels. */
     private void parkPointerOver(WindowFrame frame) {
         if (frame.box() == null || !CgUiScreen.isInstalled()) return;
-        float scale = CgUiScreen.UI_SCALE;
+        float scale = Preferences.current().uiScale();
         pointerX = Math.round((frame.box().x() + frame.box().width() / 2f) * scale);
         pointerY = Math.round((frame.box().y() + frame.box().height() / 2f) * scale);
         CgInput.movePointer(pointerX, pointerY);
@@ -392,7 +394,7 @@ public final class DesktopScriptTest extends CgGauntletController {
     private static WindowFrame mainWindow() {
         Desktop desktop = desktop();
         if (desktop == null) return null;
-        List<WindowFrame> windows = desktop.registry().taskbarOrder();
+        List<WindowFrame> windows = desktop.windowManager().registry().taskbarOrder();
         return windows.isEmpty() ? null : windows.get(0);
     }
 

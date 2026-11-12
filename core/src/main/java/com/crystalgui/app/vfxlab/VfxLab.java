@@ -30,10 +30,11 @@ import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
 import com.crystalgraphics.job.CgHostThread;
-import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.AppContext;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.WindowSpec;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -114,7 +115,8 @@ public class VfxLab extends UIElement {
             .keywords("vfx", "effects", "particles", "lab")
             .singleInstance()
             .standalone()
-            .launch(context -> new Instance(context.desktop()));
+            .separateDocument()
+            .launch(Instance::new);
 
     /** Lab space's floor: effects spawn above the origin of it, aimed along +x. */
     public static final double LAB_Y = -8192.0;
@@ -274,22 +276,6 @@ public class VfxLab extends UIElement {
         }));
     }
 
-    /** Shows {@code lab} in its window on {@code desktop}, or raises the window already there. */
-    public static WindowFrame openOn(Desktop desktop, VfxLab lab) {
-        WindowFrame existing = desktop.registry().byKey(WINDOW_KEY);
-        if (existing != null) {
-            desktop.activate(existing, true);
-            return existing;
-        }
-        WindowFrame frame = new WindowFrame("VFX Lab");
-        frame.setKey(WINDOW_KEY);
-        frame.setApplication(KIND);
-        frame.markApplicationMain();
-        frame.setContent(lab);
-        desktop.addWindow(frame);
-        return frame;
-    }
-
     /**
      * Runs what the panels asked, spawns again with Loop on once the last effect has died, then updates and submits
      * the effects and lab space's floor and sky. Once a frame on the render thread, from a
@@ -361,13 +347,13 @@ public class VfxLab extends UIElement {
 
         private final VfxLab lab = new VfxLab();
         private boolean quit;
-        private final WindowFrame window;
+        private final AppWindow window;
         private final CgTickFunction frames;
         private final CgRenderStage.Registration viewportDraw;
         private double seconds;
 
-        Instance(Desktop desktop) {
-            window = openOn(desktop, lab);
+        Instance(AppContext app) {
+            window = app.windows().open(WindowSpec.titled("VFX Lab").key(WINDOW_KEY).content(lab));
             // On the world's clock: an effect plays as fast as the world it is in, and holds while it is paused
             frames = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, "crystalgui:vfx-lab", dt -> {
                 seconds += dt;
@@ -384,7 +370,7 @@ public class VfxLab extends UIElement {
         }
 
         @Override
-        public WindowFrame mainWindow() {
+        public AppWindow mainWindow() {
             return window;
         }
 
@@ -395,9 +381,7 @@ public class VfxLab extends UIElement {
 
         @Override
         public void activate() {
-            // The window's own desktop: a minimised one is detached, and has no document to find it by
-            Desktop desktop = window.desktop();
-            if (desktop != null) desktop.activate(window, true);
+            window.activate();
         }
 
         /** Stops playing and releases the lab: its window closed, or the host shutting down. */

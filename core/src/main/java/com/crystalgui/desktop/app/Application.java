@@ -3,43 +3,43 @@ package com.crystalgui.desktop.app;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 
 /**
- * One <b>running</b> application — its main window, and everything that window's workbench owns.
+ * One running application: the object a kind's factory returns, which holds its window and everything that window's
+ * content owns. You implement it; the registry holds it, the taskbar groups its windows, and "open with" routes a
+ * file to it through {@link #open}.
  *
- * <p>You never construct one. {@link ApplicationKind#launch} builds it, {@link ApplicationRegistry}
- * holds it, and you meet it as the return of {@code applications().launch(...)} or as an entry in
- * {@code applications().running()}. The taskbar groups its windows, the switcher lists them, and
- * "open with" routes a file to it through {@link #open}.</p>
+ * <pre>{@code
+ * final class Planner implements Application {
+ *     private final AppWindow main;
  *
- * <h3>What you can ask one to do</h3>
+ *     Planner(AppContext app) {
+ *         main = app.windows().open(WindowSpec.titled("Planner").icon("mymod:planner").content(new PlannerView()));
+ *     }
  *
- * <ul>
- *   <li>{@link #kind()} — the manifest it was launched from; its id, name and icon.</li>
- *   <li>{@link #mainWindow()} — the window that <em>is</em> the application, for raising and grouping.</li>
- *   <li>{@link #open(Resource)} — show this file in the instance already running.</li>
- *   <li>{@link #activate()} — bring it to the front, which is what a second launch of a
- *       single-instance application does instead of starting another.</li>
- * </ul>
+ *     @Override public ApplicationKind kind() { return KIND; }
+ *     @Override public AppWindow mainWindow() { return main; }
+ *     @Override public boolean open(Resource file) { return false; }     // not a file this opens
+ *     @Override public void activate() { main.activate(); }
+ *     @Override public void dispose() { main.destroy(); }               // and release what it holds
+ * }
+ * }</pre>
  *
  * <h3>Closing its main window quits it</h3>
  *
- * <p>A window closes under {@code DESTROY_ON_CLOSE}, the default, and when the destroyed window is an
- * application's main window the registry quits the application: {@link #dispose()}, then off the running list.
- * So an application never hooks its own window; it releases what it holds in {@code dispose()}, which also runs
- * at a host's shutdown with the window still up. Minimised, or with the desktop closed, it keeps running. Under
- * {@code WindowPolicy.HIDE_ON_CLOSE} the X hides the window instead and the application runs on in the
- * background, which is what its taskbar entry brings back.</p>
+ * <p>The first window an application opens is its main window. When that window is destroyed, which is what the X
+ * does under {@code DESTROY_ON_CLOSE}, the registry calls {@link #dispose()} and takes it off the running list, so an
+ * application never hooks its own window. Minimised, or with the desktop closed, it keeps running. A main window
+ * opened with {@link WindowSpec#hideOnClose()} is hidden by the X instead, and the application runs on in the
+ * background until its taskbar entry brings the window back.</p>
  *
  * <ul>
- *   <li>{@code dispose()} must be idempotent: a host quitting it destroys the window, which reaches it again.</li>
- *   <li>Its thread is the document's; GPU resources are released on {@code CgHostThread.RENDER}.</li>
+ *   <li>{@link #dispose()} must be idempotent: a host shutting down destroys the window, which reaches it again.</li>
+ *   <li>It runs on the application's own thread; release GPU resources on {@code CgHostThread.RENDER}.</li>
+ *   <li>{@link #mainWindow()} is never null: an application with no window is not running.</li>
+ *   <li>A hidden main window is exempt from hidden-window eviction, since it <em>is</em> the application.</li>
  * </ul>
- *
- * <p>It is also why a main window is exempt from hidden-window eviction: a hidden main window <em>is</em>
- * the application, and a cap on hidden windows must never quit one nobody asked to quit.</p>
  */
 public interface Application extends Disposable {
 
@@ -47,7 +47,7 @@ public interface Application extends Disposable {
     ApplicationKind kind();
 
     /** The window this application IS. Never null: an application with no window is not running. */
-    WindowFrame mainWindow();
+    AppWindow mainWindow();
 
     /**
      * Opens {@code resource} in this instance.

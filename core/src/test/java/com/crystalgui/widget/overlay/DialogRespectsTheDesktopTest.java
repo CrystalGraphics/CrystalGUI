@@ -137,7 +137,7 @@ public class DialogRespectsTheDesktopTest extends UiDocumentTestBase {
         // counter into the frame's z-index, and the sheet gives a dialog a flat `z-index: 5` -- so the
         // window overtakes it only after a few raises. A single-raise fixture passed against the broken
         // arrangement, and the bug looked intermittent in the running application for the same reason.
-        for (int i = 0; i < 10; i++) desktop.raise(editor);
+        for (int i = 0; i < 10; i++) desktop.windowManager().raise(editor);
         // OVER the window, deliberately: a dialog that happens to sit beside it proves nothing, and the
         // first version of this test passed against the broken arrangement for exactly that reason --
         // addWindow centres a frame, so a dialog at the top-left overlapped nothing at all.

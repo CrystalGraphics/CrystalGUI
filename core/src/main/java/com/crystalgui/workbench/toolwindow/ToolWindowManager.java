@@ -1,7 +1,7 @@
 package com.crystalgui.workbench.toolwindow;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.AppWindows;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -880,9 +880,9 @@ public final class ToolWindowManager {
             // not in a test.
             UIElement scope = window.focus().scopeOf(anchor);
             if (scope instanceof WindowFrame owner) owner.attachOwned(frame);
-            else Desktop.of(window).addWindow(frame);
+            else AppWindows.addFloat(anchor, frame);
         } else {
-            Desktop.of(window).addWindow(frame);
+            AppWindows.addFloat(anchor, frame);
             // TOP-LEVEL, BUT OWNED. The frame keeps everything a window has -- it can be dragged
             // anywhere on the desktop and has its own taskbar entry -- and gains the one thing a tool
             // window needs from the editor it came out of: it stays above it. Without this, clicking the

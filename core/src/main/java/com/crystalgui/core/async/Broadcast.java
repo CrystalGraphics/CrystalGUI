@@ -25,7 +25,7 @@ import org.jetbrains.annotations.Nullable;
  * CHANGES.post(NotificationEvent.added(notification, index));
  *
  * // A subscriber inside a document: heard on that document's sequence, at its next turn
- * element.whileConnected(() -> Notifications.CHANGES.subscribe(this::apply));
+ * element.whileConnected(() -> NotificationService.current().onDidChange.subscribe(this::apply));
  * }</pre>
  *
  * <p>A change with nothing to say beyond "it changed" is a {@code Runnable}:</p>

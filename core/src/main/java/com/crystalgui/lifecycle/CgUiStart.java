@@ -9,7 +9,7 @@ import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgui.app.frameprofiler.ProfilerSettings;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.desktop.DesktopSession;
+import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.theme.ThemeRegistry;
@@ -78,7 +78,7 @@ public final class CgUiStart {
         step(took, "user-agent sheet", () -> touch(StyleSheet.class));
         step(took, "built-in themes", ThemeRegistry::registerBuiltins);
         // The first screen's open read it on the render thread: 146 ms of class loading
-        step(took, "desktop record", DesktopSession::ahead);
+        step(took, "desktop record", SessionRecord::ahead);
         // The frame profiler's autostart reads them at the same open: 136 ms more
         step(took, "profiler settings", () -> touch(ProfilerSettings.class));
         CrystalGuiCore.LOGGER.info("{} ({} ms)", took, (System.nanoTime() - begun) / 1_000_000L);

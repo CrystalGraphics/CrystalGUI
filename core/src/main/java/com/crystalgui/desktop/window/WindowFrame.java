@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.desktop.manager.WindowManager;
+import com.crystalgui.desktop.manager.WindowRecord;
 import com.crystalgui.widget.layout.LayoutMinimum;
 import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.desktop.app.ApplicationKind;
@@ -8,7 +10,7 @@ import com.crystalgui.core.window.WindowClamp;
 import com.crystalgui.core.window.WindowPolicy;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
-import com.crystalgui.desktop.DesktopSession;
+import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.motion.WindowGeometryAnimation;
 import com.crystalgui.ui.box.Box;
@@ -293,6 +295,13 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** Emitted when the window is destroyed, after {@code Disposer} has run. */
     public final Signal.Action onDestroyed = new Signal.Action();
 
+    private final WindowRecord record = new WindowRecord(this);
+
+    /** What the window manager knows about this window: identity, state, geometry, stacking. */
+    public WindowRecord record() {
+        return record;
+    }
+
     private final UIElement titleBar;
     private final UIElement controls;
     private final UIElement content;
@@ -320,7 +329,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     @Override
     public boolean keepsSurface() {
-        return state == WindowState.HIDDEN;
+        return record.state() == WindowState.HIDDEN;
     }
 
     /** What wants its picture: a thumbnail showing it. A window minimising wants it too. */
@@ -352,29 +361,17 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     private final Button minimizeButton;
     private final Button maximizeButton;
 
-    /** What was asked for, never clamped. @see WindowFrame */
-    private float wantedLeft, wantedTop;
-    /** What was written, after clamping. What a drag and {@code UIResizer} both measure from. */
-    private float placedLeft, placedTop;
-    /** Whether a position has been written at all — {@code Desktop} cascades the ones that have not. */
-    private boolean placed;
 
     /** Where focus was when this window last had it. @see #restoreFocus */
     @Nullable
     private UIElement lastFocused;
 
-    /** This window's place in the stack, as last assigned. @see Desktop#raise */
-    private int stackOrder;
-    /** @see #isPinned() */
-    private boolean pinned;
 
     /** Package-private for {@code WindowPinTest}, which asserts the three-state overlay. */
     final Button pinButton;
     /** Retained: its text follows the state, and Tooltip.attach ADDS a pair rather than replacing one. */
     private final Tooltip pinTooltip;
 
-    private WindowState state = WindowState.VISIBLE;
-    private WindowPolicy policy = WindowPolicy.DESTROY_ON_CLOSE;
 
     /**
      * The desktop this window belongs to — a <b>field, not a tree walk</b>.
@@ -386,13 +383,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     @Nullable
     private Desktop owner;
 
-    /** @see #key() */
-    @Nullable
-    private String key;
 
-    /** @see #setIcon */
-    @Nullable
-    private String iconName;
 
     /** @see #setDiscardGuard */
     private BooleanSupplier discardGuard = () -> true;
@@ -431,13 +422,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     private UIElement actionsOrigin;
     private int actionsOriginIndex = -1;
 
-    private boolean maximized;
     /** The maximise button's tooltip, kept because its text follows the state. @see #MAXIMIZE_TOOLTIP */
     private final Tooltip maximizeTooltip;
-    /** Where to put the window back — the MEASURED rect at the moment it was maximised. */
-    private float restoreLeft, restoreTop, restoreWidth, restoreHeight;
 
-    public WindowFrame(String title) {
+    public WindowFrame(String initialTitle) {
         super(NAME);
         addClass(WINDOW_CLASS);
         // A FOCUS NAVIGATION SCOPE, which is what makes modality PER-WINDOW rather than per-document.
@@ -461,85 +449,21 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
         // THE FIELD TOO, not the label alone: getTitle answers from the field so a caption that draws
         // no title still HAS one, and this constructor does not go through setTitle.
-        this.title = title == null ? "" : title;
-        titleLabel = new UIText(this.title);
-        titleLabel.addClass(TITLE_CLASS);
-        // FALLS THROUGH TO THE BAR. The move listener below is target-only, so a press that lands on the
-        // title text would otherwise begin nothing at all -- and "the title bar drags except where the
-        // title is" is indistinguishable from a broken drag.
-        titleLabel.setHitTest(false);
-
-        controls = new UIElement();
-        controls.addClass(CONTROLS_CLASS);
-
-        // PIN FIRST, left of minimise. It is the only control here that is not about this window's
-        // presence on the desktop, so it sits outside the minimise/maximise/close triplet every window
-        // manager draws as a unit -- the same reason a tool window's Dock button sits there.
-        pinButton = new Button("");
-        pinButton.addClass(PIN_CLASS);
-        pinButton.attachListener(() -> setPinned(!isPinned()));
-        pinTooltip = Tooltip.attach(pinButton, PIN_TOOLTIP);
-        pinTooltip.addClass(Tooltip.WAIT_CLASS);
-        controls.append(pinButton);
-
-        // MINIMISE, so the strip reads minimise-then-close left to right as every window manager
-        // draws it, and so the destructive control is the one furthest from the rest.
-        minimizeButton = new Button("");
-        minimizeButton.addClass(MINIMIZE_CLASS);
-        // THROUGH THE ANIMATION, which then hides. Not hide() itself: hiding is DETACHING, and a
-        // detached subtree paints nothing, so a window that hid on the press would animate to an empty
-        // screen. @see WindowAnimator
-        minimizeButton.attachListener(this::minimize);
-        // A WAIT ON ALL FOUR. These are the marks every window manager has drawn in this corner since
-        // Windows 95: nobody reads them, they are aimed at, and a label arriving at once lands over the
-        // button already being clicked. The length lives in ua/overlays.css.
-        Tooltip.attach(minimizeButton, MINIMIZE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
-        controls.append(minimizeButton);
-
-        maximizeButton = new Button("");
-        maximizeButton.addClass(MAXIMIZE_CLASS);
-        maximizeButton.attachListener(this::toggleMaximized);
-        // RETAINED, because this one's text follows the state -- and Tooltip.attach ADDS a listener pair
-        // rather than replacing one, so calling it again to relabel would leave the first tooltip in
-        // place and showing, with the new text on an instance nothing ever hovers.
-        maximizeTooltip = Tooltip.attach(maximizeButton, MAXIMIZE_TOOLTIP);
-        maximizeTooltip.addClass(Tooltip.WAIT_CLASS);
-        controls.append(maximizeButton);
-
-        closeButton = new Button("");
-        closeButton.addClass(CLOSE_CLASS);
-        closeButton.attachListener(this::requestClose);
-        Tooltip.attach(closeButton, CLOSE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
-        controls.append(closeButton);
-
-        // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
-        // setter means creating it possibly mid-gesture, and the title bar has no `gap` for a hidden
-        // child to occupy — the one cost that would have made the lazy version worth it.
-        // THE SAME DRAWING THE STRIP USES. It was a bare element with the glyph as an overlay, which
-        // predates WindowIcon and meant a caption showed an uncoloured mark while the entry, the hover
-        // preview and the switcher tile all showed the same window as a coloured tile — one window with
-        // two appearances, differing only in which of them had been written first. WindowIcon carries
-        // the tile, the palette keyed on the icon NAME (so the caption and the entry cannot disagree
-        // about the hue) and the branded-artwork case; the SIZE stays the context's, which for a caption
-        // is `window > .__title-bar__ > .__icon__`.
-        icon = new WindowIcon();
-        icon.addClass(ICON_CLASS);
+        record.title(initialTitle == null ? "" : initialTitle);
+        WindowCaption caption = new WindowCaption(record.title(),
+                () -> setPinned(!isPinned()), this::minimize, this::toggleMaximized, this::requestClose);
+        titleBar = caption;
+        controls = caption.controls();
+        titleLabel = caption.titleLabel();
+        icon = caption.icon();
+        captionChrome = caption.captionChrome();
+        pinButton = caption.pinButton();
+        minimizeButton = caption.minimizeButton();
+        maximizeButton = caption.maximizeButton();
+        closeButton = caption.closeButton();
+        pinTooltip = caption.pinTooltip();
+        maximizeTooltip = caption.maximizeTooltip();
         refreshIcon();
-
-        // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
-        // title bar both put an application's menu: hard against the left, with the title taking
-        // whatever is left. Hidden until something is adopted, and the caption has no `gap`, so an
-        // empty slot occupies nothing.
-        captionChrome = new UIElement();
-        captionChrome.addClass(CAPTION_CHROME_CLASS);
-        captionChrome.setDisplayed(false);
-
-        titleBar = new UIElement();
-        titleBar.addClass(TITLE_BAR_CLASS);
-        titleBar.append(icon);
-        titleBar.append(captionChrome);
-        titleBar.append(titleLabel);
-        titleBar.append(controls);
         append(titleBar);
 
         // A SCROLL VIEW, so a window smaller than its content gets a bar rather than a clip. The slot
@@ -665,7 +589,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
                 // documented to hand over to nobody, which is exactly why it cannot afford to take the
                 // foreground with it.
                 if (!pressedOver(event.getPosition().x(), event.getPosition().y(), minimizeButton)) {
-                    desktop.activate(this, false, !inContent);
+                    desktop.windowManager().activate(this, false, !inContent);
                 }
                 return;
             }
@@ -925,8 +849,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Nullable
     public String iconName() {
-        if (iconName != null) return iconName;
-        return application == null ? null : application.icon();
+        if (record.iconName() != null) return record.iconName();
+        return record.application() == null ? null : record.application().icon();
     }
 
     /**
@@ -948,7 +872,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     private void refreshIcon() {
         String name = iconName();
         boolean declared = name != null && CgUiSvg.ofIcon(name) != null;
-        if (!declared && toolWindow) {
+        if (!declared && record.toolWindow()) {
             icon.setDisplayed(false);
             return;
         }
@@ -968,10 +892,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * every stylesheet drew the light file forever and a theme swap changed nothing.</p>
      */
     public WindowFrame setIcon(@Nullable String namespacedIcon) {
-        this.iconName = namespacedIcon;
+        record.iconName(namespacedIcon);
         refreshIcon();
         Desktop desktop = owner;
-        if (desktop != null) desktop.registry().changed();
+        if (desktop != null) desktop.windowManager().registry().changed();
         return this;
     }
 
@@ -984,33 +908,29 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * all read it -- it simply is not drawn here.</p>
      */
     public WindowFrame setTitleShown(boolean shown) {
-        this.titleShown = shown;
+        record.titleShown(shown);
         // EMPTIED, NEVER HIDDEN. The label carries `flex-grow: 1; flex-basis: 0` and is therefore
         // what pushes the window controls to the far edge -- `display: none` took the spacer out
         // with the text and the pin, minimise, maximise and close collapsed against the menu bar.
-        titleLabel.setText(shown ? title : "");
+        titleLabel.setText(shown ? record.title() : "");
         return this;
     }
 
-    /** @see #setTitleShown */
-    private boolean titleShown = true;
 
-    /** What the window is called, whether or not the caption draws it. @see #setTitleShown */
-    private String title = "";
 
-    public WindowFrame setTitle(String title) {
-        this.title = title == null ? "" : title;
-        titleLabel.setText(titleShown ? this.title : "");
+    public WindowFrame setTitle(String text) {
+        record.title(text == null ? "" : text);
+        titleLabel.setText(record.titleShown() ? record.title() : "");
         // The monogram is the title's initial, and the taskbar entry carries the title too.
         refreshIcon();
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
     public String getTitle() {
         // THE STORED ONE, not the label's: a window whose caption draws no title still HAS one,
         // and the taskbar entry, the window switcher and the icon's monogram all ask here.
-        return title;
+        return record.title();
     }
 
     // ── Owned windows ───────────────────────────────────────────────────────
@@ -1077,7 +997,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      *
      * <p>So this is the same relationship without the parenting: the frame stays top-level in the
      * desktop's window layer — free to be dragged anywhere, its own entry, its own stacking slot — and
-     * the ONE thing it inherits is that {@link Desktop#raise} keeps it above its owner. Raising the
+     * the ONE thing it inherits is that {@link WindowManager#raise} keeps it above its owner. Raising the
      * owner carries its owned windows up with it, which is the whole of "clicking the editor must not
      * bury the panel I pulled out of it".</p>
      *
@@ -1087,7 +1007,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Nullable
     public WindowFrame ownerWindow() {
-        return ownerWindow;
+        WindowRecord owning = record.owner();
+        return owning == null ? null : owning.frame();
     }
 
     /**
@@ -1117,16 +1038,14 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** @see #ownerWindow() */
     public WindowFrame setOwnerWindow(@Nullable WindowFrame owner) {
         // A window cannot own itself, and a cycle would make the raise walk below never terminate.
-        for (WindowFrame walk = owner; walk != null; walk = walk.ownerWindow) {
+        for (WindowFrame walk = owner; walk != null; walk = walk.ownerWindow()) {
             if (walk == this) return this;
         }
-        this.ownerWindow = owner;
-        if (owner != null && desktop() != null) desktop().raise(this);
+        record.owner(owner == null ? null : owner.record());
+        if (owner != null && desktop() != null) desktop().windowManager().raise(this);
         return this;
     }
 
-    @Nullable
-    private WindowFrame ownerWindow;
 
     /**
      * Whether this is a <b>tool window</b> — Win32's {@code WS_EX_TOOLWINDOW}, and the answer to
@@ -1156,7 +1075,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * class check buried in the taskbar.</p>
      */
     public boolean isToolWindow() {
-        return toolWindow;
+        return record.toolWindow();
     }
 
     /**
@@ -1179,23 +1098,22 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         WindowFrame walk = this;
         // BOUNDED BY THE CHAIN ITSELF: setOwnerWindow refuses a cycle, so this terminates on the relation
         // rather than on a counter.
-        while (walk.isToolWindow() && walk.ownerWindow != null) walk = walk.ownerWindow;
+        while (walk.isToolWindow() && walk.ownerWindow() != null) walk = walk.ownerWindow();
         return walk;
     }
 
     /** @see #isToolWindow() */
     public WindowFrame setToolWindow(boolean nowToolWindow) {
-        if (toolWindow == nowToolWindow) return this;
-        this.toolWindow = nowToolWindow;
+        if (record.toolWindow() == nowToolWindow) return this;
+        record.toolWindow(nowToolWindow);
         // Whether the caption falls back to a monogram is decided by this. @see #refreshIcon
         refreshIcon();
         // The taskbar and the switcher are built from filtered views, so flipping this changes what they
         // should be showing and nothing else would tell them.
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
-    private boolean toolWindow;
 
     // ── The command surface ─────────────────────────────────────────────────────────────────────
 
@@ -1220,8 +1138,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     @Override
     @Nullable
-    public Object getData(DataKey<?> key) {
-        return key == WINDOW_FRAME ? this : null;
+    public Object getData(DataKey<?> dataKey) {
+        return dataKey == WINDOW_FRAME ? this : null;
     }
 
 
@@ -1239,7 +1157,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * which is exactly what the taskbar entry exists to prevent.</p>
      */
     public boolean isDemandingAttention() {
-        return demandingAttention;
+        return record.demandingAttention();
     }
 
     /**
@@ -1247,24 +1165,23 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * taskbar entry and every window of one application wear one hue; its title for a window of nobody's.
      */
     public String iconTitle() {
-        return application != null ? application.displayName() : getTitle();
+        return record.application() != null ? record.application().displayName() : getTitle();
     }
 
     /** @see #isDemandingAttention() */
     public void requestAttention() {
-        if (demandingAttention) return;
-        demandingAttention = true;
-        if (owner != null) owner.registry().changed();
+        if (record.demandingAttention()) return;
+        record.demandingAttention(true);
+        if (owner != null) owner.windowManager().registry().changed();
     }
 
     /** @see #isDemandingAttention() */
     public void clearAttention() {
-        if (!demandingAttention) return;
-        demandingAttention = false;
-        if (owner != null) owner.registry().changed();
+        if (!record.demandingAttention()) return;
+        record.demandingAttention(false);
+        if (owner != null) owner.windowManager().registry().changed();
     }
 
-    private boolean demandingAttention;
 
     /**
      * A short overlay on this window's taskbar entry — an unsaved count, an error count, or null.
@@ -1276,20 +1193,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Nullable
     public String badge() {
-        return badge;
+        return record.badge();
     }
 
     /** @see #badge() */
     public WindowFrame setBadge(@Nullable String nowBadge) {
         String cleaned = nowBadge == null || nowBadge.isEmpty() ? null : nowBadge;
-        if (java.util.Objects.equals(badge, cleaned)) return this;
-        this.badge = cleaned;
-        if (owner != null) owner.registry().changed();
+        if (java.util.Objects.equals(record.badge(), cleaned)) return this;
+        record.badge(cleaned);
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
-    @Nullable
-    private String badge;
 
     /**
      * How far along this window's work is, 0..1 — or <b>negative for "no progress to show"</b>, which is
@@ -1305,19 +1220,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * trap, which cost a whole editor's row positions once.</p>
      */
     public float progress() {
-        return progress;
+        return record.progress();
     }
 
     /** @see #progress() */
     public WindowFrame setProgress(float nowProgress) {
         float cleaned = !(nowProgress >= 0f) ? -1f : Math.min(1f, nowProgress);
-        if (progress == cleaned) return this;
-        this.progress = cleaned;
-        if (owner != null) owner.registry().changed();
+        if (record.progress() == cleaned) return this;
+        record.progress(cleaned);
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
-    private float progress = -1f;
 
     /**
      * Tool windows this one took down with it when it hid, so showing it puts back exactly those.
@@ -1375,7 +1289,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // hidePanel and its destroy() are never reached -- but that is a coupling between two files, not
         // a property of this loop, and the failure would be a ConcurrentModificationException from
         // minimising a window.
-        for (WindowFrame candidate : new ArrayList<>(owner.registry().windows())) {
+        for (WindowFrame candidate : new ArrayList<>(owner.windowManager().registry().windows())) {
             if (candidate == this || !candidate.isToolWindow()) continue;
             // ALREADY ON ITS WAY OUT WITH US -- an animated cascade started at gesture time, and this is
             // the owner's own hide() landing afterwards. Hiding it again would cut its flight short at
@@ -1433,7 +1347,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** Whether {@code candidate} is owned by this window, at any depth. */
     private boolean ownsTransitively(WindowFrame candidate) {
-        for (WindowFrame walk = candidate.ownerWindow; walk != null; walk = walk.ownerWindow) {
+        for (WindowFrame walk = candidate.ownerWindow(); walk != null; walk = walk.ownerWindow()) {
             if (walk == this) return true;
         }
         return false;
@@ -1461,7 +1375,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         return hasClass(ACTIVE_CLASS);
     }
 
-    /** Driven by {@link Desktop#activate}, which is the only thing that may decide this. */
+    /** Driven by {@link WindowManager#activate}, which is the only thing that may decide this. */
     public void setActive(boolean active) {
         // Brought back before its minimise landed
         if (active) {
@@ -1472,9 +1386,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         else removeClass(ACTIVE_CLASS);
     }
 
-    /** Where this window's stacking order currently sits. @see Desktop#raise */
+    /** Where this window's stacking order currently sits. @see WindowManager#raise */
     public int stackOrder() {
-        return stackOrder;
+        return record.stackOrder();
     }
 
     /**
@@ -1491,9 +1405,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * <p>One toggle, two effects — Win32's {@code WS_EX_TOPMOST} and EWMH's
      * {@code _NET_WM_STATE_ABOVE}, plus the thing those cannot express because they have no desktop to
      * close: a pinned window keeps rendering on the HUD after the screen is put away. @see
-     * Desktop#enterHudMode</p>
+     * WindowManager#enterHudMode</p>
      *
-     * <p>The band itself is one line in {@link Desktop#raise} — an offset on the same monotonic
+     * <p>The band itself is one line in {@link WindowManager#raise} — an offset on the same monotonic
      * counter — which is exactly what the band model predicted when always-on-top was refused for
      * having no consumer.</p>
      */
@@ -1520,7 +1434,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     }
 
     public boolean isPinned() {
-        return pinned;
+        return record.pinned();
     }
 
     /**
@@ -1531,18 +1445,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * hands out stacking order — and re-raising also keeps the owner group together, which a bare
      * z-write would silently break.</p>
      */
-    public WindowFrame setPinned(boolean pinned) {
-        if (this.pinned == pinned) return this;
-        this.pinned = pinned;
-        if (pinned) addClass(PINNED_CLASS); else removeClass(PINNED_CLASS);
-        pinTooltip.setText(pinned ? UNPIN_TOOLTIP : PIN_TOOLTIP);
+    public WindowFrame setPinned(boolean nowPinned) {
+        if (record.pinned() == nowPinned) return this;
+        record.pinned(nowPinned);
+        if (nowPinned) addClass(PINNED_CLASS); else removeClass(PINNED_CLASS);
+        pinTooltip.setText(nowPinned ? UNPIN_TOOLTIP : PIN_TOOLTIP);
         Desktop desktop = desktop();
-        if (desktop != null) desktop.raise(this);
+        if (desktop != null) desktop.windowManager().raise(this);
         return this;
     }
 
     public void setStackOrder(int order) {
-        this.stackOrder = order;
+        record.stackOrder(order);
         StyleGroup.inlinePipeline(getStyle().getGeneralGroup(), g -> g.zIndex(order));
     }
 
@@ -1640,16 +1554,16 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     // ── Lifecycle ───────────────────────────────────────────────────────────
 
     public WindowState state() {
-        return state;
+        return record.state();
     }
 
     public WindowPolicy policy() {
-        return policy;
+        return record.policy();
     }
 
     /** @see WindowPolicy */
-    public WindowFrame setPolicy(WindowPolicy policy) {
-        this.policy = policy == null ? WindowPolicy.DESTROY_ON_CLOSE : policy;
+    public WindowFrame setPolicy(WindowPolicy nowPolicy) {
+        record.policy(nowPolicy == null ? WindowPolicy.DESTROY_ON_CLOSE : nowPolicy);
         return this;
     }
 
@@ -1661,18 +1575,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Nullable
     public String key() {
-        return key;
+        return record.key();
     }
 
-    public WindowFrame setKey(@Nullable String key) {
-        this.key = key;
+    public WindowFrame setKey(@Nullable String nowKey) {
+        record.key(nowKey);
         return this;
     }
 
     /** Which product this window belongs to, or null for a window that is nobody's. @see #setApplication */
     @Nullable
     public ApplicationKind application() {
-        return application;
+        return record.application();
     }
 
     /**
@@ -1684,13 +1598,13 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * an application's <b>main</b> window alone (D17) — a hidden main window is the product running in
      * the background, and a cap on hidden windows must never quit one nobody asked to quit.</p>
      */
-    public WindowFrame setApplication(@Nullable ApplicationKind application) {
-        this.application = application;
+    public WindowFrame setApplication(@Nullable ApplicationKind nowApplication) {
+        record.application(nowApplication);
         // Its application's own styling hook, so a starting window and the window it becomes look alike
-        if (application != null) addClass(applicationClass(application.id()));
+        if (nowApplication != null) addClass(applicationClass(nowApplication.id()));
         // A window with no icon of its own is drawn with the kind's. @see #iconName
         refreshIcon();
-        if (owner != null) owner.registry().changed();
+        if (owner != null) owner.windowManager().registry().changed();
         return this;
     }
 
@@ -1701,19 +1615,16 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * window the same application opens is an ordinary one and may be evicted like any other.</p>
      */
     public WindowFrame markApplicationMain() {
-        this.applicationMain = true;
+        record.applicationMain(true);
         return this;
     }
 
     /** @see #markApplicationMain() */
     public boolean isApplicationMain() {
-        return applicationMain;
+        return record.applicationMain();
     }
 
-    @Nullable
-    private ApplicationKind application;
 
-    private boolean applicationMain;
 
     /**
      * Whether this window's content may be thrown away — asked before a destroying close and before
@@ -1746,8 +1657,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Override
     public boolean requestClose() {
-        if (state == WindowState.DESTROYED) return false;
-        if (policy == WindowPolicy.HIDE_ON_CLOSE) {
+        if (record.state() == WindowState.DESTROYED) return false;
+        if (record.policy() == WindowPolicy.HIDE_ON_CLOSE) {
             // Same ordering as minimise -- this hide is a continuation, so the panels are told now --
             // and CLOSE rather than MINIMIZE, because that is the animation this window is playing.
             cascadeHideOwnedToolWindows(Departure.CLOSE);
@@ -1788,7 +1699,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * which is the documented unrecoverable state.</p>
      */
     public void hide() {
-        if (state != WindowState.VISIBLE) return;
+        if (record.state() != WindowState.VISIBLE) return;
         // FIRST, while this window is still the thing they are owned by and still has a box. Win32's
         // rule: an owner going away takes its owned windows with it. Only tool windows, and only
         // top-level ones -- a FLOATING tool window is a child of the overlay slot and leaves with the
@@ -1834,14 +1745,14 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * @param persisted whether this is a restore rather than a first show — see {@link #onShown}.
      */
     public void show(boolean persisted) {
-        if (state == WindowState.DESTROYED) {
+        if (record.state() == WindowState.DESTROYED) {
             throw new IllegalStateException("a destroyed window cannot be shown again: " + getTitle());
         }
-        if (state == WindowState.VISIBLE && parent() != null) return;
+        if (record.state() == WindowState.VISIBLE && parent() != null) return;
         if (owner == null) return;
         minimizing = false;
         setLeaving(false);
-        state = WindowState.VISIBLE;
+        record.state(WindowState.VISIBLE);
         owner.reattach(this);
         // AFTER the reattach, because an animation writes styles and invalidateStyleMatch early-returns
         // on a detached element -- the classes would be set and never matched.
@@ -1865,7 +1776,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         //
         // exitHudMode clears hudMode BEFORE it restores what it hid, so a restore never lands here.
         Desktop attached = desktop();
-        if (attached != null && attached.isHudMode() && !isPinned()) {
+        if (attached != null && attached.windowManager().isHudMode() && !isPinned()) {
             setPinned(true);
             addClass(HUD_CLASS);
         }
@@ -1894,7 +1805,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Override
     public void dispose() {
-        if (state == WindowState.DESTROYED) return;
+        if (record.state() == WindowState.DESTROYED) return;
         // BEFORE anything else: adopted chrome belongs to the content, so it goes home rather than being
         // destroyed with the window that borrowed it.
         releaseChrome();
@@ -1906,18 +1817,18 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         //
         // Also false for a window that was already hidden -- eviction destroys those, and evicting
         // something the user put away must not reach in and change what they are looking at.
-        boolean wasActive = owner != null && owner.activeWindow() == this;
+        boolean wasActive = owner != null && owner.windowManager().activeWindow() == this;
 
         hide();
         // ITS SIZE AND PLACE OUTLIVE IT: the next window under its key opens there, as an application
         // reopens where it was closed. Before the state changes, which the record refuses.
         if (owner != null) owner.rememberPlacement(this);
-        state = WindowState.DESTROYED;
+        record.state(WindowState.DESTROYED);
         Desktop desktop = owner;
         owner = null;
         if (desktop != null) {
-            desktop.registry().destroyed(this);
-            if (wasActive) desktop.activateTopmost();
+            desktop.windowManager().registry().destroyed(this);
+            if (wasActive) desktop.windowManager().activateTopmost();
         }
         onDestroyed.emit();
     }
@@ -1961,8 +1872,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * and the next session save would write it down. The window comes back; the panel does not.</p>
      */
     public void markHidden() {
-        if (state != WindowState.VISIBLE) return;
-        state = WindowState.HIDDEN;
+        if (record.state() != WindowState.VISIBLE) return;
+        record.state(WindowState.HIDDEN);
         if (!hidingWithOwner) onHidden.emit();
     }
 
@@ -1974,11 +1885,11 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /**
      * The rect a maximised window goes back to. Meaningless while it is not maximised.
      *
-     * <p>Package-private: this is state {@link DesktopSession} has to be able to read and write in order
+     * <p>Package-private: this is state {@link SessionRecord} has to be able to read and write in order
      * to survive a restart, and nothing outside the compositor has any business with it.</p>
      */
     public float restoreLeft() {
-        return restoreLeft;
+        return record.restoreLeft();
     }
 
     /**
@@ -2023,17 +1934,17 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** @see #restoreLeft() */
     public float restoreTop() {
-        return restoreTop;
+        return record.restoreTop();
     }
 
     /** @see #restoreLeft() */
     public float restoreWidth() {
-        return restoreWidth;
+        return record.restoreWidth();
     }
 
     /** @see #restoreLeft() */
     public float restoreHeight() {
-        return restoreHeight;
+        return record.restoreHeight();
     }
 
     /**
@@ -2046,19 +1957,19 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * layout ran.</p>
      */
     public void setRestoreRect(float left, float top, float width, float height) {
-        restoreLeft = left;
-        restoreTop = top;
-        restoreWidth = width;
-        restoreHeight = height;
+        record.restoreLeft(left);
+        record.restoreTop(top);
+        record.restoreWidth(width);
+        record.restoreHeight(height);
     }
 
     public boolean isMaximized() {
-        return maximized;
+        return record.maximized();
     }
 
     /** Double-click on the caption, the maximise button, and (from W13) the command all land here. */
     public void toggleMaximized() {
-        if (maximized) restore();
+        if (record.maximized()) restore();
         else maximize();
     }
 
@@ -2081,32 +1992,32 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * it.</p>
      */
     public boolean isFullscreen() {
-        return fullscreen;
+        return record.fullscreen();
     }
 
     /** {@code F11} and the command both land here. */
     public void toggleFullscreen() {
-        if (fullscreen) exitFullscreen();
+        if (record.fullscreen()) exitFullscreen();
         else enterFullscreen();
     }
 
     public void enterFullscreen() {
-        if (fullscreen || state != WindowState.VISIBLE) return;
+        if (record.fullscreen() || record.state() != WindowState.VISIBLE) return;
         // REMEMBERED BEFORE maximising, or the answer is always "it was maximised".
-        maximizedBeforeFullscreen = maximized;
-        fullscreen = true;
+        record.maximizedBeforeFullscreen(record.maximized());
+        record.fullscreen(true);
         addClass(FULLSCREEN_CLASS);
         maximize();
-        if (owner != null) owner.fullscreenChanged();
+        if (owner != null) owner.windowManager().fullscreenChanged();
     }
 
     public void exitFullscreen() {
-        if (!fullscreen) return;
-        fullscreen = false;
+        if (!record.fullscreen()) return;
+        record.fullscreen(false);
         removeClass(FULLSCREEN_CLASS);
-        if (!maximizedBeforeFullscreen) restore();
+        if (!record.maximizedBeforeFullscreen()) restore();
         else shrinkIntoWorkArea();
-        if (owner != null) owner.fullscreenChanged();
+        if (owner != null) owner.windowManager().fullscreenChanged();
     }
 
     /**
@@ -2125,8 +2036,6 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** @see #isFullscreen() */
     public static final String FULLSCREEN_CLASS = "__fullscreen__";
 
-    private boolean fullscreen;
-    private boolean maximizedBeforeFullscreen;
 
     /**
      * Fills the work area, remembering the rect to come back to.
@@ -2147,25 +2056,25 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * which is the rule {@code UIResizer} already states for the size it writes.</p>
      */
     public void maximize() {
-        if (maximized) return;
+        if (record.maximized()) return;
         // A MAXIMISED WINDOW IS IN NO TILE. It covers the whole work area, so it shares an edge with
         // nothing and has no divider to move -- and leaving the cell recorded would let a joint resize
         // elsewhere re-tile it back down to a half. Restoring does not put it back in the group either:
         // it comes back to its pre-maximise rect, which is a position rather than a cell.
-        snappedZone = null;
-        restoreLeft = placedLeft;
-        restoreTop = placedTop;
+        record.snappedZone(null);
+        record.restoreLeft(record.placedLeft());
+        record.restoreTop(record.placedTop());
         Box current = box();
-        restoreWidth = current == null ? 0f : current.width();
-        restoreHeight = current == null ? 0f : current.height();
-        maximized = true;
+        record.restoreWidth(current == null ? 0f : current.width());
+        record.restoreHeight(current == null ? 0f : current.height());
+        record.maximized(true);
         addClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(RESTORE_TOOLTIP);
         UIElement area = resizeContainingBlock();
         Box areaBox = area == null ? null : area.box();
         // TO THE WORK AREA AS IT IS EACH FRAME, not as it was measured now: fullscreen takes the taskbar's row away
         // while this plays, and a size fixed here stopped at the bar's edge and jumped the rest at the end.
-        if (areaBox != null && animateGeometry(restoreLeft, restoreTop, restoreWidth, restoreHeight,
+        if (areaBox != null && animateGeometry(record.restoreLeft(), record.restoreTop(), record.restoreWidth(), record.restoreHeight(),
                 0f, 0f, areaBox.width(), areaBox.height(), area, this::applyMaximizedRect)) {
             // The animation writes px rects on the way and finishes by applying the rule below, which is
             // what makes a maximised window follow the work area afterwards.
@@ -2182,8 +2091,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** Puts the window back exactly where it was. */
     public void restore() {
-        if (!maximized) return;
-        maximized = false;
+        if (!record.maximized()) return;
+        record.maximized(false);
         removeClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
         // MEASURED, not read from the fields: while maximised those still hold the PRE-maximise
@@ -2196,7 +2105,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // to have the area's origin taken back off. @see plan/engine-port.md 6.4
         if (areaBox != null && self != null && animateGeometry(self.x(), self.y(),
                 self.width(), self.height(),
-                restoreLeft, restoreTop, restoreWidth, restoreHeight, null, this::applyRestoredRect)) {
+                record.restoreLeft(), record.restoreTop(), record.restoreWidth(), record.restoreHeight(), null, this::applyRestoredRect)) {
             return;
         }
         applyRestoredRect();
@@ -2216,14 +2125,14 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * one animation later.</p>
      */
     void restoreShrinkingUnderDrag() {
-        if (!maximized) return;
-        maximized = false;
+        if (!record.maximized()) return;
+        record.maximized(false);
         removeClass(MAXIMIZED_CLASS);
         maximizeTooltip.setText(MAXIMIZE_TOOLTIP);
 
         Box self = box();
         if (self == null || !animator.playShrink(self.width(), self.height(),
-                restoreWidth, restoreHeight, this::applyRestoredSize)) {
+                record.restoreWidth(), record.restoreHeight(), this::applyRestoredSize)) {
             applyRestoredSize();
         }
     }
@@ -2231,17 +2140,17 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** The resting SIZE, without touching the position. @see #restoreShrinkingUnderDrag */
     private void applyRestoredSize() {
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(),
-                l -> l.width(restoreWidth).height(restoreHeight));
+                l -> l.width(record.restoreWidth()).height(record.restoreHeight()));
     }
 
     /** Where a restored window rests. @see #restore */
     private void applyRestoredRect() {
-        float w = Math.max(restoreWidth, minimumSize(false)), h = Math.max(restoreHeight, minimumSize(true));
+        float w = Math.max(record.restoreWidth(), minimumSize(false)), h = Math.max(record.restoreHeight(), minimumSize(true));
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(w).height(h));
         // AFTER the flag is clear and after any animation, because applyPosition deliberately does
         // nothing while maximised OR mid-resize -- letting the clamp write a position during either
         // would fight the rect being animated on every layout pass.
-        applyPosition(restoreLeft, restoreTop);
+        applyPosition(record.restoreLeft(), record.restoreTop());
     }
 
     // ── Geometry ────────────────────────────────────────────────────────────
@@ -2254,7 +2163,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * correction {@code CanvasOverlayMove.markPlaced} had to make after gating on drags alone.</p>
      */
     public WindowFrame moveTo(float left, float top) {
-        placed = true;
+        record.placed(true);
         applyPosition(left, top);
         return this;
     }
@@ -2308,12 +2217,12 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * little further in, with nothing to attribute the drift to.</p>
      */
     public float getWantedLeft() {
-        return wantedLeft;
+        return record.wantedLeft();
     }
 
     /** @see #getWantedLeft() */
     public float getWantedTop() {
-        return wantedTop;
+        return record.wantedTop();
     }
 
     /**
@@ -2324,7 +2233,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * one: the spec has a user resize replace "existing property declaration(s) in the style attribute".</p>
      */
     public WindowFrame resizeTo(float width, float height) {
-        sized = true;
+        record.sized(true);
         float w = Math.max(width, minimumSize(false)), h = Math.max(height, minimumSize(true));
         StyleGroup.inlinePipeline(getStyle().getLayoutGroup(), l -> l.width(w).height(h));
         return this;
@@ -2332,10 +2241,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** Whether anything has given this window a size; one that has not takes the desktop's default. @see #resizeTo */
     public boolean isSized() {
-        return sized;
+        return record.sized();
     }
 
-    private boolean sized;
 
     /**
      * Moves and sizes the window in one gesture, <b>animating the change</b> — the tiled counterpart of
@@ -2369,9 +2277,9 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // a window that happens to be half-width. Joint resize pairs on it: without a recorded cell there
         // is nothing to say which windows share a divider, and geometry cannot answer that -- a window
         // dragged to exactly the left half by hand is not snapped, and Windows will not tile it either.
-        this.snappedZone = zone;
+        record.snappedZone(zone);
         Box box = box();
-        if (box != null && animateGeometry(placedLeft, placedTop, box.width(), box.height(),
+        if (box != null && animateGeometry(record.placedLeft(), record.placedTop(), box.width(), box.height(),
                 left, top, width, height, null, () -> applySnappedRect(left, top, width, height))) {
             return this;
         }
@@ -2396,16 +2304,14 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Nullable
     public SnapZones.Zone snappedZone() {
-        return snappedZone;
+        return record.snappedZone();
     }
 
     /** Leaves the tiled group. Safe to call when it was never in one. @see #snappedZone() */
     public void clearSnappedZone() {
-        snappedZone = null;
+        record.snappedZone(null);
     }
 
-    @Nullable
-    private SnapZones.Zone snappedZone;
 
     /**
      * Joint resize — dragging a shared divider moves everything the divider separates.
@@ -2423,8 +2329,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     @Override
     public void onUserResize(int handleDx, int handleDy, float width, float height) {
         Desktop desktop = desktop();
-        if (desktop == null || snappedZone == null) return;
-        desktop.jointResize(this, handleDx, handleDy, width, height);
+        if (desktop == null || record.snappedZone() == null) return;
+        desktop.windowManager().jointResize(this, handleDx, handleDy, width, height);
     }
 
     /**
@@ -2457,7 +2363,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * eviction, or a caller that simply wants the window gone. An OS animates what the USER did.</p>
      */
     public void minimize() {
-        if (state != WindowState.VISIBLE) return;
+        if (record.state() != WindowState.VISIBLE) return;
         // DEACTIVATED ON THE PRESS, not when the animation lands. Every window manager treats a minimise
         // as having happened the moment it is asked for and animates a window that has logically already
         // gone; deferring the state with the detach made the whole of it 400ms late, so the caption
@@ -2472,7 +2378,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         //
         // Guarded on being the active window, or minimising a background one would deactivate the
         // foreground.
-        if (owner != null && owner.activeWindow() == this) owner.deactivate();
+        if (owner != null && owner.windowManager().activeWindow() == this) owner.windowManager().deactivate();
         // THE PANELS GO NOW, WITH IT -- same reason the deactivation above moved to the press. hide() is
         // this animation's continuation, so a cascade left to it starts when the flight LANDS: the window
         // sails into the taskbar and its tool windows blink out afterwards, which reads as them not being
@@ -2507,7 +2413,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * asks "is this on screen?" during the flight treats it as gone, as a starting window's launch does.
      */
     public boolean isMinimizing() {
-        return minimizing && state != WindowState.DESTROYED;
+        return minimizing && record.state() != WindowState.DESTROYED;
     }
 
     /** The minimise flight, without the hide — so a test can ask where it is going. @see WindowAnimator */
@@ -2598,7 +2504,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public float boxX() {
         Box box = box();
-        return laidOut(box) ? box.x() : maximized ? 0f : placedLeft;
+        return laidOut(box) ? box.x() : record.maximized() ? 0f : record.placedLeft();
     }
 
     /** A reattached frame's box can exist yet be unplaced, at 0,0 and 0x0, until its first layout. */
@@ -2609,7 +2515,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** @see #boxX() */
     public float boxY() {
         Box box = box();
-        return laidOut(box) ? box.y() : maximized ? 0f : placedTop;
+        return laidOut(box) ? box.y() : record.maximized() ? 0f : record.placedTop();
     }
 
     /** @see #boxX() */
@@ -2628,16 +2534,16 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     /** Whether this frame has been given a position — by a caller, a drag, or the desktop's cascade. */
     public boolean isPlaced() {
-        return placed;
+        return record.placed();
     }
 
     /** The window's origin inside the work area, as last written. */
     public float left() {
-        return placedLeft;
+        return record.placedLeft();
     }
 
     public float top() {
-        return placedTop;
+        return record.placedTop();
     }
 
     /**
@@ -2647,7 +2553,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Override
     public void applyResizeOrigin(float left, float top) {
-        placed = true;
+        record.placed(true);
         applyPosition(left, top);
     }
 
@@ -2662,7 +2568,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     @Override
     public float resizeOriginLeft() {
-        if (placed) return placedLeft;
+        if (record.placed()) return record.placedLeft();
         Box box = box();
         return box == null ? 0f : box.x();
     }
@@ -2670,7 +2576,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     /** @see #resizeOriginLeft */
     @Override
     public float resizeOriginTop() {
-        if (placed) return placedTop;
+        if (record.placed()) return record.placedTop();
         Box box = box();
         return box == null ? 0f : box.y();
     }
@@ -2700,12 +2606,12 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * to where the user put it when the room comes back.</p>
      */
     public void reclamp() {
-        if (!placed) return;
+        if (!record.placed()) return;
         // NOT WHILE A DRAG IS LIVE. The clamp reads measured boxes, which lag the drag by a frame, so
         // running both writes last frame's answer over the one the pointer just asked for.
         UIDocument window = document();
         if (window != null && window.input().mode(Drag.class) != null) return;
-        applyPosition(wantedLeft, wantedTop);
+        applyPosition(record.wantedLeft(), record.wantedTop());
     }
 
     /**
@@ -2724,12 +2630,12 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     private void placeAfterLayout() {
         rememberBox();
-        if (placed) {
-            applyPosition(wantedLeft, wantedTop);
+        if (record.placed()) {
+            applyPosition(record.wantedLeft(), record.wantedTop());
             return;
         }
         Desktop desktop = desktop();
-        if (desktop != null) desktop.placeByCascade(this);
+        if (desktop != null) desktop.windowManager().placeByCascade(this);
     }
 
     @Override
@@ -2761,7 +2667,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     @Override
     public void pressBlocked(UIElement modal) {
         Desktop desktop = desktop();
-        if (desktop != null) desktop.activate(this, false, true);
+        if (desktop != null) desktop.windowManager().activate(this, false, true);
         // THE FRAME KNOWS WHAT A DIALOG IS and the engine does not -- `desktop` sits above
         // `widget.overlay`, so this is the legal direction for the type check, and it is why the hook
         // is on the SCOPE rather than on the modal.
@@ -2814,7 +2720,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * restore that gives the window a position does not happen until the pointer actually moves.</p>
      */
     void markPlaced() {
-        placed = true;
+        record.placed(true);
     }
 
     /** Records the intent, then writes it clamped. */
@@ -2830,16 +2736,16 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // work area would simply stay there, unreachable -- the exact thing the resting clamp exists to
         // prevent. A snap commits before this runs and a maximised window is exempt, so neither is
         // disturbed.
-        if (!moving && placed) applyPosition(wantedLeft, wantedTop);
+        if (!moving && record.placed()) applyPosition(record.wantedLeft(), record.wantedTop());
     }
 
     private void applyPosition(float left, float top) {
-        wantedLeft = left;
-        wantedTop = top;
+        record.wantedLeft(left);
+        record.wantedTop(top);
         // A MAXIMISED WINDOW HAS NO POSITION, and neither does one mid-resize. The intent above is
         // still recorded -- it is what restore comes back to -- but writing it would fight the 100% rect
         // on every layout pass, and this runs from the layout callback and from the work-area re-clamp.
-        if (maximized || geometryAnimating) return;
+        if (record.maximized() || geometryAnimating) return;
 
         float clampedLeft = left;
         float clampedTop = top;
@@ -2878,8 +2784,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
             clampedTop = WindowClamp.top(top, areaHeight, caption, moving);
         }
 
-        placedLeft = clampedLeft;
-        placedTop = clampedTop;
+        record.placedLeft(clampedLeft);
+        record.placedTop(clampedTop);
 
         final float writtenLeft = clampedLeft;
         final float writtenTop = clampedTop;

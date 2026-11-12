@@ -68,7 +68,7 @@ public class LauncherButton extends Button {
         launcher.refill();
         // START TAKES THE KEYBOARD, as Windows': the window that had it is no longer the active one while the menu is up.
         Desktop desktop = Desktop.ifPresent(document());
-        if (desktop != null) desktop.deactivate();
+        if (desktop != null) desktop.windowManager().deactivate();
         launcher.showFor(this, this);
         // LIT WHILE ITS MENU IS UP, as an entry is while its jump list is: :hover also matches over the menu, being
         // this button's descendant, and goes the moment the pointer leaves both.

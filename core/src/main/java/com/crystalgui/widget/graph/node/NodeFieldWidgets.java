@@ -55,7 +55,7 @@ public final class NodeFieldWidgets {
         ConfigControl create(NodeField field, Property<String> stored);
     }
 
-    private static final Map<NodeField.Kind, Factory> FACTORIES = new EnumMap<>(NodeField.Kind.class);
+    private static final Map<NodeField.Kind, Factory> FACTORIES = new java.util.concurrent.ConcurrentHashMap<>();
 
     static {
         FACTORIES.put(NodeField.Kind.ENUM, (field, stored) -> ConfigControls.bound(

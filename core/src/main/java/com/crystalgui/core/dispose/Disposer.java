@@ -55,9 +55,11 @@ public final class Disposer {
     }
 
     /** Parent → its children, in registration order. Identity-keyed; see the class note. */
+    // Threads: guarded by Disposer.class: every method is synchronized.
     private static final Map<Disposable, List<Disposable>> CHILDREN = new IdentityHashMap<>();
 
     /** Child → its parent, so disposing a child can unlink it without searching. */
+    // Threads: guarded by Disposer.class.
     private static final Map<Disposable, Disposable> PARENTS = new IdentityHashMap<>();
 
     /**
@@ -79,6 +81,7 @@ public final class Disposer {
      * weak identity map, and {@code WeakHashMap} keys on {@code equals}, which is the one thing the
      * class note above says must not happen.</p>
      */
+    // Threads: guarded by Disposer.class.
     private static final Map<Gone, Boolean> DISPOSED = new HashMap<>();
 
     /** Where a {@link Gone} key lands once its subject has been collected. @see #purgeCollected() */

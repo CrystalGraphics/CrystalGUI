@@ -11,7 +11,7 @@ import com.crystalgui.workbench.dock.layout.DockPanelRef;
  * <pre>{@code
  * dock.setForeignDrop(new DockForeignDrop() {
  *     public List<DockPanelRef> panelsFor(Object payload) {
- *         DraggedResources files = DragData.find(payload, DraggedResources.class);
+ *         DraggedResources files = TransferData.find(payload, DraggedResources.class);
  *         return files == null ? List.of() : refsFor(files);
  *     }
  *     public void opened(List<DockPanelRef> panels) { recordRecent(panels); }

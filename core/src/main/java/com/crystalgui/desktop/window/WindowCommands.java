@@ -183,7 +183,7 @@ public final class WindowCommands {
                     // exists, it just takes two steps. @see plan/shell-windowing.md W14
                     return frame != null && frame.state() == WindowState.VISIBLE
                             && frame.desktop() != null
-                            && frame.desktop().registry().windows().contains(frame);
+                            && frame.desktop().windowManager().registry().windows().contains(frame);
                 }));
 
         // FULLSCREEN IS MAXIMISE'S SIBLING and sits with it in the state group -- W13b. F11 is
@@ -288,7 +288,7 @@ public final class WindowCommands {
         // ACTIVATED FIRST. The mode takes keys ahead of dispatch, so it works on a background window
         // perfectly well -- and a window being nudged while another one is lit is exactly the sort of
         // thing that reads as the wrong window moving.
-        desktop.activate(frame);
+        desktop.windowManager().activate(frame);
         desktop.keyboardMove().begin(frame, mode);
     }
 

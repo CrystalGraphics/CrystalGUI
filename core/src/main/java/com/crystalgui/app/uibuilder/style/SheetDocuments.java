@@ -15,6 +15,7 @@ import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
+import com.crystalgui.style.StyleContext;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.text.TextBuffer;
@@ -77,7 +78,7 @@ public final class SheetDocuments {
     public static final class Sheet {
 
         private final String id;
-        private final StyleSheet sheet;
+        private StyleSheet sheet;
 
         @Nullable
         private final Resource resource;
@@ -287,15 +288,16 @@ public final class SheetDocuments {
 
     private void refill(Sheet entry) {
         if (disposed || window == null) return;
-        entry.sheet.refillFrom(parse(entry.buffer == null ? "" : entry.buffer.toString()));
-        // The rules are different objects now, so every match is stale -- including the elements this
-        // sheet did NOT match before and may match now.
-        window.styles().invalidateAllMatches();
+        // A new sheet for the new text, never the old one rewritten: the engine re-matches every element, including
+        // the ones the old rules did not reach and these may.
+        window.styles().removeStylesheet(entry.sheet);
+        entry.sheet = parse(entry.buffer == null ? "" : entry.buffer.toString());
+        reorder();
     }
 
     /** Parsed against the bound theme variables, so a sheet's {@code var()} reads what the theme set. */
     private static StyleSheet parse(String text) {
-        return StyleSheet.parse(text, StyleSheetRegistry.boundVariables());
+        return StyleSheet.parse(text, StyleContext.current().variables());
     }
 
     /**

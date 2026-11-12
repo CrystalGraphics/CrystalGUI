@@ -1,5 +1,6 @@
 package com.crystalgui.app.frameprofiler;
 
+import com.crystalgui.desktop.Desktop;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.workbench.WorkbenchContext;
 import com.crystalgui.workbench.extension.WorkbenchExtension;
@@ -53,7 +54,10 @@ public final class FrameProfilerExtension implements WorkbenchExtension {
                 // BUILT ON FIRST SHOW, not at activation: a profiler nobody opened must not refresh four
                 // times a second inside every workbench that merely offers it.
                 .view(context -> {
-                    if (panel[0] == null) panel[0] = new FrameProfilerPanel();
+                    if (panel[0] == null) {
+                        Desktop desktop = Desktop.ifPresent(workbench.document());
+                        panel[0] = new FrameProfilerPanel(desktop != null ? ProfilerSettings.of(desktop) : new ProfilerSettings());
+                    }
                     return panel[0];
                 })
                 .toggle(SHOW));

@@ -98,13 +98,13 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
     public void aBackgroundWindowOpensWithoutFocusAndAsksForAttention() {
         WindowFrame first = Desktop.of(document).addWindow(new WindowFrame("Editor"));
         settle();
-        assertSame(first, Desktop.of(document).activeWindow());
+        assertSame(first, Desktop.of(document).windowManager().activeWindow());
 
         WindowFrame pushed = Desktop.of(document).addWindow(new WindowFrame("From the server"), false);
         settle();
 
         assertEquals("a background document did not open at all", WindowState.VISIBLE, pushed.state());
-        assertSame("a background document stole focus", first, Desktop.of(document).activeWindow());
+        assertSame("a background document stole focus", first, Desktop.of(document).windowManager().activeWindow());
         assertTrue("a background document appeared without asking for attention",
                 pushed.isDemandingAttention());
         assertTrue("the entry does not show it", entryOf(pushed).hasClass(Taskbar.ATTENTION_CLASS));
@@ -141,7 +141,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         settle();
         assertTrue(pushed.isDemandingAttention());
 
-        Desktop.of(document).activate(pushed);
+        Desktop.of(document).windowManager().activateByUser(pushed);
         settle();
 
         assertFalse("activating the document left it still asking for attention",
@@ -241,13 +241,13 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         WindowFrame first = Desktop.of(document).addWindow(new WindowFrame("Editor"));
         WindowFrame second = Desktop.of(document).addWindow(new WindowFrame("Other"));
         settle();
-        assertNotSame(first, Desktop.of(document).activeWindow());
+        assertNotSame(first, Desktop.of(document).windowManager().activeWindow());
 
         pressLeft(entryOf(first));
 
         assertEquals("a left click closed the document", WindowState.VISIBLE, first.state());
         assertSame("a left click on an entry did not activate its document",
-                first, Desktop.of(document).activeWindow());
+                first, Desktop.of(document).windowManager().activeWindow());
     }
 
     private void pressMiddle(UIElement target) {
@@ -275,7 +275,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         WindowFrame second = desktop().addWindow(new WindowFrame("Pair 2"));
         second.setApplication(kind);
         WindowFrame last = desktop().addWindow(new WindowFrame("Last"));
-        WindowRegistry registry = desktop().registry();
+        WindowRegistry registry = desktop().windowManager().registry();
 
         registry.moveInTaskbar(last, lone);
         assertEquals(List.of(last, lone, first, second), registry.taskbarOrder());
@@ -297,7 +297,7 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         WindowFrame b = desktop().addWindow(new WindowFrame("Bravo"));
         WindowFrame c = desktop().addWindow(new WindowFrame("Charlie"));
         settle();
-        WindowFrame activeBefore = desktop().activeWindow();
+        WindowFrame activeBefore = desktop().windowManager().activeWindow();
         var from = entryOf(a).box();
         var to = entryOf(c).box();
         float y = from.worldY() + from.height() / 2f * uiScale();
@@ -307,8 +307,8 @@ public class TaskbarEntryTest extends UiDocumentTestBase {
         for (int step = 1; step <= 12; step++) mouse(startX + (endX - startX) * step / 12f, y, -1, false);
         mouse(endX, y, CgMouseCodes.LEFT_BUTTON, false);
 
-        assertEquals(List.of(b, c, a), desktop().registry().taskbarOrder());
-        assertSame("the release that ended the drag clicked the entry", activeBefore, desktop().activeWindow());
+        assertEquals(List.of(b, c, a), desktop().windowManager().registry().taskbarOrder());
+        assertSame("the release that ended the drag clicked the entry", activeBefore, desktop().windowManager().activeWindow());
         assertEquals(WindowState.VISIBLE, a.state());
     }
 

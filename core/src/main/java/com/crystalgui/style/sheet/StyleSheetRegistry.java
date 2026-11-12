@@ -2,7 +2,9 @@ package com.crystalgui.style.sheet;
 
 import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.style.StyleContext;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -53,66 +55,7 @@ public final class StyleSheetRegistry {
     
     private static final ConcurrentHashMap<String, StyleSheet> CACHE = new ConcurrentHashMap<>();
 
-    /**
-     * The external variable table every parse resolves against — the active theme's <b>resolved</b>
-     * tokens (the theme manager runs {@code resolveTable} before binding). Empty when no theme is
-     * bound. Volatile: written from {@code bindVariables}, read from any parse.
-     */
-    private static volatile Map<String, String> boundVariables = Map.of();
-
     private StyleSheetRegistry() {
-    }
-
-    /** The currently bound external variable table — what {@link StyleSheet#parse(String)} resolves
-     * against. Never {@code null}; empty when no theme is bound. */
-    public static Map<String, String> boundVariables() {
-        return boundVariables;
-    }
-
-    /**
-     * Binds {@code resolvedTable} as the external variable table and re-substitutes every cached
-     * sheet in place — <b>the theme-swap primitive</b>.
-     *
-     * <p>No I/O: each sheet rebuilds from its compiled source, re-parsing only the declarations holding a
-     * {@code var()}, so a swap works with the resource pack long gone. Identity-stable throughout ({@link
-     * StyleSheet#rebind} goes through {@code replaceRules}), so no engine's sheet <em>list</em>
-     * changes — which is what keeps registration order out of the picture entirely.</p>
-     *
-     * <p><b>This only re-substitutes the sheets. It does not restyle anything</b> — call
-     * {@code StyleEngine.restyleAllWindows()} afterwards, the same pairing {@link #reloadAll}
-     * documents. ({@code UiThemeManager} owns that sequencing; almost nothing else should call
-     * this directly.)</p>
-     */
-    public static void bindVariables(Map<String, String> resolvedTable) {
-        boundVariables = Map.copyOf(resolvedTable);
-        for (var entry : CACHE.entrySet()) {
-            entry.getValue().rebind(boundVariables);
-        }
-        // The user-agent sheet is a rule-copy of the cached one, refilled by mirroring — same
-        // special case as reloadAll below, for the same reason.
-        StyleSheet cachedDefault = CACHE.get(DEFAULT_SHEET);
-        if (cachedDefault != null && !cachedDefault.getRules().isEmpty()) {
-            StyleSheet.DEFAULT.refillFrom(cachedDefault);
-            return;
-        }
-        // THE ONE FAILURE THAT LOOKS EXACTLY LIKE SUCCESS.
-        //
-        // Nearly every colour a theme changes is a `var(--token, #fallback)` in the USER-AGENT sheet --
-        // a theme carries variables and, in the shipped pair, no override rules at all. So this refill
-        // is not a special case, it IS how a theme reaches the screen. Skip it and every other step
-        // still runs perfectly: the table binds, every registered sheet re-substitutes, every window
-        // re-matches, and the screen does not change.
-        //
-        // It is skipped when the cache has no entry under `DEFAULT_SHEET`, and `of()` reaches that state
-        // by design -- `computeIfAbsent` does not store a null, so a sheet that could not be READ is
-        // retried next time rather than being cached empty. Which makes this reachable exactly where
-        // resource resolution differs: a host that resolves from source directories caches it on the
-        // first call, and one whose resource manager was not up yet when `StyleSheet.DEFAULT` class-
-        // initialised does not -- and `DEFAULT` is `static final`, so it never asks again.
-        CrystalGuiCore.LOGGER.warn("theme: the user-agent sheet was NOT re-substituted -- '{}' is {} in "
-                        + "the sheet cache, so every var() in it keeps the value it was parsed with and "
-                        + "a theme swap will change nothing visible",
-                DEFAULT_SHEET, cachedDefault == null ? "absent" : "cached but empty");
     }
 
     /** Returns the parsed stylesheet for {@code namespacedPath}, or an empty (no-op) stylesheet if
@@ -148,6 +91,15 @@ public final class StyleSheetRegistry {
      * every widget out at 0x0 and points at nothing. (Counted "nine" until CrystalOS added a tenth,
      * which is the kind of number not worth restating in prose.)</p>
      */
+    /** Every sheet read so far, which is every sheet a document is likely to install. */
+    public static Collection<StyleSheet> loaded() {
+        return List.copyOf(CACHE.values());
+    }
+
+    static String sourceOf(String namespacedPath) {
+        return fetchSource(namespacedPath);
+    }
+
     private static String fetchSource(String namespacedPath) {
         if (!DEFAULT_SHEET.equals(namespacedPath)) {
             return CgIO.loadSource(toResourcePath(namespacedPath));
@@ -206,7 +158,7 @@ public final class StyleSheetRegistry {
             try {
                 // refill rather than replaceRules: the retained source must follow the file, or the
                 // next theme swap would rebind against the PRE-reload text.
-                entry.getValue().refill(css, boundVariables);
+                entry.getValue().refill(css, StyleContext.current().variables());
                 reloaded++;
             } catch (Exception e) {
                 CrystalGuiCore.LOGGER.warn(
@@ -214,11 +166,11 @@ public final class StyleSheetRegistry {
                         entry.getKey(), e.getMessage());
             }
         }
-        // The user-agent sheet, which is a copy of the cached one rather than the cached one -- see above.
-        StyleSheet cachedDefault = CACHE.get(DEFAULT_SHEET);
-        if (cachedDefault != null && !cachedDefault.getRules().isEmpty()) {
-            StyleSheet.DEFAULT.refillFrom(cachedDefault);
-        }
+        // The user-agent sheet is parsed unthemed and apart from the cache: re-read it from the same parts.
+        String ua = fetchSource(DEFAULT_SHEET);
+        if (ua != null) StyleSheet.DEFAULT.refill(ua, Map.of());
+        // Every document adopts the sheets' new text at its next frame.
+        StyleContext.PUBLISHED.update(StyleContext::renewed);
         CrystalGuiCore.LOGGER.info("StyleSheetRegistry.reloadAll: re-read {} of {} stylesheet(s)",
                 reloaded, CACHE.size());
         return reloaded;

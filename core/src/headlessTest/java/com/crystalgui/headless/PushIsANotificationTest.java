@@ -8,7 +8,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.protocol.FsMessages;
@@ -72,7 +72,7 @@ public class PushIsANotificationTest {
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private final List<FsMessages.FileChange> heard = new ArrayList<>();
 
     @Before
@@ -90,7 +90,7 @@ public class PushIsANotificationTest {
         clientSide = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, PEER, CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
-        workspace = Workspace.of(clientSide);
+        workspace = WorkspaceClient.of(clientSide);
         workspace.watch(Resource.of(FILE), false).onChanged.connect(heard::addAll);
         // SETTLED BEFORE ANY TEST LOOKS, or the greeting and the watch are still outstanding and every
         // pending-request count here starts at two.

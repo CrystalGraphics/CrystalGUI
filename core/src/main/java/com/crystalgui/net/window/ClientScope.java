@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.net.protocol.CgCall;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.net.ClientUiSession;
 
 /**
@@ -124,8 +124,8 @@ public final class ClientScope {
      * <p>Connection-scoped, not window-scoped: two panels on one client share one workspace, one cache
      * and one set of watches.</p>
      */
-    public Workspace workspace() {
-        return Workspace.of(window.connection());
+    public WorkspaceClient workspace() {
+        return WorkspaceClient.of(window.connection());
     }
 
     public ClientWindowContext window() {

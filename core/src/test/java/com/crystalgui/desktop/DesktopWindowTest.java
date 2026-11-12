@@ -91,8 +91,8 @@ public class DesktopWindowTest extends UiDocumentTestBase {
         assertSame("the desktop belongs to the document itself", document, desktop.parent());
 
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame("One"));
-        assertEquals(1, desktop.windows().size());
-        assertSame(frame, desktop.windows().get(0));
+        assertEquals(1, desktop.windowManager().windows().size());
+        assertSame(frame, desktop.windowManager().windows().get(0));
     }
 
     /**
@@ -138,12 +138,12 @@ public class DesktopWindowTest extends UiDocumentTestBase {
         Desktop desktop = Desktop.of(document);
         WindowFrame first = Desktop.of(document).addWindow(new WindowFrame("One"));
         WindowFrame second = Desktop.of(document).addWindow(new WindowFrame("Two"));
-        assertEquals(2, desktop.visibleWindows().size());
+        assertEquals(2, desktop.windowManager().visibleWindows().size());
 
         first.removeSelf();
-        assertEquals("a frame that removed itself is off the desktop", 1, desktop.visibleWindows().size());
-        assertSame(second, desktop.visibleWindows().get(0));
-        assertEquals("but it is retained, which is what W3 made detaching mean", 2, desktop.windows().size());
+        assertEquals("a frame that removed itself is off the desktop", 1, desktop.windowManager().visibleWindows().size());
+        assertSame(second, desktop.windowManager().visibleWindows().get(0));
+        assertEquals("but it is retained, which is what W3 made detaching mean", 2, desktop.windowManager().windows().size());
     }
 
     /** The layer holds windows and nothing else, which is what makes the list provably its children

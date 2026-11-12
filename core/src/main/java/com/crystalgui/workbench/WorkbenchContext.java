@@ -23,7 +23,7 @@ import com.crystalgui.document.DocumentKinds;
 import com.crystalgui.document.NewDocumentKinds;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.client.WorkspaceProjects;
 import com.crystalgui.text.diagnostic.Markers;
@@ -75,7 +75,7 @@ public interface WorkbenchContext extends SettingsScope {
     // ── The workspace under it ──────────────────────────────────────────────────────────────────
 
     /** The workspace this workbench is a view of. */
-    Workspace workspace();
+    WorkspaceClient workspace();
 
     /** The projects and their listings. @see WorkspaceProjects */
     WorkspaceProjects projects();

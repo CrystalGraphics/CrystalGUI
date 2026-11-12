@@ -7,6 +7,7 @@ import java.util.function.Function;
 
 import javax.annotation.Nullable;
 
+import com.crystalgui.core.data.DataKey;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.fs.Resource;
 
@@ -46,6 +47,12 @@ import com.crystalgui.fs.Resource;
  */
 public final class ApplicationKind {
 
+    /**
+     * The application an element stands for: a taskbar entry, a pin, a launcher row. What a command placed in
+     * {@code MenuId.APPLICATION} or {@code MenuId.TASKBAR_ENTRY} acts on.
+     */
+    public static final DataKey<ApplicationKind> DATA_KEY = DataKey.create("applicationKind", ApplicationKind.class);
+
     private final String id;
     private final String displayName;
 
@@ -55,13 +62,15 @@ public final class ApplicationKind {
     @Nullable
     private final List<DocumentKind.Matcher> opens = new ArrayList<>();
     @Nullable
-    private Function<LaunchContext, Application> factory;
+    private Function<AppContext, Application> factory;
     private boolean singleInstance;
+    private boolean separateDocument;
+    private Threading threading = Threading.SEQUENCED;
     private boolean preventPinning;
     private boolean requiresConnection = true;
     private boolean startingWindow;
     @Nullable
-    private Consumer<LaunchContext> autostart;
+    private Consumer<AppContext> autostart;
     private float windowWidth, windowHeight;
     private float windowFraction;
     private boolean frozen;
@@ -169,8 +178,40 @@ public final class ApplicationKind {
         return this;
     }
 
+    /** Where an application's document runs. */
+    public enum Threading {
+        /** On a thread of its own, recording while the render thread presents: the default. */
+        SEQUENCED,
+        /** On the client thread, for a small interface that reads the game every frame; its cost is the game's. */
+        INLINE
+    }
+
+    /**
+     * Runs the application in a document of its own, on its own thread, so its layout and paint stall no other
+     * application and not the shell. Its windows' frames stay in the shell's document and show what it draws.
+     *
+     * <pre>{@code
+     * ApplicationKind.of("mymod:lab", "Lab").separateDocument().launch(Lab::new);
+     * }</pre>
+     *
+     * <p>Until every application has one this is a choice, and an application opts in: its factory then runs on the
+     * document's thread, and anything it reads from {@link AppContext#desktop()} it reads from there.</p>
+     */
+    public ApplicationKind separateDocument() {
+        check();
+        this.separateDocument = true;
+        return this;
+    }
+
+    /** Where its document runs, {@link Threading#SEQUENCED} unless said; read only with {@link #separateDocument}. */
+    public ApplicationKind threading(Threading threading) {
+        check();
+        this.threading = threading;
+        return this;
+    }
+
     /** How one is started. Required — a manifest nothing can launch is a listing with no product. */
-    public ApplicationKind launch(Function<LaunchContext, Application> factory) {
+    public ApplicationKind launch(Function<AppContext, Application> factory) {
         check();
         this.factory = factory;
         return this;
@@ -190,7 +231,7 @@ public final class ApplicationKind {
      *   <li>Replaces {@link #launch}; a kind has one or the other.</li>
      * </ul>
      */
-    public ApplicationKind action(Consumer<LaunchContext> hook) {
+    public ApplicationKind action(Consumer<AppContext> hook) {
         check();
         this.factory = context -> {
             hook.accept(context);
@@ -281,7 +322,7 @@ public final class ApplicationKind {
      * <p>freedesktop's autostart entry, for what an application must set up <b>before</b> its window
      * exists — a profiler that records from the first frame, a tool that restores a background service.
      * Run once per desktop, as soon as the desktop has storage, with this application's own
-     * {@link LaunchContext#storage()} and no workspace.</p>
+     * {@link AppContext#storage()} and no workspace.</p>
      *
      * <pre>{@code
      * ApplicationKind.of("mymod:profiler", "Profiler")
@@ -292,14 +333,14 @@ public final class ApplicationKind {
      * <p>It must be quick and must not open a window: it runs inside the host's startup, before the
      * first frame.</p>
      */
-    public ApplicationKind autostart(Consumer<LaunchContext> hook) {
+    public ApplicationKind autostart(Consumer<AppContext> hook) {
         check();
         this.autostart = hook;
         return this;
     }
 
     @Nullable
-    Consumer<LaunchContext> autostartHook() {
+    Consumer<AppContext> autostartHook() {
         return autostart;
     }
 
@@ -330,6 +371,14 @@ public final class ApplicationKind {
         return icon;
     }
 
+    public boolean hasSeparateDocument() {
+        return separateDocument;
+    }
+
+    public Threading threading() {
+        return threading;
+    }
+
     public boolean isSingleInstance() {
         return singleInstance;
     }
@@ -353,7 +402,7 @@ public final class ApplicationKind {
     }
 
     @Nullable
-    Function<LaunchContext, Application> factory() {
+    Function<AppContext, Application> factory() {
         return factory;
     }
 }

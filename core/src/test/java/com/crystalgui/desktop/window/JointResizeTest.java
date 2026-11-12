@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.ui.input.ButtonState;
@@ -29,7 +30,7 @@ import static org.junit.Assert.assertTrue;
  *
  * <h3>The maths is driven directly and the wiring is driven through a real drag</h3>
  *
- * <p>{@link Desktop#jointResize} takes the numbers a resize handle would have produced, so the matrix of
+ * <p>{@link WindowManager#jointResize} takes the numbers a resize handle would have produced, so the matrix of
  * zones and edges is cheap to cover. That leaves exactly one thing it cannot see — whether a handle is
  * connected to it at all — so one test drags a real {@code __resizer-right__} and the rest do not have
  * to.</p>
@@ -87,7 +88,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame frame = Desktop.of(document).addWindow(new WindowFrame(title));
         frame.resizeTo(300, 200).moveTo(60, 60);
         settle();
-        desktop.snapFrameTo(frame, zone);
+        desktop.windowManager().snapFrameTo(frame, zone);
         settle();
         return frame;
     }
@@ -124,7 +125,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame right = snapped("R", SnapZones.Zone.RIGHT);
 
         // The left document's RIGHT edge dragged to 200 — the edge facing the middle, so a divider.
-        desktop.jointResize(left, 1, 0, 200f, areaHeight());
+        desktop.windowManager().jointResize(left, 1, 0, 200f, areaHeight());
         settle();
 
         assertEquals("the dragged document is not the size asked for", 200f, widthOf(left), 1f);
@@ -148,7 +149,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame right = snapped("R", SnapZones.Zone.RIGHT);
         float before = right.left();
 
-        desktop.jointResize(left, -1, 0, 200f, areaHeight());
+        desktop.windowManager().jointResize(left, -1, 0, 200f, areaHeight());
         settle();
 
         assertEquals("an outer edge dragged the neighbour with it", before, right.left(), 0.01f);
@@ -164,7 +165,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         float before = widthOf(left);
 
         assertNull("a document placed by hand is not in the group", loose.snappedZone());
-        desktop.jointResize(loose, 1, 0, 500f, areaHeight());
+        desktop.windowManager().jointResize(loose, 1, 0, 500f, areaHeight());
         settle();
 
         assertEquals("an untiled document re-tiled the group", before, widthOf(left), 0.01f);
@@ -188,7 +189,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame bottomRight = snapped("BR", SnapZones.Zone.BOTTOM_RIGHT);
 
         // The top-left cell's bottom-right corner: both of its edges face the middle.
-        desktop.jointResize(topLeft, 1, 1, 200f, 150f);
+        desktop.windowManager().jointResize(topLeft, 1, 1, 200f, 150f);
         settle();
 
         assertEquals(200f, widthOf(topLeft), 1f);
@@ -222,7 +223,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         // already current, which is why this is the fixture's job and not a guard in jointResize.
         float wanted = areaWidth() - 250f;
         topRight.moveTo(250f, topRight.top());
-        desktop.jointResize(topRight, -1, 0, wanted, areaHeight() / 2f);
+        desktop.windowManager().jointResize(topRight, -1, 0, wanted, areaHeight() / 2f);
         settle();
 
         assertEquals("the cut is not where the drag put it", 250f, topRight.left(), 1f);
@@ -244,7 +245,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
         WindowFrame right = snapped("R", SnapZones.Zone.RIGHT);
 
-        desktop.jointResize(left, 1, 0, 200f, areaHeight());
+        desktop.windowManager().jointResize(left, 1, 0, 200f, areaHeight());
         settle();
         assertNotNull("a joint resize dropped the document out of its tile", left.snappedZone());
         assertNotNull(right.snappedZone());
@@ -253,7 +254,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         assertNull("dragging a document away left it in the tiled group", right.snappedZone());
 
         float parked = right.left();
-        desktop.jointResize(left, 1, 0, 300f, areaHeight());
+        desktop.windowManager().jointResize(left, 1, 0, 300f, areaHeight());
         settle();
         assertEquals("a document that had left the group was still re-tiled", parked, right.left(), 1f);
     }
@@ -281,7 +282,7 @@ public class JointResizeTest extends UiDocumentTestBase {
     public void snappingIntoAnOccupiedZoneUsesTheGroupsCut() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
         WindowFrame right = snapped("R", SnapZones.Zone.RIGHT);
-        desktop.jointResize(left, 1, 0, 250f, areaHeight());
+        desktop.windowManager().jointResize(left, 1, 0, 250f, areaHeight());
         settle();
 
         WindowFrame third = snapped("Third", SnapZones.Zone.LEFT);
@@ -303,10 +304,10 @@ public class JointResizeTest extends UiDocumentTestBase {
     public void aFreshGroupStartsAtHalves() {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
         snapped("R", SnapZones.Zone.RIGHT);
-        desktop.jointResize(left, 1, 0, 250f, areaHeight());
+        desktop.windowManager().jointResize(left, 1, 0, 250f, areaHeight());
         settle();
 
-        for (WindowFrame frame : new java.util.ArrayList<>(desktop.registry().windows())) {
+        for (WindowFrame frame : new java.util.ArrayList<>(desktop.windowManager().registry().windows())) {
             frame.destroy();
         }
         settle();
@@ -329,7 +330,7 @@ public class JointResizeTest extends UiDocumentTestBase {
         WindowFrame left = snapped("L", SnapZones.Zone.LEFT);
         WindowFrame right = snapped("R", SnapZones.Zone.RIGHT);
 
-        desktop.jointResize(left, 1, 0, areaWidth() + 400f, areaHeight());
+        desktop.windowManager().jointResize(left, 1, 0, areaWidth() + 400f, areaHeight());
         settle();
 
         assertTrue("the neighbour was squeezed out of existence", widthOf(right) > 0f);
@@ -342,7 +343,7 @@ public class JointResizeTest extends UiDocumentTestBase {
     /**
      * <b>A real resize handle reaches the group.</b>
      *
-     * <p>The one thing driving {@link Desktop#jointResize} directly cannot see: every test above would
+     * <p>The one thing driving {@link WindowManager#jointResize} directly cannot see: every test above would
      * pass with nothing at all connected to {@code Resizer}. It needs the handle because that is the
      * seam — {@code onUserResize} was added to {@code UIElement} for this, and a hook nobody calls looks
      * exactly like a hook that works.</p>

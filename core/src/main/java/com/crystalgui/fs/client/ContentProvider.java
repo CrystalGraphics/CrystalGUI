@@ -13,7 +13,7 @@ import org.jetbrains.annotations.Nullable;
  * <b>Where a non-project resource's content comes from</b> — a decompiler, a code generator, a scratch
  * buffer.
  *
- * <p>Register one per scheme, through {@link Workspace#registerScheme} for a scheme that belongs to
+ * <p>Register one per scheme, through {@link WorkspaceClient#registerScheme} for a scheme that belongs to
  * one server or {@link ContentProviders#contribute} for one that belongs to the process. The client
  * then routes on the scheme and no caller above ever asks which side answered.</p>
  *

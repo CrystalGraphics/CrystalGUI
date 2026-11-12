@@ -8,6 +8,7 @@ import com.crystalgui.core.command.MenuSection;
 import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
+import com.crystalgui.desktop.app.AppWindow;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -107,7 +108,7 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         assertTrue("a pin with nothing running is not a launch button", pin.hasClass(Taskbar.LAUNCH_CLASS));
 
         DesktopCommands.open(desktop, lab);
-        WindowFrame window = desktop.registry().windows().get(0);
+        WindowFrame window = desktop.windowManager().registry().windows().get(0);
         assertSame("the window took a new entry instead of the pin's", pin, taskbar().entryFor(window));
         assertFalse("a running entry still reads as a launch button", pin.hasClass(Taskbar.LAUNCH_CLASS));
         assertEquals("the pin and its window are drawn twice", 1, taskbar().entries().children().size());
@@ -138,7 +139,7 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         Button pin = taskbar().pinEntryFor(lab);
 
         DesktopCommands.open(desktop, lab);
-        WindowFrame window = desktop.registry().windows().get(0);
+        WindowFrame window = desktop.windowManager().registry().windows().get(0);
         assertSame("the pin collapsed while a new entry opened beside it", pin, taskbar().entryFor(window));
         assertEquals(1, taskbar().entries().children().size());
     }
@@ -214,10 +215,10 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         DesktopCommands.open(desktop, single);
         // Built behind its starting window, a frame or two later
         for (int i = 0; i < 4; i++) frame();
-        WindowFrame window = desktop.registry().windows().get(0);
+        WindowFrame window = desktop.windowManager().registry().windows().get(0);
         WindowFrame other = desktop.addWindow(new WindowFrame("Other"));
         for (int i = 0; i < 3; i++) frame();
-        assertSame(other, desktop.activeWindow());
+        assertSame(other, desktop.windowManager().activeWindow());
 
         SystemMenu.showJumpList(window, taskbar().entryFor(window));
         for (int i = 0; i < 4; i++) frame();
@@ -231,14 +232,14 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         for (int i = 0; i < 4; i++) frame();
 
         assertFalse("the menu stayed open", menu.isOpen());
-        assertSame("the application row did not raise the running instance", window, desktop.activeWindow());
+        assertSame("the application row did not raise the running instance", window, desktop.windowManager().activeWindow());
     }
 
     private record Stub(ApplicationKind kind, WindowFrame window) implements Application {
 
         @Override
-        public WindowFrame mainWindow() {
-            return window;
+        public AppWindow mainWindow() {
+            return AppWindow.of(window);
         }
 
         @Override
@@ -249,7 +250,7 @@ public class TaskbarPinsTest extends UiDocumentTestBase {
         @Override
         public void activate() {
             Desktop on = Desktop.ifPresent(window.document());
-            if (on != null) on.activate(window, true);
+            if (on != null) on.windowManager().activate(window, true);
         }
 
         @Override

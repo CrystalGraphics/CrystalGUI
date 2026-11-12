@@ -32,7 +32,7 @@ import org.jetbrains.annotations.Nullable;
  * files.batch("move files", batch -> batch.rename(from, to, false)).then(result -> …);
  * }</pre>
  *
- * <p>Reached through {@link Workspace#files()}. Every mutation carries an operation id, so a call
+ * <p>Reached through {@link WorkspaceClient#files()}. Every mutation carries an operation id, so a call
  * retried after a timeout is answered rather than performed twice, and announces itself through
  * {@link #onWillRun}, {@link #onDidRun} and {@link #onDidFail} — which is where an undo stack, an audit
  * view and a file tree all listen rather than each call site reporting for itself.</p>
@@ -79,8 +79,17 @@ public final class FileOperations {
      */
     private final UndoStack undoStack = new UndoStack();
 
-    FileOperations(FsCall<?> calls) {
+    /** Told of this client's own saves and creates, so other applications here hear of them at once. */
+    private final Echo echo;
+
+    @FunctionalInterface
+    interface Echo {
+        void announce(Resource resource, FsMessages.ChangeKind kind, String etag);
+    }
+
+    FileOperations(FsCall<?> calls, Echo echo) {
         this.calls = calls;
+        this.echo = echo;
     }
 
     public UndoStack undoStack() {
@@ -305,13 +314,14 @@ public final class FileOperations {
     public CgReply<String> write(Resource resource, byte[] content, @Nullable String etag) {
         return mutate(resource, FsMethods.WRITE, FsMessages.WRITE_REQUEST,
                 op -> new FsMessages.WriteRequest(resource.toString(), content,
-                        etag == null ? "" : etag, false, true, op));
+                        etag == null ? "" : etag, false, true, op), FsMessages.ChangeKind.MODIFIED);
     }
 
     /** Creates a file that must not already exist. */
     public CgReply<String> create(Resource resource, byte[] content) {
         CgReply<String> created = mutate(resource, FsMethods.CREATE, FsMessages.WRITE_REQUEST,
-                op -> new FsMessages.WriteRequest(resource.toString(), content, "", true, false, op));
+                op -> new FsMessages.WriteRequest(resource.toString(), content, "", true, false, op),
+                FsMessages.ChangeKind.CREATED);
         record("create " + resource.name(),
                 () -> create(resource, content),
                 () -> delete(resource));
@@ -374,12 +384,21 @@ public final class FileOperations {
     private <A> CgReply<String> mutate(Resource resource, String method,
                                      CgCodec<A> codec,
                                      Function<String, A> args) {
+        return mutate(resource, method, codec, args, null);
+    }
+
+    private <A> CgReply<String> mutate(Resource resource, String method,
+                                     CgCodec<A> codec,
+                                     Function<String, A> args, @Nullable FsMessages.ChangeKind announce) {
         String op = "op-" + operationIds.incrementAndGet();
         return after(resource, () -> {
             onWillRun.emit(resource);
             return calls.send(method, codec, args.apply(op), FsMessages.ETAG_RESPONSE)
                     .map(FsMessages.EtagResponse::etag)
-                    .then(etag -> onDidRun.emit(resource))
+                    .then(etag -> {
+                        onDidRun.emit(resource);
+                        if (announce != null) echo.announce(resource, announce, etag);
+                    })
                     .onError(error -> onDidFail.emit(resource, error));
         });
     }

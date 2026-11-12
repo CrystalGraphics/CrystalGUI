@@ -472,17 +472,9 @@ notificationsview .__notifications-empty__ {
  * whole subtree), so a layer stretched across the workbench would swallow every click in it. */
 .__balloons__ {
     position: absolute;
-    /* INTO THE CORNER between the status bar and the right rail.
-     *
-     * The containing block is the workbench's CONTENT box, which spans the whole width — the right rail
-     * is a child of it, not something outside it — so anchoring to `right: 2px` puts the balloon
-     * underneath the rail. 22px is the rail's own 20px plus the 2px gap. The coupling is real and lives
-     * in this file twice; if `.__activity-bar__` ever changes width, this moves with it.
-     *
-     * `bottom: 2px` needs no such arithmetic: content's bottom edge already IS the status bar's top,
-     * because the workbench is a column with the bar below the content. */
-    right: 22px;
-    bottom: 2px;
+    /* THE SHELL'S CORNER: the desktop's work area, above every window and above the taskbar's edge. */
+    right: 8px;
+    bottom: 8px;
     flex-direction: column;
     /* GROWS UP AND LEFT, NEVER DOWN OR RIGHT.
      *

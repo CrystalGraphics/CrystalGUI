@@ -18,8 +18,10 @@ import org.junit.Test;
 import com.crystalgui.app.uibuilder.attributes.AttributeGroup;
 import com.crystalgui.app.uibuilder.attributes.StyleAttributes;
 import com.crystalgui.app.uibuilder.document.UiBuilderDocument;
-import com.crystalgui.core.attribute.AttributeClipboard;
+import com.crystalgui.core.attribute.AttributeClip;
 import com.crystalgui.core.attribute.AttributeSet;
+import com.crystalgui.ui.service.TransferData;
+import com.crystalgui.ui.service.UiClipboard;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
@@ -46,7 +48,7 @@ public class AttributeTransferTest extends UiDocumentTestBase {
     @Before
     public void twoElements() {
         UIElementRegistry.bootstrap();
-        AttributeClipboard.clear();
+        UiClipboard.process().clear();
         model = new UiBuilderDocument(
                 UiBuilderDocument.EMPTY.getBytes(StandardCharsets.UTF_8), "probe:a.cgui");
         source = new UIElement().layout(l -> l.width(120f).height(40f));
@@ -61,7 +63,7 @@ public class AttributeTransferTest extends UiDocumentTestBase {
 
     @After
     public void emptyTheClipboard() {
-        AttributeClipboard.clear();
+        UiClipboard.process().clear();
     }
 
     /**
@@ -154,10 +156,17 @@ public class AttributeTransferTest extends UiDocumentTestBase {
      */
     @Test
     public void theClipboardRefusesAnotherKindOfThing() {
-        AttributeClipboard.put(new StyleAttributes(source).copyAttributes());
+        copy(new StyleAttributes(source).copyAttributes());
 
-        assertNotNull(AttributeClipboard.pending(StyleAttributes.DOMAIN));
-        assertNull("a different domain gets nothing", AttributeClipboard.pending("mymod:clip"));
+        AttributeClip held = UiClipboard.process().peek(AttributeClip.class);
+        assertNotNull(held);
+        assertTrue(held.accepts(StyleAttributes.DOMAIN));
+        assertFalse("a different domain gets nothing", held.accepts("mymod:clip"));
+    }
+
+    private static void copy(AttributeSet set) {
+        AttributeClip clip = AttributeClip.of(set);
+        if (clip != null) UiClipboard.process().put(TransferData.of(clip));
     }
 
     /**
@@ -169,15 +178,16 @@ public class AttributeTransferTest extends UiDocumentTestBase {
     @Test
     public void aRememberedChoiceIsForgottenOnTheNextCopy() {
         AttributeSet copied = new StyleAttributes(source).copyAttributes();
-        AttributeClipboard.put(copied);
-        assertFalse(AttributeClipboard.remembersAChoice());
+        copy(copied);
+        AttributeClip first = UiClipboard.process().peek(AttributeClip.class);
+        assertFalse(first.remembersAChoice());
 
-        AttributeClipboard.remember(copied.keeping(slot -> slot.id().equals("opacity")));
-        assertTrue(AttributeClipboard.remembersAChoice());
-        assertEquals(1, AttributeClipboard.remembered(copied).entries().size());
+        first.remember(copied.keeping(slot -> slot.id().equals("opacity")));
+        assertTrue(first.remembersAChoice());
+        assertEquals(1, first.remembered().entries().size());
 
-        AttributeClipboard.put(new StyleAttributes(target).copyAttributes());
-        assertFalse("a new copy asks again", AttributeClipboard.remembersAChoice());
+        copy(new StyleAttributes(target).copyAttributes());
+        assertFalse("a new copy asks again", UiClipboard.process().peek(AttributeClip.class).remembersAChoice());
     }
 
     /**
@@ -227,8 +237,7 @@ public class AttributeTransferTest extends UiDocumentTestBase {
         model.root().append(bare);
         document.update(W, H);
 
-        AttributeClipboard.put(new StyleAttributes(bare).copyAttributes());
-        assertFalse(AttributeClipboard.hasSomething());
-        assertNull(AttributeClipboard.pending(StyleAttributes.DOMAIN));
+        copy(new StyleAttributes(bare).copyAttributes());
+        assertFalse(UiClipboard.process().has(AttributeClip.class));
     }
 }

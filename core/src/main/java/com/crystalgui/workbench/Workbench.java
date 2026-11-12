@@ -43,7 +43,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgui.core.pattern.FilePatternMap;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.client.FileOperations;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.workbench.editor.EditorService;
 import com.crystalgui.workbench.editor.TextEditorView;
@@ -58,7 +58,6 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
-import com.crystalgui.workbench.chrome.notification.NotificationBalloons;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
@@ -223,7 +222,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
     // Events go to Notifications (severity, actions, a bounded history); ambient text goes to StatusBar
     // (keyed per writer, replaced rather than accumulated). See com.crystalgui.core.notify.
 
-    public final Workspace workspace;
+    public final WorkspaceClient workspace;
 
     /** Who this workbench is to the process-wide registries: what it contributes leaves when it is disposed. */
     private final Owner owner = Owner.of("workbench");
@@ -290,8 +289,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      */
 
 
-    /** The transient half — balloons over the bottom-right corner. @see NotificationBalloons */
-    private final NotificationBalloons balloons = new NotificationBalloons();
     /**
      * The tree's half of the workbench — extracted at W5.
      *
@@ -794,7 +791,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * A workbench with every contributed extension on — which is what a test and a harness scene mean,
      * and what a host meant before applications existed.
      */
-    public Workbench(Workspace workspace) {
+    public Workbench(WorkspaceClient workspace) {
         this(workspace, null);
     }
 
@@ -803,7 +800,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      *                     everything contributed. An application's manifest is what names them, which is
      *                     how two applications on one desktop enable different sets
      */
-    public Workbench(Workspace workspace, @Nullable List<String> extensionIds) {
+    public Workbench(WorkspaceClient workspace, @Nullable List<String> extensionIds) {
         super(NAME);
         if (workspace == null) throw new IllegalArgumentException("A Workbench needs a workspace");
         this.workspace = workspace;
@@ -1055,10 +1052,6 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
         // thing that puts the right-hand stripe on the right: it is an ordinary flex child, not something
         // positioned, and both rails carry the same fixed width.
         content.append(rightStripe);
-        // AFTER the regions and BEFORE the drop overlay. Balloons must float over the workbench, but not
-        // over a live drag: the overlay is what tells you where a panel will land, and a message arriving
-        // mid-drag must not cover the answer.
-        content.append(balloons);
         // LAST, so it draws over everything it covers, and listening on `content` so it hears a drag
         // anywhere in the workbench -- DragEvent.Over bubbles, which is what makes one listener enough.
         content.append(dropOverlay);
@@ -1189,7 +1182,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * Everything this workbench subscribed to while it was being built.
      *
      * <p>Held rather than dropped because most of it is on something that outlives a workbench: the
-     * {@link Workspace} is per connection, {@code Notifications} is per process, and a listener on
+     * {@link WorkspaceClient} is per connection, {@code Notifications} is per process, and a listener on
      * either keeps this whole element tree reachable. {@code capabilityWatch} beside it has said so
      * since it was written — <i>"a workbench that subscribed from its constructor would stay reachable
      * for ever"</i> — and was the only subscription anybody had applied it to.</p>
@@ -1254,10 +1247,10 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
      * workbench's listener would go on being called on a signal it no longer has any business reading.</p>
      */
     public static final class RootWatch implements Disposable {
-        private final Workspace.Watch watch;
+        private final WorkspaceClient.Watch watch;
         private final Connection listener;
 
- public RootWatch(Workspace.Watch watch, Connection listener) {
+ public RootWatch(WorkspaceClient.Watch watch, Connection listener) {
             this.watch = watch;
             this.listener = listener;
         }
@@ -1354,10 +1347,12 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
             // GLOBAL, and resolved from the data context rather than captured: a captured workbench
             // makes a second window's command toggle a panel in the first.
             if (!Commands.process().contains(command)) {
+                // THE ID, not the kind: the command outlives this workbench, and the kind's view factory holds its tree.
+                String panelId = kind.id();
                 Commands.process().register(Command.of(command, "Show " + kind.displayName())
                         .runWithData(data -> {
                             Workbench workbench = data.get(WORKBENCH);
-                            if (workbench != null) workbench.revealPanel(kind.id());
+                            if (workbench != null) workbench.revealPanel(panelId);
                         })
                         .enabledWhereData(data -> data.get(WORKBENCH) != null));
             }
@@ -1926,7 +1921,7 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     /** The workspace this workbench is a view of. */
     @Override
-    public Workspace workspace() {
+    public WorkspaceClient workspace() {
         return workspace;
     }
 

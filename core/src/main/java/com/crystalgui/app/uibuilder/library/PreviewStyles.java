@@ -24,6 +24,7 @@ import com.crystalgui.ui.dom.UIDocument;
  */
 public final class PreviewStyles {
 
+    // Threads: guarded by its own monitor (of).
     private static final Map<UIDocument, PreviewStyles> BY_WINDOW = new WeakHashMap<>();
 
     private final StyleEngine styles;
@@ -38,7 +39,9 @@ public final class PreviewStyles {
 
     /** The window's one set: every card in a window shares its installation. */
     public static PreviewStyles of(UIDocument window) {
-        return BY_WINDOW.computeIfAbsent(window, PreviewStyles::new);
+        synchronized (BY_WINDOW) {
+            return BY_WINDOW.computeIfAbsent(window, PreviewStyles::new);
+        }
     }
 
     public ScopeGroup group() {

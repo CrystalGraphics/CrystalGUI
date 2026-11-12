@@ -213,7 +213,7 @@ public class Taskbar extends UIElement {
         super(NAME);
         // `desktop()` walks parents, so it can only answer once this is in a tree -- which is exactly
         // when the supplier runs. @see UINode#whileConnected
-        whileConnected(() -> desktop().registry().onDidChange.connect(this::refresh));
+        whileConnected(() -> desktop().windowManager().registry().onDidChange.connect(this::refresh));
         whileConnected(() -> desktop().pins().onDidChange.connect(this::refresh));
         whileConnected(() -> desktop().desktopSettings().onDidChange.connect(this::refresh));
         // WHEN FULL depends on the bar's width, which changes with no registry event. Owned by the bar, so it
@@ -253,7 +253,7 @@ public class Taskbar extends UIElement {
         showDesktop.addClass(SHOW_DESKTOP_CLASS);
         showDesktop.attachListener(() -> {
             Desktop desktop = desktop();
-            if (desktop != null) desktop.toggleShowDesktop();
+            if (desktop != null) desktop.windowManager().toggleShowDesktop();
         });
         append(showDesktop);
         nameOnTheBar(Tooltip.attach(showDesktop, "Show desktop"));
@@ -429,7 +429,7 @@ public class Taskbar extends UIElement {
         // THE WINDOW THE ACTIVE ONE IS REPRESENTED BY, which for a tool window is its owner: a tool
         // window has no entry of its own, so comparing against it directly lights nothing and the
         // application the panel belongs to reads as unfocused while its own panel is in front.
-        WindowFrame focused = desktop.activeWindow();
+        WindowFrame focused = desktop.windowManager().activeWindow();
         WindowFrame active = focused == null ? null : focused.taskbarSubject();
         int index = 0;
         for (Object key : wanted) {
@@ -523,7 +523,7 @@ public class Taskbar extends UIElement {
      * pin with no window is an {@link AppKey} slot too. Fills {@link #groups} with each {@code AppKey}'s windows.
      */
     private List<Object> slots(Desktop desktop) {
-        List<WindowFrame> live = desktop.registry().taskbarOrder();
+        List<WindowFrame> live = desktop.windowManager().registry().taskbarOrder();
         List<String> pinned = desktop.pins().ids();
         // Each run is one application's windows (a pin's may be empty), or one window with no application
         List<String> runIds = new ArrayList<>();
@@ -867,10 +867,10 @@ public class Taskbar extends UIElement {
                 return;
             }
             frame.clearAttention();
-            if (frame.state() == WindowState.HIDDEN || desktop.activeWindow() != frame) {
+            if (frame.state() == WindowState.HIDDEN || desktop.windowManager().activeWindow() != frame) {
                 // POINTER activation, so focus lands without a ring: the user pointed at this. Restoring
                 // a hidden window is part of what activate() means -- see Desktop.activate.
-                desktop.activate(frame, false);
+                desktop.windowManager().activate(frame, false);
             } else {
                 // THE GESTURE, not the state change -- WindowFrame.minimize plays the flight into this
                 // very entry and hides at the end of it.
@@ -915,7 +915,7 @@ public class Taskbar extends UIElement {
             desktop.pins().move(pinned, beforePin);
         } else if (beforePin == null && entry.anyWindow() != null) {
             WindowFrame after = before instanceof Entry other ? other.anyWindow() : null;
-            desktop.registry().moveInTaskbar(entry.anyWindow(), after);
+            desktop.windowManager().registry().moveInTaskbar(entry.anyWindow(), after);
         }
     }
 
@@ -1247,7 +1247,7 @@ public class Taskbar extends UIElement {
      * desktop — which answers with the <b>active</b> window. So right-clicking a background entry and
      * choosing Close would close whatever window was in front instead. Answering
      * {@link WindowFrame#WINDOW_FRAME} itself puts the entry ahead of the desktop in the walk, and
-     * {@link UiDataKeys#APPLICATION_KIND} names what Pin acts on.</p>
+     * {@link ApplicationKind#DATA_KEY} names what Pin acts on.</p>
      */
     private static final class Entry extends Button implements DataProvider {
 
@@ -1302,7 +1302,7 @@ public class Taskbar extends UIElement {
             if (frame != null || windows.isEmpty()) return frame;
             Desktop desktop = windows.get(0).desktop();
             if (desktop == null) return windows.get(0);
-            for (WindowFrame recent : desktop.registry().mruOrder()) {
+            for (WindowFrame recent : desktop.windowManager().registry().mruOrder()) {
                 if (windows.contains(recent)) return recent;
             }
             return windows.get(0);
@@ -1318,7 +1318,7 @@ public class Taskbar extends UIElement {
         @Nullable
         public Object getData(DataKey<?> key) {
             if (key == WindowFrame.WINDOW_FRAME) return subject();
-            if (key == UiDataKeys.APPLICATION_KIND) return frame != null ? frame.application() : kind;
+            if (key == ApplicationKind.DATA_KEY) return frame != null ? frame.application() : kind;
             if (key == UiDataKeys.WINDOWS) return shown();
             return null;
         }

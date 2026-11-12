@@ -27,6 +27,7 @@ public final class PreviewBuilds {
      */
     static final long BUDGET_NANOS = 3_000_000L;
 
+    // Threads: guarded by its own monitor (of).
     private static final Map<UIDocument, PreviewBuilds> BY_WINDOW = new WeakHashMap<>();
 
     private final ArrayDeque<PreviewCard> queue = new ArrayDeque<>();
@@ -41,7 +42,9 @@ public final class PreviewBuilds {
 
     /** The window's one queue. */
     public static PreviewBuilds of(UIDocument window) {
-        return BY_WINDOW.computeIfAbsent(window, PreviewBuilds::new);
+        synchronized (BY_WINDOW) {
+            return BY_WINDOW.computeIfAbsent(window, PreviewBuilds::new);
+        }
     }
 
     /** Queues {@code card}'s sample; a card already queued keeps its place. */

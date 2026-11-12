@@ -19,7 +19,7 @@ import com.crystalgraphics.storage.config.CgInMemoryConfigStorage;
 import com.crystalgui.document.Document;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -55,7 +55,7 @@ public class DirtyTabMarkerTest extends UiDocumentTestBase {
     private static final CgPath FILE = CgPath.of(PROJECT, "Main.java");
 
     private Workbench workbench;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
     private CgProtocolConnection<Object> clientEnd;
@@ -76,7 +76,7 @@ public class DirtyTabMarkerTest extends UiDocumentTestBase {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
         workbench = new Workbench(workspace);
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);

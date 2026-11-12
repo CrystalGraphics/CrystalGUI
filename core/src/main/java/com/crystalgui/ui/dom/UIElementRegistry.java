@@ -236,6 +236,15 @@ public final class UIElementRegistry {
         return Set.copyOf(BY_NAME.get().keySet());
     }
 
+    /**
+     * The generation of the registered kinds, as this thread reads it: it changes exactly when a kind is added or
+     * removed, so a value derived from the kinds ({@code LibraryCatalog}) is current while it is the same.
+     */
+    public static long generation() {
+        bootstrap();
+        return ENTRIES.generation();
+    }
+
     /** A contract that reports nothing and carries no state: the plain container's. */
     public static NodeContract plain(Name name, boolean acceptsChildren) {
         return new Plain(name.toString(), acceptsChildren);

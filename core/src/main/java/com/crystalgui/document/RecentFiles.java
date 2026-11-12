@@ -1,6 +1,6 @@
 package com.crystalgui.document;
 
-import com.crystalgui.core.signal.Signal;
+import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.fs.CgPath;
 
 import java.util.ArrayDeque;
@@ -11,6 +11,8 @@ import java.util.List;
 /**
  * The files opened most recently, newest first — VS Code's {@code recentlyOpened}, IntelliJ's
  * {@code RecentProjectsManager} for files.
+ *
+ * <p>Owned by its workbench and safe to use from any thread; a reader takes {@link #paths()}, a snapshot.</p>
  *
  * <h3>Why this is a model and not a menu</h3>
  *
@@ -36,8 +38,8 @@ public final class RecentFiles {
     /** VS Code's own default for the File menu's list. */
     public static final int DEFAULT_LIMIT = 10;
 
-    /** Fires whenever the list changes, so a view can follow it rather than poll. */
-    public final Signal.Action onDidChange = new Signal.Action();
+    /** The list as it now is, posted whenever it changes, so a view can follow it rather than poll. */
+    public final Broadcast<List<CgPath>> onDidChange = Broadcast.create("recent-files");
 
     private final Deque<CgPath> paths = new ArrayDeque<>();
     private final int limit;
@@ -57,38 +59,38 @@ public final class RecentFiles {
      * not announce a change nobody can see — the same equality guard {@code Property.set} makes, and what
      * stops a menu contributor being asked to rebuild on every tab click.</p>
      */
-    public void record(CgPath path) {
+    public synchronized void record(CgPath path) {
         if (path == null) return;
         if (!paths.isEmpty() && paths.peekFirst().equals(path)) return;
         paths.remove(path);
         paths.addFirst(path);
         while (paths.size() > limit) paths.removeLast();
-        onDidChange.emit();
+        onDidChange.post(new ArrayList<>(paths));
     }
 
     /** Drops {@code path}, for a file that has been deleted or moved. */
-    public boolean forget(CgPath path) {
+    public synchronized boolean forget(CgPath path) {
         if (!paths.remove(path)) return false;
-        onDidChange.emit();
+        onDidChange.post(new ArrayList<>(paths));
         return true;
     }
 
     /** Newest first. */
-    public List<CgPath> paths() {
+    public synchronized List<CgPath> paths() {
         return new ArrayList<>(paths);
     }
 
-    public boolean isEmpty() {
+    public synchronized boolean isEmpty() {
         return paths.isEmpty();
     }
 
-    public int size() {
+    public synchronized int size() {
         return paths.size();
     }
 
-    public void clear() {
+    public synchronized void clear() {
         if (paths.isEmpty()) return;
         paths.clear();
-        onDidChange.emit();
+        onDidChange.post(new ArrayList<>(paths));
     }
 }

@@ -25,7 +25,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.example.notes.NotesKind;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -49,7 +49,7 @@ public class WorkbenchExtensionsTest {
 
     private static final String PROJECT = "scratch";
 
-    private Workspace workspace;
+    private WorkspaceClient workspace;
 
     @Before
     public void openWorkspace() {
@@ -64,7 +64,7 @@ public class WorkbenchExtensionsTest {
         CgProtocolConnection<Object> clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
     }
 
     @After

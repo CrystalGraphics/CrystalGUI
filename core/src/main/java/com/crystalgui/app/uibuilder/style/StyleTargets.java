@@ -115,6 +115,7 @@ public final class StyleTargets {
      * <p>Every Inspector section asks for its target, and parsing the user-agent sheet -- six thousand lines --
      * each time was forty milliseconds a section: half a second to select a node.</p>
      */
+    // Threads: guarded by its own monitor (access-ordered: a get mutates).
     private static final Map<String, CssSourceModel> PARSED = new LinkedHashMap<>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, CssSourceModel> eldest) {

@@ -4,6 +4,8 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.AppWindows;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.style.StyleGroup;
@@ -529,9 +531,8 @@ public class DockArea extends UIElement implements MinimumSize {
         if (home == null) return;
         UIDocument surface = home.document();
         if (surface == null) return;
-        Desktop desktop = Desktop.of(surface);
         for (DockWindow window : home.windows) {
-            if (window.area() == this && desktop.activeWindow() != window) desktop.activate(window);
+            if (window.area() == this && !window.isActive()) AppWindow.of(window).activate();
         }
     }
 
@@ -1773,7 +1774,7 @@ public class DockArea extends UIElement implements MinimumSize {
         String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
         DockWindow frame = new DockWindow(this, torn, title);
         frame.moveTo(left, top);
-        Desktop.of(window).addWindow(frame);
+        AppWindows.addFloat(this, frame);
         requestRebuild();
     }
 

@@ -163,7 +163,7 @@ final class WindowMove {
             event.stopPropagation();
             // Raised first, because a press that never reaches the frame's own activation would
             // otherwise move a window without bringing it forward.
-            desktop.activate(frame);
+            desktop.windowManager().activate(frame);
             beginMove(event.getPosition().x(), event.getPosition().y(), 1);
         }, true, false);
     }
@@ -281,9 +281,9 @@ final class WindowMove {
                 Desktop desktop = frame.desktop();
                 if (desktop != null) {
                     // The FRAME goes with it: the preview morphs out of the window being dragged and
-                    // back into it, so it needs to know which one. @see Desktop#showSnapPreview
-                    if (pendingSnap != null) desktop.showSnapPreview(pendingSnap, frame);
-                    else desktop.hideSnapPreview();
+                    // back into it, so it needs to know which one. @see com.crystalgui.desktop.SnapPreview#show
+                    if (pendingSnap != null) desktop.snapPreview().show(pendingSnap, frame);
+                    else desktop.snapPreview().hide();
                 }
             }
 
@@ -302,7 +302,7 @@ final class WindowMove {
                 tornLoose = false;
                 frame.setMoving(false);
                 Desktop desktop = frame.desktop();
-                if (desktop != null) desktop.hideSnapPreview();
+                if (desktop != null) desktop.snapPreview().hide();
             }
         });
         // ONE FOR ONE, so a compositor may move it ahead of a busy document. Not once torn loose: that re-anchors.
@@ -354,7 +354,7 @@ final class WindowMove {
         // AT ONCE, not the contracting hide. The window is about to take the very rect the preview is
         // occupying, so animating the preview back to where the window used to be would play the
         // gesture backwards beside the thing playing it forwards.
-        if (desktop != null) desktop.hideSnapPreviewNow();
+        if (desktop != null) desktop.snapPreview().hideNow();
         if (zone == null || desktop == null) return;
 
         if (zone == SnapZones.Zone.MAXIMIZE) {
@@ -366,7 +366,7 @@ final class WindowMove {
         }
         // THROUGH THE DESKTOP, which owns where the group's dividers currently are -- computing the rect
         // here would tile against halves and silently undo a layout somebody had dragged to 3:1.
-        desktop.snapFrameTo(frame, zone);
+        desktop.windowManager().snapFrameTo(frame, zone);
     }
 
     /**

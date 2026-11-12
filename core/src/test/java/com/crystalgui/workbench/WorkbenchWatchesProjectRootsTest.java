@@ -22,7 +22,7 @@ import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.EditorInput;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -51,7 +51,7 @@ import com.crystalgui.workbench.editor.EditorService;
  * reads as "the tree is a bit stale sometimes" rather than as a subscription that was never made.</p>
  *
  * <p>The assertion is on the watch's own listener count rather than on a change arriving, because
- * {@code Workspace.watch} answers the same object to every caller: this test holds one handle on the
+ * {@code WorkspaceClient.watch} answers the same object to every caller: this test holds one handle on the
  * root, and what it counts is whether the workbench added itself to it.</p>
  */
 public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
@@ -60,7 +60,7 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
     private static final CgPath ROOT = CgPath.of(PROJECT, "");
 
     private Workbench workbench;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
     private CgProtocolConnection<Object> clientEnd;
@@ -81,7 +81,7 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
         workbench = new Workbench(workspace);
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);
@@ -108,7 +108,7 @@ public class WorkbenchWatchesProjectRootsTest extends UiDocumentTestBase {
         // OUR OWN HANDLE ON THE SAME SUBSCRIPTION. Repeating a watch answers the object that already
         // exists, so this is the very Watch the workbench will find -- and holding it before anything
         // else does is what makes the "before" reading meaningful.
-        Workspace.Watch root = workspace.watch(Resource.of(ROOT), true);
+        WorkspaceClient.Watch root = workspace.watch(Resource.of(ROOT), true);
         assertEquals("nothing has listened to the root before the listing lands",
                 0, root.onChanged.connectionCount());
 

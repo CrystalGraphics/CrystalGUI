@@ -17,7 +17,7 @@ import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -79,7 +79,7 @@ public class ProblemsFollowsTheActiveFileTest extends UiDocumentTestBase {
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
         // EVERY EXTENSION, because the subject is one of them and how it is wired is the question.
-        workbench = new Workbench(Workspace.of(clientEnd));
+        workbench = new Workbench(WorkspaceClient.of(clientEnd));
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);
         document.append(root);

@@ -62,9 +62,15 @@ public final class StyleEngine {
     /** Every styleable in the tree, for the whole-tree invalidation a sheet change is. */
     private final Supplier<? extends Collection<? extends Styleable>> elements;
 
-    /** A sheet and the subtree it is installed for; a null root is the whole tree. */
-    private record Installed(StyleSheet sheet, @Nullable StyleScope root) {
+    /**
+     * A sheet and the subtree it is installed for; a null root is the whole tree. {@code sheet} is the base the
+     * document installed, {@code effective} what the cascade reads under the generation last adopted.
+     */
+    private record Installed(StyleSheet sheet, StyleSheet effective, @Nullable StyleScope root) {
     }
+
+    /** The {@link StyleContext} generation the effective sheets were resolved from. */
+    private long adopted = -1;
 
     @Getter
     private final TransitionEngine transitionEngine = new TransitionEngine();
@@ -107,54 +113,18 @@ public final class StyleEngine {
      */
     private final Map<Styleable, Map<String, HighlightStyle>> highlightsByElement = new HashMap<>();
 
-    /**
-     * Every live engine, weakly held — what {@link #reloadStylesheets()} restyles.
-     *
-     * <p>Weak because a window that goes out of scope must not be kept alive by a debug facility, and
-     * there is no {@code UIWindow.close()} to unregister from. A discarded window simply falls out of the
-     * set when it is collected; until then it is restyled harmlessly.</p>
-     */
-    private static final Set<StyleEngine> LIVE =
-            Collections.synchronizedSet(Collections.newSetFromMap(new WeakHashMap<>()));
-
     public StyleEngine(Supplier<? extends Collection<? extends Styleable>> elements) {
         this.elements = elements;
-        LIVE.add(this);
     }
 
     /**
-     * Re-reads every stylesheet from disk and restyles every live window — <b>CSS hot reload</b>.
-     *
-     * <p>The one call a host needs. {@code StyleSheetRegistry.reloadAll()} refills the sheets in place so
-     * existing registrations stay valid, and every engine then re-matches; see
-     * {@link #invalidateAllMatches()} for why re-matching alone is sufficient to drop deleted rules.</p>
-     *
-     * <p><b>Global rather than per-window on purpose.</b> Stylesheets are a global cache, so a per-window
-     * call would re-read every file once per window and still leave the other windows stale unless the
-     * caller remembered all of them. The harness binds this to a key; {@code CgAssetReloader}'s F3+T path
-     * is the same shape.</p>
+     * Re-reads every stylesheet from disk — <b>CSS hot reload</b>. The sheets are refilled where they stand and a
+     * new {@link StyleContext} generation is published, which every document adopts at its next frame.
      *
      * @return how many stylesheets were re-read successfully
      */
     public static int reloadStylesheets() {
-        int reloaded = StyleSheetRegistry.reloadAll();
-        restyleAllWindows();
-        return reloaded;
-    }
-
-    /**
-     * Re-matches every element of every live window against the sheets' <b>current</b> contents —
-     * the second half of any in-place sheet mutation. {@code StyleSheetRegistry.reloadAll()} and
-     * {@code bindVariables()} both change what the sheets say without changing any engine's sheet
-     * list, so no per-window hook fires; whoever mutated the sheets calls this next.
-     */
-    public static int restyleAllWindows() {
-        synchronized (LIVE) {
-            for (StyleEngine engine : LIVE) engine.invalidateAllMatches();
-            // COUNTED, because zero is a real answer and looks exactly like success from the caller.
-            // A sheet mutation that restyles nothing has done everything right and changed no pixel.
-            return LIVE.size();
-        }
+        return StyleSheetRegistry.reloadAll();
     }
 
     public void addStylesheet(StyleSheet sheet) {
@@ -170,7 +140,8 @@ public final class StyleEngine {
      */
     public void addStylesheet(StyleSheet sheet, @Nullable StyleScope root) {
         sheet.warmValues();
-        sheets.add(new Installed(sheet, root));
+        adoptIfNew();
+        sheets.add(new Installed(sheet, StyleContext.current().resolve(sheet), root));
         sheetsRevision++;
         markAllDirty();
     }
@@ -218,6 +189,8 @@ public final class StyleEngine {
      * than left behind as a winning candidate nothing overwrites.</p>
      */
     public void invalidateAllMatches() {
+        // A sheet edited where it stands can resolve to a new copy under this generation.
+        resolveAgain(StyleContext.current());
         markAllDirty();
     }
 
@@ -254,7 +227,7 @@ public final class StyleEngine {
     public Set<String> stateDescendantKeysFrom(Styleable ancestor) {
         Set<String> reachable = null;
         for (int i = 0; i < sheets.size(); i++) {
-            StyleSheet sheet = sheets.get(i).sheet();
+            StyleSheet sheet = sheets.get(i).effective();
             // An unkeyable subject (`foo:hover *`) means anything could match, so nothing can be narrowed.
             if (sheet.hasUnboundedStateDescendants()) return EVERYTHING;
             reachable = addAll(reachable, sheet.stateDescendantsFromAnyAncestor());
@@ -277,7 +250,7 @@ public final class StyleEngine {
     public Set<String> classDescendantKeysFrom(String cls) {
         Set<String> reachable = null;
         for (int i = 0; i < sheets.size(); i++) {
-            Set<String> keys = sheets.get(i).sheet().classDescendantsFrom(cls);
+            Set<String> keys = sheets.get(i).effective().classDescendantsFrom(cls);
             if (keys == null) return EVERYTHING;
             reachable = addAll(reachable, keys);
         }
@@ -335,6 +308,7 @@ public final class StyleEngine {
     /** Called from {@code UIDocument.frame}, before layout is recomputed — and again afterwards for
      * as long as {@link #hasPendingMatches()} reports work that layout itself created. */
     public void calculateStyle(float deltaSeconds) {
+        adoptIfNew();
         // THE TWO HALVES REPORTED APART. They cost differently and for unrelated reasons -- the drain is
         // proportional to how many elements were invalidated, the tick to how many transitions are in
         // flight -- so one `style` bucket cannot say which of them a slow frame is.
@@ -344,6 +318,32 @@ public final class StyleEngine {
         timed = CgTrace.stamp(UiTrace.FRAME);
         transitionEngine.tick(deltaSeconds);
         CgTrace.zoneDone(UiTrace.FRAME, "style:transitions", timed);
+    }
+
+    /**
+     * Reads the sheets of the newest {@link StyleContext} generation if one was published since this engine last
+     * did, and re-matches the tree against them. A theme switch reaches a document only through this, at its own
+     * frame, so no document's cascade is ever half one theme.
+     */
+    private void adoptIfNew() {
+        long latest = StyleContext.number();
+        if (latest == adopted) return;
+        adopted = latest;
+        resolveAgain(StyleContext.current());
+        // A reload edits a sheet's rules where it stands, so the same sheets can say something new.
+        if (!sheets.isEmpty()) markAllDirty();
+    }
+
+    private void resolveAgain(StyleContext context) {
+        boolean changed = false;
+        for (int i = 0; i < sheets.size(); i++) {
+            Installed installed = sheets.get(i);
+            StyleSheet effective = context.resolve(installed.sheet());
+            if (effective == installed.effective()) continue;
+            sheets.set(i, new Installed(installed.sheet(), effective, installed.root()));
+            changed = true;
+        }
+        if (changed) sheetsRevision++;
     }
 
     /**
@@ -729,7 +729,7 @@ public final class StyleEngine {
 
         for (int sheetIndex = 0; sheetIndex < sheets.size(); sheetIndex++) {
             var installed = sheets.get(sheetIndex);
-            var sheet = installed.sheet();
+            var sheet = installed.effective();
             // WHICH RULES CAN REACH THIS ELEMENT. An unscoped sheet reaches everything outside a shadow
             // tree, and a shadow tree's parts only through ::part(). A scoped sheet reaches what is at
             // or under its root -- the shadow root itself, for a composite's own sheet -- and its
@@ -955,6 +955,13 @@ public final class StyleEngine {
     public List<StyleSheet> getSheets() {
         List<StyleSheet> out = new ArrayList<>(sheets.size());
         for (Installed installed : sheets) out.add(installed.sheet());
+        return out;
+    }
+
+    /** What the cascade reads for each installed sheet, in order: the sheets of the generation last adopted. */
+    public List<StyleSheet> effectiveSheets() {
+        List<StyleSheet> out = new ArrayList<>(sheets.size());
+        for (Installed installed : sheets) out.add(installed.effective());
         return out;
     }
 

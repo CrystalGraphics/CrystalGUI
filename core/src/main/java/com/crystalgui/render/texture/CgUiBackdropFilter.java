@@ -27,8 +27,12 @@ import com.crystalgui.render.CgUiPaintContext;
 @Accessors(chain = true)
 public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware {
 
-    /** Every glass's draw, on the frame thread; made at the first draw, since a server builds filters and draws none. */
-    private static CgCanvasGlass gpu;
+    /**
+     * The glass's draw, one a recording thread: documents record at once and a draw sets its material's values then
+     * submits. Made at a thread's first draw, since a server builds filters and draws none.
+     */
+    // Threads: thread-local, each document's recording thread has its own.
+    private static final ThreadLocal<CgCanvasGlass> GLASS = new ThreadLocal<>();
 
     /** What {@code backdrop-filter: none} computes to: present so the declaration parses and overrides a lower one, filtering nothing. */
     public static final CgUiBackdropFilter NONE = new CgUiBackdropFilter();
@@ -138,7 +142,8 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        if (gpu == null) gpu = new CgCanvasGlass(CgCanvasMaterials.SCREEN);
+        CgCanvasGlass gpu = GLASS.get();
+        if (gpu == null) GLASS.set(gpu = new CgCanvasGlass(CgCanvasMaterials.SCREEN));
         gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
                 .tint(tintArgb).saturation(saturation).luminosity(luminosity)
                 .lens(bezel, ior).chromatic(chromatic)

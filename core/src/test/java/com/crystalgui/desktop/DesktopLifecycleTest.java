@@ -94,9 +94,9 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
 
         assertEquals(WindowState.HIDDEN, frame.state());
         assertNull("a hidden document is out of the tree", frame.document());
-        assertTrue("...and off the desktop", desktop.visibleWindows().isEmpty());
-        assertEquals("...but still a document", 1, desktop.windows().size());
-        assertSame(frame, desktop.windows().get(0));
+        assertTrue("...and off the desktop", desktop.windowManager().visibleWindows().isEmpty());
+        assertEquals("...but still a document", 1, desktop.windowManager().windows().size());
+        assertSame(frame, desktop.windowManager().windows().get(0));
     }
 
     /**
@@ -178,7 +178,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         frame.removeSelf();
 
         assertEquals(WindowState.HIDDEN, frame.state());
-        assertEquals("still retained", 1, desktop.windows().size());
+        assertEquals("still retained", 1, desktop.windowManager().windows().size());
     }
 
     // ── Close is a request, routed through the policy ───────────────────────
@@ -191,7 +191,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         assertTrue(frame.requestClose());
 
         assertEquals(WindowState.DESTROYED, frame.state());
-        assertTrue("a destroyed document leaves the registry", desktop.windows().isEmpty());
+        assertTrue("a destroyed document leaves the registry", desktop.windowManager().windows().isEmpty());
     }
 
     @Test
@@ -202,7 +202,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         assertTrue(frame.requestClose());
 
         assertEquals(WindowState.HIDDEN, frame.state());
-        assertEquals("retained, and its way back is the taskbar", 1, desktop.windows().size());
+        assertEquals("retained, and its way back is the taskbar", 1, desktop.windowManager().windows().size());
     }
 
     /**
@@ -259,15 +259,15 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
     @Test
     public void hidingPastTheCapEvictsTheLeastRecentlyUsed() {
         build();
-        desktop.registry().setHiddenCap(2);
+        desktop.windowManager().registry().setHiddenCap(2);
 
         WindowFrame first = open("One");
         WindowFrame second = open("Two");
         WindowFrame third = open("Three");
         // Activated most-recent-last, so `first` is the least recently used of the three.
-        desktop.activate(first);
-        desktop.activate(second);
-        desktop.activate(third);
+        desktop.windowManager().activate(first);
+        desktop.windowManager().activate(second);
+        desktop.windowManager().activate(third);
 
         first.hide();
         second.hide();
@@ -277,7 +277,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         assertEquals("the least recently used one was discarded", WindowState.DESTROYED, first.state());
         assertEquals(WindowState.HIDDEN, second.state());
         assertEquals(WindowState.HIDDEN, third.state());
-        assertEquals(2, desktop.windows().size());
+        assertEquals(2, desktop.windowManager().windows().size());
     }
 
     /**
@@ -288,13 +288,13 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
     @Test
     public void evictionSkipsAWindowWhoseContentRefuses() {
         build();
-        desktop.registry().setHiddenCap(1);
+        desktop.windowManager().registry().setHiddenCap(1);
 
         WindowFrame dirty = open("Dirty");
         dirty.setDiscardGuard(() -> false);
         WindowFrame clean = open("Clean");
-        desktop.activate(dirty);
-        desktop.activate(clean);
+        desktop.windowManager().activate(dirty);
+        desktop.windowManager().activate(clean);
 
         dirty.hide();
         clean.hide();
@@ -306,7 +306,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         // alternative lets retention grow by one document per unsaved document, which is the leak the cap
         // exists to bound.
         assertEquals(WindowState.DESTROYED, clean.state());
-        assertEquals(1, desktop.windows().size());
+        assertEquals(1, desktop.windowManager().windows().size());
     }
 
     // ── The registry's two orders ───────────────────────────────────────────
@@ -324,25 +324,25 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         WindowFrame second = open("Two");
         WindowFrame third = open("Three");
 
-        desktop.activate(first);
+        desktop.windowManager().activate(first);
 
         assertEquals("open order is stable", java.util.List.of(first, second, third),
-                desktop.registry().windows());
-        assertSame("most recently activated first", first, desktop.registry().mruOrder().get(0));
+                desktop.windowManager().registry().windows());
+        assertSame("most recently activated first", first, desktop.windowManager().registry().mruOrder().get(0));
 
         first.hide();
         // STILL IN THE SEQUENCE, which is the half that matters: a hidden document has left the stacking
         // order entirely and kept its place here, which is exactly why the switcher cannot read z.
         assertTrue("a hidden document keeps its place in the sequence",
-                desktop.registry().mruOrder().contains(first));
-        assertEquals(java.util.List.of(first), desktop.registry().hidden());
+                desktop.windowManager().registry().mruOrder().contains(first));
+        assertEquals(java.util.List.of(first), desktop.windowManager().registry().hidden());
         // AND IT KEEPS THE FRONT OF IT, because minimising hands activation to nobody. That is the
         // right answer twice over: the switcher's first offer is the document you just put away, which
         // is what a switcher is for, and nothing had to move the keyboard to get there.
-        assertSame(first, desktop.registry().mruOrder().get(0));
-        assertNull("minimising is not switching", desktop.activeWindow());
+        assertSame(first, desktop.windowManager().registry().mruOrder().get(0));
+        assertNull("minimising is not switching", desktop.windowManager().activeWindow());
         assertSame("and `third` is still merely the one in front", third,
-                desktop.visibleWindows().get(desktop.visibleWindows().size() - 1));
+                desktop.windowManager().visibleWindows().get(desktop.windowManager().visibleWindows().size() - 1));
     }
 
     /** A document can be found again by the name it was opened under — what geometry is persisted
@@ -352,12 +352,12 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         build();
         WindowFrame frame = open("One").setKey("editor:main");
 
-        assertSame(frame, desktop.registry().byKey("editor:main"));
-        assertNull(desktop.registry().byKey("nothing"));
-        assertNull("anonymous windows never match", desktop.registry().byKey(null));
+        assertSame(frame, desktop.windowManager().registry().byKey("editor:main"));
+        assertNull(desktop.windowManager().registry().byKey("nothing"));
+        assertNull("anonymous windows never match", desktop.windowManager().registry().byKey(null));
 
         frame.destroy();
-        assertNull("and a destroyed one is gone from the registry", desktop.registry().byKey("editor:main"));
+        assertNull("and a destroyed one is gone from the registry", desktop.windowManager().registry().byKey("editor:main"));
     }
 
     /**
@@ -375,21 +375,21 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         build();
         WindowFrame first = open("One");
         WindowFrame second = open("Two");
-        assertSame(second, desktop.activeWindow());
+        assertSame(second, desktop.windowManager().activeWindow());
 
         second.hide();
         settle();
-        assertNull("putting a document away is not switching to another", desktop.activeWindow());
+        assertNull("putting a document away is not switching to another", desktop.windowManager().activeWindow());
         assertFalse("...and the one behind was not disturbed", first.isActive());
 
-        desktop.activate(second);
+        desktop.windowManager().activate(second);
         settle();
-        assertSame(second, desktop.activeWindow());
+        assertSame(second, desktop.windowManager().activeWindow());
 
         second.destroy();
         settle();
         assertSame("but a destroyed document leaves the keyboard nowhere, so the front one takes over",
-                first, desktop.activeWindow());
+                first, desktop.windowManager().activeWindow());
     }
 
     /** Evicting a document the user had already put away must not reach in and change what they are
@@ -399,12 +399,12 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         build();
         WindowFrame background = open("One");
         WindowFrame front = open("Two");
-        assertSame(front, desktop.activeWindow());
+        assertSame(front, desktop.windowManager().activeWindow());
 
         background.destroy();
         settle();
 
-        assertSame("the document in front is untouched", front, desktop.activeWindow());
+        assertSame("the document in front is untouched", front, desktop.windowManager().activeWindow());
     }
 
     /**
@@ -435,7 +435,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         assertNull("...so it holds no input state", document.focus().focused());
         assertEquals("and the windows are untouched", WindowState.VISIBLE, visible.state());
         assertEquals(WindowState.HIDDEN, minimised.state());
-        assertEquals("both still registered", 2, desktop.windows().size());
+        assertEquals("both still registered", 2, desktop.windowManager().windows().size());
 
         Desktop.of(document).resume();
         settle();
@@ -496,12 +496,12 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         frame.hide();
         settle();
 
-        desktop.activate(frame);
+        desktop.windowManager().activate(frame);
         settle();
 
         assertEquals(WindowState.VISIBLE, frame.state());
         assertNotNull(frame.document());
-        assertSame(frame, desktop.activeWindow());
+        assertSame(frame, desktop.windowManager().activeWindow());
     }
 
     /** The minimise button hides and never destroys, whatever the policy says — the two controls mean
@@ -536,7 +536,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         Desktop.setAnimationsEnabled(true);
         try {
             WindowFrame frame = open("One");
-            assertSame("the fixture never made it active", frame, desktop.activeWindow());
+            assertSame("the fixture never made it active", frame, desktop.windowManager().activeWindow());
 
             frame.minimizeButton().onPressed.emit();
             advance();
@@ -544,7 +544,7 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
             assertEquals("the minimise already landed, so this says nothing about WHEN it deactivated",
                     WindowState.VISIBLE, frame.state());
             assertNull("still the active document while it is flying into the taskbar",
-                    desktop.activeWindow());
+                    desktop.windowManager().activeWindow());
         } finally {
             Desktop.setAnimationsEnabled(false);
         }
@@ -564,13 +564,13 @@ public class DesktopLifecycleTest extends UiDocumentTestBase {
         try {
             WindowFrame background = open("Background");
             WindowFrame front = open("Front");
-            assertSame(front, desktop.activeWindow());
+            assertSame(front, desktop.windowManager().activeWindow());
 
             background.minimizeButton().onPressed.emit();
             advance();
 
             assertSame("minimising a background document stole the foreground document's activation",
-                    front, desktop.activeWindow());
+                    front, desktop.windowManager().activeWindow());
         } finally {
             Desktop.setAnimationsEnabled(false);
         }

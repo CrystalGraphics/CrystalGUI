@@ -2,6 +2,7 @@ package com.crystalgui.desktop.window;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.SnapPreview;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.input.ButtonState;
 import com.crystalgui.ui.service.Drag;
@@ -306,11 +307,11 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         assertEquals("the snap preview is taking up space before any drag", 0f,
                 previewWidth(), 0.01f);
 
-        Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
+        Desktop.of(document).snapPreview().show(SnapZones.Zone.LEFT, frame);
         settle();
         assertTrue("the preview did not appear", previewWidth() > 0f);
 
-        Desktop.of(document).hideSnapPreview();
+        Desktop.of(document).snapPreview().hide();
         settle();
         assertEquals("the preview stayed on screen", 0f, previewWidth(), 0.01f);
     }
@@ -339,7 +340,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         // and passes against a build that animates nothing at all.
         Desktop.setAnimationsEnabled(true);
         try {
-            Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
+            Desktop.of(document).snapPreview().show(SnapZones.Zone.LEFT, frame);
             settle();
 
             // NEAR THE START, not exactly at it. Three settle passes take a couple of milliseconds of a
@@ -351,12 +352,12 @@ public class WindowGesturesTest extends UiDocumentTestBase {
             assertNearer("left", previewBox().x(), area.x() + 120f, area.x());
         } finally {
             Desktop.setAnimationsEnabled(false);
-            Desktop.of(document).hideSnapPreviewNow();
+            Desktop.of(document).snapPreview().hideNow();
         }
 
         // ...and the counter-assertion: with animations off it IS the half at once, so the assertions
         // above are reading a timeline rather than an unrelated failure to size the preview at all.
-        Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
+        Desktop.of(document).snapPreview().show(SnapZones.Zone.LEFT, frame);
         settle();
         assertEquals("animations off did not settle the preview immediately",
                 (float) Math.floor(area.width() / 2f), previewWidth(), 1f);
@@ -365,7 +366,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     /** <b>A LEFT snap covers the left half of the work area, and stops at the middle.</b> */
     @Test
     public void theSnapPreviewCoversTheHalfItNames() {
-        Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
+        Desktop.of(document).snapPreview().show(SnapZones.Zone.LEFT, frame);
         settle();
 
         var area = Desktop.of(document).windowLayer().box();
@@ -378,7 +379,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
     /** <b>...and a quarter covers half of each axis</b>, which nothing else here asserts about a rect. */
     @Test
     public void theSnapPreviewCoversTheQuarterItNames() {
-        Desktop.of(document).showSnapPreview(SnapZones.Zone.BOTTOM_RIGHT, frame);
+        Desktop.of(document).snapPreview().show(SnapZones.Zone.BOTTOM_RIGHT, frame);
         settle();
 
         var area = Desktop.of(document).windowLayer().box();
@@ -588,14 +589,14 @@ public class WindowGesturesTest extends UiDocumentTestBase {
         WindowFrame other = Desktop.of(document).addWindow(new WindowFrame("Other"));
         other.resizeTo(300, 200).moveTo(360, 40);
         settle();
-        Desktop.of(document).activate(frame);
+        Desktop.of(document).windowManager().activate(frame);
         settle();
 
-        Desktop.of(document).showSnapPreview(SnapZones.Zone.LEFT, frame);
+        Desktop.of(document).snapPreview().show(SnapZones.Zone.LEFT, frame);
         settle();
 
         UIElement preview = Desktop.of(document).windowLayer()
-                                   .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
+                                   .querySelector("." + SnapPreview.CLASS);
         assertNotNull("the preview was never built", preview);
         int previewZ = preview.getStyle().getGeneralGroup().zIndex().orZero();
 
@@ -703,7 +704,7 @@ public class WindowGesturesTest extends UiDocumentTestBase {
      */
     private Box previewBox() {
         UIElement found = Desktop.of(document).windowLayer()
-                                 .querySelector("." + Desktop.SNAP_PREVIEW_CLASS);
+                                 .querySelector("." + SnapPreview.CLASS);
         // NULLABLE on purpose. Callers that read x/height only run once a preview exists, so a null
         // there is a real failure and should say so rather than be flattened into a zero box.
         return found == null ? null : found.box();
@@ -711,6 +712,6 @@ public class WindowGesturesTest extends UiDocumentTestBase {
 
     private float previewWidth() {
         return widthOf(Desktop.of(document).windowLayer()
-                .querySelector("." + Desktop.SNAP_PREVIEW_CLASS));
+                .querySelector("." + SnapPreview.CLASS));
     }
 }

@@ -32,7 +32,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -104,7 +104,7 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
 
         // THE PRODUCT'S OWN LIST, not just the builder's id: the panel came up empty in the running
         // editor while a minimal fixture passed, and the only difference left was what else is on.
-        workbench = new Workbench(Workspace.of(clientEnd), CrystalEditor.EXTENSIONS);
+        workbench = new Workbench(WorkspaceClient.of(clientEnd), CrystalEditor.EXTENSIONS);
         UIElement root = new UIElement().layout(l -> l.width(1200).height(800));
         root.append(workbench);
         document.append(root);
@@ -334,7 +334,7 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
     public void aRestoredUnsavedCguiFillsTheHierarchyPanel() {
         workbench.open(DockInput.of(workbench.refFor(FILE)));
         for (int i = 0; i < 16; i++) frameAndPump();
-        Workspace workspace = workbench.workspace();
+        WorkspaceClient workspace = workbench.workspace();
         workspace.setStorage(new CgInMemoryConfigStorage());
         workspace.backup().save(Resource.of(FILE), SOURCE.replace("bao", "unsaved").getBytes(StandardCharsets.UTF_8),
                 "whatever");
@@ -364,7 +364,7 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         }
         for (int i = 0; i < 4; i++) frameAndPump();
 
-        Workspace workspace = workbench.workspace();
+        WorkspaceClient workspace = workbench.workspace();
         workspace.setStorage(new CgInMemoryConfigStorage());
         workspace.backup().save(Resource.of(FILE), SOURCE.replace("bao", "unsaved").getBytes(StandardCharsets.UTF_8), "a");
         workspace.backup().save(Resource.of(OTHER), "unsaved notes\n".getBytes(StandardCharsets.UTF_8), "b");

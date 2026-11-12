@@ -68,7 +68,7 @@ public class UiTraceRunTest {
      */
     private void record() {
         CgTraceRun.open();
-        FrameStats.get().hold();
+        FrameStats.compositor().hold();
         long chain = CgTrace.spanBegin(UiTrace.FLOW, "open file");
         for (int i = 0; i < 120; i++) {
             UiTrace.frameBegin();
@@ -99,7 +99,7 @@ public class UiTraceRunTest {
         record();
         CgTraceRun.writeMeta();
         Path exported = TraceFiles.export(CgTrace.snapshot(), Long.MIN_VALUE, Long.MAX_VALUE);
-        FrameStats.get().release();
+        FrameStats.compositor().release();
         CgTraceLog.stop();
 
         Path dir = ROOT.resolve(CgTraceLog.LATEST);
@@ -119,7 +119,7 @@ public class UiTraceRunTest {
     public void theRunWritesTheReportAnAgentReads() throws Exception {
         record();
         Path written = CgTraceRun.writeReport(CgTraceReport.Tier.VERDICT);
-        FrameStats.get().release();
+        FrameStats.compositor().release();
         CgTraceLog.stop();
 
         assertNotNull("no report written", written);
@@ -138,7 +138,7 @@ public class UiTraceRunTest {
     public void theMetadataSaysWhatWasNotRecording() throws Exception {
         record();
         CgTraceRun.writeMeta();
-        FrameStats.get().release();
+        FrameStats.compositor().release();
         CgTraceLog.stop();
 
         String meta = new String(Files.readAllBytes(
@@ -154,7 +154,7 @@ public class UiTraceRunTest {
     public void theExportCarriesTheFramesTheZonesAndTheChain() throws Exception {
         record();
         Path exported = TraceFiles.export(CgTrace.snapshot(), Long.MIN_VALUE, Long.MAX_VALUE);
-        FrameStats.get().release();
+        FrameStats.compositor().release();
         CgTraceLog.stop();
 
         String json = new String(Files.readAllBytes(exported), StandardCharsets.UTF_8);
@@ -172,7 +172,7 @@ public class UiTraceRunTest {
         record();
         CgTraceSnapshot live = CgTrace.snapshot();
         Path exported = TraceFiles.export(live, Long.MIN_VALUE, Long.MAX_VALUE);
-        FrameStats.get().release();
+        FrameStats.compositor().release();
         CgTraceLog.stop();
 
         CgTraceSnapshot read = TraceFiles.read(exported);

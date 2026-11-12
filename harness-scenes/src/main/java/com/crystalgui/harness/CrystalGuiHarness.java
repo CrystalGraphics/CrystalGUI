@@ -4,6 +4,7 @@ import com.crystalgraphics.harness.HarnessExtension;
 import com.crystalgraphics.harness.SceneRegistry;
 import com.crystalgraphics.harness.config.SceneDescriptor;
 import com.crystalgui.harness.scene.CgGpuTraceProbeScene;
+import com.crystalgui.harness.scene.CgUiClientSurfaceProbeScene;
 import com.crystalgui.harness.scene.CgUiDesktopScene;
 import com.crystalgui.harness.scene.CgUiGalleryScene;
 import com.crystalgui.harness.scene.CgUiNewEngineGalleryScene;
@@ -12,6 +13,7 @@ import com.crystalgui.harness.scene.CgUiStylingScene;
 import com.crystalgui.harness.scene.CgUiSvgIconScene;
 import com.crystalgui.harness.scene.CgUiTextGammaScene;
 import com.crystalgui.harness.scene.CgUiTextScene;
+import com.crystalgui.harness.scene.CgUiConcurrencyScene;
 import com.crystalgui.harness.scene.CgUiTextStressScene;
 import com.crystalgui.harness.scene.CgUiTimelineScene;
 import com.crystalgui.harness.scene.CgUiVisualLayersScene;
@@ -76,6 +78,30 @@ public final class CrystalGuiHarness implements HarnessExtension {
                 .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
                 .build(),
             () -> new CgUiTextScene()
+        );
+
+        reg.register(
+            SceneDescriptor.builder("cgui-concurrency")
+                .description("Ten documents on ten sequences relaying out and repainting through the shared caches for 30 s, with text, icons and theme switches; prints problems=N and captures 'final', which must equal the -Dcrystalgui.ui.singleSequence=true run's")
+                .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
+                .category(SceneDescriptor.Category.SCENE)
+                .needsFbo(false)
+                .needsDepthBuffer(false)
+                .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
+                .build(),
+            () -> new CgUiConcurrencyScene()
+        );
+
+        reg.register(
+            SceneDescriptor.builder("cgui-client-surface")
+                .description("One document drawing another's surface in one firing: the client's root in a surface of its own, a shell document's frame showing its picture; captures 'probe'")
+                .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
+                .category(SceneDescriptor.Category.SCENE)
+                .needsFbo(false)
+                .needsDepthBuffer(false)
+                .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
+                .build(),
+            () -> new CgUiClientSurfaceProbeScene()
         );
 
         reg.register(

@@ -163,7 +163,11 @@ final class CgUiScreenInput implements CgInputListener, CgSystemInput.Mouse, CgS
     /** Every key the document dispatched and left since the last frame, to the game, in order. Render thread. */
     void returnUnhandledKeys() {
         CgUiViewport viewport = CgUiScreen.viewport();
-        if (viewport == null) return;
+        if (viewport != null) returnUnhandledKeys(viewport);
+    }
+
+    /** As {@link #returnUnhandledKeys()}, for what one application's own document left. */
+    void returnUnhandledKeys(CgUiViewport viewport) {
         for (CgSystemInput.Keyboard.Event key; (key = viewport.pollUnhandledKey()) != null; ) {
             if (!offerLeftKey(key)) CgScreens.giveBack(key);
         }

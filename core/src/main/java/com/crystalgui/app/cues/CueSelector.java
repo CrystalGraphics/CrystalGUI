@@ -5,10 +5,11 @@ import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
 import com.crystalgui.core.collection.tree.TreeDataSource;
 import com.crystalgui.core.collection.tree.TreeRow;
-import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.AppContext;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.WindowSpec;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
-import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
@@ -22,6 +23,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Queue;
+import java.util.concurrent.ConcurrentLinkedQueue;
 
 /**
  * The cue picker, an application: a window with a column per namespace, each its cues as a tree of their paths'
@@ -50,7 +53,8 @@ public final class CueSelector {
             .keywords("cues", "hits", "kit")
             .windowFraction(0.5f)
             .standalone()
-            .launch(context -> new Instance(context.desktop()));
+            .separateDocument()
+            .launch(Instance::new);
 
     private CueSelector() {
     }
@@ -165,20 +169,26 @@ public final class CueSelector {
     /** One window: the registry's cues at launch, and the world tick that plays what a press asked for. */
     private static final class Instance implements Application {
 
-        private final WindowFrame window;
+        private final AppWindow window;
         private final Map<String, Column> columns = new LinkedHashMap<>();
         private final CueSelection selection = CueSelection.client();
         private final SearchField search = new SearchField();
         private final UIText status = new UIText("");
         private final CgTickFunction tick;
+        /** What a press asked for, played on the world's tick: the selection belongs to the client thread, the tree to this document's. */
+        private final Queue<Runnable> asked = new ConcurrentLinkedQueue<>();
+        private final Runnable refresh = this::refresh;
         private int seen = -1;
         private int shownTenths = -1;
+        /** What the tick last read, for the document's thread to show. */
+        private volatile String line = HINT;
+        private volatile boolean changed;
 
         /** Kits open at launch; the rest are one chip press away, so columns stay wide however many kits there are. */
         private static final int MAX_OPEN = 4;
         private static final String HINT = "Click a cue to play it  |  a folder to fold it";
 
-        Instance(Desktop desktop) {
+        Instance(AppContext app) {
             Map<String, List<Node>> roots = new LinkedHashMap<>();
             for (String id : selection.refresh().ids()) add(roots, id);
             for (Map.Entry<String, List<Node>> e : roots.entrySet()) {
@@ -187,12 +197,7 @@ public final class CueSelector {
                 column.show("");
                 columns.put(e.getKey(), column);
             }
-            window = new WindowFrame("Cues");
-            window.setKey(ID);
-            window.setApplication(KIND);
-            window.markApplicationMain();
-            window.setContent(build());
-            desktop.addWindow(window);
+            window = app.windows().open(WindowSpec.titled("Cues").key(ID).content(build()));
             tick = CgWorld.client().schedule().add(CgTickGroup.SUBMIT, ID, dt -> sync());
         }
 
@@ -314,18 +319,34 @@ public final class CueSelector {
             return current.substring(current.indexOf(':') + 1).startsWith(node.path + "/");
         }
 
-        /** On the world's tick: redraws the rows when the selection changed and keeps the status line. */
+        /** On the world's tick: plays what was asked, reads the selection, and tells the document when something changed. */
         private void sync() {
+            for (Runnable request; (request = asked.poll()) != null; ) request.run();
+            boolean redraw = false;
             if (seen != selection.version()) {
                 seen = selection.version();
                 shownTenths = -1;
-                for (Column column : columns.values()) column.tree.refresh();
+                redraw = true;
             }
             int tenths = (int) (shown() * 10) + (finished() ? 1000 : 0);
-            if (tenths != shownTenths) {
+            boolean text = tenths != shownTenths;
+            if (text) {
                 shownTenths = tenths;
-                status.setText(statusLine());
+                line = statusLine();
             }
+            if (redraw || text) {
+                changed = changed || redraw;
+                window.execute(refresh);
+            }
+        }
+
+        /** On the document's thread: redraws the rows when the selection changed and shows the line the tick read. */
+        private void refresh() {
+            if (changed) {
+                changed = false;
+                for (Column column : columns.values()) column.tree.refresh();
+            }
+            status.setText(line);
         }
 
         private boolean finished() {
@@ -367,7 +388,10 @@ public final class CueSelector {
                 row.onMouseDown.attachListener((element, event) -> {
                     Node node = row.node;
                     if (node == null) return;
-                    if (node.cue != null) selection.play(node.cue);
+                    if (node.cue != null) {
+                        String cue = node.cue;
+                        asked.add(() -> selection.play(cue));
+                    }
                     else if (!node.children.isEmpty()) tree.requestToggle(node);
                     event.stopPropagation();
                 }, false, true);
@@ -390,14 +414,12 @@ public final class CueSelector {
         }
 
         @Override public ApplicationKind kind() { return KIND; }
-        @Override public WindowFrame mainWindow() { return window; }
+        @Override public AppWindow mainWindow() { return window; }
         @Override public boolean open(Resource resource) { return false; }
 
         @Override
         public void activate() {
-            // The window's own desktop: a minimised one is detached, and has no document to find it by
-            Desktop desktop = window.desktop();
-            if (desktop != null) desktop.activate(window, true);
+            window.activate();
         }
 
         @Override

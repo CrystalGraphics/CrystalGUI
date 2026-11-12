@@ -1,7 +1,6 @@
 package com.crystalgui.desktop.launcher;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.desktop.Desktop;
@@ -260,7 +259,7 @@ public class Launcher extends Popover {
         @Override
         @Nullable
         public Object getData(DataKey<?> key) {
-            return key == UiDataKeys.APPLICATION_KIND ? kind : null;
+            return key == ApplicationKind.DATA_KEY ? kind : null;
         }
     }
 }

@@ -205,7 +205,7 @@ public class WindowSwitcher extends UIElement {
 
     private void begin(boolean forward, String commandId) {
         order.clear();
-        order.addAll(desktop.registry().switcherOrder());
+        order.addAll(desktop.windowManager().registry().switcherOrder());
         // One window still opens, as Windows' Alt+Tab does: it is how a minimised lone window comes back.
         if (order.isEmpty()) return;
         open = true;
@@ -239,7 +239,7 @@ public class WindowSwitcher extends UIElement {
         if (!open) return;
         WindowFrame chosen = selectedWindow();
         close();
-        if (chosen != null && chosen.state() != WindowState.DESTROYED) desktop.activateByUser(chosen);
+        if (chosen != null && chosen.state() != WindowState.DESTROYED) desktop.windowManager().activateByUser(chosen);
     }
 
     /**

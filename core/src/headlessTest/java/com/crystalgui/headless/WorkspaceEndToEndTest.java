@@ -11,7 +11,7 @@ import com.crystalgraphics.job.reply.CgStream;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.FileOperations;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectInfo;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -68,7 +68,7 @@ public class WorkspaceEndToEndTest {
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
 
     @Before
     public void setUp() {
@@ -90,7 +90,7 @@ public class WorkspaceEndToEndTest {
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice",
                 CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
-        workspace = Workspace.of(clientSide);
+        workspace = WorkspaceClient.of(clientSide);
         pump();
     }
 
@@ -210,7 +210,7 @@ public class WorkspaceEndToEndTest {
     }
 
     /**
-     * <b>...and {@code Workspace.read} gives every byte of it, not the empty inline field.</b>
+     * <b>...and {@code WorkspaceClient.read} gives every byte of it, not the empty inline field.</b>
      *
      * <p>The tier above the protocol, which is where this went wrong. {@code fs/read} answers inline or
      * with a TRANSFER, and which one is the server's decision against its own limit — so a caller that
@@ -514,7 +514,7 @@ public class WorkspaceEndToEndTest {
     @Test
     public void aFolderWatchDeliversABatchOfChanges() {
         List<List<FsMessages.FileChange>> batches = new ArrayList<>();
-        Workspace.Watch watch = workspace.watch(file("src"), false);
+        WorkspaceClient.Watch watch = workspace.watch(file("src"), false);
         watch.onChanged.connect(batches::add);
         pump();
 
@@ -535,7 +535,7 @@ public class WorkspaceEndToEndTest {
     public void twoSubscribersBothHear() {
         int[] first = {0};
         int[] second = {0};
-        Workspace.Watch watch = workspace.watch(MAIN, false);
+        WorkspaceClient.Watch watch = workspace.watch(MAIN, false);
         watch.onChanged.connect(changes -> first[0]++);
         watch.onChanged.connect(changes -> second[0]++);
         pump();
@@ -552,8 +552,8 @@ public class WorkspaceEndToEndTest {
     /** Two consumers of one folder cost one subscription, and the last release unwatches. */
     @Test
     public void aWatchIsSharedAndReleasedByItsLastHolder() {
-        Workspace.Watch one = workspace.watch(file("src"), false);
-        Workspace.Watch two = workspace.watch(file("src"), false);
+        WorkspaceClient.Watch one = workspace.watch(file("src"), false);
+        WorkspaceClient.Watch two = workspace.watch(file("src"), false);
         pump();
         assertSame(one, two);
         assertEquals(1, hub.subscriptionCount("alice"));

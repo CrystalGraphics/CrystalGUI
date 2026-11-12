@@ -34,7 +34,7 @@ public class FrameStatsOverlayTest extends UiDocumentTestBase {
         assertTrue("the headline row is empty", hud.text().get(0).length() > 0);
         // WALL CLOCK, not the delta the test passes: the frames above run back to back, so the interval
         // between them is real and tiny rather than the 100ms this test claims each one took.
-        assertTrue("no frame was sampled", FrameStats.get().sampleCount() > 0);
+        assertTrue("no frame was sampled", FrameStats.compositor().sampleCount() > 0);
         hud.removeSelf();
     }
 

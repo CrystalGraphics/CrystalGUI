@@ -15,7 +15,7 @@ import com.crystalgui.document.DocumentReference;
 import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -89,7 +89,7 @@ public class PresenceTest {
         final CgProtocolConnection<Object> server;
         final CgProtocolConnection<Object> client;
         final WorkspaceBinding<Object> binding;
-        final Workspace workspace;
+        final WorkspaceClient workspace;
         final WorkspaceDocuments documents;
 
         Peer(WorkspaceActor who) {
@@ -98,7 +98,7 @@ public class PresenceTest {
             client = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
             binding = new WorkspaceBinding<>(service, hub, who, who, CgPlainOps.INSTANCE);
             binding.installOn(server::onRequest);
-            workspace = Workspace.over(client::call, client::onNotify, CgPlainOps.INSTANCE)
+            workspace = WorkspaceClient.over(client::call, client::onNotify, CgPlainOps.INSTANCE)
                     .setStorage(new CgInMemoryConfigStorage());
             DocumentKinds kinds = new DocumentKinds();
             kinds.contribute(Owner.PROCESS, DocumentKind.of("test:text", "Text")

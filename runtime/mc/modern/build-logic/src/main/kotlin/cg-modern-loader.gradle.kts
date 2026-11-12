@@ -718,6 +718,8 @@ val quickPlay = project.name.split('.').map { it.toIntOrNull() ?: 0 }.let { v ->
 }
 tasks.withType<JavaExec>().matching { it.name == "runClient" }.configureEach {
     val exec = this
+    // The game must know it was pointed at a server before Quick Play connects, or a gauntlet loads a save first.
+    if (joinServer != null) exec.systemProperty("crystalgraphics.join", joinServer)
     if (joinServer != null || clientUser != null) {
         argumentProviders.add(CommandLineArgumentProvider {
             val join = when {

@@ -121,7 +121,7 @@ public class ToolWindowFrame extends WindowFrame {
         setToolWindow(true);
         // Keyed, so a session restore can find the frame that belongs to this tool window rather than
         // opening a second one beside it. The key is NOT a claim on the desktop's record -- a tool
-        // window's geometry is per project and lives in ToolWindowState. @see DesktopSession
+        // window's geometry is per project and lives in ToolWindowState. @see SessionRecord
         setKey("toolwindow:" + typeId);
 
         // BEFORE the window controls, which is where IntelliJ's gear sits and where every toolkit puts

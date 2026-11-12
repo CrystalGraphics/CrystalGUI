@@ -89,6 +89,7 @@ public final class LibrarySources implements ContentProvider {
      * kilobytes of string. Sixteen is what an LRU has to hold for going back and forth between a class
      * and its supertype to stay free, which is what reading actually looks like.</p>
      */
+    // Threads: guarded by its own monitor.
     private static final Map<String, String> DECOMPILED = new LinkedHashMap<String, String>(16, 0.75f, true) {
         @Override
         protected boolean removeEldestEntry(Map.Entry<String, String> eldest) {
@@ -282,6 +283,7 @@ public final class LibrarySources implements ContentProvider {
      * <p>Bounded only by how many library tabs a session opens, which is how many a person can read.
      * It cannot go stale in a way that matters: what a class IS does not change within a session.</p>
      */
+    // Threads: guarded by its own monitor.
     private static final Map<String, SymbolInfo> SYMBOLS = new HashMap<>();
 
     @Override

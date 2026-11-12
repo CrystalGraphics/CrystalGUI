@@ -1,218 +1,294 @@
 package com.crystalgui.fs.client;
 
-import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.serialization.CgDynamicOps;
 import com.crystalgraphics.serialization.CgStateMap;
-import com.crystalgraphics.job.reply.CgReply;
+import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.async.Broadcast;
 import com.crystalgui.core.async.UiBudget;
+import com.crystalgui.core.async.UiSequence;
+import com.crystalgui.core.signal.Connection;
 import com.crystalgui.core.dispose.Disposable;
-import com.crystalgui.core.signal.Signal;
-import com.crystalgraphics.storage.config.CgConfigStorage;
-import com.crystalgui.fs.CgPath;
+import com.crystalgui.core.storage.CrystalGuiStorage;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.protocol.FsHello;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.protocol.FsMethods;
-import com.crystalgui.fs.protocol.ScriptingMode;
 import com.crystalgui.text.TextPoint;
 import com.crystalgui.text.lang.SymbolInfo;
+import com.crystalgraphics.job.reply.CgReply;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
-import java.util.function.UnaryOperator;
-import org.jetbrains.annotations.Nullable;
+import java.util.function.Function;
+import javax.annotation.Nullable;
 
 /**
- * The client's handle on a workspace that lives on the server.
+ * The workspace on one connection, owned by the desktop: the wire, what the server said about itself, who may do
+ * what, what is watched, where backups and history are kept, and which applications are using it. One per
+ * connection, on the services sequence; every application holds a {@link WorkspaceClient} of its own.
  *
  * <pre>{@code
+ * // The desktop, once per connection (it rebinds on a reconnect)
  * Workspace workspace = Workspace.of(connection);
  *
- * workspace.read(resource).then(content -> …).onError(error -> …);
- * workspace.watch(folder, true).onChanged.connect(changes -> …);
- * workspace.capabilities().isValidName(typed);
+ * // An application, on its own sequence: its reads, writes and events come back there
+ * WorkspaceClient mine = workspace.client("Crystal Editor");
+ * mine.read(resource).then(content -> …);
+ * mine.watch(folder, true).onChanged.connect(changes -> …);
  * }</pre>
  *
- * <p>Work is grouped by noun: {@link #files()} reads and writes, {@link #presence()} says who else has
- * a file open, {@link #capabilities()} what this actor may do, {@link #health()} how the connection is
- * doing. Every event is a {@code Signal} and every registration answers a {@link Disposable}, so any
- * number of consumers can subscribe and each releases its own.</p>
+ * <p>Two applications with one file open agree <b>through the file</b>: a save by one is announced to the other's
+ * watches at once (without the round trip), a clean copy reloads, a dirty one conflicts on its next save. Each
+ * keeps its own document models.</p>
  *
- * <p><b>One per connection</b>, held as an attachment on it — a second workspace in one process is
- * ordinary (two servers in a dev client, a dock window), and each keeps its own watches, caches and
- * scheme table.</p>
+ * <p>Easy to get wrong: a client is made on the sequence that will use it, since that is where its callbacks go;
+ * made outside every sequence its callbacks run on the thread that delivers them. Dispose a client with its
+ * application, or its watches live on.</p>
  */
-public final class Workspace implements Disposable {
+public final class Workspace {
 
+    /** Locks the service's tables: the services sequence writes them, a client may read from its own. */
+    private final Object lock = new Object();
+    @Nullable
+    private final Executor serial;
+    private volatile FsCall.Caller<Object> caller;
+    private volatile CgDynamicOps<Object> ops;
     private final FsCall<Object> calls;
-    private final FileOperations files;
-    private final Presence presence = new Presence();
-    private final Capabilities capabilities = new Capabilities();
-    private final Health health = new Health();
-    private final Map<Resource, Watch> watches = new LinkedHashMap<>();
+    private final List<WorkspaceClient> clients = new CopyOnWriteArrayList<>();
 
-    /** Where a non-project scheme's content comes from. @see #schemes */
-    private final Map<String, ContentProvider> providers = new LinkedHashMap<>();
+    /** The server's subscriptions, one per resource however many applications watch it. */
+    private final Map<Resource, Subscription> watches = new LinkedHashMap<>();
+    /** What each application has unsaved, for the others' presence. */
+    private final Map<WorkspaceClient, Set<Resource>> editing = new IdentityHashMap<>();
 
-    /** Unsaved work and per-save history, both client-local. Absent until a host supplies a store. */
+    private volatile FsHello hello = FsHello.unknown();
+    private volatile boolean greeted;
+    private volatile Map<String, FsMessages.ProjectCapability> capabilities = Map.of();
+    private volatile Map<String, List<String>> serverOpen = Map.of();
+    private volatile Map<String, List<String>> serverEditing = Map.of();
+
+    /** Where a non-project scheme's content comes from. */
+    private final Map<String, ContentProvider> providers = new ConcurrentHashMap<>();
+    private final Map<ContentProvider, ContentProvider> timed = new ConcurrentHashMap<>();
     @Nullable
-    private Backup backup;
-    @Nullable
-    private LocalHistory history;
-
-    /** The greeting, once it has arrived. Until then, the conservative assumptions. @see FsHello */
-    private FsHello hello = FsHello.unknown();
-
-    /** The connection came back and everything was re-subscribed. */
-    public final Signal.Action onDidReconnect = new Signal.Action();
-
-    /** The greeting arrived, so the server's own facts are now known. */
-    public final Signal.Value<FsHello> onDidGreet = new Signal.Value<>();
+    private final Connection contributions;
 
     @Nullable
-    private final Executor home;
+    private volatile Backup backup;
+    @Nullable
+    private volatile LocalHistory history;
+    @Nullable
+    private volatile Function<String, CgConfigStorage> storeFor;
 
-    /**
-     * Runs {@code task} on the sequence this workspace was made on and answers false (the caller returns); true when
-     * already on a sequence or when it has none, so the caller carries on.
-     */
-    public boolean onHome(Runnable task) {
-        if (home == null || Broadcast.sequenceHere() != null) return true;
-        home.execute(task);
-        return false;
+    private static final class Subscription {
+        boolean recursive;
+        final Set<WorkspaceClient> holders = Collections.newSetFromMap(new IdentityHashMap<>());
     }
 
-    private Workspace(FsCall.Caller<Object> caller, Subscriber subscriber, CgDynamicOps<Object> ops) {
-        // A wire's replies, timeouts and notifications arrive on its tick thread, and this workspace's signals
-        // belong to the sequence it was made on: hand every callback back there.
-        Executor home = Broadcast.sequenceHere();
-        this.home = home;
-        this.calls = new FsCall<>(home == null ? caller : homed(caller, home), ops, health);
-        this.files = new FileOperations(calls);
-        subscribe(home == null ? subscriber : homed(subscriber, home), ops);
-        // DRAINED INTO THIS WORKSPACE'S OWN TABLE, and kept in step. A language module contributes at
-        // mod init, long before any world is joined -- so it cannot be handed a workspace, and it must
-        // not name one either. @see ContentProviders
+    private Workspace(FsCall.Caller<Object> wire, WorkspaceClient.Subscriber subscriber, CgDynamicOps<Object> ops) {
+        // The wire answers on its tick thread; the service's state belongs to the services sequence.
+        this.serial = Broadcast.sequenceHere() != null ? UiSequence.services() : null;
+        this.caller = wire;
+        this.ops = ops;
+        this.calls = new FsCall<>(homed(), ops, new Health());
+        subscribe(subscriber);
+        // A language module contributes at mod init, long before any world is joined, so it cannot be handed a
+        // workspace: its providers are drained into this one and kept in step. @see ContentProviders
         adoptContributions();
-        ContentProviders.onDidChange.subscribe(this::adoptContributions);
-    }
-
-    private static FsCall.Caller<Object> homed(FsCall.Caller<Object> caller, Executor home) {
-        return (method, args, onResult, onError) -> caller.call(method, args,
-                result -> home.execute(() -> onResult.accept(result)),
-                error -> home.execute(() -> onError.accept(error)));
-    }
-
-    private static Subscriber homed(Subscriber subscriber, Executor home) {
-        return (method, handler) -> subscriber.subscribe(method, message -> home.execute(() -> handler.accept(message)));
-    }
-
-    private void adoptContributions() {
-        for (ContentProviders.Contribution contribution : ContentProviders.all()) {
-            // A SCHEME REGISTERED DIRECTLY ON THIS WORKSPACE WINS, because it was registered against
-            // THIS server -- a contribution is a process-wide default and an instance registration is a
-            // statement about one connection.
-            providers.putIfAbsent(contribution.scheme(), contribution.provider());
+        Connection held = null;
+        try {
+            held = ContentProviders.onDidChange.subscribe(this::adoptContributions);
+        } catch (IllegalStateException neitherSequenceNorHost) {
+            // Built on a thread nothing is delivered to (a bare test): the contributions at birth are all it sees.
         }
+        this.contributions = held;
     }
 
     /** The workspace on this connection, created on first ask and shared by every later caller. */
     public static Workspace of(CgProtocolConnection<Object> connection) {
         return connection.attachment(Workspace.class, wire -> {
-            Workspace workspace = new Workspace(wire::call,
-                    (method, handler) -> wire.onNotify(method, handler),
-                    wire.ops());
+            Workspace workspace = new Workspace(wire::call, wire::onNotify, wire.ops());
             workspace.greet();
             return workspace;
         });
     }
 
     /** For a test, or a host with its own transport. */
-    public static Workspace over(FsCall.Caller<Object> caller, Subscriber subscriber,
+    public static Workspace over(FsCall.Caller<Object> caller, WorkspaceClient.Subscriber subscriber,
                                  CgDynamicOps<Object> ops) {
         Workspace workspace = new Workspace(caller, subscriber, ops);
         workspace.greet();
         return workspace;
     }
 
-    /** How this workspace hears what the server says without being asked. */
-    public interface Subscriber {
-        void subscribe(String method, Consumer<CgStateMap<Object>> handler);
+    /** An application's handle, answering on the calling sequence. {@code name} is how others see it in presence. */
+    public WorkspaceClient client(String name) {
+        WorkspaceClient made = new WorkspaceClient(this, name);
+        clients.add(made);
+        return made;
     }
 
-    // ── The facades ─────────────────────────────────────────────────────────────────────────────
-
-    public FileOperations files() {
-        return files;
+    public WorkspaceClient client() {
+        return client("");
     }
 
-    public Presence presence() {
-        return presence;
+    // ── Threading ───────────────────────────────────────────────────────────────────────────────
+
+    private void onServices(Runnable task) {
+        Runnable locked = () -> {
+            synchronized (lock) {
+                task.run();
+            }
+        };
+        if (serial == null) locked.run();
+        else serial.execute(locked);
     }
 
-    public Capabilities capabilities() {
+    private FsCall.Caller<Object> homed() {
+        return (method, args, onResult, onError) -> caller.call(method, args,
+                result -> onServices(() -> onResult.accept(result)),
+                error -> onServices(() -> onError.accept(error)));
+    }
+
+    void eachClient(Consumer<WorkspaceClient> action) {
+        for (WorkspaceClient each : clients) each.post(() -> action.accept(each));
+    }
+
+    // ── Facts the clients read ──────────────────────────────────────────────────────────────────
+
+    FsCall.Caller<Object> wire() {
+        return (method, args, onResult, onError) -> caller.call(method, args, onResult, onError);
+    }
+
+    CgDynamicOps<Object> ops() {
+        return ops;
+    }
+
+    /** What the server said about itself. The conservative assumptions until it has answered. */
+    public FsHello server() {
+        return hello;
+    }
+
+    /** Whether the server has actually answered, as opposed to {@link #server()}'s assumptions. False again after a rebind. */
+    public boolean hasGreeted() {
+        return greeted;
+    }
+
+    Map<String, FsMessages.ProjectCapability> capabilities() {
         return capabilities;
     }
 
-    /** How the connection is doing — round trip, what is outstanding, the last failure. */
-    public Health health() {
-        return health;
+    @Nullable
+    Backup backup() {
+        return backup;
+    }
+
+    @Nullable
+    LocalHistory history() {
+        return history;
+    }
+
+    // ── The greeting ────────────────────────────────────────────────────────────────────────────
+
+    /** Asks what this server is, and what this actor may do on it. First, because four client decisions depend on it. */
+    public void greet() {
+        onServices(this::greetNow);
+    }
+
+    private void greetNow() {
+        calls.coalesced("hello", FsMethods.HELLO, FsMessages.PATH_REQUEST,
+                        new FsMessages.PathRequest(""), FsHello.CODEC)
+                .then(answer -> {
+                    if (answer == null) return;
+                    hello = answer;
+                    greeted = true;
+                    // The greeting names this workspace, which is what its backups and history are filed under.
+                    if (!answer.workspaceId().isEmpty()) useIdentity(answer.workspaceId());
+                    eachClient(client -> client.onDidGreet.emit(answer));
+                    askCapabilities();
+                });
+    }
+
+    private void askCapabilities() {
+        calls.coalesced("capabilities", FsMethods.CAPABILITIES, FsMessages.PATH_REQUEST,
+                        new FsMessages.PathRequest(""), FsMessages.CAPABILITIES_NOTIFICATION)
+                .then(answer -> {
+                    if (answer != null) applyCapabilities(answer);
+                });
+    }
+
+    // ── Where unsaved work and history are kept ─────────────────────────────────────────────────
+
+    /**
+     * Tells the service how to find a store for a workspace's identity: the desktop's, once. With it the greeting
+     * is all a workspace needs to file its backups.
+     */
+    public Workspace useStores(@Nullable Function<String, CgConfigStorage> stores) {
+        this.storeFor = stores;
+        if (stores != null && greeted && !hello.workspaceId().isEmpty()) useIdentity(hello.workspaceId());
+        return this;
     }
 
     /**
-     * Registers where a scheme's content comes from — a decompiler, a code generator, a scratch buffer.
-     *
-     * <p>Per workspace, so two servers in one client keep separate tables and one server's library
-     * scheme cannot answer the other's requests. A module that has no workspace to hand contributes
-     * through {@link ContentProviders} instead.</p>
-     *
-     * <p>Answers a {@link Disposable}, so a mod that unloads takes its schemes with it. Registering a
-     * scheme twice replaces the first, which is what a hot reload wants.</p>
-     *
-     * <p>The project scheme may be registered too, and a project file's <b>content</b> still comes from
-     * the server: a provider answers three questions and only one is about bytes — what the resource
-     * holds ({@link ContentProvider#symbolOf}), where a member of it is declared
-     * ({@link ContentProvider#locate}), and what it says. The first two are the language engine's even
-     * for the author's own files. {@link #read} checks the scheme before the table, so a provider here
-     * is never asked for a project file's bytes.</p>
+     * Files backups and history under {@code identity}. The first identity wins: a workspace is one thing however
+     * many applications ask. An application whose server never named it passes the hash of its projects.
      */
-    public Disposable registerScheme(String scheme, ContentProvider provider) {
+    public void useIdentity(String identity) {
+        Function<String, CgConfigStorage> stores = storeFor;
+        if (stores == null || backup != null) return;
+        setStorage(stores.apply(identity));
+    }
+
+    /** Where unsaved work and per-save history are kept; without one there is no hot exit and no timeline. */
+    public Workspace setStorage(@Nullable CgConfigStorage storage) {
+        // A DIRECTORY EACH, and not tidiness: both stores own everything in the store they are given --
+        // Backup#discardAll clears it, LocalHistory sweeps it to a file cap.
+        this.backup = storage == null ? null : new Backup(storage.scoped(CrystalGuiStorage.BACKUPS));
+        this.history = storage == null ? null : new LocalHistory(storage.scoped(CrystalGuiStorage.HISTORY));
+        return this;
+    }
+
+    // ── Content providers ───────────────────────────────────────────────────────────────────────
+
+    private void adoptContributions() {
+        for (ContentProviders.Contribution contribution : ContentProviders.all()) {
+            // A scheme registered directly on this workspace wins: it was registered against this server,
+            // and a contribution is a process-wide default.
+            providers.putIfAbsent(contribution.scheme(), contribution.provider());
+        }
+    }
+
+    Disposable registerScheme(String scheme, ContentProvider provider) {
         providers.put(scheme, provider);
         return () -> providers.remove(scheme, provider);
     }
 
-    /**
-     * What provides this resource, or null when the server does.
-     *
-     * <p>Answers a <b>timed view</b> of the provider, because this is the one door every reader goes
-     * through and the cost is behind the callee's signature: {@code symbolOf(Resource)} reads exactly
-     * like a property getter and was measured at a 761ms compile the first time it was asked about a
-     * class, from a tab presentation the dock re-reads on every strip rebuild. Instrumenting callers
-     * would mean remembering to, in every widget that ever asks a provider anything. @see UiBudget</p>
-     */
     @Nullable
-    public ContentProvider providerFor(Resource resource) {
+    ContentProvider providerFor(Resource resource) {
         if (resource == null) return null;
         ContentProvider provider = providers.get(resource.scheme());
-        // ONE WRAPPER PER PROVIDER, kept: a fresh one per call would allocate on a path the dock takes
-        // per tab per rebuild, and would make two answers about one scheme unequal.
+        // ONE WRAPPER PER PROVIDER, kept: a fresh one per call would allocate on a path the dock takes per tab.
         return provider == null ? null : timed.computeIfAbsent(provider, Timed::new);
     }
 
-    private final Map<ContentProvider, ContentProvider> timed = new LinkedHashMap<>();
+    List<ContentProvider> providers() {
+        return List.copyOf(providers.values());
+    }
 
     /**
-     * Times a provider's <b>synchronous</b> answers against the frame budget.
-     *
-     * <p>Only the synchronous ones. {@code read} and {@code locate} answer a {@link CgReply} — the work is
-     * off the frame thread by construction, so timing the call measures the submit and reports nothing
-     * worth hearing. What is left is what a tab presentation and a tree row bind ask while painting.</p>
+     * Times a provider's <b>synchronous</b> answers against the frame budget: the cost is behind the callee's
+     * signature ({@code symbolOf} reads like a getter and was measured at 761 ms the first time it was asked), and
+     * this is the one door every reader goes through. @see UiBudget
      */
     private static final class Timed implements ContentProvider {
 
@@ -280,438 +356,200 @@ public final class Workspace implements Disposable {
         }
     }
 
-    /** Every registered provider, for a caller that must subscribe to all of them. */
-    public List<ContentProvider> providers() {
-        return List.copyOf(providers.values());
+    // ── Watches ─────────────────────────────────────────────────────────────────────────────────
+
+    /** An application asks for a watch: the first holder, of any application, subscribes on the server. */
+    void watch(WorkspaceClient who, Resource resource, boolean recursive) {
+        onServices(() -> {
+            Subscription have = watches.get(resource);
+            boolean send = have == null || (recursive && !have.recursive);
+            if (have == null) {
+                have = new Subscription();
+                watches.put(resource, have);
+            }
+            have.recursive |= recursive;
+            have.holders.add(who);
+            if (send) sendWatch(resource, have.recursive);
+            presenceMoved();
+        });
     }
 
-    /**
-     * Reads any resource — <b>the one door</b>.
-     *
-     * <p>A project resource goes over the wire; anything else goes to whatever registered its scheme.
-     * The routing lives here so no caller above ever has to ask which kind of thing it is holding.</p>
-     */
-    public CgReply<FileOperations.Content> read(Resource resource) {
-        // THE SCHEME BEFORE THE TABLE. A project file's bytes are the server's whatever has registered
-        // to describe the scheme -- a provider is there to say what the file DECLARES, not to serve it.
-        if (resource.isProject()) return files.readWhole(resource);
-        ContentProvider provider = providerFor(resource);
-        // A PROVIDER HAS NO ETAG, and the empty string is how it says so rather than a null nobody
-        // remembers to check: an etag is the server's record of a file it holds, and a decompiled class
-        // is not one. Whoever reads this answers "no etag" the same way for both.
-        if (provider != null) return provider.read(resource).map(bytes ->
-                new FileOperations.Content(bytes, ""));
-        return files.readWhole(resource);
+    /** An application let go of a watch: the last holder unsubscribes. */
+    void unwatch(WorkspaceClient who, Resource resource) {
+        onServices(() -> {
+            Subscription have = watches.get(resource);
+            if (have == null) return;
+            have.holders.remove(who);
+            if (have.holders.isEmpty()) {
+                watches.remove(resource);
+                calls.send(FsMethods.UNWATCH, FsMessages.PATH_REQUEST,
+                        new FsMessages.PathRequest(resource.toString()), FsMessages.ETAG_RESPONSE);
+            }
+            presenceMoved();
+        });
     }
 
-    /** Whether this resource refuses writes. An unregistered non-project scheme is read-only. */
-    public boolean isReadOnly(Resource resource) {
-        if (resource == null) return true;
-        // Same rule as `read`: a project file is the server's, and whether it may be written is the
-        // server's answer rather than a provider's.
-        if (resource.isProject()) return false;
-        ContentProvider provider = providerFor(resource);
-        // REFUSING TO WRITE SOMETHING NOBODY CLAIMS is the right default: a scheme with no provider has
-        // no storage behind it at all.
-        return provider == null || provider.isReadOnly(resource);
-    }
-
-    /**
-     * Where unsaved work and per-save history are kept.
-     *
-     * <p>Supplied by the host, because only it knows where this client's own writable data lives — a
-     * config directory on one loader, a profile folder on another. Without one a workspace still works
-     * and simply offers no hot exit and no timeline.</p>
-     */
-    public Workspace setStorage(@Nullable CgConfigStorage storage) {
-        // A DIRECTORY EACH, and not tidiness: both stores own everything in the store they are given --
-        // Backup#discardAll clears it, LocalHistory sweeps it to a file cap. Sharing one meant a
-        // successful save, which discards backups, deleted the history it had just written.
-        this.backup = storage == null ? null : new Backup(storage.scoped(CrystalGuiStorage.BACKUPS));
-        this.history = storage == null ? null : new LocalHistory(storage.scoped(CrystalGuiStorage.HISTORY));
-        return this;
-    }
-
-    /** Unsaved work, or null when no store was supplied. */
-    @Nullable
-    public Backup backup() {
-        return backup;
-    }
-
-    /** What this file held at each of the last few saves, or null when no store was supplied. */
-    @Nullable
-    public LocalHistory history() {
-        return history;
-    }
-
-    /** Every project this actor may see, as the server described them. */
-    public CgReply<List<FsMessages.ProjectEntry>> projects() {
-        return files.projects().map(FsMessages.ProjectsResponse::projects);
-    }
-
-    /**
-     * Watches a path — a file, or a directory with or without its descendants.
-     *
-     * <p>Repeating a watch on one resource answers the same object, so two consumers of one folder cost
-     * one subscription. Disposing the last one unwatches.</p>
-     */
-    public Watch watch(Resource resource, boolean recursive) {
-        Watch existing = watches.get(resource);
-        if (existing != null) {
-            existing.holders++;
-            return existing;
-        }
-        Watch watch = new Watch(resource, recursive);
-        watches.put(resource, watch);
+    private void sendWatch(Resource resource, boolean recursive) {
         calls.send(FsMethods.WATCH, FsMessages.PATH_REQUEST,
                 new FsMessages.PathRequest(resource.toString(), recursive ? "recursive" : ""),
                 FsMessages.ETAG_RESPONSE);
-        return watch;
+    }
+
+    // ── What the server pushes ──────────────────────────────────────────────────────────────────
+
+    private void subscribe(WorkspaceClient.Subscriber subscriber) {
+        CgDynamicOps<Object> wireOps = ops;
+        subscriber.subscribe(FsMethods.CHANGED, args -> {
+            FsMessages.ChangedNotification n = FsMessages.CHANGED_NOTIFICATION.decode(wireOps, args.encode());
+            onServices(() -> changed(n.changes()));
+        });
+        subscriber.subscribe(FsMethods.PRESENCE, args -> {
+            FsMessages.PresenceNotification n = FsMessages.PRESENCE_NOTIFICATION.decode(wireOps, args.encode());
+            onServices(() -> applyPresence(n));
+        });
+        subscriber.subscribe(FsMethods.CAPABILITIES, args -> {
+            FsMessages.CapabilitiesNotification n = FsMessages.CAPABILITIES_NOTIFICATION.decode(wireOps, args.encode());
+            onServices(() -> applyCapabilities(n));
+        });
+    }
+
+    private void changed(List<FsMessages.FileChange> changes) {
+        for (FsMessages.FileChange change : changes) {
+            // A RENAME CONCERNS THE STORES TOO: a file is usually renamed while nothing has it open, and then
+            // nothing is left to notice. This is the one place every change arrives.
+            if (change.kind() == FsMessages.ChangeKind.RENAMED && !change.from().isEmpty()) {
+                moveStores(Resource.parse(change.from()), Resource.parse(change.path()));
+            }
+        }
+        eachClient(client -> client.deliver(changes));
+    }
+
+    private void moveStores(Resource from, Resource to) {
+        Backup b = backup;
+        LocalHistory h = history;
+        if (b != null) b.rename(from, to);
+        if (h != null) h.rename(from, to);
     }
 
     /**
-     * Tells the server this client has, or no longer has, unsaved changes to a file.
-     *
-     * <p><b>Nobody else can say it.</b> Dirtiness is {@code version != savedVersion} on a document only
-     * this client holds, so the server can neither observe it nor infer it — a file with no writes
-     * coming is equally one nobody has touched and one somebody has been typing in for ten minutes.
-     * That is the question presence exists to answer, and it is why "who has it open" alone is the
-     * weaker signal: two people find out they were both editing when the second one saves and is
-     * refused.</p>
-     *
-     * <p>Sent on the transition, never per keystroke. {@link WorkspaceDocuments} is the caller, because
-     * a document's state is what changed.</p>
+     * A save, a create or a delete one application made, announced to every <em>other</em> application's watches
+     * now: the server announces it to all of them a round trip later, which an etag already makes harmless.
      */
-    public CgReply<String> setEditing(Resource resource, boolean dirty) {
-        return calls.send(FsMethods.EDITING, FsMessages.PATH_REQUEST,
-                        new FsMessages.PathRequest(resource.toString(), dirty ? "dirty" : ""),
-                        FsMessages.ETAG_RESPONSE)
-                .map(FsMessages.EtagResponse::etag);
+    void fanOut(WorkspaceClient source, FsMessages.FileChange change) {
+        for (WorkspaceClient each : clients) {
+            if (each != source) each.post(() -> each.deliver(List.of(change)));
+        }
     }
 
-    // ── The greeting ────────────────────────────────────────────────────────────────────────────
-
-    /** Asks what this server is. First, because four client decisions depend on the answer. */
-    public CgReply<FsHello> greet() {
-        return calls.coalesced("hello", FsMethods.HELLO, FsMessages.PATH_REQUEST,
-                        new FsMessages.PathRequest(""), FsHello.CODEC)
-                .then(answer -> {
-                    if (answer == null) return;
-                    hello = answer;
-                    greeted = true;
-                    onDidGreet.emit(answer);
-                    askCapabilities();
-                });
+    private void applyCapabilities(FsMessages.CapabilitiesNotification notification) {
+        Map<String, FsMessages.ProjectCapability> next = new LinkedHashMap<>();
+        for (FsMessages.ProjectCapability capability : notification.capabilities()) {
+            next.put(capability.project(), capability);
+        }
+        capabilities = Collections.unmodifiableMap(next);
+        eachClient(WorkspaceClient::capabilitiesMoved);
     }
 
-    /**
-     * ...and what this actor may DO here, which nothing ever asked.
-     *
-     * <p>Both halves of this existed and no wire joined them: the server registered a handler for
-     * {@code fs/capabilities} and the client subscribed to a <em>notification</em> of the same name,
-     * which nothing on any host ever sent. So {@code capabilities()} answered out of an empty map for
-     * every project on every host — and an empty map is indistinguishable from a permissive one, which
-     * is why it looked like it worked. The same shape as presence before it was joined up.</p>
-     *
-     * <p>Asked on the greeting, because the two questions have the same lifetime: what this server is,
-     * and what this actor may do on it. Pushed updates still arrive on the subscription — a
-     * promotion, a project opened — and this is what makes the first answer exist to be updated.</p>
-     */
-    public CgReply<FsMessages.CapabilitiesNotification> askCapabilities() {
-        return calls.coalesced("capabilities", FsMethods.CAPABILITIES, FsMessages.PATH_REQUEST,
-                        new FsMessages.PathRequest(""), FsMessages.CAPABILITIES_NOTIFICATION)
-                .then(answer -> {
-                    if (answer != null) capabilities.apply(answer);
-                });
+    private void applyPresence(FsMessages.PresenceNotification notification) {
+        Map<String, List<String>> open = new LinkedHashMap<>();
+        Map<String, List<String>> typing = new LinkedHashMap<>();
+        for (FsMessages.PresenceEntry entry : notification.entries()) {
+            open.computeIfAbsent(entry.path(), key -> new ArrayList<>()).add(entry.who());
+            if (entry.editing()) typing.computeIfAbsent(entry.path(), key -> new ArrayList<>()).add(entry.who());
+        }
+        serverOpen = open;
+        serverEditing = typing;
+        presenceMoved();
     }
 
-    private boolean greeted;
-
-    /**
-     * Whether the server has actually answered, as opposed to {@link #server()}'s assumptions.
-     *
-     * <p>The two are not the same question and {@code server()} cannot answer this one: it returns a
-     * usable {@link FsHello} from the moment the client exists, because every caller of it needs an
-     * answer rather than a null. So a consumer that must run <em>once the server has spoken</em> — a
-     * session restore keyed on which workspace this is, chiefly — has nothing to test but this.</p>
-     *
-     * <p>False again after a {@link #rebind}: a new peer has not greeted, whatever the last one said.</p>
-     */
-    public boolean hasGreeted() {
-        return greeted;
+    private void presenceMoved() {
+        eachClient(WorkspaceClient::presenceMoved);
     }
 
-    /** What the server said about itself. The conservative assumptions until it has answered. */
-    public FsHello server() {
-        return hello;
+    // ── Presence: the server's peers, and the other applications on this client ─────────────────
+
+    /** Who else has {@code resource} open: the server's peers, then the other applications here. */
+    List<String> whoElseHasOpen(WorkspaceClient me, Resource resource) {
+        List<String> out = new ArrayList<>(serverOpen.getOrDefault(resource.toString(), List.of()));
+        synchronized (lock) {
+            Subscription have = watches.get(resource);
+            if (have != null) {
+                for (WorkspaceClient other : have.holders) {
+                    if (other != me && !other.name().isEmpty() && !out.contains(other.name())) out.add(other.name());
+                }
+            }
+        }
+        return out;
     }
 
-    /**
-     * How two resources are decided to be one document on THIS server.
-     *
-     * <p>Identity on a case-sensitive host; a lower-cased project path on one that folds. Handed to
-     * {@code Documents.setKeyStrategy}, where it decides whether {@code Main.java} and {@code main.java}
-     * are one open document. {@link Resource} equality stays strict — the folding is the store's, as
-     * VS Code keeps {@code URI} strict and folds in {@code extUri}.</p>
-     */
-    public UnaryOperator<Resource> documentKeyStrategy() {
-        if (hello.caseSensitive()) return UnaryOperator.identity();
-        return resource -> {
-            CgPath path = resource.asPath();
-            if (path == null) return resource;
-            return Resource.of(CgPath.of(path.project().toLowerCase(Locale.ROOT),
-                    path.path().toLowerCase(Locale.ROOT)));
-        };
+    /** Who has unsaved changes to {@code resource}: the server's peers, then the other applications here. */
+    List<String> whoIsEditing(WorkspaceClient me, Resource resource) {
+        List<String> out = new ArrayList<>(serverEditing.getOrDefault(resource.toString(), List.of()));
+        synchronized (lock) {
+            for (Map.Entry<WorkspaceClient, Set<Resource>> each : editing.entrySet()) {
+                WorkspaceClient other = each.getKey();
+                if (other != me && !other.name().isEmpty() && each.getValue().contains(resource)
+                        && !out.contains(other.name())) {
+                    out.add(other.name());
+                }
+            }
+        }
+        return out;
+    }
+
+    void noteEditing(WorkspaceClient who, Resource resource, boolean dirty) {
+        onServices(() -> {
+            Set<Resource> mine = editing.computeIfAbsent(who, key -> new LinkedHashSet<>());
+            if (dirty ? mine.add(resource) : mine.remove(resource)) presenceMoved();
+        });
     }
 
     // ── Reconnect ───────────────────────────────────────────────────────────────────────────────
 
-    /**
-     * The wire moved. Re-asks the greeting and re-subscribes everything that was watched.
-     *
-     * <p><b>A subscription is an intent to be re-issued, never a record to be trusted.</b> "I have
-     * already asked the server to watch this" is a fact about a <em>peer</em>, so across a reconnect it
-     * records promises the new peer never made — and change notifications then stop permanently for
-     * exactly the files that were open, with no error and no log line.</p>
-     */
+    /** The wire moved: re-asks the greeting and re-subscribes everything watched. */
     public void rebind(CgProtocolConnection<Object> connection) {
         rebind(connection::call, connection::onNotify, connection.ops());
     }
 
-    public void rebind(FsCall.Caller<Object> caller, Subscriber subscriber, CgDynamicOps<Object> ops) {
-        // NOT A NEW OBJECT: the workbench, the index and every open document hold this one. What moves
-        // is where its calls go and who it is listening to.
-        this.calls.rebind(caller);
-        subscribe(subscriber, ops);
-        capabilities.clear();
-        presence.clear();
-        health.reset();
-        // NOT GREETED UNTIL THIS ONE ANSWERS. The field describes a PEER, and a reconnect is a different
-        // peer -- the same rule the watches below follow, and for the same reason.
-        greeted = false;
-        greet();
-        for (Watch watch : new ArrayList<>(watches.values())) {
-            calls.send(FsMethods.WATCH, FsMessages.PATH_REQUEST,
-                    new FsMessages.PathRequest(watch.resource().toString(),
-                            watch.recursive() ? "recursive" : ""),
-                    FsMessages.ETAG_RESPONSE);
-        }
-        onDidReconnect.emit();
-    }
-
-    private void subscribe(Subscriber subscriber, CgDynamicOps<Object> ops) {
-        subscriber.subscribe(FsMethods.CHANGED, args ->
-                deliver(FsMessages.CHANGED_NOTIFICATION.decode(ops, args.encode())));
-        subscriber.subscribe(FsMethods.PRESENCE, args ->
-                presence.apply(FsMessages.PRESENCE_NOTIFICATION.decode(ops, args.encode())));
-        subscriber.subscribe(FsMethods.CAPABILITIES, args ->
-                capabilities.apply(FsMessages.CAPABILITIES_NOTIFICATION.decode(ops, args.encode())));
-    }
-
-    private void deliver(FsMessages.ChangedNotification notification) {
-        // GROUPED BY WATCH, so a folder's consumer gets one batch rather than one call per file --
-        // which is what coalescing on the server is for and would be undone by delivering per change.
-        Map<Watch, List<FsMessages.FileChange>> grouped = new LinkedHashMap<>();
-        for (FsMessages.FileChange change : notification.changes()) {
-            Resource resource = Resource.parse(change.path());
-            // A RENAME CONCERNS BOTH ENDS. Its `path` is the DESTINATION, so a watch on the file that
-            // moved -- which is what an open tab holds -- matches neither the path nor anything under
-            // it, and the one event that exists to stop a tab being closed would have been filtered out
-            // before reaching it. The watcher on the folder it moved INTO is covered by `path`; the
-            // watcher on the file itself is covered only by `from`.
-            Resource origin = change.from().isEmpty() ? null : Resource.parse(change.from());
-            if (origin != null && change.kind() == FsMessages.ChangeKind.RENAMED) {
-                moveStores(origin, resource);
+    public void rebind(FsCall.Caller<Object> next, WorkspaceClient.Subscriber subscriber, CgDynamicOps<Object> nextOps) {
+        onServices(() -> {
+            // NOT A NEW OBJECT: every application holds a client of this one. What moves is where its calls go and
+            // who it is listening to. A subscription is an intent to be re-issued, never a record to be trusted:
+            // "already asked" is a fact about a peer, and a reconnect is a different one.
+            this.caller = next;
+            this.ops = nextOps;
+            calls.rebind(homed());
+            subscribe(subscriber);
+            capabilities = Map.of();
+            serverOpen = Map.of();
+            serverEditing = Map.of();
+            greeted = false;
+            greetNow();
+            for (Map.Entry<Resource, Subscription> each : new ArrayList<>(watches.entrySet())) {
+                sendWatch(each.getKey(), each.getValue().recursive);
             }
-            for (Watch watch : watches.values()) {
-                if (watch.covers(resource) || (origin != null && watch.covers(origin))) {
-                    grouped.computeIfAbsent(watch, key -> new ArrayList<>()).add(change);
-                }
-            }
-        }
-        grouped.forEach((watch, changes) -> watch.onChanged.emit(changes));
+            eachClient(WorkspaceClient::wireMoved);
+        });
     }
 
-    /**
-     * Carries this client's own per-resource stores to where a file went.
-     *
-     * <p>Here rather than on the open document, because a file is usually renamed while nothing has it
-     * open — and then nothing is left to notice. The history simply vanishes from the renamed file, and
-     * a backup is offered on every launch as unsaved work for a path that no longer exists, which cannot
-     * be opened and so cannot be compared away either. This is the one place every change arrives,
-     * whether or not anything is watching the file it names.</p>
-     */
-    private void moveStores(Resource from, Resource to) {
-        if (backup != null) backup.rename(from, to);
-        if (history != null) history.rename(from, to);
+    /** Detaches an application's client: its watches are released and others stop seeing it. */
+    void release(WorkspaceClient client) {
+        clients.remove(client);
+        onServices(() -> {
+            for (Resource resource : new ArrayList<>(watches.keySet())) unwatch(client, resource);
+            editing.remove(client);
+            presenceMoved();
+        });
     }
 
-    @Override
+    /** How many applications hold a client now. */
+    public int clientCount() {
+        return clients.size();
+    }
+
+    /** Stops listening for contributions. The wire is the connection's. */
     public void dispose() {
-        for (Watch watch : new ArrayList<>(watches.values())) watch.forceDispose();
-        watches.clear();
-    }
-
-    // ── Watches ─────────────────────────────────────────────────────────────────────────────────
-
-    /** One subscription, held by however many consumers asked for it. */
-    public final class Watch implements Disposable {
-        private final Resource resource;
-        private final boolean recursive;
-        private int holders = 1;
-
-        /** A tick's worth of changes under this path. Coalesced on the server, batched here. */
-        public final Signal.Value<List<FsMessages.FileChange>> onChanged = new Signal.Value<>();
-
-        private Watch(Resource resource, boolean recursive) {
-            this.resource = resource;
-            this.recursive = recursive;
-        }
-
-        public Resource resource() {
-            return resource;
-        }
-
-        public boolean recursive() {
-            return recursive;
-        }
-
-        boolean covers(Resource candidate) {
-            if (candidate.equals(resource)) return true;
-            // THE SAME RULE THE SERVER APPLIES, and now literally the same code. This was a second
-            // copy written on string prefixes, and it answered false for every file under a project
-            // root -- so the explorer's one recursive watch heard nothing, and only a file with a
-            // watch of its own (an open document) ever saw a change. @see CgPath#covers
-            if (!resource.isProject() || !candidate.isProject()) return false;
-            return resource.asPath().covers(candidate.asPath(), recursive);
-        }
-
-        @Override
-        public void dispose() {
-            if (--holders > 0) return;
-            forceDispose();
-        }
-
-        private void forceDispose() {
-            if (watches.remove(resource) == null) return;
-            calls.send(FsMethods.UNWATCH, FsMessages.PATH_REQUEST,
-                    new FsMessages.PathRequest(resource.toString()), FsMessages.ETAG_RESPONSE);
-        }
-    }
-
-    // ── Presence ────────────────────────────────────────────────────────────────────────────────
-
-    /** Who else has a file open, and who is <b>editing</b> it. */
-    public static final class Presence {
-        private final Map<String, List<String>> open = new LinkedHashMap<>();
-        private final Map<String, List<String>> editing = new LinkedHashMap<>();
-
-        /** Somebody's presence changed. */
-        public final Signal.Action onDidChange = new Signal.Action();
-
-        public List<String> whoElseHasOpen(Resource resource) {
-            return open.getOrDefault(resource.toString(), List.of());
-        }
-
-        /**
-         * Who has <b>unsaved changes</b> to it.
-         *
-         * <p>The question worth asking before you start typing: without it two people find out they
-         * were both editing a file when the second one saves and is refused.</p>
-         */
-        public List<String> whoIsEditing(Resource resource) {
-            return editing.getOrDefault(resource.toString(), List.of());
-        }
-
-        void apply(FsMessages.PresenceNotification notification) {
-            open.clear();
-            editing.clear();
-            for (FsMessages.PresenceEntry entry : notification.entries()) {
-                open.computeIfAbsent(entry.path(), key -> new ArrayList<>()).add(entry.who());
-                if (entry.editing()) {
-                    editing.computeIfAbsent(entry.path(), key -> new ArrayList<>()).add(entry.who());
-                }
-            }
-            onDidChange.emit();
-        }
-
-        void clear() {
-            // PUSHED STATE DESCRIBES A SERVER NOBODY IS TALKING TO. Kept across a rebind it would show
-            // players from the world you just left as having your files open.
-            open.clear();
-            editing.clear();
-        }
-    }
-
-    // ── Capabilities ────────────────────────────────────────────────────────────────────────────
-
-    /**
-     * What this actor may do, and what this host will accept.
-     *
-     * <p><b>Hints, never the authority.</b> The server re-checks every operation regardless — these
-     * exist so a menu can grey a row and a dialog can refuse a name before the round trip, not so the
-     * client can decide.</p>
-     */
-    public final class Capabilities {
-        private final Map<String, FsMessages.ProjectCapability> byProject = new LinkedHashMap<>();
-
-        public final Signal.Action onDidChange = new Signal.Action();
-
-        public boolean mayRead(Resource resource) {
-            FsMessages.ProjectCapability capability = forResource(resource);
-            return capability == null || capability.mayRead();
-        }
-
-        public boolean mayWrite(Resource resource) {
-            FsMessages.ProjectCapability capability = forResource(resource);
-            return capability != null && capability.mayWrite();
-        }
-
-        /** Whether this host tells {@code Main.java} from {@code main.java}. */
-        /**
-         * Whether this resource may be RUN here, and how.
-         *
-         * <p>A project nobody has said anything about answers {@link ScriptingMode#LIVE}, which is what
-         * every host meant before the question existed. The one place that is deliberately overridden
-         * is a workspace on a remote server, where the client's own local projects answer
-         * {@link ScriptingMode#NONE}: no server speaks for those files, so nobody can authorise
-         * them.</p>
-         */
-        public ScriptingMode scriptingMode(Resource resource) {
-            FsMessages.ProjectCapability capability = forResource(resource);
-            return capability == null ? ScriptingMode.LIVE : capability.scripting();
-        }
-
-        public boolean caseSensitive() {
-            return hello.caseSensitive();
-        }
-
-        /** Whether a New File dialog should refuse this name, asked as the person types. */
-        public boolean isValidName(String name) {
-            return hello.isValidName(name);
-        }
-
-        /** What a file of this size costs: everything, no services, read-only, or refused. */
-        public FsHello.SizeTier sizeTierOf(long bytes) {
-            return hello.tierOf(bytes);
-        }
-
-        @Nullable
-        private FsMessages.ProjectCapability forResource(Resource resource) {
-            CgPath path = resource.asPath();
-            return path == null ? null : byProject.get(path.project());
-        }
-
-        void apply(FsMessages.CapabilitiesNotification notification) {
-            byProject.clear();
-            for (FsMessages.ProjectCapability capability : notification.capabilities()) {
-                byProject.put(capability.project(), capability);
-            }
-            onDidChange.emit();
-        }
-
-        void clear() {
-            byProject.clear();
-        }
+        if (contributions != null) contributions.disconnect();
+        for (WorkspaceClient each : new ArrayList<>(clients)) each.dispose();
     }
 }

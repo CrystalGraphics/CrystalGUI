@@ -38,7 +38,7 @@ import com.crystalgraphics.world.CgWorldQueries;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.protocol.FsMessages;
 import com.crystalgui.fs.server.WorkspaceHost;
 import com.crystalgui.net.ClientUiSession;
@@ -240,7 +240,12 @@ public final class ConnectionTest extends CgGauntletController {
     private static final int WINDOW_ID = 4242;
 
     /** Five seconds of ticks: the run is in a world already, and a stalled probe ends the run rather than holding it. */
-    private static final int DEADLINE_TICKS = 20 * 5;
+    private static final int SOLO_DEADLINE_TICKS = 20 * 5;
+
+    /** A role run waits on a second client, a minute or more from joining. */
+    private static final int ROLE_DEADLINE_TICKS = 20 * 600;
+
+    private static final int DEADLINE_TICKS = ROLE == Role.NONE ? SOLO_DEADLINE_TICKS : ROLE_DEADLINE_TICKS;
 
     /** So the watcher's two reports are two events rather than one coalesced change. */
     private static final int BETWEEN_WRITES = 40;
@@ -285,7 +290,7 @@ public final class ConnectionTest extends CgGauntletController {
     private static volatile boolean fanoutStarted;
     private static volatile boolean reported;
 
-    private static Workspace files;
+    private static WorkspaceClient files;
     private static boolean listingAsked;
     private static boolean writeStarted;
     private static boolean desktopOpened;
@@ -305,7 +310,7 @@ public final class ConnectionTest extends CgGauntletController {
     private static boolean writerEditing;
     private static int writerCreatedAt;
 
-    private static final Set<String> HEARD = new LinkedHashSet<>();
+    private static final Set<String> HEARD = java.util.Collections.synchronizedSet(new LinkedHashSet<>());
 
     private static int ticks;
 
@@ -712,17 +717,17 @@ public final class ConnectionTest extends CgGauntletController {
     /**
      * The workspace on this client's connection — <b>the same object the desktop is using</b>.
      *
-     * <p>{@link Workspace#of} is an attachment on the connection rather than a constructor, so every
+     * <p>{@link WorkspaceClient#of} is an attachment on the connection rather than a constructor, so every
      * caller shares one. That matters for {@link #LOOP_ALIVE}: the assertion is that the request the
      * desktop itself would make completes, and a second workspace would be a second subscriber to
      * {@code fs.changed} as well as a weaker claim.</p>
      */
     @Nullable
-    private static Workspace workspace() {
+    private static WorkspaceClient workspace() {
         if (files != null) return files;
         CgProtocolConnection<Object> connection = CgNetwork.client();
         if (connection == null) return null;
-        files = Workspace.of(connection);
+        files = WorkspaceClient.of(connection);
         return files;
     }
 
@@ -738,7 +743,7 @@ public final class ConnectionTest extends CgGauntletController {
      */
     private static void driveFiles() {
         if (!done(RESHAPE)) return;
-        Workspace live = workspace();
+        WorkspaceClient live = workspace();
         if (live == null) return;
         if (!live.onHome(ConnectionTest::driveFiles)) return;
 
@@ -809,7 +814,7 @@ public final class ConnectionTest extends CgGauntletController {
         }
         if (!CgScreens.anyOpen() || loopAskStarted) return;
 
-        Workspace live = workspace();
+        WorkspaceClient live = workspace();
         if (live == null || !live.onHome(ConnectionTest::driveLoopAlive)) return;
         loopAskStarted = true;
         live.files().list(project())
@@ -833,24 +838,26 @@ public final class ConnectionTest extends CgGauntletController {
      */
     private static void driveRole(Role role) {
         ticks++;
-        Workspace live = workspace();
+        WorkspaceClient live = workspace();
+        int deadline = DEADLINE_TICKS;
         if (live == null) {
-            if (ticks > DEADLINE_TICKS) finish(false, "joined, but no connection");
+            if (ticks > deadline) finish(false, "joined, but no connection");
             return;
         }
         if (role == Role.WRITER) writerStep(live);
         else watcherStep(live);
 
-        if (ticks > DEADLINE_TICKS) finish(false, "timed out");
+        if (ticks > deadline) finish(false, "timed out");
     }
 
-    private static void writerStep(Workspace live) {
+    private static void writerStep(WorkspaceClient live) {
         Resource shared = Resource.of(CgPath.of(WorkspaceHost.DEFAULT_PROJECT_ID, SHARED_FILE));
 
         if (!writerCreated) {
             if (writerCreating) return;
             writerCreating = true;
-            live.files().write(shared, "first\n".getBytes(StandardCharsets.UTF_8), null)
+            // create, never write: a write is a save, which refuses a file that is not there yet
+            live.files().create(shared, "first\n".getBytes(StandardCharsets.UTF_8))
                     .then(etag -> {
                         CrystalGuiCore.LOGGER.info("[connection] wrote {} — the watcher should hear about it",
                                 SHARED_FILE);
@@ -859,8 +866,8 @@ public final class ConnectionTest extends CgGauntletController {
                     })
                     .onError(f -> {
                         CrystalGuiCore.LOGGER.error("[connection] create failed: {} — NO_PERMISSIONS means "
-                                + "the player is not an op", f.code());
-                        writerCreating = false;
+                                + "the player is not an op; EXISTS means a run left the file", f.code());
+                        finish(false, "create failed: " + f.code());
                     });
             return;
         }
@@ -888,7 +895,7 @@ public final class ConnectionTest extends CgGauntletController {
         finish(true, "");
     }
 
-    private static void watcherStep(Workspace live) {
+    private static void watcherStep(WorkspaceClient live) {
         if (!watching) {
             watching = true;
             // RECURSIVE, because the writer's file is at the project root and a watch that did not

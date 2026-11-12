@@ -96,7 +96,7 @@ public abstract class UiDocumentTestBase extends UiTestBase {
 
     /**
      * Detaches what the test built, as closing a window does. A widget subscribed to a process-wide signal
-     * ({@code Notifications.onDidChange}, {@code UiTemplates.onDidReload}) lets go on detach, so a document
+     * ({@code NotificationService.onDidChange}, {@code UiTemplates.onDidReload}) lets go on detach, so a document
      * dropped still attached stayed reachable from that signal: hundreds of classes in one JVM ran out of heap.
      */
     @After

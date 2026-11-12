@@ -171,6 +171,11 @@ top-layer {
 texteditor:focus-visible,
 dialog:focus-visible,
 window:focus-visible,
+/* An application's own document shown in a window: the portal is focusable so keys have somewhere to land, and the
+ * application is not the window's controls. Which window is active is its title bar's to say. */
+clientportal:focus-visible,
+clientroot:focus-visible,
+popupportal:focus-visible,
 viewcontainer:focus-visible,
 dockarea:focus-visible,
 dockgroup:focus-visible,

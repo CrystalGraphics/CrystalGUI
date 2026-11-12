@@ -15,7 +15,7 @@ graphics context goes (`contextDestroyed`). **A `CgUiRenderer.View` is per docum
 `paintContext()`, and its `UiPresenter`, which shows the context's target, so the two are closed together
 (`close()`, render thread). **A `CgUiViewport` owns its document's view** and opens its paint context's frame for its `Content`; the document
 owns none, since it is the DOM and runs on a dedicated server. A view is never shared: each document records on its
-own thread into a target of its own size, and its replay segments, surfaces and icon raster are keyed to its tree.
+own thread into a target of its own size, and its replay segments and surfaces are keyed to its tree. The icon raster is the exception: one `SvgAtlas` for the process, shared by every document.
 Anything drawing without a driver (a rehearsal, a scene with no document) opens a view and closes it when done; one
 left open holds its textures until the context goes.
 
@@ -82,7 +82,7 @@ sequence, or at the firing inline) and shows through its `presenter()`, and `CgU
 | Lifecycle | `CgUiRenderer.View.close()` with its document (a driver's `close` does), `CgUiRenderer.contextDestroyed()` at shutdown |
 
 > **A view's textures are freed by its `close()`, and by `CgUiRenderer.contextDestroyed()` for one left open**
-> (`CgUiClientLifecycle.onContextDestroy` calls it). Both free what nothing else sweeps: each paint context's frame target, surfaces, backdrop and icon-raster textures —
+> (`CgUiClientLifecycle.onContextDestroy` calls it). Both free what nothing else sweeps: each paint context's frame target, surfaces, backdrop and drop-shadow textures (the shared icon atlas goes at `contextDestroyed`) —
 > requested from the graph, which no registry holds (`CgExecutor.freeStorage`) — and the contexts' renderers. Not
 > what is borrowed from CrystalGraphics' registries (materials, the fallback white pixel, font atlases):
 > `destroyContext()` sweeps those, and freeing them here would be a double free.
@@ -244,6 +244,15 @@ things it deliberately does not implement and why none of them matters for icons
 > `SvgScene.DropShadow`, shared by the nodes it covers; `drawShadow` blurs their coverage once with the backdrop's
 > passes into a texture of its own (a filter pass clears its whole target, so never an atlas slot) and draws it under
 > the flood colour. Above icon size it is skipped, with a log line.
+
+> **The icon atlas is shared, so a cell has a publication rule** (`SvgAtlas`): the document that asks first claims a cell under the
+> atlas lock and builds it in its own recording; a callback recorded after the build (`CgUiPaintContext.afterExecuted`) marks it
+> ready on the render thread. Others draw only ready cells; a pending one is skipped for a frame and `missed()` moves
+> `replayEpoch` once it is ready. A generation (texture) is cleared by its creator's recording and claimed in by nobody else until
+> that has executed; a full atlas starts a new generation, so an earlier recording still writes the texture its cells name.
+> A closed view or aborted frame `abandon`s its unbuilt cells. Drop shadows stay per document.
+> **Every static collection in `core` or `language` names its thread rule** (`// Threads:`, or is concurrent/synchronized):
+> `SharedStateTest` fails the build otherwise. Several documents run style, layout and paint at once.
 
 > **Two seams here are easy to get backwards, and both exist for the same reason: a document is shared.**
 > `currentColor` is left unresolved in the cached ops and bound at draw time, so one parsed icon backs a

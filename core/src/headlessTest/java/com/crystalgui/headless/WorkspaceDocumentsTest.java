@@ -17,7 +17,7 @@ import com.crystalgui.document.DocumentState;
 import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -72,7 +72,7 @@ public class WorkspaceDocumentsTest {
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private WorkspaceDocuments documents;
 
     @Before
@@ -92,7 +92,7 @@ public class WorkspaceDocumentsTest {
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
-        workspace = Workspace.of(clientSide).setStorage(new CgInMemoryConfigStorage());
+        workspace = WorkspaceClient.of(clientSide).setStorage(new CgInMemoryConfigStorage());
         DocumentKinds kinds = new DocumentKinds();
         kinds.contribute(Owner.PROCESS, DocumentKind.of("test:java", "Java")
                 .files(DocumentKind.FilePatterns.extension("java"),
@@ -288,7 +288,7 @@ public class WorkspaceDocumentsTest {
      * <b>...and a file over the inline limit reloads WHOLE.</b>
      *
      * <p>{@code fs/read} answers inline or with a TRANSFER, so a caller that takes {@code content} and
-     * stops is right for every small file and silently wrong for a large one. {@code Workspace.read}
+     * stops is right for every small file and silently wrong for a large one. {@code WorkspaceClient.read}
      * was fixed for the OPEN path; the reload path still read straight through {@code files().read},
      * so an external change to a big file adopted an EMPTY array and marked the document clean --
      * and the next save wrote that emptiness over somebody's work.</p>

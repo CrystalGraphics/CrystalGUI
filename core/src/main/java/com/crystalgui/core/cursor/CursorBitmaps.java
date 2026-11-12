@@ -78,6 +78,7 @@ public final class CursorBitmaps {
     /** No bitmap — GLFW's own crosshair is better than one we would draw. @see CursorArt#standardOnly */
     private static final CursorArt CROSSHAIR = CursorArt.standardOnly("crosshair");
 
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<Cursor, CursorArt> ART = new EnumMap<>(Cursor.class);
 
     static {

@@ -45,7 +45,8 @@ public final class SettingsCategory {
         SECTION
     }
 
-    private static final Map<String, SettingsCategory> BY_PATH = new LinkedHashMap<>();
+    /** Declared at start-up, read by every document: guarded by its own monitor. */
+    private static final Map<String, SettingsCategory> BY_PATH = java.util.Collections.synchronizedMap(new LinkedHashMap<>());
 
     private final String path;
     private final String title;
@@ -93,7 +94,9 @@ public final class SettingsCategory {
     }
 
     public static Map<String, SettingsCategory> all() {
-        return new LinkedHashMap<>(BY_PATH);
+        synchronized (BY_PATH) {
+            return new LinkedHashMap<>(BY_PATH);
+        }
     }
 
     /** For tests, which must not inherit whatever another test declared. */

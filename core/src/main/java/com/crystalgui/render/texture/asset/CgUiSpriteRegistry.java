@@ -42,6 +42,10 @@ import java.util.concurrent.ConcurrentHashMap;
  * object in place on reload rather than replacing it — but each element's sprite still reads
  * {@code texture.getWidth()/getHeight()} fresh on every {@link #get} call (not cached at load time),
  * since a reload can legitimately swap in a differently-sized image even without an atlas repack.</p>
+ *
+ * <p><b>Threads:</b> any. The parsed packs are immutable and held in a concurrent map filled by
+ * {@code computeIfAbsent}; each lookup answers an instance of its own, so documents on their own sequences share
+ * no sprite. No GPU state lives here: the texture a sprite names is drawn through the document's paint context.</p>
  */
 public final class CgUiSpriteRegistry {
 

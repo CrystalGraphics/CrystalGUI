@@ -12,7 +12,7 @@ import java.util.Objects;
 /**
  * Where a module that owns a scheme <b>contributes</b> its provider, without holding a workspace.
  *
- * <p>For a module that has no {@link Workspace} to hand: a language stack registers its providers at
+ * <p>For a module that has no {@link WorkspaceClient} to hand: a language stack registers its providers at
  * mod init, long before any world is joined, and {@code core/} may never name {@code language/} — the
  * same inversion {@code ProjectSourcesRegistry} and {@code TypeSearchRegistry} use.</p>
  *
@@ -24,7 +24,7 @@ public final class ContentProviders {
 
     private static final Contributions<Contribution> PROVIDERS = Contributions.of("content-providers", Contribution::scheme);
 
-    /** A provider was contributed or withdrawn: what a live {@link Workspace} re-reads. */
+    /** A provider was contributed or withdrawn: what a live {@link WorkspaceClient} re-reads. */
     public static final Broadcast<?> onDidChange = PROVIDERS.published().changes();
 
     private ContentProviders() {

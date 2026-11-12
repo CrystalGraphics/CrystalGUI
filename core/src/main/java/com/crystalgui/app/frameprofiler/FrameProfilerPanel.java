@@ -93,7 +93,8 @@ public class FrameProfilerPanel extends UIElement {
     public static final String ABSENT_CLASS = "__absent__";
     public static final String BADGE_CLASS = "__badge__";
 
-    private final ProfilerModel model = new ProfilerModel();
+    private final ProfilerSettings settings;
+    private final ProfilerModel model;
 
     private final Button record = new Button("Record");
     private final Button live = new Button("Live");
@@ -122,7 +123,7 @@ public class FrameProfilerPanel extends UIElement {
     private final ChainsTab chains = new ChainsTab();
     private final CompareTab compare = new CompareTab(model);
     private final ScreenTab screen = new ScreenTab();
-    private final BuffersTab buffers = new BuffersTab();
+    private final BuffersTab buffers;
 
     /** What the strip's hovered frame looked like, floating under the pointer. @see #showPreview */
     private final UIElement preview = new UIElement();
@@ -139,7 +140,10 @@ public class FrameProfilerPanel extends UIElement {
     @Nullable
     private String shownZone;
 
-    public FrameProfilerPanel() {
+    public FrameProfilerPanel(ProfilerSettings settings) {
+        this.settings = settings;
+        this.model = new ProfilerModel(settings);
+        this.buffers = new BuffersTab(settings);
         super(NAME);
         refusePublicChildren();
         layout(l -> l.flexDirection(FlexDirection.COLUMN).widthPercent(100f).heightPercent(100f));
@@ -334,7 +338,7 @@ public class FrameProfilerPanel extends UIElement {
         sinceRefresh += deltaSeconds;
         // A SETTING, and four times a second by default: fast enough that the strip visibly fills, slow
         // enough to read, and cheap enough that the viewer does not become the thing worth profiling.
-        if (sinceRefresh < ProfilerSettings.refreshSeconds()) return true;
+        if (sinceRefresh < settings.refreshSeconds()) return true;
         sinceRefresh = 0f;
         if (following) {
             model.refreshInBackground();
@@ -361,7 +365,7 @@ public class FrameProfilerPanel extends UIElement {
     public void setSettingsOpen(boolean open) {
         if (open == isSettingsOpen()) return;
         if (open && settingsPage == null) {
-            settingsPage = new ProfilerSettingsPage();
+            settingsPage = new ProfilerSettingsPage(settings);
             settingsPage.onDone(() -> setSettingsOpen(false));
             appendStructural(settingsPage);
         }
@@ -841,7 +845,7 @@ public class FrameProfilerPanel extends UIElement {
     }
 
     private long budgetNanos() {
-        return ProfilerSettings.budgetNanos();
+        return settings.budgetNanos();
     }
 
     @Nullable

@@ -53,7 +53,7 @@ public final class Health {
     public long asked() {
         inFlight++;
         sent++;
-        onDidChange.emit();
+        changed();
         return clockMillis.getAsLong();
     }
 
@@ -66,14 +66,14 @@ public final class Health {
         // what a raw last-value readout does, and why a raw one flickers uselessly.
         roundTripMillis = samples == 0 ? elapsed : roundTripMillis + ALPHA * (elapsed - roundTripMillis);
         samples++;
-        onDidChange.emit();
+        changed();
     }
 
     /** It failed. The error is kept because "what went wrong last" is the second question asked. */
     public void failed(CgReplyError error) {
         settle();
         lastError = error;
-        onDidChange.emit();
+        changed();
     }
 
     private void settle() {
@@ -107,7 +107,7 @@ public final class Health {
     public void reset() {
         inFlight = 0;
         lastError = null;
-        onDidChange.emit();
+        changed();
     }
 
     /** {@code 58 ms · 2 in flight}, which is what a status item shows. */
@@ -118,5 +118,14 @@ public final class Health {
         if (inFlight > 0) out.append(" · ").append(inFlight).append(" in flight");
         if (lastError != null) out.append(" · last error ").append(lastError.code());
         return out.toString();
+    }
+
+    /**
+     * Tells a listener, if there is one. A signal binds to the first sequence that touches it, and a service-wide
+     * tally nobody listens to is touched from whichever caller asked first and from the wire's thread when it is
+     * answered.
+     */
+    private void changed() {
+        if (onDidChange.hasListeners()) onDidChange.emit();
     }
 }

@@ -16,7 +16,7 @@ import java.util.Objects;
 
 /**
  * The desktop's own settings, kept in its config store's {@code desktop-settings.json}: how the shell behaves,
- * as distinct from the arrangement {@link DesktopSession} records. A typed, saved view over the desktop's own
+ * as distinct from the arrangement {@link SessionRecord} records. A typed, saved view over the desktop's own
  * {@code Desktop.settings()} store, so anything inside the desktop resolves them through the settings tree.
  *
  * <pre>{@code

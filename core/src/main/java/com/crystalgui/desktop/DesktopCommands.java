@@ -1,6 +1,5 @@
 package com.crystalgui.desktop;
 
-import com.crystalgui.ui.data.UiDataKeys;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.Commands;
@@ -13,7 +12,7 @@ import com.crystalgui.desktop.taskbar.TaskbarDesigner;
 import com.crystalgui.desktop.window.WindowCommands;
 import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.display.FrameStatsOverlay;
@@ -149,7 +148,7 @@ public final class DesktopCommands {
                     if (desktop == null) return;
                     UIDocument window = desktop.document();
                     if (window == null) return;
-                    WindowFrame existing = desktop.registry().byKey("taskbar-designer");
+                    WindowFrame existing = desktop.windowManager().registry().byKey("taskbar-designer");
                     if (existing != null) existing.requestClose();
                     else TaskbarDesigner.open(window);
                 })
@@ -203,18 +202,18 @@ public final class DesktopCommands {
                 .menu(MenuId.DESKTOP_CONTEXT, "1_desktop", 10)
                 .run(context -> {
                     Desktop desktop = desktopFor(context);
-                    if (desktop != null) desktop.toggleShowDesktop();
+                    if (desktop != null) desktop.windowManager().toggleShowDesktop();
                 })
                 .toggledWhen(context -> {
                     Desktop desktop = desktopFor(context);
-                    return desktop != null && desktop.isShowingDesktop();
+                    return desktop != null && desktop.windowManager().isShowingDesktop();
                 })
                 .enabledWhen(context -> {
                     Desktop desktop = desktopFor(context);
                     // Nothing to show and nothing to put back is not a state worth offering: with no
                     // windows at all the desktop IS shown, and the row would toggle nothing.
                     return desktop != null
-                            && (desktop.isShowingDesktop() || desktop.registry().size() > 0);
+                            && (desktop.windowManager().isShowingDesktop() || desktop.windowManager().registry().size() > 0);
                 }));
 
         registry.register(Command.of(RESET_WINDOW_SIZES, "Reset window sizes")
@@ -240,7 +239,7 @@ public final class DesktopCommands {
     private static boolean hasSomethingToSwitchTo(CommandContext context) {
         Desktop desktop = desktopFor(context);
         // One window is enough, as for Alt+Tab. A disabled chord falls through to Tab traversal.
-        return desktop != null && desktop.registry().size() > 0;
+        return desktop != null && desktop.windowManager().registry().size() > 0;
     }
 
     /** The row that opens the application a menu is about, under its own name and icon; none without one. */
@@ -287,10 +286,10 @@ public final class DesktopCommands {
         return installed != null && installed.isPinnable();
     }
 
-    /** The application the command was invoked about, or null. @see UiDataKeys#APPLICATION_KIND */
+    /** The application the command was invoked about, or null. @see ApplicationKind#DATA_KEY */
     @Nullable
     private static ApplicationKind kindFor(CommandContext context) {
-        return context.data().get(UiDataKeys.APPLICATION_KIND);
+        return context.data().get(ApplicationKind.DATA_KEY);
     }
 
     /**

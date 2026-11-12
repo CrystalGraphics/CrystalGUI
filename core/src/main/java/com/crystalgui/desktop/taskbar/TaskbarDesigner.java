@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.taskbar;
 
+import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.core.CrystalGuiCore;
@@ -135,7 +136,7 @@ public final class TaskbarDesigner {
         designer.enableIslandDrag();
         desktop.addWindow(frame);
         // AFTER openWindow, not before: adding a window is what places and sizes it, so a size written
-        // first is simply overwritten. @see Desktop#placeByCascade
+        // first is simply overwritten. @see WindowManager#placeByCascade
         // CLAMPED TO THE WORK AREA, not a fixed size. 640 logical is 1280 physical at the default
         // uiScale of 2, against a work area 540 logical tall -- so the first version opened a window
         // taller than the desktop it was on and pushed its own buttons off the bottom of the screen.

@@ -21,7 +21,7 @@ public class BuffersTabTest {
     @Test
     public void watchesOnceShownAndStopsWhenClosed() {
         UIDocument window = new UIDocument();
-        BuffersTab tab = new BuffersTab();
+        BuffersTab tab = new BuffersTab(new ProfilerSettings());
         window.append(tab);
         for (int i = 0; i < 3; i++) window.frame(1f / 60f, 400, 300);
 
@@ -36,7 +36,7 @@ public class BuffersTabTest {
     public void leavesAWatchItDidNotStart() {
         CgBufferInspector.watch(true);
         UIDocument window = new UIDocument();
-        BuffersTab tab = new BuffersTab();
+        BuffersTab tab = new BuffersTab(new ProfilerSettings());
         window.append(tab);
         for (int i = 0; i < 3; i++) window.frame(1f / 60f, 400, 300);
 

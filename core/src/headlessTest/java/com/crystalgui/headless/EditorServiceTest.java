@@ -18,7 +18,7 @@ import com.crystalgui.document.EditorInput;
 import com.crystalgui.document.TextDocumentModel;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.client.WorkspaceDocuments;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
@@ -76,7 +76,7 @@ public class EditorServiceTest {
     private WorkspaceService service;
     private WatchHub hub;
     private WorkspaceBinding<Object> binding;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private WorkspaceDocuments documents;
     private DocumentKinds kinds;
     private EditorService editors;
@@ -98,7 +98,7 @@ public class EditorServiceTest {
         binding = new WorkspaceBinding<>(service, hub, WorkspaceActor.LOCAL, "alice", CgPlainOps.INSTANCE);
         binding.installOn(serverSide::onRequest);
 
-        workspace = Workspace.of(clientSide).setStorage(new CgInMemoryConfigStorage());
+        workspace = WorkspaceClient.of(clientSide).setStorage(new CgInMemoryConfigStorage());
         kinds = new DocumentKinds();
         // A kind with a MODEL and no EDITOR, which is a real declaration and what lets this whole
         // suite be headless: everything asserted here is about the lane, not about a widget.

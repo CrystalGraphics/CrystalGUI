@@ -4,7 +4,7 @@ import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.job.reply.CgReply;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.fs.CgPath;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 
 import org.junit.Test;
 
@@ -124,14 +124,14 @@ public class ResourceTest {
     // ── Which side answers for a scheme ─────────────────────────────────────────────────────────
 
     /** A workspace with no wire behind it. Every test here asks about routing, never about content. */
-    private static Workspace offline() {
-        return Workspace.over((method, args, onResult, onError) -> { }, (method, handler) -> { },
+    private static WorkspaceClient offline() {
+        return WorkspaceClient.over((method, args, onResult, onError) -> { }, (method, handler) -> { },
                 CgPlainOps.INSTANCE);
     }
 
     @Test
     public void anUnregisteredSchemeHasNoProviderAndIsReadOnly() {
-        Workspace workspace = offline();
+        WorkspaceClient workspace = offline();
         Resource resource = Resource.of("nobody", "x");
         assertNull(workspace.providerFor(resource));
         assertTrue("refusing to write something nobody claims is the safe direction",
@@ -145,7 +145,7 @@ public class ResourceTest {
 
     @Test
     public void aRegisteredProviderAnswersForItsScheme() {
-        Workspace workspace = offline();
+        WorkspaceClient workspace = offline();
         workspace.registerScheme("greeting", resource -> CgReply.of("hello".getBytes()));
 
         Resource resource = Resource.of("greeting", "x");
@@ -157,7 +157,7 @@ public class ResourceTest {
 
     @Test
     public void withdrawingASchemeTakesItsProviderWithIt() {
-        Workspace workspace = offline();
+        WorkspaceClient workspace = offline();
         Disposable registration =
                 workspace.registerScheme("greeting", resource -> CgReply.of("hello".getBytes()));
         registration.dispose();
@@ -173,7 +173,7 @@ public class ResourceTest {
      */
     @Test
     public void theProjectSchemeIsNeverReadThroughAProvider() {
-        Workspace workspace = offline();
+        WorkspaceClient workspace = offline();
         workspace.registerScheme(Resource.SCHEME_PROJECT,
                 resource -> CgReply.of("leaked".getBytes()));
 

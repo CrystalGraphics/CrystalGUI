@@ -23,8 +23,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
 import com.crystalgui.widget.display.SpanTrack;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -61,6 +63,10 @@ import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.config.control.MaskControl;
 import com.crystalgui.widget.display.FrameStatsOverlay;
 import com.crystalgui.widget.overlay.Dialog;
+import com.crystalgui.widget.overlay.Popover;
+import com.crystalgui.desktop.app.AppDocument;
+import com.crystalgui.desktop.app.ClientPortal;
+import com.crystalgui.desktop.app.PopupLayer;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.toolwindow.ToolWindowManager;
@@ -230,6 +236,11 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
 
     private WorkbenchApplication editor;
+
+    /** Runs {@code work} on the editor's own document: its tree is touched by that thread alone. */
+    private void onEditor(Runnable work) {
+        editor.mainWindow().execute(work);
+    }
     private int backgroundWindows;
 
     @Override
@@ -529,9 +540,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     private void driveFollowShot(HarnessContext ctx) {
         long n = viewport.presentedFrames();
         if (n == 60) viewport.run(() -> {
-            for (WindowFrame window : desktop.windows()) {
+            for (WindowFrame window : desktop.windowManager().windows()) {
                 if (!window.isMaximized() && window.box() != null) {
-                    desktop.activate(window);
+                    desktop.windowManager().activate(window);
                     // FROM ONE PLACE EVERY RUN: the session keeps where the last drag left it.
                     window.moveTo(24f, 24f);
                     followWindow = window;
@@ -588,7 +599,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             Document graph = graphDocument();
             if (graph == null || !graph.isDirty()) {
                 closeWhenClean = false;
-                if (editor != null) editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+                if (editor != null) onEditor(() -> editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE)));
             }
         }
         String graphShot = graphCost == null ? null : graphCost.captureNow();
@@ -654,9 +665,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // The window to move goes on top first: one behind the maximised editor would move unseen.
         if (frameNumber == 30) {
             viewport.run(() -> {
-                for (WindowFrame window : desktop.windows()) {
+                for (WindowFrame window : desktop.windowManager().windows()) {
                     if (!window.isMaximized() && window.box() != null) {
-                        desktop.activate(window);
+                        desktop.windowManager().activate(window);
                         break;
                     }
                 }
@@ -670,7 +681,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 return;
             }
             long id = shown.frameId();
-            for (WindowFrame window : desktop.windows()) {
+            for (WindowFrame window : desktop.windowManager().windows()) {
                 Box box = window.box();
                 if (box != null && box.movedNode(id) != 0 && !window.isMaximized()) {
                     nodesWindow = window;
@@ -752,10 +763,10 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         int n = (int) viewport.presentedFrames();
         if (n == 99) {
             minimiseTarget = viewport.ask(() -> {
-                for (WindowFrame window : desktop.windows()) {
+                for (WindowFrame window : desktop.windowManager().windows()) {
                     if (window.getTitle().equals(MINIMISE_WINDOW)) return window;
                 }
-                return desktop.activeWindow();
+                return desktop.windowManager().activeWindow();
             });
         }
         if (minimiseTarget == null) return;
@@ -843,6 +854,73 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
 
             @Override
+            public void describeWindows() {
+                float scale = desktop.document().boxes().uiScale();
+                for (WindowFrame each : desktop.windowManager().windows()) {
+                    Box box = each.box();
+                    if (box == null) continue;
+                    System.out.printf(Locale.ROOT, "[windows] %-24s %s x=%d y=%d w=%d h=%d%n", each.getTitle(), each.state(),
+                            Math.round(box.x() * scale), Math.round(box.y() * scale), Math.round(box.width() * scale),
+                            Math.round(box.height() * scale));
+                }
+            }
+
+            private AppDocument popupApplication() {
+                for (WindowFrame each : desktop.windowManager().windows()) {
+                    if (!each.content().children().isEmpty() && each.content().children().get(0) instanceof ClientPortal portal) {
+                        return portal.application();
+                    }
+                }
+                return null;
+            }
+
+            @Override
+            public void stallApplication(long millis) {
+                AppDocument application = popupApplication();
+                if (application == null) return;
+                application.execute(() -> {
+                    long until = System.nanoTime() + millis * 1_000_000L;
+                    while (System.nanoTime() < until) Thread.onSpinWait();
+                });
+            }
+
+            @Override
+            public void showPopup() {
+                AppDocument application = popupApplication();
+                if (application == null) {
+                    System.out.println("[popup] no application on its own document");
+                    return;
+                }
+                application.execute(() -> {
+                    Popover popover = new Popover();
+                    popover.append(new UIText("A menu in the application's own document"));
+                    application.document().append(popover);
+                    popover.showAt(24f, 40f, null);
+                });
+            }
+
+            @Override
+            public void describePopup() {
+                AppDocument application = popupApplication();
+                PopupLayer layer = application == null ? null : application.popups();
+                float[] occupied = layer == null ? null : layer.occupied();
+                System.out.println("[popup] in the application's document: " + Arrays.toString(occupied));
+                if (application != null) {
+                    application.execute(() -> System.out.println("[popup] its thread: layer="
+                            + application.document().topLayerNodeIfPresent() + " content="
+                            + application.document().hasTopLayerContent() + " promoted="
+                            + application.document().promotedNodes().size()));
+                }
+                for (UIElement each : desktop.document().promotedNodes()) {
+                    Box box = each.box();
+                    if (box != null && each.getClass().getSimpleName().equals("PopupPortal")) {
+                        System.out.printf(Locale.ROOT, "[popup] shown by the shell at x=%.0f y=%.0f w=%.0f h=%.0f%n",
+                                box.worldX(), box.worldY(), box.width(), box.height());
+                    }
+                }
+            }
+
+            @Override
             public void switchTheme() {
                 UiThemeManager themes = UiThemeManager.getInstance();
                 List<UiTheme> all = ThemeRegistry.themes();
@@ -855,13 +933,13 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             @Override
             public void openLargeFile(Runnable onOpened) {
                 if (editor == null) return;
-                editor.workbench().openFile(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE), onOpened);
+                onEditor(() -> editor.workbench().openFile(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE), onOpened));
             }
 
             @Override
             public void closeLargeFile() {
-                if (editor != null) editor.workbench().dock().closePanel(
-                        editor.workbench().refFor(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE)));
+                if (editor != null) onEditor(() -> editor.workbench().dock().closePanel(
+                        editor.workbench().refFor(CgPath.of(HarnessServer.PROJECT_ID, BASELINE_FILE))));
             }
 
             @Override
@@ -921,7 +999,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
             @Override
             public float[] region() {
-                UIElement window = editor == null ? null : editor.mainWindow();
+                UIElement window = editor == null ? null : editor.mainWindow().frame();
                 float[] corner = at(window, 0f, 0f);
                 float[] far = at(window, 1f, 1f);
                 return new float[]{corner[0], corner[1], far[0] - corner[0], far[1] - corner[1]};
@@ -954,7 +1032,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
             @Override
             public void open() {
-                if (editor != null) editor.workbench().openFile(GRAPH_COST_FILE);
+                if (editor != null) onEditor(() -> editor.workbench().openFile(GRAPH_COST_FILE));
             }
 
             /**
@@ -966,11 +1044,11 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 if (editor == null) return;
                 Document graph = graphDocument();
                 if (graph != null && graph.isDirty()) {
-                    editor.workbench().documents().revert(graph);
+                    onEditor(() -> editor.workbench().documents().revert(graph));
                     closeWhenClean = true;
                     return;
                 }
-                editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE));
+                onEditor(() -> editor.workbench().dock().closePanel(editor.workbench().refFor(GRAPH_COST_FILE)));
             }
 
             @Override
@@ -1058,7 +1136,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /** What {@code profiler.open} does: close the profiler if it is in front, else open it. */
     private void toggleProfiler() {
-        if (profilerWindow == desktop.activeWindow()) profilerWindow.requestClose();
+        if (profilerWindow == desktop.windowManager().activeWindow()) profilerWindow.requestClose();
         else FrameProfiler.openOn(desktop);
     }
     private boolean profilerShotDone;
@@ -1075,8 +1153,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             // recorded by the autostart alone.
             log("before opening: recording " + CgTrace.isRecording() + ", frames already recorded "
                     + CgTrace.frameCount() + ", keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames()
-                    + ", record-at-launch " + ProfilerSettings.get(ProfilerSettings.RECORD_AT_LAUNCH));
-            WindowFrame window = FrameProfiler.openOn(desktop);
+                    + ", record-at-launch " + profilerSettings().get(ProfilerSettings.RECORD_AT_LAUNCH));
+            WindowFrame window = FrameProfiler.openOn(desktop).frame();
             profilerWindow = window;
             window.maximize();
             // THE COMPOSED TREE, not content(): the window hosts what it is given in a slot of its
@@ -1381,8 +1459,8 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             }
             // WHAT THE PAGE'S ROWS WRITE: the first 300 frames and no newest -- keep the start, then stop.
             case 178 -> {
-                ProfilerSettings.set(ProfilerSettings.FIRST_FRAMES, 300);
-                ProfilerSettings.set(ProfilerSettings.FRAMES, 0);
+                profilerSettings().set(ProfilerSettings.FIRST_FRAMES, 300);
+                profilerSettings().set(ProfilerSettings.FRAMES, 0);
             }
             case 181 -> {
                 log("settings changed: keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames()
@@ -1530,17 +1608,17 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             click(panel.settingsPage().doneButton());
         } else if (at == 56) {
             if ("arm-launch".equals(System.getProperty("crystalgui.harness.desktop.profiler.phase"))) {
-                ProfilerSettings.set(ProfilerSettings.RECORD_AT_LAUNCH, true);
+                profilerSettings().set(ProfilerSettings.RECORD_AT_LAUNCH, true);
                 log("armed record-at-launch for the next run");
-            } else if (ProfilerSettings.get(ProfilerSettings.RECORD_AT_LAUNCH)) {
-                ProfilerSettings.set(ProfilerSettings.RECORD_AT_LAUNCH, false);
+            } else if (profilerSettings().get(ProfilerSettings.RECORD_AT_LAUNCH)) {
+                profilerSettings().set(ProfilerSettings.RECORD_AT_LAUNCH, false);
                 log("record-at-launch switched back off");
             }
         // THE START AND THE NEWEST: 60 kept from the start, 120 newest, then run past both. Frame #0 must
         // still be there, with a gap marked before the newest.
         } else if (at == 58) {
-            ProfilerSettings.set(ProfilerSettings.FIRST_FRAMES, 40);
-            ProfilerSettings.set(ProfilerSettings.FRAMES, 150);
+            profilerSettings().set(ProfilerSettings.FIRST_FRAMES, 40);
+            profilerSettings().set(ProfilerSettings.FRAMES, 150);
             if (!model.isCapturing()) model.toggleRecording();
             model.setFollowing(true);
         } else if (at == 330) {
@@ -1692,9 +1770,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             FrameStatsOverlay.toggleOn(document);
         // profiler.open toggles: run with the profiler in front it closes it; again, it comes back.
         } else if (at == 397) {
-            desktop.raise(profilerWindow);
+            desktop.windowManager().raise(profilerWindow);
         } else if (at == 399) {
-            log("profiler.open with the profiler in front (active " + (desktop.activeWindow() == profilerWindow) + ")");
+            log("profiler.open with the profiler in front (active " + (desktop.windowManager().activeWindow() == profilerWindow) + ")");
             toggleProfiler();
         } else if (at == 420) {
             // A CLOSE ANIMATES before the window hides: read it well after the press.
@@ -1705,7 +1783,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         } else if (at == 442) {
             // BACK TO THE DEFAULTS, through the store: the page is closed, so its button cannot be pressed.
             for (Setting<?> setting : ProfilerSettings.all()) {
-                ProfilerSettings.store().reset(SettingsLayer.USER, setting);
+                profilerSettings().store().reset(SettingsLayer.USER, setting);
             }
         } else if (at == 444) {
             log("defaults again: keeps first " + CgTrace.firstFrames() + " + newest " + CgTrace.newestFrames());
@@ -1933,7 +2011,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private void refreshReadout() {
         UIElement area = desktop.windowLayer();
-        WindowFrame active = desktop.activeWindow();
+        WindowFrame active = desktop.windowManager().activeWindow();
         Box areaBox = area == null ? null : area.box();
         StringBuilder text = new StringBuilder();
         text.append("work area  ")
@@ -1944,7 +2022,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // THE REGISTRY, not the layer -- so hidden windows are listed too. A minimised window that
         // appears nowhere is a minimised window with no way back, which is the failure W4's taskbar
         // exists to prevent.
-        for (WindowFrame window : desktop.windows()) {
+        for (WindowFrame window : desktop.windowManager().windows()) {
             boolean hidden = window.state() == WindowState.HIDDEN;
             Box box = window.box();
             text.append(window == active ? "> " : "  ")
@@ -1976,7 +2054,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 windowKey(key);
                 return;
             }
-            WindowFrame existing = desktop.registry().byKey("taskbar-designer");
+            WindowFrame existing = desktop.windowManager().registry().byKey("taskbar-designer");
             if (existing != null) existing.requestClose();
             else TaskbarDesigner.open(document);
         });
@@ -2059,14 +2137,16 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private void toggleFloatingProjectPanel() {
         if (editor == null) return;
-        ToolWindowManager manager = editor.workbench().toolWindowManager();
-        if (manager.typeOf(Workbench.PROJECT_TYPE) == ToolWindowType.FLOATING) {
-            manager.dockPanel(Workbench.PROJECT_TYPE);
-            return;
-        }
-        // Offset from the editor window's own corner, which is the space a float's insets are measured
-        // in -- it is owned by that window, so (0,0) is the editor's top-left and not the desktop's.
-        manager.floatPanel(Workbench.PROJECT_TYPE, 100f, 70f);
+        onEditor(() -> {
+            ToolWindowManager manager = editor.workbench().toolWindowManager();
+            if (manager.typeOf(Workbench.PROJECT_TYPE) == ToolWindowType.FLOATING) {
+                manager.dockPanel(Workbench.PROJECT_TYPE);
+                return;
+            }
+            // Offset from the editor window's own corner, which is the space a float's insets are measured
+            // in -- it is in that window's document, so (0,0) is the editor's top-left.
+            manager.floatPanel(Workbench.PROJECT_TYPE, 100f, 70f);
+        });
     }
 
     /**
@@ -2108,5 +2188,9 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     @Override
     public boolean shouldShutdownOnComplete() {
         return PROFILER_SHOT || TRACE_COST || BASELINE;
+    }
+
+    private ProfilerSettings profilerSettings() {
+        return ProfilerSettings.of(desktop);
     }
 }

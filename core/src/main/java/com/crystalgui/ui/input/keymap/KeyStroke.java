@@ -185,7 +185,9 @@ public record KeyStroke(int key, int modifiers) {
      * means the two cannot drift — a hand-written map would silently lack whatever was added last, and the
      * symptom would be a key that simply refuses to bind.
      */
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<String, Integer> BY_NAME = new HashMap<>();
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<Integer, String> BY_CODE = new TreeMap<>();
 
     static {

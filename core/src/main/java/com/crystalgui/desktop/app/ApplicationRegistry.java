@@ -5,7 +5,9 @@ import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
 
@@ -21,10 +23,11 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.ui.dom.UIDocument;
 
 /**
@@ -37,7 +40,7 @@ import com.crystalgui.ui.dom.UIDocument;
  * <ul>
  *   <li>{@link #installed()} — what a launcher lists. Answerable with nothing running.</li>
  *   <li>{@link #handlerFor} — which product opens this file, and {@link #open} launches it and shows it.</li>
- *   <li>{@link #launch(ApplicationKind, LaunchContext)} — start one, or activate the instance already
+ *   <li>{@link #launch(ApplicationKind, AppContext)} — start one, or activate the instance already
  *       there when the manifest says {@code singleInstance}.</li>
  *   <li>{@link #running()} — every live instance, which is what the taskbar groups by and what a
  *       "quit everything" walks.</li>
@@ -60,7 +63,7 @@ import com.crystalgui.ui.dom.UIDocument;
  * <h3>Each instance gets its own corner</h3>
  *
  * <p>{@link #launch} scopes the {@link CgConfigStorage} it is given by the kind's id before handing over a
- * {@link LaunchContext}, so two applications on one desktop keep separate sessions and preferences with
+ * {@link AppContext}, so two applications on one desktop keep separate sessions and preferences with
  * neither of them doing anything about it.</p>
  */
 public final class ApplicationRegistry {
@@ -68,6 +71,12 @@ public final class ApplicationRegistry {
     private final Desktop desktop;
     private final List<ApplicationKind> installed = new ArrayList<>();
     private final List<Application> running = new ArrayList<>();
+    /** Each running application's own client on the workspace, released when it quits. */
+    private final java.util.Map<Application, WorkspaceClient> clients = new java.util.IdentityHashMap<>();
+    /** The documents applications of a {@link ApplicationKind#separateDocument() separate} kind run in, until they quit. */
+    private final java.util.Map<Application, AppDocument> documentsOf = new java.util.IdentityHashMap<>();
+    @Nullable
+    private AppDocuments documents;
     /** Kinds already told they need a server, so a host retrying every frame says so once. */
     private final Set<String> refusedForNoServer = new HashSet<>();
 
@@ -206,11 +215,11 @@ public final class ApplicationRegistry {
     }
 
     private void runAutostart(ApplicationKind kind) {
-        Consumer<LaunchContext> hook = kind.autostartHook();
+        Consumer<AppContext> hook = kind.autostartHook();
         CgConfigStorage storage = desktop.config();
         if (hook == null || storage == null) return;
         try {
-            hook.accept(LaunchContext.of(kind, desktop, null, scoped(kind, storage),
+            hook.accept(AppContext.of(kind, desktop, null, scoped(kind, storage),
                     cacheFor(kind, desktop.cacheRoot())));
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] the autostart of '{}' failed: {}", kind.id(),
@@ -245,7 +254,7 @@ public final class ApplicationRegistry {
      * @return the instance, or null when it could not be started, or ran as an {@link ApplicationKind#action}
      */
     @Nullable
-    public Application launch(ApplicationKind kind, LaunchContext context) {
+    public Application launch(ApplicationKind kind, AppContext context) {
         bootstrap();
         if (kind.isSingleInstance()) {
             Application already = firstRunning(kind);
@@ -273,11 +282,28 @@ public final class ApplicationRegistry {
             CrystalGuiCore.LOGGER.warn("[cgui] the application '{}' declares no launch factory", kind.id());
             return null;
         }
+        // EVERY APPLICATION HAS A CLIENT OF ITS OWN on the workspace the desktop owns: its replies and events come
+        // back to the sequence it launches on, and the others see it by name in presence.
+        // MADE ON ITS DOCUMENT'S THREAD when it has one: a client answers where it was made, and a signal belongs to the
+        // sequence that first used it.
+        WorkspaceClient shared = context.workspace();
+        AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
+        String clientName = kind.displayName();
+        WorkspaceClient own = shared == null ? null
+                : document == null ? shared.service().client(clientName)
+                : document.ask(() -> shared.service().client(clientName));
+        if (own != null) {
+            context = new AppContext(kind, context.desktop(), own, context.storage(), context.cache(),
+                    context.open());
+        }
         Application application;
+        AppContext launched = context.withDocument(document);
         // On the document's thread outside any frame: without a zone, a launch is a stretch of nothing in the trace.
         long launching = CgTrace.stamp(UiTrace.FLOW);
         try {
-            application = kind.factory().apply(context);
+            // ITS OWN DOCUMENT BUILDS IT: the tree an application makes is touched by its thread alone.
+            application = document == null ? kind.factory().apply(launched)
+                    : document.ask(() -> kind.factory().apply(launched));
             CgTrace.zoneDone(UiTrace.FLOW, "app:launch", launching);
         } catch (RuntimeException failed) {
             // AN APPLICATION THAT THROWS COSTS ITS OWN LAUNCH AND NOTHING ELSE. A desktop is a shell:
@@ -286,15 +312,23 @@ public final class ApplicationRegistry {
             CrystalGuiCore.LOGGER.error("[cgui] the application '{}' failed to launch: {}",
                     kind.id(), failed.getMessage(), failed);
             desktop.reportFailure(kind.id(), kind.displayName(), kind.displayName() + " could not be opened.", failed);
+            if (own != null) own.dispose();
+            if (document != null) document.close();
             return null;
         }
-        if (application == null) return null;
+        if (application == null) {
+            if (own != null) own.dispose();
+            if (document != null) document.close();
+            return null;
+        }
+        if (own != null) clients.put(application, own);
+        if (document != null) documentsOf.put(application, document);
         refusedForNoServer.remove(kind.id());
         running.add(application);
         // Its main window destroyed is the application quit: closing it under DESTROY_ON_CLOSE, or anything else
         // taking it down. Every application gets this from here, so none hooks its own window.
-        WindowFrame main = application.mainWindow();
-        if (main != null) main.onDestroyed.connect(() -> quit(application));
+        AppWindow main = application.mainWindow();
+        if (main != null) main.frame().onDestroyed.connect(() -> quit(application));
         onDidChange.emit();
         return application;
     }
@@ -315,7 +349,7 @@ public final class ApplicationRegistry {
      *   <li>For the instance itself, call {@link #launch}: this answers nothing, since nothing exists yet.</li>
      * </ul>
      */
-    public void launchInStartingWindow(ApplicationKind kind, @Nullable Workspace workspace) {
+    public void launchInStartingWindow(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         bootstrap();
         boolean runsAlready = kind.isSingleInstance() && firstRunning(kind) != null;
         boolean refused = kind.factory() == null || (kind.requiresConnection() && workspace == null)
@@ -327,7 +361,7 @@ public final class ApplicationRegistry {
             return;
         }
         if (desktop.isStarting(kind)) {
-            desktop.activate(desktop.openStartingWindow(kind));
+            desktop.windowManager().activate(desktop.openStartingWindow(kind));
             return;
         }
         WindowFrame starter = desktop.openStartingWindow(kind);
@@ -364,7 +398,7 @@ public final class ApplicationRegistry {
                 Application application = launch(kind, workspace);
                 // No main window took its place: a refusal, a failure, or an application with none
                 if (desktop.isStarting(kind)) {
-                    desktop.endStartingWindow(kind, application == null ? null : application.mainWindow());
+                    desktop.endStartingWindow(kind, application == null ? null : application.mainWindow().frame());
                 }
                 if (application != null && !away) application.activate();
                 return false;
@@ -378,10 +412,88 @@ public final class ApplicationRegistry {
     /** The longest a build waits for its starting window's mark to come in. */
     private static final long STARTING_LONGEST_NANOS = 3_000_000_000L;
 
+    /**
+     * Disposes {@code application} where it was built and waits: on its own document's thread when it has one. For a
+     * desktop going down, which must not leave an application holding a tick or a draw.
+     */
+    public void dispose(Application application) {
+        AppDocument document = documentsOf.get(application);
+        if (document == null) application.dispose();
+        else document.run(application::dispose);
+    }
+
+    // ── The session ─────────────────────────────────────────────────────────────────────────────────────────────
+
+    /** What each application last gave {@code AppContext.saveState}, by kind id; the last session's until then. */
+    private final Map<String, String> states = new ConcurrentHashMap<>();
+    /** The applications the last session left running, not yet relaunched. */
+    private List<SessionRecord.App> awaiting = List.of();
+
+    /** The desktop hands over what the last session recorded: the state each application left, and which were running. */
+    public void expect(List<SessionRecord.App> recorded) {
+        awaiting = List.copyOf(recorded);
+        for (SessionRecord.App app : recorded) {
+            if (!app.state().isEmpty()) states.put(app.id(), app.state());
+        }
+    }
+
+    /**
+     * Relaunches every application the last session left running, once, each into its own document and with the state
+     * it left. One that is not installed, is running already or refuses to launch is skipped.
+     *
+     * <pre>{@code
+     * desktop.applications().restoreSession(workspace);    // when the desktop is first shown
+     * }</pre>
+     */
+    public void restoreSession(@Nullable WorkspaceClient workspace) {
+        List<SessionRecord.App> todo = awaiting;
+        awaiting = List.of();
+        for (SessionRecord.App app : todo) {
+            ApplicationKind kind = byId(app.id());
+            if (kind == null || !running(kind).isEmpty()) continue;
+            try {
+                launch(kind, workspace);
+            } catch (RuntimeException refused) {
+                CrystalGuiCore.LOGGER.debug("[cgui] '{}' cannot be restored yet", kind.id(), refused);
+            }
+        }
+    }
+
+    /** Records the state {@code kindId}'s application gave. Any thread. */
+    void rememberState(String kindId, String state) {
+        states.put(kindId, state);
+    }
+
+    /** What {@code kindId}'s application last gave {@code saveState}, or null. */
+    @Nullable
+    String stateOf(String kindId) {
+        return states.get(kindId);
+    }
+
+    /** The running applications, one per kind, with their state: what the session records. The shell's thread. */
+    public List<SessionRecord.App> sessionApps() {
+        List<SessionRecord.App> out = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        for (Application live : running) {
+            String id = live.kind().id();
+            if (seen.add(id)) out.add(new SessionRecord.App(id, states.getOrDefault(id, "")));
+        }
+        return out;
+    }
+
+    /** The document {@code application} runs in, or null when it runs in the shell's. */
+    @Nullable
+    public AppDocument documentOf(Application application) {
+        return documentsOf.get(application);
+    }
+
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
     private void quit(Application application) {
         if (!running.contains(application)) return;
-        application.dispose();
+        AppDocument document = documentsOf.get(application);
+        // ITS DISPOSE RUNS WHERE IT WAS BUILT, ahead of the document's end.
+        if (document == null) application.dispose();
+        else document.execute(application::dispose);
         forget(application);
     }
 
@@ -391,7 +503,7 @@ public final class ApplicationRegistry {
      *
      * <pre>{@code
      * Application app = desktop.applications().openPrimary(workspace);
-     * if (app != null) desktop.activate(app.mainWindow());
+     * if (app != null) app.activate();
      * }</pre>
      *
      * <ul>
@@ -401,7 +513,7 @@ public final class ApplicationRegistry {
      * </ul>
      */
     @Nullable
-    public Application openPrimary(@Nullable Workspace workspace) {
+    public Application openPrimary(@Nullable WorkspaceClient workspace) {
         ApplicationKind kind = primary();
         if (kind == null) return null;
         for (Application live : running(kind)) {
@@ -430,12 +542,12 @@ public final class ApplicationRegistry {
      * starting window ({@link #launchInStartingWindow}) and answers null, since the instance builds a frame later.</p>
      */
     @Nullable
-    public Application activateOrLaunch(ApplicationKind kind, @Nullable Workspace workspace) {
+    public Application activateOrLaunch(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         Application recent = null;
         int best = Integer.MAX_VALUE;
-        List<WindowFrame> mru = desktop.registry().mruOrder();
+        List<WindowFrame> mru = desktop.windowManager().registry().mruOrder();
         for (Application live : running(kind)) {
-            int at = mru.indexOf(live.mainWindow());
+            int at = mru.indexOf(live.mainWindow().frame());
             if (recent == null || (at >= 0 && at < best)) {
                 recent = live;
                 if (at >= 0) best = at;
@@ -462,7 +574,7 @@ public final class ApplicationRegistry {
      * looks exactly like one whose preferences do not work.</p>
      */
     @Nullable
-    public Application launch(ApplicationKind kind, @Nullable Workspace workspace) {
+    public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace) {
         CgConfigStorage storage = desktop.config();
         if (storage == null) {
             CrystalGuiCore.LOGGER.warn("[cgui] '{}' was not launched: this desktop has nowhere to "
@@ -474,16 +586,16 @@ public final class ApplicationRegistry {
 
     /** Launches with nothing asked of it, and nowhere to cache derived output. */
     @Nullable
-    public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
+    public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace,
                               CgConfigStorage storage) {
         return launch(kind, workspace, storage, null);
     }
 
     /** Launches with nothing asked of it. @param cacheRoot {@code crystalgui/cache}, or null for none */
     @Nullable
-    public Application launch(ApplicationKind kind, @Nullable Workspace workspace,
+    public Application launch(ApplicationKind kind, @Nullable WorkspaceClient workspace,
                               CgConfigStorage storage, @Nullable Path cacheRoot) {
-        return launch(kind, LaunchContext.of(kind, desktop, workspace,
+        return launch(kind, AppContext.of(kind, desktop, workspace,
                 scoped(kind, storage), cacheFor(kind, cacheRoot)));
     }
 
@@ -493,18 +605,18 @@ public final class ApplicationRegistry {
      * @see #handlerFor
      */
     @Nullable
-    public Application open(Resource resource, @Nullable Workspace workspace,
+    public Application open(Resource resource, @Nullable WorkspaceClient workspace,
                             CgConfigStorage storage) {
         return open(resource, workspace, storage, null);
     }
 
-    /** As {@link #open(Resource, Workspace, CgConfigStorage)}, with somewhere to cache. */
+    /** As {@link #open(Resource, WorkspaceClient, CgConfigStorage)}, with somewhere to cache. */
     @Nullable
-    public Application open(Resource resource, @Nullable Workspace workspace,
+    public Application open(Resource resource, @Nullable WorkspaceClient workspace,
                             CgConfigStorage storage, @Nullable Path cacheRoot) {
         ApplicationKind kind = handlerFor(resource);
         if (kind == null) return null;
-        return launch(kind, new LaunchContext(kind, desktop, workspace, scoped(kind, storage),
+        return launch(kind, new AppContext(kind, desktop, workspace, scoped(kind, storage),
                 cacheFor(kind, cacheRoot), List.of(resource)));
     }
 
@@ -557,7 +669,25 @@ public final class ApplicationRegistry {
      * everything anybody else shut down.</p>
      */
     public void forget(Application application) {
+        // FROM ITS OWN THREAD TOO: an instance calls this in its dispose, and the registry is the shell's.
+        UIDocument shell = desktop.document();
+        if (shell == null) forgetNow(application);
+        else shell.execute(() -> forgetNow(application));
+    }
+
+    private void forgetNow(Application application) {
+        // ITS STICKY NOTIFICATIONS GO WITH IT: there is no window left to act on them.
+        desktop.notifications().closeFrom(application.kind().id());
+        WorkspaceClient client = clients.remove(application);
+        if (client != null) client.dispose();
+        AppDocument document = documentsOf.remove(application);
+        if (document != null) document.close();
         if (running.remove(application)) onDidChange.emit();
+    }
+
+    /** Runs each {@link ApplicationKind#separateDocument() separate} application in a document {@code documents} builds. */
+    public void useDocuments(@Nullable AppDocuments documents) {
+        this.documents = documents;
     }
 
     /** D20: each application's own corner of a shared config directory. */

@@ -80,6 +80,12 @@ public final class Notification {
     /** @see #withAttribution */
     @Getter private String attribution = "";
 
+    /** The application that said this (its kind's id), or empty for the shell's own. @see #from */
+    @Getter private String sourceId = "";
+
+    /** The source application's name, as a list shows it. */
+    @Getter private String sourceName = "";
+
     /**
      * Which producer this came from — IntelliJ's {@code NotificationGroup}.
      *
@@ -154,6 +160,16 @@ public final class Notification {
      */
     public Notification withAttribution(String text) {
         this.attribution = text == null ? "" : text;
+        return this;
+    }
+
+    /**
+     * Which application this is from: the toast activates it on a click, and its sticky ones close with it. Posting
+     * stamps the focused application when a producer says nothing; say it for something a background job reports.
+     */
+    public Notification from(String applicationId, String applicationName) {
+        this.sourceId = applicationId == null ? "" : applicationId;
+        this.sourceName = applicationName == null ? "" : applicationName;
         return this;
     }
 

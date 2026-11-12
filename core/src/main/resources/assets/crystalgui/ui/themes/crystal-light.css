@@ -131,6 +131,14 @@ theme {
      * depth here is a shadow, so these are black at low alpha where the dark theme uses white. The
      * rule is the same either way: a translucent tint over the backdrop, never an opaque fill that
      * would put a hole in the blur. @see ua/desktop.css */
+    /* The desktop's own glass: the starting wash and the failure screen sit over the game, so they are the same in
+     * both themes. */
+    --starting-wash: #0E0F1199;
+    --failure-bg: #16171A66;
+    --failure-title-bg: #FFFFFF1C;
+    --failure-icon-bg: #E8483F;
+    --failure-icon-rim: #B3261E;
+    --glass-mark-fg: #FFFFFF;
     /* The same ladder in black: hover Fluent's SubtleFillColorSecondary (3.5%), then active, then active-hovered. */
     --taskbar-entry-hover-bg: #00000009;
     --taskbar-entry-active-bg: #00000012;

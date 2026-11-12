@@ -402,6 +402,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
     UiCommit commit(Content content, float deltaSeconds, int width, int height) {
         UiFrame frame = null;
         Readouts out = new Readouts();
+        long started = System.nanoTime();
         try {
             if (content.frame(deltaSeconds, width, height)) {
                 CgUiPaintContext ctx = view.paintContext();
@@ -409,7 +410,11 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
                 try {
                     content.paint(ctx);
                 } catch (RuntimeException | LinkageError failed) {
-                    ctx.abortFrame();
+                    try {
+                        ctx.abortFrame();
+                    } catch (RuntimeException | LinkageError aborting) {
+                        failed.addSuppressed(aborting);   // the paint's own failure is the one to report
+                    }
                     throw failed;
                 }
                 frame = ctx.seal();
@@ -422,6 +427,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
             frame = null;
             content.failed(failed);
         }
+        view.frameLog().committed(started, System.nanoTime() - started);
         boolean moves = thread.compositesMotion();
         return new UiCommit(frame, out, ++commits, moves ? CompositorMotion.follow(document, frame) : null,
                 moves ? CompositorMotion.motions(document, frame) : List.of());

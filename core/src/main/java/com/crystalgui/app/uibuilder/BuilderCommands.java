@@ -13,13 +13,14 @@ import com.crystalgui.app.uibuilder.canvas.transform.TransformBox;
 import com.crystalgui.app.uibuilder.document.BuilderEdit;
 import com.crystalgui.app.uibuilder.document.TreeMoves;
 import com.crystalgui.app.uibuilder.live.PickMode;
-import com.crystalgui.core.attribute.AttributeClipboard;
-import com.crystalgui.core.attribute.AttributeSet;
+import com.crystalgui.core.attribute.AttributeClip;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.service.TransferData;
+import com.crystalgui.ui.service.UiClipboard;
 import com.crystalgui.widget.dnd.SortPlacement;
 import com.crystalgui.widget.overlay.PasteAttributesDialog;
 import java.util.ArrayList;
@@ -237,15 +238,17 @@ public final class BuilderCommands {
 
         registry.register(Command.of(COPY_ATTRIBUTES, "Copy Attributes")
                 .icon(ActionIcons.COPY_ATTRIBUTES)
-                .run(context -> AttributeClipboard.put(
-                        new StyleAttributes(selectionOf(context)).copyAttributes()))
+                .run(context -> {
+                    AttributeClip clip = AttributeClip.of(new StyleAttributes(selectionOf(context)).copyAttributes());
+                    if (clip != null) UiClipboard.process().put(TransferData.of(clip));
+                })
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null));
 
         registry.register(Command.of(PASTE_ATTRIBUTES, "Paste Attributes")
                 .icon(ActionIcons.PASTE_ATTRIBUTES)
                 .run(BuilderCommands::pasteAttributes)
                 .enabledWhen(context -> hasBuilder(context) && selectionOf(context) != null
-                        && AttributeClipboard.pending(StyleAttributes.DOMAIN) != null));
+                        && canPasteAttributes()));
 
         registry.register(Command.of(CONVERT_TO_SIZE, "Convert to Size")
                 .run(context -> builderOf(context).transformBox().convertToSize(selectionOf(context)))
@@ -263,16 +266,23 @@ public final class BuilderCommands {
         UIBuilderView builder = builderOf(context);
         UIElement node = selectionOf(context);
         if (builder == null || node == null) return;
-        AttributeSet copied = AttributeClipboard.pending(StyleAttributes.DOMAIN);
-        if (copied == null) return;
+        // Read through the clipboard: another program's copy since ours wins, and the reply lands on this thread.
+        UiClipboard.process().read(AttributeClip.class).then(clip -> {
+            if (clip == null || !clip.accepts(StyleAttributes.DOMAIN)) return;
+            StyleAttributes target = new StyleAttributes(node);
+            if (clip.remembersAChoice()) {
+                target.applyAsEdit(builder.document(), clip.remembered());
+                return;
+            }
+            PasteAttributesDialog.open(builder.surface(), clip.attributes(), StyleAttributes.describe(node),
+                    chosen -> target.applyAsEdit(builder.document(), chosen), clip::remember);
+        });
+    }
 
-        StyleAttributes target = new StyleAttributes(node);
-        if (AttributeClipboard.remembersAChoice()) {
-            target.applyAsEdit(builder.document(), AttributeClipboard.remembered(copied));
-            return;
-        }
-        PasteAttributesDialog.open(builder.surface(), copied, StyleAttributes.describe(node),
-                chosen -> target.applyAsEdit(builder.document(), chosen));
+    /** What the menu asks every frame, so it cannot wait on the system: the clip this process holds. */
+    private static boolean canPasteAttributes() {
+        AttributeClip clip = UiClipboard.process().peek(AttributeClip.class);
+        return clip != null && clip.accepts(StyleAttributes.DOMAIN);
     }
 
     /**

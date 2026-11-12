@@ -813,8 +813,8 @@ by `StatusBarViewTest` for the view half.
 Notifications.show(Notification.error("Open failed")
         .withDetail(path.name() + " — " + failure.code())
         .withAction("Retry", () -> openFile(path)));
-Notifications.clear();          // "Clear all"
-Notifications.markAllRead();    // the bell, without touching the history
+service.clear();             // "Clear all"
+service.markAllRead();        // the bell, without touching the history
 ```
 
 `Notification` carries a severity, a **title**, an optional **detail** body, a wall-clock `timestamp`, a
@@ -875,7 +875,18 @@ against mutants.
 ## Resources
 
 `com.crystalgui.fs` — `Resource`, `CgPath`, and the two failure types both halves name.
-`com.crystalgui.fs.client` — `Workspace` and its facades, `ContentProvider`, `ContentProviders`.
+`com.crystalgui.fs.client` — `Workspace` (the desktop's service for one connection) and `WorkspaceClient` (an
+application's handle on it, with the facades), `ContentProvider`, `ContentProviders`.
+
+**One workspace per connection, one client per application.** `Workspace.of(connection)` is shared by everything on
+the wire and lives on the services sequence: it keeps the greeting, the capabilities, the server's watches (one
+subscription per path however many applications hold it), the backup and history stores (filed from the greeting's
+workspace id) and the provider table. `workspace.client("Crystal Editor")` made on an application's sequence returns
+its handle: replies and events come back there, and the registry gives every launched application one and disposes
+it when the application quits. Document models stay local to each client: two applications with one file open
+agree **through the file**. A save, create or delete in one reaches the other's watches at once, a clean copy
+reloads, a dirty one conflicts on its next save (the etag model, unchanged), and each shows in the other's
+`presence()` by its name.
 `com.crystalgui.fs.provider` — the filesystem SPI under all of it; `com.crystalgui.fs.server` — the
 workspace over it, where authorisation, etags, trash and presence live.
 
@@ -916,7 +927,7 @@ the resource *is*, which is how a tab draws its glyph) and `locate` (where a mem
 Every answer is a `CgReply`, because the work can be real — reading a source archive is I/O and
 decompiling a class is hundreds of milliseconds, and neither may land on a frame.
 
-Register through `Workspace.registerScheme` when the scheme belongs to one server, and through
+Register through `WorkspaceClient.registerScheme` when the scheme belongs to one server, and through
 `ContentProviders.contribute` when it belongs to the process — a language stack registers at mod init,
 long before any world is joined, so it has no workspace to be handed and `core/` may never name
 `language/`. Each workspace drains the contributions into its own table, so two servers in one client
@@ -925,7 +936,7 @@ keep separate ones.
 ### Rules
 
 - **A project resource's CONTENT always comes from the server**, whatever has registered the scheme.
-  `Workspace.read` checks the scheme before it checks the provider table, so a provider registered for
+  `WorkspaceClient.read` checks the scheme before it checks the provider table, so a provider registered for
   `project://` — which is how the author's own `.java` files get a declaration glyph — is never asked
   for their bytes.
 - **Unregistered schemes are read-only.** Refusing to write something nobody claims is the safe direction.
@@ -1096,7 +1107,10 @@ registry.register(Command.of("mymod.pin", "Pin Tab")
 
 A file dragged from the Project panel opens where it is dropped, with the zones a dragged tab gets: into a
 group, beside it, or along the dock's outer edge. Nothing about files is in the dock: a drag it did not start
-is asked of a `DockForeignDrop` on the home, and the payload says what it carries through `DragData`.
+is asked of a `DockForeignDrop` on the home, and the payload says what it carries through `TransferData`. The
+clipboard carries the same type: `UiClipboard.process().put(TransferData.of(fragment, text))` keeps the typed form for
+other applications and writes the text through to the system, and a paste (`read(type)`) offers the typed form only
+while the system text is still what was written (another program's copy since wins).
 
 ```java
 // a tree offers its rows to targets outside it
@@ -1467,8 +1481,8 @@ in the caption and the initial focus. `CrystalEditor` is a manifest and three ch
 | **Installing is not launching** | A launcher lists installed manifests, `handlerFor(resource)` answers "open with", and a search matches keywords — all with nothing running. Deriving associations by building an application and asking its workbench is what made them unanswerable before |
 | **Closing is not quitting** | Under `HIDE_ON_CLOSE` the window goes away and the application is still running, with every document and the whole arrangement intact. `Application.dispose()` is the other verb — and it is why `WindowRegistry.evictIfNeeded` exempts an application's **main** window (D17): a cap on hidden windows must never quit a product nobody asked to quit |
 | **Each application gets its own corner of the storage** | `CgConfigStorage.scoped(applicationId)`, applied by the registry before the factory runs. Two products sharing one directory both write `settings.json` and a session record, and the second to save wins |
-| **Preferences are yours, workspace state is the workspace's** | `LaunchContext.storage()` is `workspace-config/apps/<id>/` and holds what is the same on every server. A session, a backup and local history belong to one workspace, so they go in `workspace-config/projects/<identity>/` — reached by scoping `LaunchContext.workspaces()` once the greeting has supplied an identity, which is why they are set in `restoreWhenReady` and not in a constructor |
-| **`cache/` is a sibling of the config tree, and disposable** | `LaunchContext.cache()` is `crystalgui/cache/apps/<id>/`. Deleting the whole tree at any moment must lose nothing — anything that would be missed belongs under `workspace-config/`. `CrystalGuiStorage` names every segment of the tree, and nothing else may spell them |
+| **Preferences are yours, workspace state is the workspace's** | `AppContext.storage()` is `workspace-config/apps/<id>/` and holds what is the same on every server. A session, a backup and local history belong to one workspace, so they go in `workspace-config/projects/<identity>/` — reached by scoping `AppContext.workspaces()` once the greeting has supplied an identity, which is why they are set in `restoreWhenReady` and not in a constructor |
+| **`cache/` is a sibling of the config tree, and disposable** | `AppContext.cache()` is `crystalgui/cache/apps/<id>/`. Deleting the whole tree at any moment must lose nothing — anything that would be missed belongs under `workspace-config/`. `CrystalGuiStorage` names every segment of the tree, and nothing else may spell them |
 | **The session is keyed by (application id, workspace identity)** | A record describes a *workbench over a workspace*, whose tabs may come from any project — one record per project over one dock would restore N layouts onto one screen. The identity is the `workspaceId` the server greets with, or a hash of the sorted project ids from a server that has never heard of it |
 | **An id nothing contributed is a logged absence** | The three-tier degradation the language stack already follows, and what lets `crystalgui:scripting` be listed by every manifest and simply be missing on a host with no engine band |
 | **A `Workbench` built directly still gets everything** | `new Workbench(workspace)` activates every contributed extension — which is what a test and a harness scene mean. Only an application filters |
@@ -1730,11 +1744,11 @@ StatusBarEntryAccessor caret = StatusBar.addEntry(
 
 ## The notification model
 
-`Notifications` is one observable collection emitting typed changes — VS Code's `NotificationsModel`. Its changes are
+`NotificationService` (`desktop.notifications()`, one per desktop) is one observable collection emitting typed changes — VS Code's `NotificationsModel`. Its changes are
 a `Broadcast`: posted, and heard on the subscriber's own document, a turn later.
 
 ```java
-whileConnected(() -> Notifications.onDidChange.subscribe(event -> {
+whileConnected(() -> service.onDidChange.subscribe(event -> {
     switch (event.kind()) {
         case ADDED   -> add(event.notification());
         case CHANGED -> restate(event.notification());   // a repeat, or a handle's updateMessage
@@ -1742,7 +1756,7 @@ whileConnected(() -> Notifications.onDidChange.subscribe(event -> {
         case CLEARED -> rebuild();                       // one event, not N removals
     }
 }));
-NotificationHandle handle = Notifications.show(Notification.error("Disconnected"));
+NotificationHandle handle = service.show(Notification.error("Disconnected"));
 handle.updateMessage("Reconnecting");   // arrives as CHANGED — not a new event, does not re-ring the bell
 handle.close();                          // arrives as REMOVED
 ```
@@ -1754,6 +1768,9 @@ handle.close();                          // arrives as REMOVED
 | **A group decides how loud a notification is** | `NotificationGroups.displayOf(groupId)` → BALLOON / STICKY_BALLOON / LOG_ONLY / NONE, user-overridable via `setDisplay`. IntelliJ's model. An **unregistered group gets BALLOON**, because a producer that forgot to register must not go silent |
 | **Never-show-again is keyed by a message KIND** | `withNeverShowAgain(id)`; the instance is gone the moment it fades, so a flag on it would suppress nothing. Deliberately not the group — silencing one warning and silencing a whole producer are different requests |
 | **A repeat is CHANGED, and does not move the card** | Collapsing exists so a repeated message stops burying the list; re-ordering on every repeat would undo half of that |
+| **The service is the desktop's; the toasts are the shell's** | `Desktop.notifications()` owns history, handles, unread and groups; `NotificationBalloons` sits in the desktop's overlay layer above every window, so a toast outlives the application that said it. `Notifications.show(...)` is a stateless facade to the caller's document's service |
+| **Every notification has a source application** | `Notification.from(id, name)`; unset, `show` stamps the focused application. A click on the toast activates it, `closeFrom(id)` withdraws its sticky ones when it closes, `historyFrom(id)` is its own list. One document serves every application until P4, so "focused" is the best source there is |
+| **What the user silenced is a preference** | `notifications.silenced.<id>` and `notifications.display.<group>` are desktop-wide `Preferences`, persisted with them. The history itself is not persisted: an action is a lambda |
 
 ## Diagnostics — owners and resources
 

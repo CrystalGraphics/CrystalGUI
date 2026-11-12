@@ -104,6 +104,7 @@ public final class RhinoGlobals {
     }
 
     /** {@code JsTypeRef}'s name for a type → the constructor whose {@code prototype} holds its members. */
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<String, String> PROTOTYPE_HOLDERS = new LinkedHashMap<>();
 
     static {

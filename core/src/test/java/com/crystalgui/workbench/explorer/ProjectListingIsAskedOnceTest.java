@@ -15,7 +15,7 @@ import com.crystalgraphics.net.CgInMemoryTransport;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
 import com.crystalgraphics.net.protocol.CgProtocols;
 import com.crystalgraphics.serialization.CgPlainOps;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -44,7 +44,7 @@ public class ProjectListingIsAskedOnceTest {
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
     private CgProtocolConnection<Object> clientEnd;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private WorkspaceTreeSource source;
 
     @Before
@@ -63,7 +63,7 @@ public class ProjectListingIsAskedOnceTest {
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
 
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
         source = new WorkspaceTreeSource(workspace);
     }
 

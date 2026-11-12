@@ -23,7 +23,6 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.shadergraph.ShaderGraphContribution;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.core.notify.Notification;
-import com.crystalgui.core.notify.Notifications;
 import com.crystalgui.core.notify.StatusBarAlignment;
 import com.crystalgui.core.notify.StatusBarEntry;
 import com.crystalgraphics.storage.config.CgConfigStorage;
@@ -33,7 +32,7 @@ import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.document.DocumentKind;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.fs.project.ProjectRegistry;
 import com.crystalgui.fs.project.WorkspaceProject;
 import com.crystalgui.fs.provider.InMemoryFileSystem;
@@ -96,7 +95,7 @@ public class TwoApplicationsTest {
     private CgInMemoryTransport<Object>[] link;
     private CgProtocolConnection<Object> serverEnd;
     private CgProtocolConnection<Object> clientEnd;
-    private Workspace workspace;
+    private WorkspaceClient workspace;
     private UIDocument surface;
     private Desktop desktop;
     private CgConfigStorage storage;
@@ -115,7 +114,7 @@ public class TwoApplicationsTest {
         clientEnd = CgProtocols.open(link[1], CgPlainOps.INSTANCE, () -> { }, null);
         new WorkspaceBinding<>(service, new WatchHub(service), WorkspaceActor.LOCAL, "host",
                 CgPlainOps.INSTANCE).installOn(serverEnd);
-        workspace = Workspace.of(clientEnd);
+        workspace = WorkspaceClient.of(clientEnd);
 
         // ANIMATIONS OFF, and it is load-bearing rather than tidiness: with them on, a destroyed
         // window's taskbar entry collapses over several frames and the strip goes on holding the frame
@@ -140,7 +139,6 @@ public class TwoApplicationsTest {
         // colour assertions fail in the suite and pass in isolation, which is the shape this file's own
         // javadoc predicted before an application ever attached to a document.
         UiThemeManager.getInstance().resetForTesting();
-        Notifications.resetForTesting();
         InspectorRegistry.resetForTesting();
         ProjectSourcesRegistry.resetForTesting();
         Disposer.resetForTesting();
@@ -176,10 +174,10 @@ public class TwoApplicationsTest {
 
         // D3. One centre, and it is the desktop's -- which is why it is the one thing here that stays
         // process-wide: every OS has exactly one and it is inside no application.
-        int before = Notifications.history().size();
-        Notifications.show(Notification.info("something happened"));
+        int before = desktop.notifications().history().size();
+        desktop.notifications().show(Notification.info("something happened"));
         assertEquals("a notification landed in more than one place, or in none",
-                before + 1, Notifications.history().size());
+                before + 1, desktop.notifications().history().size());
     }
 
     /**
@@ -260,8 +258,8 @@ public class TwoApplicationsTest {
         WindowFrame secondGraphWindow = desktop.addWindow(new WindowFrame("Graph 2"));
         secondGraphWindow.setApplication(GRAPHS_ONLY);
 
-        List<WindowFrame> strip = desktop.registry().taskbarOrder();
-        assertEquals(List.of(graphs.mainWindow(), secondGraphWindow, bare.mainWindow()), strip);
+        List<WindowFrame> strip = desktop.windowManager().registry().taskbarOrder();
+        assertEquals(List.of(graphs.mainWindow().frame(), secondGraphWindow, bare.mainWindow().frame()), strip);
     }
 
     /**
@@ -274,13 +272,13 @@ public class TwoApplicationsTest {
     @Test
     public void anApplicationsMainWindowIsNotEvicted() {
         WorkbenchApplication graphs = launch(GRAPHS_ONLY);
-        graphs.mainWindow().hide();
+        graphs.mainWindow().frame().hide();
 
-        desktop.registry().setHiddenCap(0);
-        desktop.registry().evictIfNeeded();
+        desktop.windowManager().registry().setHiddenCap(0);
+        desktop.windowManager().registry().evictIfNeeded();
 
         assertTrue("the application's main window was evicted, which quit a product silently",
-                desktop.registry().windows().contains(graphs.mainWindow()));
+                desktop.windowManager().registry().windows().contains(graphs.mainWindow().frame()));
         assertEquals("...and the application went with it", 1, desktop.applications().running().size());
     }
 

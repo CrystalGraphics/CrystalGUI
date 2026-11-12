@@ -72,7 +72,7 @@ final class DesktopContent implements CgUiViewport.Content {
     @Override
     public void readouts(Readouts out) {
         out.put(ATTACHED, desktop.parent() != null);
-        out.put(PINNED, desktop.hasPinnedWindows());
+        out.put(PINNED, desktop.windowManager().hasPinnedWindows());
         // Only over the game is a press routed from the frame; the desktop's own screen dispatches it.
         if (!mode.coversSurface() && mode != CgUiScreen.Mode.NONE) out.put(HIT_REGIONS, HitRegions.capture(document));
     }
@@ -81,6 +81,6 @@ final class DesktopContent implements CgUiViewport.Content {
     @Override
     public void failed(Throwable cause) {
         CrystalGuiCore.LOGGER.error("[cgui] recording the desktop failed; leaving HUD mode");
-        desktop.exitHudMode();
+        desktop.windowManager().exitHudMode();
     }
 }

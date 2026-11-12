@@ -53,6 +53,7 @@ public final class DesktopTest extends DesktopRun {
     /** Frames each photograph waits past the last event it follows (the open, ready, the first photograph). */
     private static final int SETTLE_FRAMES = 20;
 
+    // Threads: guarded by DesktopTest.class.
     private static final Map<Integer, List<Runnable>> STEPS = new TreeMap<>();
     private static volatile DesktopTest active;
 

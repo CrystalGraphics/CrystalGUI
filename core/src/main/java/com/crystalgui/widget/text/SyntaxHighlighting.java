@@ -135,6 +135,7 @@ public final class SyntaxHighlighting {
     }
 
     /** One per language, built on first use and kept. @see #fromGrammar */
+    // Threads: guarded by its own monitor.
     private static final Map<Language, StaticTokenizer> STATIC_TOKENIZERS = new java.util.HashMap<>();
 
     /** The lexers tier three uses. Stateless, so one each is enough and no reset is needed. */

@@ -51,7 +51,7 @@ final class CompletionRanking {
      * by a whole tier, so the boost a caller would be tempted to add here is one the matcher has applied
      * already — adding it twice is how a tier gap gets crossed by accident.</p>
      */
-    static Comparator<CompletionSession.Row> byQuality() {
+    static Comparator<CompletionSession.Row> byQuality(CompletionRecency.Snapshot recency) {
         if (sortByName) return byNameOnly();
         return Comparator
                 .comparingInt(CompletionRanking::tierOf)
@@ -65,7 +65,7 @@ final class CompletionRanking {
                 // RECENCY, after proximity and before the positional bonuses -- §18.3's ordering. It only
                 // ever separates items that already matched and are already equally near, which is the
                 // whole reason it can be this crude without being disruptive.
-                .thenComparingInt(row -> -CompletionRecency.shared().rankOf(row.item()))
+                .thenComparingInt(row -> -recency.rankOf(row.item()))
                 .thenComparingInt(row -> -matchScore(row))
                 .thenComparing(row -> row.item().sortKey())
                 .thenComparing(row -> row.item().label());

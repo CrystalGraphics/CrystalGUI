@@ -71,10 +71,10 @@ public final class DeclarationEditors {
         Field build(Context context);
     }
 
-    private static final Map<StyleProperty<?>, Editor> OVERRIDES = new HashMap<>();
+    private static final Map<StyleProperty<?>, Editor> OVERRIDES = new java.util.concurrent.ConcurrentHashMap<>();
 
     /** Editors for a name no property claims: a shorthand a sheet writes, such as {@code text-stroke}. */
-    private static final Map<String, Editor> NAMED = new HashMap<>();
+    private static final Map<String, Editor> NAMED = new java.util.concurrent.ConcurrentHashMap<>();
 
     private DeclarationEditors() {
     }

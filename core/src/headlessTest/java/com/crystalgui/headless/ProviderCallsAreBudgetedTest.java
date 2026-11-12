@@ -6,7 +6,7 @@ import com.crystalgui.core.async.UiBudget;
 import com.crystalgui.core.async.UiThread;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.ContentProvider;
-import com.crystalgui.fs.client.Workspace;
+import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.text.lang.SymbolKind;
 
@@ -24,7 +24,7 @@ import static org.junit.Assert.assertTrue;
  * <p>The wiring is the half worth a test. {@link UiBudget} is a static nothing forces anyone to call,
  * so it survives a refactor perfectly while catching nothing — which is exactly what happened when the
  * registry that used to hold the timing wrapper was deleted. This asserts through
- * {@link Workspace#providerFor}, the door every reader goes through, so a future move of that door
+ * {@link WorkspaceClient#providerFor}, the door every reader goes through, so a future move of that door
  * fails here rather than silently unhooking the guard.</p>
  */
 public class ProviderCallsAreBudgetedTest {
@@ -34,7 +34,7 @@ public class ProviderCallsAreBudgetedTest {
 
     private static final Resource LIBRARY = Resource.of(Resource.SCHEME_LIBRARY, "java.util.ArrayList");
 
-    private Workspace workspace;
+    private WorkspaceClient workspace;
 
     /** Answers a symbol, slowly — the shape that reads like a property getter and runs a compile. */
     private static final class Slow implements ContentProvider {
@@ -70,7 +70,7 @@ public class ProviderCallsAreBudgetedTest {
         // THE FRAME THREAD IS WHOEVER DRAWS, and the budget only measures work done on it -- so a test
         // that did not claim it would time nothing and pass against an unwired guard.
         UiThread.markCurrent();
-        workspace = Workspace.over((method, args, onResult, onError) -> { },
+        workspace = WorkspaceClient.over((method, args, onResult, onError) -> { },
                 (method, handler) -> { }, CgPlainOps.INSTANCE);
         workspace.registerScheme(Resource.SCHEME_LIBRARY, new Slow());
     }

@@ -63,7 +63,7 @@ public class ProjectSourceResourceTest {
      * <b>The registry accepts a provider for {@code project://} at all.</b>
      *
      * <p>Describing a scheme and serving its bytes are different questions: a project file's content
-     * comes from the server, and {@code Workspace.read} checks the scheme before it checks the provider
+     * comes from the server, and {@code WorkspaceClient.read} checks the scheme before it checks the provider
      * table so a contribution here can never answer instead of the wire.</p>
      */
     @Test

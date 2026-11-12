@@ -1,5 +1,6 @@
 package com.crystalgui.workbench;
 
+import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.core.settings.Setting;
 import com.crystalgui.core.settings.Settings;
 import com.crystalgui.core.settings.SettingsCategory;
@@ -14,6 +15,8 @@ import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.widget.texteditor.TextEditor;
 
 import com.crystalgui.workbench.explorer.WorkspaceTreeSource;
+import com.crystalgui.core.signal.Connection;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -307,6 +310,15 @@ public final class WorkbenchSettings {
         declare();
         apply(workbench);
         settings.onChanged.connect(change -> apply(workbench));
+        // A desktop-wide preference changed in another application reaches this workbench the same way. Weakly held:
+        // the broadcast outlives every workbench.
+        WeakReference<Workbench> weak = new WeakReference<>(workbench);
+        Connection[] held = new Connection[1];
+        held[0] = Preferences.PUBLISHED.changes().subscribe(() -> {
+            Workbench live = weak.get();
+            if (live == null) held[0].disconnect();
+            else apply(live);
+        });
     }
 
     /** Pushes the values in force into the widgets that read them. Safe to call as often as you like. */
@@ -319,6 +331,7 @@ public final class WorkbenchSettings {
         if (window != null) themes.installInto(window.styles());
         themes.setTheme(themeId(ThemeRegistry.themes(), workbench.resolve(UI_THEME)));
         themes.setScheme(themeId(ThemeRegistry.schemes(), workbench.resolve(EDITOR_SCHEME)));
+        themes.setOverrides(Preferences.current().tokenOverrides());
 
         // AUTO-REVEAL IS NOT PUSHED ANY MORE. It was written onto the engine through a setter, so the
         // engine held a field for a panel it may not have; the explorer resolves the preference at the

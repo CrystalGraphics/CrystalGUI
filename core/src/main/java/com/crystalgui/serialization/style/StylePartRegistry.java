@@ -27,6 +27,7 @@ import com.crystalgui.style.property.visual.transform.Transform;
  */
 public final class StylePartRegistry {
 
+    // Threads: filled once by the static initialiser, read-only after.
     private static final Map<Class<?>, StyleParts<?>> BY_TYPE = new LinkedHashMap<>();
 
     static {
