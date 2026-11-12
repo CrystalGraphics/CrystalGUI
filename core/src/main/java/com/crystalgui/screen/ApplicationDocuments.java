@@ -60,6 +60,11 @@ final class ApplicationDocuments implements AppDocuments {
         public boolean consumeKeyboardEvent(CgSystemInput.Keyboard.Event event) {
             return viewport.consumeKeyboardEvent(event);
         }
+
+        @Override
+        public boolean consumeComposition(String text, int caret) {
+            return viewport.consumeComposition(text, caret);
+        }
     }
 
     private final List<Entry> open = new CopyOnWriteArrayList<>();

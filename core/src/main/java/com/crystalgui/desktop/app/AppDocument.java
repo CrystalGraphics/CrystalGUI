@@ -39,6 +39,11 @@ public final class AppDocument {
 
     /** What the host ends the document with, and the input it takes: a viewport is one. */
     public interface Backend extends CgSystemInput.Mouse, CgSystemInput.Keyboard {
+        /** Offers the document an input method's run in progress; an empty {@code text} ends it. */
+        default boolean consumeComposition(String text, int caret) {
+            return false;
+        }
+
         /** Ends the thread and frees what the document drew with; the host's thread, once. */
         void close();
     }
@@ -64,6 +69,21 @@ public final class AppDocument {
         this.backend = backend;
         // What the pointer looks like over a window is what the shell shows there, asked of this document.
         document.input().presentsCursor(false);
+    }
+
+    /** Where the focus owner's text caret was at the last commit, in the document's surface pixels, or null. */
+    @Nullable
+    private volatile float[] caret;
+
+    /** The caret of the application's focus owner as of its last frame, {x, y, width, height}; null when there is none. Any thread. */
+    @Nullable
+    float[] caret() {
+        return caret;
+    }
+
+    /** Offers the document an input method's run in progress. */
+    void composition(String text, int caret) {
+        backend.consumeComposition(text, caret);
     }
 
     /** The cursor the application's document wants where its pointer is. Any thread. */
@@ -280,6 +300,7 @@ public final class AppDocument {
 
     /** The document's thread, after each commit: tells the windows whose client changed. */
     public void committed() {
+        caret = document.input().textInputArea();
         for (ClientRoot client : clients) client.committed();
         PopupLayer layer = popups();
         if (layer != null) layer.committed();

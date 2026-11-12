@@ -1,7 +1,10 @@
 package com.crystalgui.desktop.app;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import org.junit.After;
 import org.junit.Before;
@@ -16,6 +19,8 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.control.TextField;
 import com.crystalgui.widget.overlay.Popover;
@@ -38,6 +43,14 @@ public class ApplicationInputEndToEndTest extends UiDocumentTestBase {
         }
 
         @Override
+        public boolean consumeComposition(String text, int caret) {
+            composed.add(text);
+            return own.input().consumeComposition(text, caret);
+        }
+
+        final java.util.List<String> composed = new java.util.ArrayList<>();
+
+        @Override
         public void close() {
         }
     }
@@ -49,6 +62,7 @@ public class ApplicationInputEndToEndTest extends UiDocumentTestBase {
     private AppDocument application;
     private AppWindow window;
     private TextField field;
+    private Live live;
 
     @Before
     public void open() {
@@ -61,9 +75,9 @@ public class ApplicationInputEndToEndTest extends UiDocumentTestBase {
         own.boxes().setUiScale(2f);
         own.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET));
         own.useTopLayer(new PopupLayer());
-        Live backend = new Live();
-        backend.own = own;
-        application = new AppDocument(own, backend);
+        live = new Live();
+        live.own = own;
+        application = new AppDocument(own, live);
         field = new TextField();
         field.layout(l -> l.widthPercent(100f).heightPercent(100f));
         window = AppWindows.open(desktop, KIND, application, WindowSpec.titled("Live").content(field).size(300, 200));
@@ -117,6 +131,40 @@ public class ApplicationInputEndToEndTest extends UiDocumentTestBase {
         move(5f, 5f);
         settle();
         assertEquals("off the window it is the shell's own", Cursor.DEFAULT, document.input().currentCursor());
+    }
+
+    @Test
+    public void anInputMethodSeesTheApplicationsCaretWhereItIsOnTheScreen() {
+        assertNull("no caret before anything is focused", document.input().textInputArea());
+        // A text field knows its caret once it has painted, which a test does not; this stands in for one.
+        UIElement caret = new UIElement() {
+            @Override
+            public float[] textInputArea() {
+                return new float[] {10f, 20f, 1f, 12f};
+            }
+        };
+        caret.setFocusPolicy(FocusPolicy.CLICK);
+        own.append(caret);
+        own.focus().requestFocus(caret);
+        float[] at = fieldInShell();
+        click(at[0], at[1]);                            // the shell's focus goes to the window
+        own.focus().requestFocus(caret);
+        settle();
+        float[] area = document.input().textInputArea();
+        assertNotNull("the application's caret is the shell's to give", area);
+        Box portal = application.active().box();
+        assertEquals("across: the window's corner plus the caret's", portal.worldX() + 10f, area[0], 0.5f);
+        assertEquals("down", portal.worldY() + 20f, area[1], 0.5f);
+        assertEquals("as tall as the caret", 12f, area[3], 0.5f);
+    }
+
+    @Test
+    public void aRunAnInputMethodIsComposingGoesToTheApplicationsField() {
+        float[] at = fieldInShell();
+        click(at[0], at[1]);
+        settle();
+        assertTrue("taken", document.input().consumeComposition("ni", 2));
+        assertEquals(java.util.List.of("ni"), live.composed);
     }
 
     @Test

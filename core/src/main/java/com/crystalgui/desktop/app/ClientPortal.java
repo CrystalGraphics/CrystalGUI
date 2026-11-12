@@ -12,6 +12,7 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.CompositionEvent;
 import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -87,6 +88,11 @@ public final class ClientPortal extends UIElement implements CursorSource {
         onMouseScroll.attachListener((element, event) -> pointer(event.getPosition(), -1, false, event.getScroll()),
                 false, true);
         onMouseLeave.attachListener((element, event) -> pointer(event.getPosition(), -1, false, 0f), false, true);
+        // The run an input method is composing belongs to the application's field, not to the shell's focus owner.
+        events.getGroup(CompositionEvent.class).attachListener((element, event) -> {
+            event.stopPropagation();
+            appDocument.composition(event.getText(), event.getCaret());
+        }, false, true);
         onKeyDown.attachListener((element, event) -> key(event, true), false, true);
         onKeyUp.attachListener((element, event) -> key(event, false), false, true);
     }
@@ -95,6 +101,21 @@ public final class ClientPortal extends UIElement implements CursorSource {
     @Override
     public Cursor cursorAt(float x, float y) {
         return appDocument.cursor();
+    }
+
+    /**
+     * Where the application's text caret is, in the shell's surface pixels, for an input method to open its list beside:
+     * the application's own, moved to where its window is.
+     */
+    @Override
+    @Nullable
+    public float[] textInputArea() {
+        float[] area = appDocument.caret();
+        if (area == null) return null;
+        ClientPortal window = appDocument.active();
+        Box origin = window != null && window.box() != null ? window.box() : box();
+        if (origin == null) return null;
+        return new float[] {origin.worldX() + area[0], origin.worldY() + area[1], area[2], area[3]};
     }
 
     /** Whether this shows a window's caption rather than its content. */

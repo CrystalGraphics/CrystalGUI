@@ -4835,11 +4835,14 @@ com/crystalgui/desktop/app/AppDocument
   method public removeClient (Lcom/crystalgui/desktop/app/ClientRoot;)V
   method public run (Ljava/lang/Runnable;)V
   method public showPopupsIn (Lcom/crystalgui/ui/dom/UIDocument;)V
+  method public windowHeight ()F
+  method public windowWidth ()F
 com/crystalgui/desktop/app/AppDocument$Backend
   access public,abstract,interface
   extends java/lang/Object
   implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
   implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
+  method public consumeComposition (Ljava/lang/String;I)Z
   method public,abstract close ()V
 com/crystalgui/desktop/app/AppDocuments
   access public,abstract,interface
@@ -4972,9 +4975,12 @@ com/crystalgui/desktop/app/ClientPortal
   access public,final
   extends com/crystalgui/ui/dom/UIElement
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
+  implements com/crystalgui/ui/service/CursorSource
   method public application ()Lcom/crystalgui/desktop/app/AppDocument;
   method public client ()Lcom/crystalgui/desktop/app/ClientRoot;
+  method public cursorAt (FF)Lcom/crystalgui/core/cursor/Cursor;
   method public paintContent (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
+  method public textInputArea ()[F
 com/crystalgui/desktop/app/ClientRoot
   access public,final
   extends com/crystalgui/ui/dom/UIElement
@@ -4999,6 +5005,7 @@ com/crystalgui/desktop/app/PopupLayer
   method public occupied ()[F
   method public onChanged (Ljava/lang/Runnable;)V
   method public picture ()Lcom/crystalgui/render/Surface;
+  method public rectangles ()[[F
   method public surface (Lcom/crystalgui/render/Surface;)V
 com/crystalgui/desktop/app/ServerWindowHost
   access public,abstract,interface
@@ -14663,6 +14670,7 @@ com/crystalgui/ui/service/Input
   method public pointerFollowerWithin ()Lcom/crystalgui/ui/dom/UIElement;
   method public pointerMovedSincePress ()Z
   method public popMode (Lcom/crystalgui/ui/service/InputMode;)V
+  method public presentsCursor (Z)Lcom/crystalgui/ui/service/Input;
   method public pushMode (Lcom/crystalgui/ui/service/InputMode;)V
   method public reconcile (I)V
   method public releaseEndedDrag ()Z
