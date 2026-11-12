@@ -28,7 +28,7 @@ import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgReplay;
-import com.crystalgraphics.render.graph.CgTextureDesc;
+import com.crystalgraphics.gpu.resource.CgTextureDesc;
 import com.crystalgraphics.render.property.CgPropertyValues;
 import com.crystalgraphics.render.property.CgSpatialTree;
 import com.crystalgraphics.text.render.CgTextDraw;

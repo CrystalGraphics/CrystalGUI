@@ -3,7 +3,7 @@ package com.crystalgui.render;
 import com.crystalgraphics.gpu.resource.CgReadback;
 import com.crystalgraphics.render.graph.CgGraphTexture;
 import com.crystalgraphics.render.graph.CgRecording;
-import com.crystalgraphics.render.graph.CgTextureDesc;
+import com.crystalgraphics.gpu.resource.CgTextureDesc;
 import com.crystalgraphics.trace.CgFrameImages;
 import com.crystalgraphics.trace.CgTrace;
 
