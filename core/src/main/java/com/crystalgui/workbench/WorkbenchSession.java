@@ -3,6 +3,7 @@ package com.crystalgui.workbench;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.storage.config.CgConfigStorage;
+import com.crystalgui.desktop.app.AppWindows;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.EditorInput;
@@ -500,7 +501,7 @@ public final class WorkbenchSession {
             // in at a default and jumping -- Desktop.addWindow's own note, from the other side.
             frame.resizeTo(record.width(), record.height());
             frame.moveTo(record.left(), record.top());
-            Desktop.of(window).addWindow(frame);
+            AppWindows.addFloat(window, frame);
         }
     }
 

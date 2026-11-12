@@ -4861,6 +4861,7 @@ com/crystalgui/desktop/app/AppWindows
   method public active ()Lcom/crystalgui/desktop/app/AppWindow;
   method public all ()Ljava/util/List;
   method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public,static addFloat (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/desktop/app/Application
   access public,abstract,interface
   extends java/lang/Object

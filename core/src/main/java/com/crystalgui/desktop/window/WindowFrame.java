@@ -450,84 +450,20 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         // THE FIELD TOO, not the label alone: getTitle answers from the field so a caption that draws
         // no title still HAS one, and this constructor does not go through setTitle.
         record.title(initialTitle == null ? "" : initialTitle);
-        titleLabel = new UIText(record.title());
-        titleLabel.addClass(TITLE_CLASS);
-        // FALLS THROUGH TO THE BAR. The move listener below is target-only, so a press that lands on the
-        // title text would otherwise begin nothing at all -- and "the title bar drags except where the
-        // title is" is indistinguishable from a broken drag.
-        titleLabel.setHitTest(false);
-
-        controls = new UIElement();
-        controls.addClass(CONTROLS_CLASS);
-
-        // PIN FIRST, left of minimise. It is the only control here that is not about this window's
-        // presence on the desktop, so it sits outside the minimise/maximise/close triplet every window
-        // manager draws as a unit -- the same reason a tool window's Dock button sits there.
-        pinButton = new Button("");
-        pinButton.addClass(PIN_CLASS);
-        pinButton.attachListener(() -> setPinned(!isPinned()));
-        pinTooltip = Tooltip.attach(pinButton, PIN_TOOLTIP);
-        pinTooltip.addClass(Tooltip.WAIT_CLASS);
-        controls.append(pinButton);
-
-        // MINIMISE, so the strip reads minimise-then-close left to right as every window manager
-        // draws it, and so the destructive control is the one furthest from the rest.
-        minimizeButton = new Button("");
-        minimizeButton.addClass(MINIMIZE_CLASS);
-        // THROUGH THE ANIMATION, which then hides. Not hide() itself: hiding is DETACHING, and a
-        // detached subtree paints nothing, so a window that hid on the press would animate to an empty
-        // screen. @see WindowAnimator
-        minimizeButton.attachListener(this::minimize);
-        // A WAIT ON ALL FOUR. These are the marks every window manager has drawn in this corner since
-        // Windows 95: nobody reads them, they are aimed at, and a label arriving at once lands over the
-        // button already being clicked. The length lives in ua/overlays.css.
-        Tooltip.attach(minimizeButton, MINIMIZE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
-        controls.append(minimizeButton);
-
-        maximizeButton = new Button("");
-        maximizeButton.addClass(MAXIMIZE_CLASS);
-        maximizeButton.attachListener(this::toggleMaximized);
-        // RETAINED, because this one's text follows the state -- and Tooltip.attach ADDS a listener pair
-        // rather than replacing one, so calling it again to relabel would leave the first tooltip in
-        // place and showing, with the new text on an instance nothing ever hovers.
-        maximizeTooltip = Tooltip.attach(maximizeButton, MAXIMIZE_TOOLTIP);
-        maximizeTooltip.addClass(Tooltip.WAIT_CLASS);
-        controls.append(maximizeButton);
-
-        closeButton = new Button("");
-        closeButton.addClass(CLOSE_CLASS);
-        closeButton.attachListener(this::requestClose);
-        Tooltip.attach(closeButton, CLOSE_TOOLTIP).addClass(Tooltip.WAIT_CLASS);
-        controls.append(closeButton);
-
-        // BUILT NOW AND HIDDEN, rather than created when an icon arrives. Creating an element from a
-        // setter means creating it possibly mid-gesture, and the title bar has no `gap` for a hidden
-        // child to occupy — the one cost that would have made the lazy version worth it.
-        // THE SAME DRAWING THE STRIP USES. It was a bare element with the glyph as an overlay, which
-        // predates WindowIcon and meant a caption showed an uncoloured mark while the entry, the hover
-        // preview and the switcher tile all showed the same window as a coloured tile — one window with
-        // two appearances, differing only in which of them had been written first. WindowIcon carries
-        // the tile, the palette keyed on the icon NAME (so the caption and the entry cannot disagree
-        // about the hue) and the branded-artwork case; the SIZE stays the context's, which for a caption
-        // is `window > .__title-bar__ > .__icon__`.
-        icon = new WindowIcon();
-        icon.addClass(ICON_CLASS);
+        WindowCaption caption = new WindowCaption(record.title(),
+                () -> setPinned(!isPinned()), this::minimize, this::toggleMaximized, this::requestClose);
+        titleBar = caption;
+        controls = caption.controls();
+        titleLabel = caption.titleLabel();
+        icon = caption.icon();
+        captionChrome = caption.captionChrome();
+        pinButton = caption.pinButton();
+        minimizeButton = caption.minimizeButton();
+        maximizeButton = caption.maximizeButton();
+        closeButton = caption.closeButton();
+        pinTooltip = caption.pinTooltip();
+        maximizeTooltip = caption.maximizeTooltip();
         refreshIcon();
-
-        // AFTER the icon and BEFORE the title, which is where IntelliJ's New UI and VS Code's custom
-        // title bar both put an application's menu: hard against the left, with the title taking
-        // whatever is left. Hidden until something is adopted, and the caption has no `gap`, so an
-        // empty slot occupies nothing.
-        captionChrome = new UIElement();
-        captionChrome.addClass(CAPTION_CHROME_CLASS);
-        captionChrome.setDisplayed(false);
-
-        titleBar = new UIElement();
-        titleBar.addClass(TITLE_BAR_CLASS);
-        titleBar.append(icon);
-        titleBar.append(captionChrome);
-        titleBar.append(titleLabel);
-        titleBar.append(controls);
         append(titleBar);
 
         // A SCROLL VIEW, so a window smaller than its content gets a bar rather than a clip. The slot
