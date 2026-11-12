@@ -56,3 +56,6 @@ __pycache__/
 # Machine-local settings -- paths true of one checkout only. The .example beside it IS committed and
 # is the template. @see gradle/local-settings.gradle.kts
 local.properties
+# Trace reports a module's tests write into their working directory.
+/*/crystalgraphics/
+/*/crystalgui/
