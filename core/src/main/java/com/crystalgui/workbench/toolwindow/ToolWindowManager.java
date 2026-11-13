@@ -829,9 +829,14 @@ public final class ToolWindowManager {
         return frame != null ? frame.bounds() : placementOf(typeId).floatingBounds();
     }
 
-    /** Puts a floating or windowed tool window back in the region it never stopped belonging to. */
+    /**
+     * Puts a floating or windowed tool window back in the region it never stopped belonging to, open, and brings the
+     * workbench's window to the front with the panel focused: Dock means "take me back there".
+     */
     public void dockPanel(String typeId) {
         setType(typeId, ToolWindowType.DOCKED);
+        if (!isPanelOpen(typeId)) showPanel(typeId);
+        if (floats != null && floats.main() != null) floats.main().activate();
     }
 
     /**

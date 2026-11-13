@@ -21243,6 +21243,7 @@ com/crystalgui/workbench/view/ViewContainer
   method public content ()Lcom/crystalgui/ui/dom/UIElement;
   method public focusView ()V
   method public getData (Lcom/crystalgui/core/data/DataKey;)Ljava/lang/Object;
+  method public reclaimChrome ()V
   method public setHideButtonVisible (Z)V
   method public setViews (Ljava/util/List;)V
   method public tabs ()Lcom/crystalgui/widget/layout/TabView;

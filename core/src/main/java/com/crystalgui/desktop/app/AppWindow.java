@@ -131,10 +131,32 @@ public final class AppWindow {
         bar.addClass(WindowFrame.ADOPTED_CHROME_CLASS);
         captionClient.setContent(bar);
         document.addClient(captionClient);
+        // THE ACTIONS ARE A CLIENT OF THEIR OWN, for the control strip at the caption's end, beside the window's buttons.
+        UIElement actions = provider.captionActions();
+        ClientRoot actionsClient = null;
+        if (actions != null) {
+            actionsClient = new ClientRoot();
+            actionsClient.asCaption();
+            actions.addClass(WindowFrame.ADOPTED_CHROME_CLASS);
+            actionsClient.setContent(actions);
+            document.addClient(actionsClient);
+        }
+        ClientRoot actionsRoot = actionsClient;
         onShell(() -> {
             ClientPortal portal = new ClientPortal(document, captionClient, true);
+            ClientPortal actionsPortal = actionsRoot == null ? null : new ClientPortal(document, actionsRoot, true);
             frame.addClass(WindowFrame.ADOPTED_CLASS);
-            frame.adoptChrome(() -> portal);
+            frame.adoptChrome(new WindowChrome() {
+                @Override
+                public UIElement captionChrome() {
+                    return portal;
+                }
+
+                @Override
+                public UIElement captionActions() {
+                    return actionsPortal;
+                }
+            });
         });
     }
 

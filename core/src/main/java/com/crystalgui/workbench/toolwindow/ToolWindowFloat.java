@@ -126,6 +126,7 @@ public final class ToolWindowFloat {
 
     /** Ends the window. */
     public void destroy() {
+        container.reclaimChrome();
         window.destroy();
     }
 }

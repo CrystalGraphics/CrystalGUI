@@ -17,6 +17,7 @@ import com.crystalgui.workbench.toolwindow.ToolWindowCommands;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.desktop.window.WindowChrome;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.widget.control.Button;
 import com.crystalgui.widget.display.EmptyState;
@@ -335,6 +336,17 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
     @Override
     public UIElement captionChrome() {
         return header;
+    }
+
+    /**
+     * Takes its header and its action row back from a caption that held them, in place. Call it when the window that
+     * adopted them lets go, before the container is shown anywhere else; a no-op when they never left.
+     */
+    public void reclaimChrome() {
+        if (header.parentElement() != this) insertAt(0, header);
+        header.removeClass(WindowFrame.ADOPTED_CHROME_CLASS);
+        if (trailing.parentElement() != header) header.append(trailing);
+        trailing.removeClass(WindowFrame.ADOPTED_CHROME_CLASS);
     }
 
     /**
