@@ -181,6 +181,32 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         return pendingGhostY;
     }
 
+    /** What a drag begun here carries when that may leave the document; any thread reads it. */
+    @Nullable
+    private volatile Object portableDrag;
+    @Nullable
+    private ForeignDrag foreignDrag;
+
+    /**
+     * The payload of the drag now running in this document, when it is {@linkplain TransferData#portable portable}, else
+     * null. Any thread: the shell reads it to offer the drag to the document under the pointer.
+     */
+    @Nullable
+    public Object portableDrag() {
+        return portableDrag;
+    }
+
+    /** Set and cleared by the drag. */
+    void portableDrag(@Nullable Object payload) {
+        portableDrag = payload;
+    }
+
+    /** A drag from another document, as this document's elements see it. The document's thread. */
+    public ForeignDrag foreignDrag() {
+        if (foreignDrag == null) foreignDrag = new ForeignDrag(this, document);
+        return foreignDrag;
+    }
+
     private @Nullable UIElement pressTarget;
     private @Nullable UIElement keyboardPressTarget;
     private @Nullable UIElement capture;

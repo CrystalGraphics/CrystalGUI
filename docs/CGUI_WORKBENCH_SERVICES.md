@@ -1112,6 +1112,13 @@ clipboard carries the same type: `UiClipboard.process().put(TransferData.of(frag
 other applications and writes the text through to the system, and a paste (`read(type)`) offers the typed form only
 while the system text is still what was written (another program's copy since wins).
 
+**Between applications.** A drag leaves its application's document only when its payload is a value: `DraggedResources`
+is, and a tab offers one for the file it shows (`TransferData.carrying(tabPayload, new DraggedResources(...))`: the tab
+for its own dock, the file for any other). The shell offers it to the window under the pointer, whose elements hear the
+same `Over`/`Drop`/`Leave` with `ForeignDrag.SOURCE` as the source; a window no element took it from is handed the
+resources through `Application.open`, and the bare desktop opens them in a window of the application they came from. A
+payload holding nodes (`TransferData.of`) never leaves its document.
+
 ```java
 // a tree offers its rows to targets outside it
 public Object transfer(List<CgPath> paths) { return new DraggedResources(files(paths)); }

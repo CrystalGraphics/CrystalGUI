@@ -13,7 +13,10 @@ import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.document.DraggedResources;
+import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.TransferData;
 import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.widget.layout.SplitView;
 import com.crystalgui.widget.dnd.DragGhost;
@@ -1319,13 +1322,21 @@ public class DockArea extends UIElement implements MinimumSize {
     @Nullable
     private DockDragPayload resolvedPayload;
 
+    /** A tab's drag: the tab for this dock, and the file it shows for any other application it is dropped on. */
+    private static Object carrying(DockDragPayload tab, DockPanelRef panel) {
+        String path = panel.state(DockPanelRef.PATH, "");
+        if (path.isEmpty()) return tab;
+        return TransferData.carrying(tab, new DraggedResources(List.of(Resource.parse(path))));
+    }
+
     /**
      * What a drag means to the dock: its own payload as it stands, anything else as the foreign drop reads it, or
      * null to refuse. A single panel already open is its TAB, so dropping a file that is open is a tab drag.
      */
     @Nullable
     private DockDragPayload payloadOf(@Nullable Object dragged) {
-        if (dragged instanceof DockDragPayload own) return own;
+        DockDragPayload own = TransferData.find(dragged, DockDragPayload.class);
+        if (own != null) return own;
         if (dragged == null) return null;
         if (dragged == resolvedDrag) return resolvedPayload;
         DockForeignDrop drop = home().foreignDrop;
@@ -1632,7 +1643,7 @@ public class DockArea extends UIElement implements MinimumSize {
             Drag.start(tab,
                     event.getPosition().x(), event.getPosition().y(),
                     CgMouseCodes.LEFT_BUTTON,
-                    DockDragPayload.ofPanel(this, group.leaf(), panel),
+                    carrying(DockDragPayload.ofPanel(this, group.leaf(), panel), panel),
                     Drag.DEFAULT_THRESHOLD_PX,
                     new Drag.Listener() {
                         @Override
@@ -1827,7 +1838,7 @@ public class DockArea extends UIElement implements MinimumSize {
             clearPreview();
             // WHAT AN OPEN DOES BESIDES PLACING A TAB, for anything that did not start as one of ours.
             DockForeignDrop drop = home().foreignDrop;
-            if (landed != null && drop != null && !(event.getPayload() instanceof DockDragPayload)) {
+            if (landed != null && drop != null && TransferData.find(event.getPayload(), DockDragPayload.class) == null) {
                 drop.opened(payload.panels());
             }
         }, false, true);

@@ -14,9 +14,12 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.cursor.Cursor;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import org.joml.Vector2f;
 
 /**
  * The document one application runs in, on a thread of its own: its windows' client roots live here, and the shell's
@@ -258,6 +261,63 @@ public final class AppDocument {
             if (node instanceof ClientPortal portal && portal.application() == this) return portal;
         }
         return null;
+    }
+
+    /** The application whose document a drag of this one's is over, which hears it as a foreign drag. The shell's thread. */
+    @Nullable
+    private AppDocument crossing;
+
+    /**
+     * The shell's thread, for each pointer event while this document holds the pointer: offers a drag of this document that
+     * carries a value to what the pointer is over. Another application's window hears it as a drag of its own; the bare
+     * desktop on release opens it in a window of this application ({@link ApplicationRegistry#openDropped}).
+     *
+     * <p>A drag whose payload holds nodes is not portable and never leaves; nothing here runs for it.</p>
+     */
+    void carry(UIDocument shell, float x, float y, boolean released) {
+        Object payload = document.input().portableDrag();
+        if (payload == null) {
+            leaveCrossing();
+            return;
+        }
+        ClientPortal portal = null;
+        boolean chrome = false;
+        Box under = shell.boxes().hitTest(x, y);
+        for (UIElement node = under == null ? null : under.node(); node != null; node = node.parentElement()) {
+            if (node instanceof ClientPortal found) {
+                portal = found;
+                break;
+            }
+            if (node instanceof WindowFrame) chrome = true;
+        }
+        AppDocument receiver = portal == null || portal.application() == this ? null : portal.application();
+        if (receiver != crossing) {
+            leaveCrossing();
+            crossing = receiver;
+        }
+        Desktop desktop = Desktop.ifPresent(shell);
+        if (receiver != null) {
+            Vector2f local = portal.toLocal(x, y);
+            float scale = shell.boxes().uiScale();
+            float at = local.x * scale, down = local.y * scale;
+            if (released) {
+                crossing = null;
+                receiver.execute(() -> {
+                    boolean taken = receiver.document.input().foreignDrag().drop(at, down);
+                    if (!taken && desktop != null) shell.execute(() -> desktop.applications().offerDropped(receiver, payload));
+                });
+            } else {
+                receiver.execute(() -> receiver.document.input().foreignDrag().move(payload, at, down));
+            }
+        } else if (released && portal == null && !chrome && desktop != null) {
+            desktop.applications().openDropped(this, payload);
+        }
+    }
+
+    private void leaveCrossing() {
+        AppDocument was = crossing;
+        crossing = null;
+        if (was != null) was.execute(() -> was.document.input().foreignDrag().leave());
     }
 
     /** Offers the document a key. */

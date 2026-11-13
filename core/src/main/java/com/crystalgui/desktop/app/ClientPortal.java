@@ -187,6 +187,7 @@ public final class ClientPortal extends UIElement implements CursorSource {
         // dropped from one window onto the other lands where the pointer is, not where it would be in this one.
         ClientPortal target = this;
         if (shell.input().pointerCaptureTarget() == this) {
+            appDocument.carry(shell, at.x(), at.y(), button >= 0 && !pressed);
             ClientPortal under = appDocument.portalAt(shell, at.x(), at.y());
             if (under != null) target = under;
         }

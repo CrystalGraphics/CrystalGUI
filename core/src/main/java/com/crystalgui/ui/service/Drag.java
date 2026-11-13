@@ -435,6 +435,7 @@ public final class Drag implements InputMode {
             if (dx * dx + dy * dy < threshold * threshold) return true;
             activated = true;
             declareFollow();
+            input.portableDrag(TransferData.shared(payload));
         }
         showGhost();
         ghostSurfaceX = x;
@@ -507,6 +508,7 @@ public final class Drag implements InputMode {
         // two paths that DO report (end and cancel) pop themselves first. The ghost is released HERE
         // rather than in end()/cancel(), because this is the one path every ending goes through.
         live = false;
+        input.portableDrag(null);
         follows(null);
         releaseGhost();
     }

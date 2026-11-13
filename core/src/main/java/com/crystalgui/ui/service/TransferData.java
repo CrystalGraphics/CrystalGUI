@@ -46,17 +46,84 @@ public interface TransferData {
         return payload instanceof TransferData data ? data.as(type) : null;
     }
 
-    /** Offers each non-null form; the first of a type wins. */
+    /**
+     * Whether a drag carrying this may leave its document: true only where every form is a value (resources, text, ids,
+     * an encoded fragment) a document on another thread can read. A payload holding nodes stays in its own document.
+     */
+    default boolean portable() {
+        return false;
+    }
+
+    /**
+     * What of this another document may be offered: itself when {@link #portable}, the values of a {@link #carrying}
+     * payload, else null.
+     */
+    @Nullable
+    default TransferData shared() {
+        return portable() ? this : null;
+    }
+
+    /** What of {@code payload} another document may be offered, or null: nothing, for a payload that is not a {@code TransferData}. */
+    @Nullable
+    static TransferData shared(@Nullable Object payload) {
+        return payload instanceof TransferData data ? data.shared() : null;
+    }
+
+    /**
+     * A payload that is nodes for its own document and values for any other: a tab dragged inside the editor is the
+     * tab, and over another application it is the file it shows.
+     *
+     * <pre>{@code
+     * Drag.startWithPayload(tab, x, y, TransferData.carrying(dockPayload, new DraggedResources(files)), listener);
+     * }</pre>
+     *
+     * @param local what this document's targets read; may hold nodes
+     * @param values what leaves it; every form a value
+     */
+    static TransferData carrying(Object local, TransferData values) {
+        return new Carrying(local, values);
+    }
+
+    /** What {@link #carrying} holds. */
+    record Carrying(Object local, TransferData values) implements TransferData {
+        @Override
+        public <D> D as(Class<D> type) {
+            D found = find(local, type);
+            return found != null ? found : values.as(type);
+        }
+
+        @Override
+        public TransferData shared() {
+            return values.shared();
+        }
+    }
+
+    /** Offers each non-null form; the first of a type wins. Not portable: a form may hold nodes. */
     static TransferData of(Object... forms) {
+        return forms(false, forms);
+    }
+
+    /**
+     * {@link #of} for forms that are all values: the drag may be offered to other applications' documents.
+     *
+     * <pre>{@code
+     * Drag.startWithPayload(row, x, y, TransferData.values(new DraggedResources(files), paths), listener);
+     * }</pre>
+     */
+    static TransferData values(Object... forms) {
+        return forms(true, forms);
+    }
+
+    private static TransferData forms(boolean portable, Object[] forms) {
         List<Object> held = new ArrayList<>(forms.length);
         for (Object form : forms) {
             if (form != null) held.add(form);
         }
-        return new Forms(List.copyOf(held));
+        return new Forms(List.copyOf(held), portable);
     }
 
     /** The forms {@link #of} holds. */
-    record Forms(List<Object> held) implements TransferData {
+    record Forms(List<Object> held, boolean portable) implements TransferData {
         @Override
         public <D> D as(Class<D> type) {
             for (Object form : held) {

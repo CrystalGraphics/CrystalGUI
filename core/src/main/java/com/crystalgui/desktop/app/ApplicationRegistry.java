@@ -26,9 +26,11 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.document.DraggedResources;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.ui.service.TransferData;
 
 /**
  * What is <b>installed</b> on this desktop, and what is <b>running</b> — the shell's side of an
@@ -485,6 +487,39 @@ public final class ApplicationRegistry {
     @Nullable
     public AppDocument documentOf(Application application) {
         return documentsOf.get(application);
+    }
+
+    /** The application that runs in {@code document}, or null. */
+    @Nullable
+    public Application applicationOf(AppDocument document) {
+        for (Map.Entry<Application, AppDocument> entry : documentsOf.entrySet()) {
+            if (entry.getValue() == document) return entry.getKey();
+        }
+        return null;
+    }
+
+    /**
+     * A value drag from {@code from}'s application was released on the bare desktop: its resources open in a window of
+     * that application: its single instance, or a new one.
+     */
+    void openDropped(AppDocument from, Object payload) {
+        DraggedResources dragged = TransferData.find(payload, DraggedResources.class);
+        Application source = applicationOf(from);
+        CgConfigStorage storage = desktop.config();
+        if (dragged == null || source == null || storage == null) return;
+        ApplicationKind kind = source.kind();
+        launch(kind, new AppContext(kind, desktop, clients.get(source), scoped(kind, storage),
+                cacheFor(kind, desktop.cacheRoot()), dragged.resources()));
+    }
+
+    /** A value drag was released on {@code target}'s window and no element took it: the application is offered its resources. */
+    void offerDropped(AppDocument target, Object payload) {
+        DraggedResources dragged = TransferData.find(payload, DraggedResources.class);
+        Application receiver = applicationOf(target);
+        if (dragged == null || receiver == null) return;
+        target.execute(() -> {
+            for (Resource resource : dragged.resources()) receiver.open(resource);
+        });
     }
 
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */
