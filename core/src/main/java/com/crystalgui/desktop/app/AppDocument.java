@@ -77,8 +77,14 @@ public final class AppDocument {
     private final UIDocument document;
     private final Backend backend;
     private final AppHealth health;
+    /** Exceptions that escaped the document's thread, awaiting the shell. */
+    private final java.util.Queue<Throwable> faults = new java.util.concurrent.ConcurrentLinkedQueue<>();
+
     /** What the application is called in a fault's report; set by the registry at launch. */
     private volatile String name = "Application";
+    /** The caption's note while the windows are dimmed: "(Not responding)", "(Stopped working)", or empty. */
+    private volatile String ghost = "";
+
     /** The shell's frames for this document's windows, which the shell dims while it does not answer. */
     private final List<WindowFrame> frames = new CopyOnWriteArrayList<>();
     private final List<ClientRoot> clients = new CopyOnWriteArrayList<>();
@@ -408,6 +414,17 @@ public final class AppDocument {
         return health.state() == AppHealth.State.NOT_RESPONDING ? now - hungSince : 0L;
     }
 
+    /** Any thread: an exception escaped a frame or a task of this document; the shell takes it on its next frame. */
+    public void fault(Throwable cause) {
+        faults.add(cause);
+    }
+
+    /** The shell's thread: the next unreported fault, or null. */
+    @Nullable
+    Throwable pollFault() {
+        return faults.poll();
+    }
+
     AppHealth health() {
         return health;
     }
@@ -421,7 +438,7 @@ public final class AppDocument {
     void windowOpened(WindowFrame frame) {
         frames.add(frame);
         frame.onDestroyed.connect(() -> frames.remove(frame));
-        frame.setUnresponsive(health.state() == AppHealth.State.NOT_RESPONDING);
+        frame.setGhosted(ghost);
     }
 
     /** The shell's frames for this document's windows. */
@@ -429,10 +446,23 @@ public final class AppDocument {
         return frames;
     }
 
+    private boolean stoppedWorking;
+
+    /** The shell's thread: a fault was reported; the windows stay dimmed, captioned "(Stopped working)", until it is closed. */
+    void stoppedWorking() {
+        stoppedWorking = true;
+        showHealth();
+    }
+
+    boolean isStoppedWorking() {
+        return stoppedWorking;
+    }
+
     /** The shell's thread: dims or restores the windows to match what the document is doing. */
     void showHealth() {
-        boolean hung = health.state() != AppHealth.State.RESPONDING;
-        for (WindowFrame frame : frames) frame.setUnresponsive(hung);
+        ghost = health.state() != AppHealth.State.RESPONDING ? "(Not responding)"
+                : stoppedWorking ? "(Stopped working)" : "";
+        for (WindowFrame frame : frames) frame.setGhosted(ghost);
     }
 
     /** The document's thread, after each commit: tells the windows whose client changed. */

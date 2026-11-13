@@ -938,35 +938,36 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         return this;
     }
 
-    /** What the class that dims a window of an application that is not answering is called. */
-    public static final String UNRESPONSIVE_CLASS = "__unresponsive__";
+    /** The class that dims a window whose application does not answer or has failed. */
+    public static final String GHOSTED_CLASS = "__ghosted__";
 
-    private boolean unresponsive;
+    private String ghostNote = "";
 
     /**
-     * Dims the window and appends "(Not responding)" to its caption while its application does not answer; the frame
-     * itself still moves, minimises and closes, as DWM's ghost does.
+     * Dims the window and appends {@code note} to its caption ("(Not responding)", "(Stopped working)") while its
+     * application cannot be used; the frame itself still moves, minimises and closes, as DWM's ghost does. An empty
+     * {@code note} restores it.
      *
      * <pre>{@code
-     * frame.setUnresponsive(health.state() == AppHealth.State.NOT_RESPONDING);
+     * frame.setGhosted("(Not responding)");
+     * frame.setGhosted("");
      * }</pre>
      */
-    public WindowFrame setUnresponsive(boolean on) {
-        if (unresponsive == on) return this;
-        unresponsive = on;
-        toggleClass(UNRESPONSIVE_CLASS, on);
-        String title = record.titleShown() ? record.title() : "";
-        titleLabel.setText(on ? (title + " (Not responding)").trim() : title);
+    public WindowFrame setGhosted(String note) {
+        if (ghostNote.equals(note)) return this;
+        ghostNote = note;
+        toggleClass(GHOSTED_CLASS, !note.isEmpty());
+        titleLabel.setText(captionText());
         return this;
+    }
+
+    public boolean isGhosted() {
+        return !ghostNote.isEmpty();
     }
 
     private String captionText() {
         String title = record.titleShown() ? record.title() : "";
-        return unresponsive ? (title + " (Not responding)").trim() : title;
-    }
-
-    public boolean isUnresponsive() {
-        return unresponsive;
+        return ghostNote.isEmpty() ? title : (title + " " + ghostNote).trim();
     }
 
     public String getTitle() {

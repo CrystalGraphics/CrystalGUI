@@ -14,7 +14,10 @@ import java.util.function.Consumer;
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.provider.Providers;
+import com.crystalgraphics.job.CgHostThread;
+import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.notify.Notification;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.dispose.Disposable;
@@ -78,6 +81,13 @@ public final class ApplicationRegistry {
     private final java.util.Map<Application, WorkspaceClient> clients = new java.util.IdentityHashMap<>();
     /** The Not responding box each hung document has open. */
     private final Map<AppDocument, WindowFrame> hangDialogs = new java.util.IdentityHashMap<>();
+    /** The Stopped working box each faulted document has open. */
+    private final Map<AppDocument, WindowFrame> faultDialogs = new java.util.IdentityHashMap<>();
+    /** When each kind last faulted, newest last: three within {@link #LOOP_NANOS} is a crash loop. */
+    private final Map<String, java.util.ArrayDeque<Long>> recentFaults = new java.util.HashMap<>();
+    /** A third fault of one kind within this long stops offering Restart. */
+    static final long LOOP_NANOS = 60_000_000_000L;
+    static final int LOOP_FAULTS = 3;
     /** Documents being closed so their application can start again once they are gone. */
     private final Set<AppDocument> restarting = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     private boolean watching;
@@ -232,6 +242,10 @@ public final class ApplicationRegistry {
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] the autostart of '{}' failed: {}", kind.id(),
                     failed.getMessage(), failed);
+            // A NOTIFICATION, NOT A BOX: nobody asked for this application, so nothing is waiting on it.
+            FaultReport report = FaultReport.of(FaultReport.Kind.COULDNT_START, kind.displayName(), failed);
+            desktop.notifications().show(Notification.error(report.title()).from(kind.id(), kind.displayName())
+                    .withDetail(report.reason()));
         }
     }
 
@@ -295,6 +309,7 @@ public final class ApplicationRegistry {
         // MADE ON ITS DOCUMENT'S THREAD when it has one: a client answers where it was made, and a signal belongs to the
         // sequence that first used it.
         WorkspaceClient shared = context.workspace();
+        AppContext asked = context;
         AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
         String clientName = kind.displayName();
         WorkspaceClient own = shared == null ? null
@@ -313,13 +328,14 @@ public final class ApplicationRegistry {
             application = document == null ? kind.factory().apply(launched)
                     : document.ask(() -> kind.factory().apply(launched));
             CgTrace.zoneDone(UiTrace.FLOW, "app:launch", launching);
-        } catch (RuntimeException failed) {
+        } catch (RuntimeException | LinkageError failed) {
             // AN APPLICATION THAT THROWS COSTS ITS OWN LAUNCH AND NOTHING ELSE. A desktop is a shell:
             // one product failing to start must leave every other window on screen, the same isolation
-            // an extension's activate and a dock banner provider each get.
+            // an extension's activate and a dock banner provider each get. A LinkageError is a mod whose
+            // dependency is missing, which is the same fault from the user's side.
             CrystalGuiCore.LOGGER.error("[cgui] the application '{}' failed to launch: {}",
                     kind.id(), failed.getMessage(), failed);
-            desktop.reportFailure(kind.id(), kind.displayName(), kind.displayName() + " could not be opened.", failed);
+            couldntStart(kind, asked, failed);
             if (own != null) own.dispose();
             if (document != null) document.close();
             return null;
@@ -466,8 +482,9 @@ public final class ApplicationRegistry {
             if (kind == null || !running(kind).isEmpty()) continue;
             try {
                 launch(kind, workspace);
-            } catch (RuntimeException refused) {
-                CrystalGuiCore.LOGGER.debug("[cgui] '{}' cannot be restored yet", kind.id(), refused);
+            } catch (RuntimeException | LinkageError refused) {
+                CrystalGuiCore.LOGGER.error("[cgui] '{}' could not be restored", kind.id(), refused);
+                couldntStart(kind, null, refused);
             }
         }
     }
@@ -551,6 +568,7 @@ public final class ApplicationRegistry {
         for (Application application : new ArrayList<>(documentsOf.keySet())) {
             AppDocument document = documentsOf.get(application);
             if (document == null) continue;
+            for (Throwable cause; (cause = document.pollFault()) != null; ) fault(document, application, cause, now);
             AppHealth health = document.health();
             boolean moved = health.step(now);
             if (moved) {
@@ -589,6 +607,71 @@ public final class ApplicationRegistry {
         if (report != null) CrystalGuiCore.LOGGER.warn("[cgui] {}", report.text());
     }
 
+    /**
+     * An exception escaped {@code document}'s frame, a window's build or event handler, or {@code restoreState}: its
+     * windows stay, dimmed, and the box offers Restart or Close. A third fault of the kind within a minute offers no
+     * Restart, so a crash loop ends at the box. Further faults while the box is open are dropped.
+     */
+    private void fault(AppDocument document, Application application, Throwable cause, long now) {
+        if (document.isStoppedWorking()) return;
+        ApplicationKind kind = application.kind();
+        FaultReport report = FaultReport.of(FaultReport.Kind.STOPPED, kind.displayName(), cause);
+        if (recordFault(kind.id(), now) >= LOOP_FAULTS) report = report.as(FaultReport.Kind.KEEPS_STOPPING);
+        document.stoppedWorking();
+        CrystalGuiCore.LOGGER.error("[cgui] {}", report.text());
+        List<FailureWindow.Action> actions = new ArrayList<>();
+        if (report.kind() == FaultReport.Kind.STOPPED) {
+            actions.add(new FailureWindow.Action("Restart", () -> restart(document)));
+        }
+        actions.add(new FailureWindow.Action("Close", () -> document.health().close(System.nanoTime())));
+        actions.add(details(kind, report));
+        WindowFrame box = FailureWindow.open(desktop, kind, report.title(), report.title(), report.reason(), actions);
+        faultDialogs.put(document, box);
+    }
+
+    /**
+     * The launch of {@code kind} failed: its box offers Try again (when {@code asked} is known), Close and Details.
+     * The launch that failed was never on the list, so nothing else is touched.
+     */
+    private void couldntStart(ApplicationKind kind, @Nullable AppContext asked, Throwable cause) {
+        UIDocument shell = desktop.document();
+        if (shell == null) return;
+        FaultReport report = FaultReport.of(FaultReport.Kind.COULDNT_START, kind.displayName(), cause);
+        boolean loop = recordFault(kind.id(), System.nanoTime()) >= LOOP_FAULTS;
+        FaultReport shown = loop ? report.as(FaultReport.Kind.KEEPS_STOPPING) : report;
+        shell.execute(() -> {
+            List<FailureWindow.Action> actions = new ArrayList<>();
+            if (asked != null && !loop) actions.add(new FailureWindow.Action("Try again", () -> launch(kind, asked)));
+            actions.add(new FailureWindow.Action("Close", () -> { }));
+            actions.add(details(kind, shown));
+            FailureWindow.open(desktop, kind, shown.title(), shown.title(), shown.reason(), actions);
+        });
+    }
+
+    private static final int DETAIL_LINES = 12;
+
+    /** The Details button: a second box with the report's top lines, and Copy for the whole of it. */
+    private FailureWindow.Action details(ApplicationKind kind, FaultReport report) {
+        return new FailureWindow.Action("Details", () -> {
+            String text = report.text();
+            String[] lines = text.split("\n");
+            StringBuilder shown = new StringBuilder();
+            for (int i = 0; i < Math.min(lines.length, DETAIL_LINES); i++) shown.append(lines[i]).append('\n');
+            if (lines.length > DETAIL_LINES) shown.append("... ").append(lines.length - DETAIL_LINES).append(" more");
+            FailureWindow.open(desktop, kind, report.title(), report.title(), shown.toString(), List.of(
+                    new FailureWindow.Action("Copy", () -> CgHostThread.CLIENT.run(() -> CgClipboard.set(text))),
+                    new FailureWindow.Action("Close", () -> { })));
+        });
+    }
+
+    /** Notes a fault of {@code kindId} at {@code now} and answers how many fell within the last minute. */
+    int recordFault(String kindId, long now) {
+        java.util.ArrayDeque<Long> times = recentFaults.computeIfAbsent(kindId, id -> new java.util.ArrayDeque<>());
+        while (!times.isEmpty() && now - times.peekFirst() > LOOP_NANOS) times.pollFirst();
+        times.addLast(now);
+        return times.size();
+    }
+
     /** Closes the unresponsive document by the ladder, and starts the application again once it is gone. */
     private void restart(AppDocument document) {
         restarting.add(document);
@@ -599,6 +682,8 @@ public final class ApplicationRegistry {
     private void finishClose(AppDocument document, Application application) {
         WindowFrame box = hangDialogs.remove(document);
         if (box != null && box.state() != WindowState.DESTROYED) box.destroy();
+        WindowFrame fault = faultDialogs.remove(document);
+        if (fault != null && fault.state() != WindowState.DESTROYED) fault.destroy();
         ApplicationKind kind = application.kind();
         WorkspaceClient workspace = clients.get(application);
         boolean again = restarting.remove(document);

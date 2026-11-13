@@ -3072,6 +3072,7 @@ com/crystalgui/core/async/UiSequence
   method public isCurrent ()Z
   method public jobs ()Lcom/crystalgui/core/async/JobScheduler;
   method public name ()Ljava/lang/String;
+  method public onFault (Ljava/util/function/Consumer;)V
   method public runNow (Ljava/lang/Runnable;)V
   method public runningThread ()Ljava/lang/Thread;
   method public toString ()Ljava/lang/String;
@@ -4838,6 +4839,7 @@ com/crystalgui/desktop/app/AppDocument
   method public dismissPopups ()V
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public execute (Ljava/lang/Runnable;)V
+  method public fault (Ljava/lang/Throwable;)V
   method public openClient (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/ClientRoot;
   method public popups ()Lcom/crystalgui/desktop/app/PopupLayer;
   method public portalTo (Lcom/crystalgui/desktop/app/ClientRoot;)Lcom/crystalgui/desktop/app/ClientPortal;
@@ -5018,9 +5020,11 @@ com/crystalgui/desktop/app/FaultReport
   extends java/lang/Record
   method public <init> (Lcom/crystalgui/desktop/app/FaultReport$Kind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V
   method public application ()Ljava/lang/String;
+  method public as (Lcom/crystalgui/desktop/app/FaultReport$Kind;)Lcom/crystalgui/desktop/app/FaultReport;
   method public deadlock ()Ljava/lang/String;
   method public kind ()Lcom/crystalgui/desktop/app/FaultReport$Kind;
   method public origin ()Ljava/lang/String;
+  method public reason ()Ljava/lang/String;
   method public stack ()Ljava/lang/String;
   method public text ()Ljava/lang/String;
   method public timeMillis ()J
@@ -5029,10 +5033,14 @@ com/crystalgui/desktop/app/FaultReport
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
   method public,static hung (Ljava/lang/String;Ljava/lang/Thread;)Lcom/crystalgui/desktop/app/FaultReport;
+  method public,static of (Lcom/crystalgui/desktop/app/FaultReport$Kind;Ljava/lang/String;Ljava/lang/Throwable;)Lcom/crystalgui/desktop/app/FaultReport;
 com/crystalgui/desktop/app/FaultReport$Kind
   access public,final,enum
   extends java/lang/Enum
+  field public,static,final COULDNT_START Lcom/crystalgui/desktop/app/FaultReport$Kind;
+  field public,static,final KEEPS_STOPPING Lcom/crystalgui/desktop/app/FaultReport$Kind;
   field public,static,final NOT_RESPONDING Lcom/crystalgui/desktop/app/FaultReport$Kind;
+  field public,static,final STOPPED Lcom/crystalgui/desktop/app/FaultReport$Kind;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/desktop/app/FaultReport$Kind;
   method public,static values ()[Lcom/crystalgui/desktop/app/FaultReport$Kind;
 com/crystalgui/desktop/app/PopupLayer
@@ -5587,6 +5595,7 @@ com/crystalgui/desktop/window/WindowFrame
   field public,static,final CONTENT_CLASS Ljava/lang/String;
   field public,static,final CONTROLS_CLASS Ljava/lang/String;
   field public,static,final FULLSCREEN_CLASS Ljava/lang/String;
+  field public,static,final GHOSTED_CLASS Ljava/lang/String;
   field public,static,final HANDOVER_CLASS Ljava/lang/String;
   field public,static,final HUD_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
@@ -5605,7 +5614,6 @@ com/crystalgui/desktop/window/WindowFrame
   field public,static,final TITLE_BAR_CLASS Ljava/lang/String;
   field public,static,final TITLE_CLASS Ljava/lang/String;
   field public,static,final UNPIN_TOOLTIP Ljava/lang/String;
-  field public,static,final UNRESPONSIVE_CLASS Ljava/lang/String;
   field public,static,final WINDOW_CLASS Ljava/lang/String;
   field public,static,final WINDOW_FRAME Lcom/crystalgui/core/data/DataKey;
   implements com/crystalgui/core/data/DataProvider
@@ -5654,6 +5662,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public isClosing ()Z
   method public isDemandingAttention ()Z
   method public isFullscreen ()Z
+  method public isGhosted ()Z
   method public isMaximized ()Z
   method public isMinimizeControl (Lcom/crystalgui/ui/dom/UIElement;)Z
   method public isMinimizing ()Z
@@ -5661,7 +5670,6 @@ com/crystalgui/desktop/window/WindowFrame
   method public isPlaced ()Z
   method public isSized ()Z
   method public isToolWindow ()Z
-  method public isUnresponsive ()Z
   method public keepsSurface ()Z
   method public key ()Ljava/lang/String;
   method public left ()F
@@ -5706,6 +5714,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public setBadge (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setDiscardGuard (Ljava/util/function/BooleanSupplier;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public setGhosted (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setIcon (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setKey (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setOwner (Lcom/crystalgui/desktop/Desktop;)V
@@ -5718,7 +5727,6 @@ com/crystalgui/desktop/window/WindowFrame
   method public setTitle (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setTitleShown (Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setToolWindow (Z)Lcom/crystalgui/desktop/window/WindowFrame;
-  method public setUnresponsive (Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public show (Z)V
   method public snapTo (Lcom/crystalgui/desktop/window/SnapZones$Zone;FFFF)Lcom/crystalgui/desktop/window/WindowFrame;
   method public snappedZone ()Lcom/crystalgui/desktop/window/SnapZones$Zone;
@@ -14880,6 +14888,7 @@ com/crystalgui/viewport/CgUiViewport
   method public offer (Ljava/util/function/BooleanSupplier;)Z
   method public offerKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;Ljava/util/function/BooleanSupplier;)Z
   method public offerMouse (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;Ljava/util/function/BooleanSupplier;)Z
+  method public onFault (Ljava/util/function/Consumer;)V
   method public pollUnhandledKey ()Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;
   method public presentedCommit ()J
   method public presentedFrames ()J

@@ -2136,6 +2136,6 @@ window.__failure__ .__title-bar__ .__pin__ {
 }
 
 /* A window of an application that does not answer: its last picture, dimmed; the frame still moves and closes. */
-window.__unresponsive__ {
+window.__ghosted__ {
     opacity: 0.6;
 }

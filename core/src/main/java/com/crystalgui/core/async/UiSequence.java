@@ -10,6 +10,7 @@ import com.crystalgui.core.trace.UiTrace;
 
 import javax.annotation.Nullable;
 import java.util.Queue;
+import java.util.function.Consumer;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
@@ -198,6 +199,7 @@ public final class UiSequence implements Executor {
                     unwind();
                 } catch (RuntimeException | Error failed) {
                     CrystalGuiCore.LOGGER.error("[cgui] a task on sequence '{}' threw", name, failed);
+                    faulted(failed);
                 }
             }
             try {
@@ -318,6 +320,7 @@ public final class UiSequence implements Executor {
                     unwind();
                 } catch (RuntimeException | Error failed) {
                     CrystalGuiCore.LOGGER.error("[cgui] a task on sequence '{}' threw", name, failed);
+                    faulted(failed);
                 }
             }
         } finally {
@@ -338,6 +341,30 @@ public final class UiSequence implements Executor {
     }
 
     /** An aborted task reached its checkpoint: the sequence is over. */
+    private volatile Consumer<Throwable> faults;
+
+    /**
+     * Hears every exception a task of this sequence lets escape, on the sequence's thread, after it is logged: the
+     * owner of the document reports it. A listener that throws is ignored.
+     *
+     * <pre>{@code
+     * sequence.onFault(cause -> shell.report(cause));
+     * }</pre>
+     */
+    public void onFault(Consumer<Throwable> listener) {
+        this.faults = listener;
+    }
+
+    private void faulted(Throwable failed) {
+        Consumer<Throwable> listener = faults;
+        if (listener == null) return;
+        try {
+            listener.accept(failed);
+        } catch (RuntimeException ignored) {
+            // a fault report must not fault the sequence again
+        }
+    }
+
     private void unwind() {
         closed = true;
         tasks.clear();

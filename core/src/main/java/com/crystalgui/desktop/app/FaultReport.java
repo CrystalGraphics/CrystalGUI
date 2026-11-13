@@ -27,13 +27,23 @@ public record FaultReport(Kind kind, String application, String origin, String s
 
     /** What a report is about. */
     public enum Kind {
-        NOT_RESPONDING
+        /** A document with input waiting and no commit. */
+        NOT_RESPONDING,
+        /** An exception escaped a frame, a task or an event handler of a running application. */
+        STOPPED,
+        /** The launch, the first window's build or the restoring of state threw, or a class failed to link. */
+        COULDNT_START,
+        /** A third fault within a minute of restarts: no Restart is offered, so it cannot loop. */
+        KEEPS_STOPPING
     }
 
     /** The headline: what the dialog says. */
     public String title() {
         return switch (kind) {
             case NOT_RESPONDING -> application + " is not responding";
+            case STOPPED -> application + " has stopped working";
+            case COULDNT_START -> application + " couldn't start";
+            case KEEPS_STOPPING -> application + " keeps stopping";
         };
     }
 
@@ -48,6 +58,44 @@ public record FaultReport(Kind kind, String application, String origin, String s
         }
         return new FaultReport(Kind.NOT_RESPONDING, application, origin, stack.toString(), lockCycle(),
                 System.currentTimeMillis());
+    }
+
+    /**
+     * A report on an exception: the exception's class and message are the headline's reason, its stack the report's.
+     *
+     * <pre>{@code
+     * try {
+     *     launch();
+     * } catch (RuntimeException | LinkageError failed) {
+     *     FaultReport report = FaultReport.of(Kind.COULDNT_START, "VFX Lab", failed);
+     *     report.reason();        // the first line: "IllegalStateException: no shader"
+     * }
+     * }</pre>
+     */
+    public static FaultReport of(Kind kind, String application, Throwable cause) {
+        StringBuilder stack = new StringBuilder();
+        String origin = "";
+        for (Throwable at = cause; at != null; at = at.getCause() == at ? null : at.getCause()) {
+            if (at != cause) stack.append("caused by: ");
+            stack.append(at).append('\n');
+            for (StackTraceElement frame : at.getStackTrace()) {
+                stack.append("\tat ").append(frame).append('\n');
+                if (origin.isEmpty() && !isJdk(frame.getClassName())) origin = describe(frame);
+            }
+        }
+        return new FaultReport(kind, application, origin, stack.toString(), "", System.currentTimeMillis());
+    }
+
+    /** This report as another kind: a fault that repeats becomes {@link Kind#KEEPS_STOPPING}. */
+    public FaultReport as(Kind other) {
+        return new FaultReport(other, application, origin, stack, deadlock, timeMillis);
+    }
+
+    /** The first line of the stack: the exception's class and message; empty for a hang. */
+    public String reason() {
+        if (kind == Kind.NOT_RESPONDING) return "";
+        int end = stack.indexOf("\n");
+        return end < 0 ? stack : stack.substring(0, end);
     }
 
     /** The whole report as text, for Copy and the log. */

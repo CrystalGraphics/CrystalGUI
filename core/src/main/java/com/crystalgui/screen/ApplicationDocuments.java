@@ -135,6 +135,11 @@ final class ApplicationDocuments implements AppDocuments {
             public void readouts(Readouts out) {
                 if (made[0] != null) made[0].committed();
             }
+
+            @Override
+            public void failed(Throwable cause) {
+                if (made[0] != null) made[0].fault(cause);
+            }
         };
         // THE USER'S SCALE, as the shell's: the clients draw at the size their frames give them.
         Connection scale = Preferences.PUBLISHED.changes().subscribe(
@@ -143,6 +148,7 @@ final class ApplicationDocuments implements AppDocuments {
         entry.first = first;
         made[0] = new AppDocument(document, entry);
         entry.document = made[0];
+        viewport.onFault(made[0]::fault);
         open.add(entry);
         return made[0];
     }

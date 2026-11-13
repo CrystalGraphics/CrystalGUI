@@ -141,9 +141,9 @@ public class HungApplicationTest extends UiDocumentTestBase {
         long now = System.nanoTime();
         application.mouse(new CgSystemInput.Mouse.Event(5, 5, 0, 0, -1, false, 0f, 0L));
         desktop.applications().check(now + SECOND);
-        assertFalse(mainFrame().isUnresponsive());
+        assertFalse(mainFrame().isGhosted());
         desktop.applications().check(now + 6 * SECOND);
-        assertTrue("dimmed", mainFrame().isUnresponsive());
+        assertTrue("dimmed", mainFrame().isGhosted());
         int windows = desktop.windowManager().registry().windows().size();
         desktop.applications().check(now + 12 * SECOND);
         assertEquals("its dialog opened", windows + 1, desktop.windowManager().registry().windows().size());
@@ -156,7 +156,7 @@ public class HungApplicationTest extends UiDocumentTestBase {
         desktop.applications().check(now + 6 * SECOND);
         application.committed();
         desktop.applications().check(now + 7 * SECOND);
-        assertFalse(mainFrame().isUnresponsive());
+        assertFalse(mainFrame().isGhosted());
     }
 
     @Test

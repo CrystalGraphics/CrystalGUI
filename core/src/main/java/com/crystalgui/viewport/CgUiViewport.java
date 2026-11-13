@@ -396,6 +396,15 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
         if (sequence != null) sequence.abort();
     }
 
+    /**
+     * Hears each exception a task of the document's sequence lets escape, on its thread; a no-op for a document on the
+     * host's thread, whose failed frames reach {@link Content#failed} instead.
+     */
+    public void onFault(java.util.function.Consumer<Throwable> listener) {
+        UiSequence sequence = thread.sequence();
+        if (sequence != null) sequence.onFault(listener);
+    }
+
     /** Whether the document's sequence has ended: it unwound at a checkpoint after {@link #abort}, or was abandoned. */
     public boolean stopped() {
         UiSequence sequence = thread.sequence();
