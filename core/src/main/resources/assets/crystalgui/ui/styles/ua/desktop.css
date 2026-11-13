@@ -2073,17 +2073,17 @@ window.__failure__ .__failure-body__ {
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    padding: 10px 14px 4px 14px;
+    padding: 10px 14px 4px 12px;
 }
 
 window.__failure__ .__failure-icon__ {
-    width: 32px;
-    height: 32px;
+    width: 27px;
+    height: 27px;
     flex-shrink: 0;
-    padding: 6px;
-    border-radius: 16px;
+    padding: 4px;
+    border-radius: 14px;
     background: var(--failure-icon-bg, #E8483F);
-    outline: 2px var(--failure-icon-rim, #B3261E);
+    outline: 1px var(--failure-icon-rim, #B3261E);
     overlay: icon("crystalgui:x-bold");
     overlay-origin: content-box;
     overlay-size: contain;
@@ -2098,7 +2098,6 @@ window.__failure__ .__failure-text__ {
 
 window.__failure__ .__failure-message__ {
     width: 100%;
-    font-weight: bold;
     font-size: 9px;
     color: var(--glass-mark-fg, #FFFFFF);
 }
@@ -2109,20 +2108,78 @@ window.__failure__ .__failure-detail__ {
     color: var(--glass-mark-fg, #FFFFFF);
 }
 
-/* The default button, as Windows outlines it. */
-window.__failure__ .__failure-footer__ button.__default__,
-window.__failure__ .__failure-footer__ button.__default__:hover,
-window.__failure__ .__failure-footer__ button.__default__:active {
-    min-width: 52px;
-    height: 16px;
-    font-size: 9px;
+/* A report: resizable, its text unwrapped and scrolled in both directions. */
+window.__failure__.__failure-report__ {
+    width: 460px;
+    min-width: 260px;
+    resize: both;
+}
+
+/* The window is as tall as its text, up to a cap, and the text scrolls beyond it. */
+window.__failure__.__failure-report__ .__failure-body__ {
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 60px;
+    align-items: stretch;
+}
+
+window.__failure__.__failure-report__ .__failure-text__ {
     min-height: 0px;
-    padding-top: 0px;
-    padding-bottom: 0px;
+}
+
+window.__failure__.__failure-report__ .__failure-footer__ {
+    flex-shrink: 0;
+}
+
+window.__failure__.__failure-report__ .__failure-icon__ {
+    align-self: flex-start;
+}
+
+/* Resized taller, the text area takes the room and the footer stays at the bottom. */
+window.__failure__.__failure-report__ .__failure-scroll__ {
+    width: 100%;
+    flex-grow: 1;
+    flex-shrink: 1;
+    min-height: 40px;
+    overflow: auto;
+}
+
+window.__failure__.__failure-report__ .__failure-detail__ {
+    width: auto;
+    white-space: nowrap;
+}
+
+/* Every button of the footer the same size, so a pair reads as a pair. */
+window.__failure__ .__failure-footer__ button {
+    width: 72px;
+    height: 16px;
+    min-width: 0px;
+    min-height: 0px;
+    flex-shrink: 0;
+    margin-left: 6px;
+    font-size: 9px;
+    padding: 0px;
     justify-content: center;
     align-items: center;
     background: none;
     background-color: var(--failure-title-bg, #FFFFFF1C);
+}
+
+/* Hover and press lighten the button's own fill, the default one's included. */
+window.__failure__ .__failure-footer__ button:hover {
+    background: none;
+    background-color: var(--failure-button-hover-bg, #FFFFFF33);
+}
+
+window.__failure__ .__failure-footer__ button:active {
+    background: none;
+    background-color: var(--failure-button-active-bg, #FFFFFF44);
+}
+
+/* The default button, as Windows outlines it. */
+window.__failure__ .__failure-footer__ button.__default__,
+window.__failure__ .__failure-footer__ button.__default__:hover,
+window.__failure__ .__failure-footer__ button.__default__:active {
     outline: 1px var(--accent, #3574F0);
 }
 
@@ -2135,7 +2192,5 @@ window.__failure__ .__title-bar__ .__pin__ {
     display: none;
 }
 
-/* A window of an application that does not answer: its last picture, dimmed; the frame still moves and closes. */
-window.__ghosted__ {
-    opacity: 0.6;
-}
+/* A window of an application that does not answer is DWM's ghost: opaque, its last picture veiled pale by the client
+ * portal, the caption's text suffixed; the frame still moves and closes. Nothing here: it is not see-through. */

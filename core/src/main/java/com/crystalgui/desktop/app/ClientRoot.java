@@ -6,6 +6,7 @@ import com.crystalgui.render.Surface;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.layout.LayoutMinimum;
 
 /**
  * A window's client area in its application's document: the root of what the application shows in that window, drawn
@@ -116,6 +117,18 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
         this.changed = then;
     }
 
+    private volatile float minimumWidth, minimumHeight;
+
+    /**
+     * The smallest its window's client may be, as the content asks for it ({@link LayoutMinimum}): a toolbar and a status
+     * bar keep their height, and a band that may give way says how little it needs. Worked out on the application's
+     * thread after each commit it changed in, so the shell's thread may read it. Zero before the first commit and for a
+     * caption.
+     */
+    float minimum(boolean vertical) {
+        return vertical ? minimumHeight : minimumWidth;
+    }
+
     /** The application's thread, after each commit of its document. */
     void committed() {
         Measure sized = measure;
@@ -132,6 +145,10 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
         long revision = box == null ? -1L : box.innerRevision();
         if (revision == seenRevision) return;
         seenRevision = revision;
+        if (content != null && sized == null) {
+            minimumWidth = LayoutMinimum.of(content, false);
+            minimumHeight = LayoutMinimum.of(content, true);
+        }
         Runnable then = changed;
         if (then != null) then.run();
     }

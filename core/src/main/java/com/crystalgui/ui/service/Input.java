@@ -201,6 +201,18 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
         portableDrag = payload;
     }
 
+    private volatile boolean ghostHandedOver;
+
+    /** Whether the shell draws the running drag's ghost itself, because the pointer left this document's windows. */
+    public boolean ghostHandedOver() {
+        return ghostHandedOver;
+    }
+
+    /** Any thread: the shell sets it while it draws the ghost, so the drag hides its own, which is cut off at the edge. */
+    public void handOverGhost(boolean handedOver) {
+        ghostHandedOver = handedOver;
+    }
+
     /** A drag from another document, as this document's elements see it. The document's thread. */
     public ForeignDrag foreignDrag() {
         if (foreignDrag == null) foreignDrag = new ForeignDrag(this, document);

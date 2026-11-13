@@ -68,6 +68,16 @@ public final class LayoutMinimum {
         return Math.max(stated, folded(box, style, vertical));
     }
 
+    /**
+     * What {@code container}'s in-flow children need together, inside its padding: a column of a body and a footer needs
+     * both, stacked. For a container that scrolls, whose own {@link #of} answers only what it states.
+     */
+    public static float contained(UIElement container, boolean vertical) {
+        Box box = container.box();
+        if (box == null) return 0f;
+        return folded(box, container.computedStyle(), vertical) - edges(box, vertical);
+    }
+
     /** {@code element}'s own {@code min-width} or {@code min-height} in pixels, or zero: for a {@link MinimumSize} folding its own floor in. */
     public static float stated(UIElement element, boolean vertical) {
         return SplitView.ownMinimum(element, vertical);

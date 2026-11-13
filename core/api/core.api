@@ -3074,6 +3074,7 @@ com/crystalgui/core/async/UiSequence
   method public name ()Ljava/lang/String;
   method public onFault (Ljava/util/function/Consumer;)V
   method public runNow (Ljava/lang/Runnable;)V
+  method public runNow (Ljava/lang/Runnable;J)Z
   method public runningThread ()Ljava/lang/Thread;
   method public toString ()Ljava/lang/String;
   method public,static checkpoint ()V
@@ -4993,9 +4994,11 @@ com/crystalgui/desktop/app/ClientPortal
   extends com/crystalgui/ui/dom/UIElement
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   implements com/crystalgui/ui/service/CursorSource
+  implements com/crystalgui/widget/layout/MinimumSize
   method public application ()Lcom/crystalgui/desktop/app/AppDocument;
   method public client ()Lcom/crystalgui/desktop/app/ClientRoot;
   method public cursorAt (FF)Lcom/crystalgui/core/cursor/Cursor;
+  method public minimumSize (Z)F
   method public paintContent (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/ui/box/Box;)V
   method public textInputArea ()[F
 com/crystalgui/desktop/app/ClientRoot
@@ -5098,18 +5101,24 @@ com/crystalgui/desktop/dialog/FailureWindow
   field public,static,final FOOTER_CLASS Ljava/lang/String;
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final MESSAGE_CLASS Ljava/lang/String;
+  field public,static,final REPORT_CLASS Ljava/lang/String;
+  field public,static,final SCROLL_CLASS Ljava/lang/String;
   field public,static,final TEXT_CLASS Ljava/lang/String;
   method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public,static openReport (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/desktop/window/WindowFrame;
 com/crystalgui/desktop/dialog/FailureWindow$Action
   access public,final,record
   extends java/lang/Record
   method public <init> (Ljava/lang/String;Ljava/lang/Runnable;)V
+  method public <init> (Ljava/lang/String;Ljava/lang/Runnable;Z)V
+  method public closes ()Z
   method public label ()Ljava/lang/String;
   method public run ()Ljava/lang/Runnable;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+  method public,static opening (Ljava/lang/String;Ljava/lang/Runnable;)Lcom/crystalgui/desktop/dialog/FailureWindow$Action;
 com/crystalgui/desktop/launcher/Launcher
   access public
   extends com/crystalgui/widget/overlay/Popover
@@ -5637,6 +5646,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public boxY ()F
   method public cancelAnimation ()V
   method public captionHeight ()F
+  method public centreOver ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public clearAttention ()V
   method public clearSnappedZone ()V
   method public closeButton ()Lcom/crystalgui/widget/control/Button;
@@ -5644,6 +5654,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public controls ()Lcom/crystalgui/ui/dom/UIElement;
   method public desktop ()Lcom/crystalgui/desktop/Desktop;
   method public destroy ()V
+  method public dismiss ()V
   method public dispose ()V
   method public enterFullscreen ()V
   method public exitFullscreen ()V
@@ -5663,6 +5674,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public isDemandingAttention ()Z
   method public isFullscreen ()Z
   method public isGhosted ()Z
+  method public isMaximizable ()Z
   method public isMaximized ()Z
   method public isMinimizeControl (Lcom/crystalgui/ui/dom/UIElement;)Z
   method public isMinimizing ()Z
@@ -5712,11 +5724,13 @@ com/crystalgui/desktop/window/WindowFrame
   method public setActive (Z)V
   method public setApplication (Lcom/crystalgui/desktop/app/ApplicationKind;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setBadge (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public setCentreOver (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setDiscardGuard (Ljava/util/function/BooleanSupplier;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setGhosted (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setIcon (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setKey (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public setMaximizable (Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setOwner (Lcom/crystalgui/desktop/Desktop;)V
   method public setOwnerWindow (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setPinned (Z)Lcom/crystalgui/desktop/window/WindowFrame;
@@ -8552,7 +8566,7 @@ com/crystalgui/render/CgUiPaintContext
   method public pushRoundedClip (FFFF[F[F[F)Z
   method public pushScissor (FFFF)V
   method public quad ()Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
-  method public quad (Lcom/crystalgraphics/api/material/CgMaterial;)Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
+  method public quad (Lcom/crystalgraphics/api/material/CgMaterialInterface;)Lcom/crystalgraphics/render/canvas/CgQuadBatch$Quad;
   method public reapplyScissor ()V
   method public recordFrame (II)V
   method public rect ()Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -14729,6 +14743,8 @@ com/crystalgui/ui/service/Input
   method public followPointer (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)V
   method public foreignDrag ()Lcom/crystalgui/ui/service/ForeignDrag;
   method public forget (Lcom/crystalgui/ui/dom/UIElement;)V
+  method public ghostHandedOver ()Z
+  method public handOverGhost (Z)V
   method public hasMode (Lcom/crystalgui/ui/service/InputMode;)Z
   method public hoverTarget ()Lcom/crystalgui/ui/dom/UIElement;
   method public invalidateHover ()V
@@ -17142,6 +17158,7 @@ com/crystalgui/widget/layout/ContextToolbar
 com/crystalgui/widget/layout/LayoutMinimum
   access public,final
   extends java/lang/Object
+  method public,static contained (Lcom/crystalgui/ui/dom/UIElement;Z)F
   method public,static of (Lcom/crystalgui/ui/dom/UIElement;Z)F
   method public,static stated (Lcom/crystalgui/ui/dom/UIElement;Z)F
 com/crystalgui/widget/layout/MinimumSize

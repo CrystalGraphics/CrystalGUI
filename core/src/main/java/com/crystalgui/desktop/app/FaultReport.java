@@ -33,7 +33,7 @@ public record FaultReport(Kind kind, String application, String origin, String s
         STOPPED,
         /** The launch, the first window's build or the restoring of state threw, or a class failed to link. */
         COULDNT_START,
-        /** A third fault within a minute of restarts: no Restart is offered, so it cannot loop. */
+        /** A third fault within a minute: the application keeps stopping. */
         KEEPS_STOPPING
     }
 

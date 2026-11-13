@@ -9,6 +9,7 @@ import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.scroll.ScrollerView;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -37,6 +38,8 @@ public final class FailureWindow {
     public static final String TEXT_CLASS = "__failure-text__";
     public static final String MESSAGE_CLASS = "__failure-message__";
     public static final String DETAIL_CLASS = "__failure-detail__";
+    public static final String REPORT_CLASS = "__failure-report__";
+    public static final String SCROLL_CLASS = "__failure-scroll__";
     public static final String FOOTER_CLASS = "__failure-footer__";
     public static final String DEFAULT_CLASS = "__default__";
 
@@ -49,8 +52,24 @@ public final class FailureWindow {
         return open(desktop, kind, title, message, detail(cause), List.of(new Action("OK", () -> { })));
     }
 
-    /** One button of the box: it runs, then the box closes. */
-    public record Action(String label, Runnable run) {
+    /**
+     * One button of the box: it runs, then the box closes unless {@code closes} is false.
+     *
+     * <pre>{@code
+     * new Action("Close", () -> { })                      // runs, then the box closes
+     * Action.opening("Details", () -> showTheReport())    // runs; the box stays for the answer
+     * }</pre>
+     */
+    public record Action(String label, Runnable run, boolean closes) {
+
+        public Action(String label, Runnable run) {
+            this(label, run, true);
+        }
+
+        /** A button that shows something beside the box, which stays until one of its closing buttons is pressed. */
+        public static Action opening(String label, Runnable run) {
+            return new Action(label, run, false);
+        }
     }
 
     /**
@@ -63,14 +82,34 @@ public final class FailureWindow {
      */
     public static WindowFrame open(Desktop desktop, @Nullable ApplicationKind kind, String title, String message,
                                    String detail, List<Action> actions) {
+        return open(desktop, kind, title, message, detail, actions, false);
+    }
+
+    /**
+     * A report: like {@link #open} but resizable, its {@code detail} one line per line of text and scrolled where it
+     * does not fit, for a stack trace that wrapping would make unreadable.
+     */
+    public static WindowFrame openReport(Desktop desktop, @Nullable ApplicationKind kind, String title, String message,
+                                         String detail, List<Action> actions) {
+        return open(desktop, kind, title, message, detail, actions, true);
+    }
+
+    private static WindowFrame open(Desktop desktop, @Nullable ApplicationKind kind, String title, String message,
+                                    String detail, List<Action> actions, boolean report) {
         WindowFrame frame = new WindowFrame(title);
         frame.addClass(CLASS);
+        if (report) {
+            frame.addClass(REPORT_CLASS);
+            // THE BODY MAY GIVE WAY, so the content fills the window's height: a content-sized slot never shrinks it.
+            if (frame.content() instanceof ScrollerView view) view.setFitsMainAxis(true);
+        }
         if (kind != null) {
             frame.setApplication(kind);
             if (kind.icon() != null) frame.setIcon(kind.icon());
         }
         frame.minimizeButton().setDisplayed(false);
         frame.maximizeButton().setDisplayed(false);
+        frame.setMaximizable(false);
 
         UIElement body = new UIElement();
         body.addClass(BODY_CLASS);
@@ -91,7 +130,14 @@ public final class FailureWindow {
         if (!detail.isEmpty()) {
             UIText why = new UIText(detail);
             why.addClass(DETAIL_CLASS);
-            text.append(why);
+            if (report) {
+                ScrollerView scroll = new ScrollerView();
+                scroll.addClass(SCROLL_CLASS);
+                scroll.append(why);
+                text.append(scroll);
+            } else {
+                text.append(why);
+            }
         }
 
         UIElement buttons = new UIElement();
@@ -106,7 +152,7 @@ public final class FailureWindow {
             }
             button.onPressed.connect(() -> {
                 action.run().run();
-                frame.requestClose();
+                if (action.closes()) frame.requestClose();
             });
             buttons.append(button);
         }

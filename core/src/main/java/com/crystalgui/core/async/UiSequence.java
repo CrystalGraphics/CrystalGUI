@@ -178,14 +178,25 @@ public final class UiSequence implements Executor {
      * sequence's tasks it simply runs {@code task}.</p>
      */
     public void runNow(Runnable task) {
+        runNow(task, Long.MAX_VALUE);
+    }
+
+    /**
+     * {@link #runNow(Runnable)} that gives up waiting for a running turn after {@code timeoutNanos}: answers whether
+     * {@code task} ran (also true when the sequence was abandoned, which nothing waits for). What closing a document
+     * uses, so a document stuck in a loop cannot hold its closer.
+     */
+    public boolean runNow(Runnable task, long timeoutNanos) {
         if (isCurrent()) {
             task.run();
-            return;
+            return true;
         }
-        if (abandoned) return;
+        if (abandoned) return true;
         // CLAIMED THE WAY A TURN CLAIMS IT, so a turn and this can never overlap.
+        long started = System.nanoTime();
         while (!scheduled.compareAndSet(false, true)) {
-            if (abandoned) return;
+            if (abandoned) return true;
+            if (System.nanoTime() - started >= timeoutNanos) return false;
             LockSupport.parkNanos(20_000L);
         }
         UiSequence outer = CURRENT.get();
@@ -213,6 +224,7 @@ public final class UiSequence implements Executor {
             scheduled.set(false);
         }
         if (!tasks.isEmpty() && !closed) schedule();
+        return true;
     }
 
     /** The thread running this sequence's work at this moment, or null when it is idle: what a hang report names. */

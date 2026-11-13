@@ -85,11 +85,9 @@ public final class ApplicationRegistry {
     private final Map<AppDocument, WindowFrame> faultDialogs = new java.util.IdentityHashMap<>();
     /** When each kind last faulted, newest last: three within {@link #LOOP_NANOS} is a crash loop. */
     private final Map<String, java.util.ArrayDeque<Long>> recentFaults = new java.util.HashMap<>();
-    /** A third fault of one kind within this long stops offering Restart. */
+    /** A third fault of one kind within this long is a crash loop: its box says it keeps stopping. */
     static final long LOOP_NANOS = 60_000_000_000L;
     static final int LOOP_FAULTS = 3;
-    /** Documents being closed so their application can start again once they are gone. */
-    private final Set<AppDocument> restarting = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
     private boolean watching;
     /** The documents applications of a {@link ApplicationKind#separateDocument() separate} kind run in, until they quit. */
     private final java.util.Map<Application, AppDocument> documentsOf = new java.util.IdentityHashMap<>();
@@ -309,7 +307,6 @@ public final class ApplicationRegistry {
         // MADE ON ITS DOCUMENT'S THREAD when it has one: a client answers where it was made, and a signal belongs to the
         // sequence that first used it.
         WorkspaceClient shared = context.workspace();
-        AppContext asked = context;
         AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
         String clientName = kind.displayName();
         WorkspaceClient own = shared == null ? null
@@ -335,7 +332,7 @@ public final class ApplicationRegistry {
             // dependency is missing, which is the same fault from the user's side.
             CrystalGuiCore.LOGGER.error("[cgui] the application '{}' failed to launch: {}",
                     kind.id(), failed.getMessage(), failed);
-            couldntStart(kind, asked, failed);
+            couldntStart(kind, failed);
             if (own != null) own.dispose();
             if (document != null) document.close();
             return null;
@@ -484,7 +481,7 @@ public final class ApplicationRegistry {
                 launch(kind, workspace);
             } catch (RuntimeException | LinkageError refused) {
                 CrystalGuiCore.LOGGER.error("[cgui] '{}' could not be restored", kind.id(), refused);
-                couldntStart(kind, null, refused);
+                couldntStart(kind, refused);
             }
         }
     }
@@ -575,7 +572,8 @@ public final class ApplicationRegistry {
                 if (health.state() == AppHealth.State.NOT_RESPONDING) document.hungSince(now);
                 document.showHealth();
             }
-            if (health.state() == AppHealth.State.NOT_RESPONDING && document.hungFor(now) >= AppHealth.HANG_NANOS) {
+            if (health.state() == AppHealth.State.NOT_RESPONDING && !health.isPatient()
+                    && document.hungFor(now) >= AppHealth.HANG_NANOS) {
                 showNotResponding(document, application);
             }
             if (health.state() == AppHealth.State.RESPONDING) {
@@ -587,7 +585,14 @@ public final class ApplicationRegistry {
         }
     }
 
-    /** The Not responding box for {@code document}: Wait, Restart, Close. One per document. */
+    /** A message about {@code application} opens on its main window, not the middle of the desktop. */
+    private static void centreOver(WindowFrame box, Application application) {
+        AppWindow main = application.mainWindow();
+        WindowFrame frame = main == null ? null : main.frame();
+        if (frame != null) box.setCentreOver(frame);
+    }
+
+    /** The Not responding box for {@code document}: End Process or Cancel (keep waiting). One per document. */
     private void showNotResponding(AppDocument document, Application application) {
         if (document.health().state() != AppHealth.State.NOT_RESPONDING) return;
         WindowFrame open = hangDialogs.get(document);
@@ -598,19 +603,21 @@ public final class ApplicationRegistry {
         FaultReport report = document.health().report();
         ApplicationKind kind = application.kind();
         String name = kind.displayName();
-        WindowFrame box = FailureWindow.open(desktop, kind, name, name + " is not responding",
-                report == null || report.origin().isEmpty() ? "" : "In " + report.origin(), List.of(
-                        new FailureWindow.Action("Wait", () -> document.health().patient(System.nanoTime())),
-                        new FailureWindow.Action("Restart", () -> restart(document)),
-                        new FailureWindow.Action("Close", () -> document.health().close(System.nanoTime()))));
+        // WINDOWS' WORDING; the stack is for the log below, which means nothing to the person at the box.
+        WindowFrame box = FailureWindow.open(desktop, kind, name,
+                name + " is not responding.",
+                "The program may respond again if you wait.\nDo you want to end this process?", List.of(
+                        new FailureWindow.Action("End Process", () -> document.health().close(System.nanoTime())),
+                        new FailureWindow.Action("Wait", () -> document.health().patient())));
+        centreOver(box, application);
         hangDialogs.put(document, box);
         if (report != null) CrystalGuiCore.LOGGER.warn("[cgui] {}", report.text());
     }
 
     /**
      * An exception escaped {@code document}'s frame, a window's build or event handler, or {@code restoreState}: its
-     * windows stay, dimmed, and the box offers Restart or Close. A third fault of the kind within a minute offers no
-     * Restart, so a crash loop ends at the box. Further faults while the box is open are dropped.
+     * windows stay, dimmed, and the box offers Details or Close. A third fault of the kind within a minute is titled
+     * "keeps stopping". Further faults while the box is open are dropped.
      */
     private void fault(AppDocument document, Application application, Throwable cause, long now) {
         if (document.isStoppedWorking()) return;
@@ -620,20 +627,18 @@ public final class ApplicationRegistry {
         document.stoppedWorking();
         CrystalGuiCore.LOGGER.error("[cgui] {}", report.text());
         List<FailureWindow.Action> actions = new ArrayList<>();
-        if (report.kind() == FaultReport.Kind.STOPPED) {
-            actions.add(new FailureWindow.Action("Restart", () -> restart(document)));
-        }
-        actions.add(new FailureWindow.Action("Close", () -> document.health().close(System.nanoTime())));
         actions.add(details(kind, report));
-        WindowFrame box = FailureWindow.open(desktop, kind, report.title(), report.title(), report.reason(), actions);
+        actions.add(new FailureWindow.Action("Close", () -> document.health().close(System.nanoTime())));
+        WindowFrame box = FailureWindow.open(desktop, kind, kind.displayName(), report.title(), report.reason(), actions);
+        centreOver(box, application);
         faultDialogs.put(document, box);
     }
 
     /**
-     * The launch of {@code kind} failed: its box offers Try again (when {@code asked} is known), Close and Details.
-     * The launch that failed was never on the list, so nothing else is touched.
+     * The launch of {@code kind} failed: its box offers Close and Details. The launch that failed was never on the list,
+     * so nothing else is touched.
      */
-    private void couldntStart(ApplicationKind kind, @Nullable AppContext asked, Throwable cause) {
+    private void couldntStart(ApplicationKind kind, Throwable cause) {
         UIDocument shell = desktop.document();
         if (shell == null) return;
         FaultReport report = FaultReport.of(FaultReport.Kind.COULDNT_START, kind.displayName(), cause);
@@ -641,10 +646,9 @@ public final class ApplicationRegistry {
         FaultReport shown = loop ? report.as(FaultReport.Kind.KEEPS_STOPPING) : report;
         shell.execute(() -> {
             List<FailureWindow.Action> actions = new ArrayList<>();
-            if (asked != null && !loop) actions.add(new FailureWindow.Action("Try again", () -> launch(kind, asked)));
-            actions.add(new FailureWindow.Action("Close", () -> { }));
             actions.add(details(kind, shown));
-            FailureWindow.open(desktop, kind, shown.title(), shown.title(), shown.reason(), actions);
+            actions.add(new FailureWindow.Action("Close", () -> { }));
+            FailureWindow.open(desktop, kind, kind.displayName(), shown.title(), shown.reason(), actions);
         });
     }
 
@@ -652,13 +656,17 @@ public final class ApplicationRegistry {
 
     /** The Details button: a second box with the report's top lines, and Copy for the whole of it. */
     private FailureWindow.Action details(ApplicationKind kind, FaultReport report) {
-        return new FailureWindow.Action("Details", () -> {
+        return FailureWindow.Action.opening("Details", () -> {
             String text = report.text();
-            String[] lines = text.split("\n");
+            // THE FONT HAS NO TAB GLYPH: it draws as a box and ends the line's wrap opportunities.
+            String[] lines = text.replace("\t", "  ").split("\n");
+            // THE BOX'S HEADLINE IS THE TITLE: the report's own first line repeats it.
+            int first = lines.length > 0 && lines[0].equals(report.title()) ? 1 : 0;
+            int last = Math.min(lines.length, first + DETAIL_LINES);
             StringBuilder shown = new StringBuilder();
-            for (int i = 0; i < Math.min(lines.length, DETAIL_LINES); i++) shown.append(lines[i]).append('\n');
-            if (lines.length > DETAIL_LINES) shown.append("... ").append(lines.length - DETAIL_LINES).append(" more");
-            FailureWindow.open(desktop, kind, report.title(), report.title(), shown.toString(), List.of(
+            for (int i = first; i < last; i++) shown.append(lines[i]).append('\n');
+            if (lines.length > last) shown.append("... ").append(lines.length - last).append(" more");
+            FailureWindow.openReport(desktop, kind, kind.displayName(), report.title(), shown.toString(), List.of(
                     new FailureWindow.Action("Copy", () -> CgHostThread.CLIENT.run(() -> CgClipboard.set(text))),
                     new FailureWindow.Action("Close", () -> { })));
         });
@@ -672,30 +680,14 @@ public final class ApplicationRegistry {
         return times.size();
     }
 
-    /** Closes the unresponsive document by the ladder, and starts the application again once it is gone. */
-    private void restart(AppDocument document) {
-        restarting.add(document);
-        document.health().close(System.nanoTime());
-    }
-
-    /** The ladder ended: the application's windows go, it is taken off the list, and a restart launches it again. */
+    /** The ladder ended: the application's windows go and it is taken off the list. */
     private void finishClose(AppDocument document, Application application) {
         WindowFrame box = hangDialogs.remove(document);
         if (box != null && box.state() != WindowState.DESTROYED) box.destroy();
         WindowFrame fault = faultDialogs.remove(document);
         if (fault != null && fault.state() != WindowState.DESTROYED) fault.destroy();
-        ApplicationKind kind = application.kind();
-        WorkspaceClient workspace = clients.get(application);
-        boolean again = restarting.remove(document);
-        for (WindowFrame frame : new ArrayList<>(document.frames())) frame.destroy();
+        for (WindowFrame frame : new ArrayList<>(document.frames())) frame.dismiss();
         forget(application);
-        if (again) {
-            CgConfigStorage storage = desktop.config();
-            if (storage != null) {
-                launch(kind, new AppContext(kind, desktop, workspace, scoped(kind, storage),
-                        cacheFor(kind, desktop.cacheRoot()), List.of()));
-            }
-        }
     }
 
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */

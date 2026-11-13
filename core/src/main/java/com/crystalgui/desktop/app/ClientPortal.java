@@ -18,6 +18,7 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.input.FocusPolicy;
 import com.crystalgui.ui.service.CursorSource;
+import com.crystalgui.widget.layout.MinimumSize;
 import org.joml.Vector2f;
 
 /**
@@ -36,7 +37,7 @@ import org.joml.Vector2f;
  *       surface.</li>
  * </ul>
  */
-public final class ClientPortal extends UIElement implements CursorSource {
+public final class ClientPortal extends UIElement implements CursorSource, MinimumSize {
 
     /** What the sheets address it by: it never rings, as a pane does not. */
     public static final Name NAME = Name.of("clientportal");
@@ -101,7 +102,8 @@ public final class ClientPortal extends UIElement implements CursorSource {
     /** The pointer looks as the application's document says it does over what this shows. */
     @Override
     public Cursor cursorAt(float x, float y) {
-        return appDocument.cursor();
+        // The busy ring over a ghost, as Windows shows over a window that does not answer.
+        return appDocument.ghosted() ? Cursor.WAIT : appDocument.cursor();
     }
 
     /**
@@ -158,6 +160,12 @@ public final class ClientPortal extends UIElement implements CursorSource {
         return appDocument;
     }
 
+    /** What the application's content needs, so the window around it stops where the content would clip. */
+    @Override
+    public float minimumSize(boolean vertical) {
+        return client.minimum(vertical);
+    }
+
     /** The client this shows. */
     public ClientRoot client() {
         return client;
@@ -177,6 +185,37 @@ public final class ClientPortal extends UIElement implements CursorSource {
         }
         Surface picture = client.picture();
         if (picture != null) picture.drawPicture(ctx, 0f, 0f, picture.pictureWidth(), picture.pictureHeight());
+        // DWM'S GHOST: the last picture stays, opaque, washed out; the frame around it is untouched.
+        if (!caption) paintVeil(ctx, width, height);
+    }
+
+    /** What a ghosted window's client is veiled with: pale and translucent, so its frozen picture reads as washed out. */
+    private static final int GHOST_VEIL_RGB = 0xF2F2F2;
+    private static final int GHOST_VEIL_ALPHA = 0x66;
+    private static final long GHOST_FADE_NANOS = 250_000_000L;
+
+    private float veil;
+    private float veilFrom;
+    private float veilTarget;
+    private long veilStart;
+
+    /** Fades the veil in as the window ghosts and out as it recovers, repainting until it settles. */
+    private void paintVeil(CgUiPaintContext ctx, float width, float height) {
+        long now = System.nanoTime();
+        float target = appDocument.ghosted() ? 1f : 0f;
+        if (target != veilTarget) {
+            veilTarget = target;
+            veilFrom = veil;
+            veilStart = now;
+        }
+        float t = Math.min(1f, (now - veilStart) / (float) GHOST_FADE_NANOS);
+        t = t * t * (3f - 2f * t);
+        veil = veilFrom + (veilTarget - veilFrom) * t;
+        if (veil > 0f) {
+            int alpha = Math.round(GHOST_VEIL_ALPHA * veil);
+            ctx.fillRect(0f, 0f, width, height, (alpha << 24) | GHOST_VEIL_RGB);
+        }
+        if (veil != veilTarget) repaint();
     }
 
     private void pointer(ReadOnlyVec2f at, int button, boolean pressed, float wheel) {

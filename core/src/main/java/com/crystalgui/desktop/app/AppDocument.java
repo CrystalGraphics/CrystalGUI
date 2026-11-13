@@ -16,9 +16,12 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
+import com.crystalgui.document.DraggedResources;
+import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.service.TransferData;
 import org.joml.Vector2f;
 
 /**
@@ -315,6 +318,7 @@ public final class AppDocument {
         Object payload = document.input().portableDrag();
         if (payload == null) {
             leaveCrossing();
+            if (crossGhost != null) crossGhost.hide();
             return;
         }
         ClientPortal portal = null;
@@ -333,6 +337,7 @@ public final class AppDocument {
             crossing = receiver;
         }
         Desktop desktop = Desktop.ifPresent(shell);
+        if (desktop != null) showGhost(desktop, payload, x, y, released);
         if (receiver != null) {
             Vector2f local = portal.toLocal(x, y);
             float scale = shell.boxes().uiScale();
@@ -349,6 +354,30 @@ public final class AppDocument {
         } else if (released && portal == null && !chrome && desktop != null) {
             desktop.applications().openDropped(this, payload);
         }
+    }
+
+    /** The shell's ghost for a drag outside its own application's windows, where the source's ghost is cut off. */
+    @Nullable
+    private CrossingGhost crossGhost;
+
+    /**
+     * Draws the ghost of the drag, for as long as this shell carries it: the source's own is cut off at its document's
+     * edge, so the source is told to hide it ({@code handOverGhost}) and this one follows the pointer everywhere.
+     */
+    private void showGhost(Desktop desktop, Object payload, float x, float y, boolean released) {
+        if (released) {
+            if (crossGhost != null) crossGhost.hide();
+            return;
+        }
+        document.input().handOverGhost(true);
+        if (crossGhost == null) crossGhost = new CrossingGhost();
+        DraggedResources files = TransferData.find(payload, DraggedResources.class);
+        String name = files == null ? "" : files.resources().get(0).name();
+        String icon = files == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
+        String text = files == null ? "" : files.resources().size() == 1 ? name : files.resources().size() + " items";
+        UIDocument shell = desktop.document();
+        float scale = shell == null ? 1f : Math.max(0.01f, shell.boxes().uiScale());
+        crossGhost.showAt(desktop.overlayLayer(), files != null && files.resources().size() == 1 ? icon : null, text, x, y, scale);
     }
 
     private void leaveCrossing() {
@@ -462,7 +491,21 @@ public final class AppDocument {
     void showHealth() {
         ghost = health.state() != AppHealth.State.RESPONDING ? "(Not responding)"
                 : stoppedWorking ? "(Stopped working)" : "";
-        for (WindowFrame frame : frames) frame.setGhosted(ghost);
+        for (WindowFrame frame : frames) {
+            frame.setGhosted(ghost);
+            repaintPortals(frame.content());
+        }
+    }
+
+    /** The veil is painted by each client portal, whose picture is kept until something in it changes: so it is told. */
+    private static void repaintPortals(UIElement node) {
+        if (node instanceof ClientPortal portal) portal.repaint();
+        for (UIElement child : node.composedChildren()) repaintPortals(child);
+    }
+
+    /** Whether the windows are ghosted: not responding or stopped working. The shell's thread. */
+    boolean ghosted() {
+        return !ghost.isEmpty();
     }
 
     /** The document's thread, after each commit: tells the windows whose client changed. */

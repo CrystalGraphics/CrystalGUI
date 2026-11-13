@@ -696,9 +696,10 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
     public float minimumSize(boolean vertical) {
         float floor = LayoutMinimum.stated(this, vertical);
         Box self = box(), inner = content.box();
-        float need = 0f;
         // FROM THE FOLD ALONE, never from what is laid out now: a floor read off an overflow vanishes once the window
-        // widens past it, and a drag then flickered between the two answers.
+        // widens past it, and a drag then flickered between the two answers. Folded as the slot lays them out: a body
+        // and a footer in a column are both needed, stacked.
+        float need = LayoutMinimum.contained(content, vertical);
         for (UIElement child : content.children()) {
             if (child.isDisplayed()) need = Math.max(need, LayoutMinimum.of(child, vertical));
         }
@@ -1720,6 +1721,44 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         return true;
     }
 
+    /**
+     * Ends the window with the close animation and no veto: for a window whose owner is already gone and cannot be
+     * asked, as {@link #requestClose} would.
+     *
+     * <pre>{@code
+     * for (WindowFrame frame : document.frames()) frame.dismiss();   // the application ended
+     * }</pre>
+     */
+    public void dismiss() {
+        if (record.state() == WindowState.DESTROYED || closing) return;
+        closing = true;
+        setLeaving(true);
+        animator.playClose(this::destroy);
+    }
+
+    @Nullable
+    private WindowFrame centreOver;
+
+    /**
+     * Opens this window centred over {@code over} instead of on the desktop, when it is first placed: a message about an
+     * application belongs on the application. Has no effect once the window has a position.
+     *
+     * <pre>{@code
+     * WindowFrame box = FailureWindow.open(desktop, kind, title, message, "", actions);
+     * box.setCentreOver(application.mainWindow().frame());
+     * }</pre>
+     */
+    public WindowFrame setCentreOver(@Nullable WindowFrame over) {
+        this.centreOver = over;
+        return this;
+    }
+
+    /** The window this one is centred over when first placed, or null. */
+    @Nullable
+    public WindowFrame centreOver() {
+        return centreOver;
+    }
+
     /** Set once a close it agreed to begins: it plays out and is destroyed, whatever is asked of it meanwhile. */
     private boolean closing;
 
@@ -2006,6 +2045,21 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         record.restoreHeight(height);
     }
 
+    private boolean maximizable = true;
+
+    /**
+     * Whether this window may be maximised: by its button, a double-click on the caption, a drag to the top edge or
+     * fullscreen. A message box is not; it keeps its size.
+     */
+    public WindowFrame setMaximizable(boolean maximizable) {
+        this.maximizable = maximizable;
+        return this;
+    }
+
+    public boolean isMaximizable() {
+        return maximizable;
+    }
+
     public boolean isMaximized() {
         return record.maximized();
     }
@@ -2099,7 +2153,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * which is the rule {@code UIResizer} already states for the size it writes.</p>
      */
     public void maximize() {
-        if (record.maximized()) return;
+        if (record.maximized() || !maximizable) return;
         // A MAXIMISED WINDOW IS IN NO TILE. It covers the whole work area, so it shares an edge with
         // nothing and has no divider to move -- and leaving the cell recorded would let a joint resize
         // elsewhere re-tile it back down to a half. Restoring does not put it back in the group either:

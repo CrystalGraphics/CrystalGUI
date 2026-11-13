@@ -103,7 +103,14 @@ final class TreeDragAndDrop<T> {
         @Nullable
         @Override
         public <D> D as(Class<D> type) {
-            return type.isInstance(transfer) ? type.cast(transfer) : null;
+            return TransferData.find(transfer, type);
+        }
+
+        /** Rows are nodes of this tree and stay in its document; what the model offers outside may leave if it is values. */
+        @Nullable
+        @Override
+        public TransferData shared() {
+            return TransferData.shared(transfer);
         }
     }
 

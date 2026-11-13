@@ -316,7 +316,11 @@ public final class Drag implements InputMode {
     private void showGhost() {
         if (ghost == null) return;
         UIDocument document = ghost.document();
-        if (document == null || document.isPromoted(ghost)) return;
+        if (document == null) return;
+        if (document.isPromoted(ghost)) {
+            if (!ghost.isDisplayed()) ghost.setDisplayed(true);
+            return;
+        }
         ghost.setDisplayed(true);
         // Unhittable for the gesture's life: it is under the cursor by construction, so a hittable
         // ghost is a ghost that answers every drop query with itself.
@@ -437,10 +441,14 @@ public final class Drag implements InputMode {
             declareFollow();
             input.portableDrag(TransferData.shared(payload));
         }
-        showGhost();
         ghostSurfaceX = x;
         ghostSurfaceY = y;
-        if (!moveGhost(x, y)) placeGhostAfterLayout();
+        if (input.ghostHandedOver()) {
+            if (ghost != null && ghost.isDisplayed()) ghost.setDisplayed(false);
+        } else {
+            showGhost();
+            if (!moveGhost(x, y)) placeGhostAfterLayout();
+        }
         float[] local = toLocal(source, x, y);
         // THE DELTA IS A VECTOR, NOT A DIFFERENCE OF TWO POINTS, and it has to be: `toLocal` puts the
         // box's own origin at zero (M6.1), so a source that MOVES WITH THE DRAG changes the frame its
@@ -509,6 +517,7 @@ public final class Drag implements InputMode {
         // rather than in end()/cancel(), because this is the one path every ending goes through.
         live = false;
         input.portableDrag(null);
+        input.handOverGhost(false);
         follows(null);
         releaseGhost();
     }

@@ -128,6 +128,8 @@ vfxlab .lab-panes {
     width: 100%;
     height: 0px;
     flex-grow: 1;
+    /* The band that gives way: the toolbar and status bar keep their height, and the window stops here. */
+    min-height: 160px;
 }
 
 vfxlab .lab-effects,

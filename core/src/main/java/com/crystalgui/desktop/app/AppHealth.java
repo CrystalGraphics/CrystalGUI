@@ -18,7 +18,8 @@ import javax.annotation.Nullable;
  *
  * <ul>
  *   <li><b>Not responding</b> is input waiting for {@link #HANG_NANOS} with no commit, as DWM's is; a commit
- *       ends it. {@link #patient} defers the next verdict by as long again.</li>
+ *       ends it. {@link #patient} only stops the box from reopening by itself: the window stays ghosted while the
+ *       document still owes its commit, as in Windows.</li>
  *   <li><b>The ladder</b>: {@code abort} at once (the engine's checkpoints throw), {@code interrupt} after
  *       {@link #INTERRUPT_NANOS}, {@code abandon} after {@link #ABANDON_NANOS}, which drops the document's thread
  *       from the pool's care. What never calls the engine and never blocks is contained, not stopped.</li>
@@ -38,7 +39,7 @@ final class AppHealth {
     private final Supplier<String> name;
     private volatile long waitingSince;
     private volatile long lastCommit = System.nanoTime();
-    private long patientUntil;
+    private volatile boolean patient;
     private volatile State state = State.RESPONDING;
     private long closeStarted;
     private boolean interrupted;
@@ -69,16 +70,24 @@ final class AppHealth {
     void committed() {
         lastCommit = System.nanoTime();
         waitingSince = 0L;
+        patient = false;
         if (state == State.NOT_RESPONDING) {
             state = State.RESPONDING;
             report = null;
         }
     }
 
-    /** The user chose Wait: the next verdict comes after another {@link #HANG_NANOS}. The shell's thread. */
-    void patient(long now) {
-        patientUntil = now + HANG_NANOS;
-        if (state == State.NOT_RESPONDING) state = State.RESPONDING;
+    /**
+     * The user chose Wait: the box does not reopen by itself until the document answers. The state, and so the ghost,
+     * stay: a window that is still frozen must not look alive. The shell's thread.
+     */
+    void patient() {
+        patient = true;
+    }
+
+    /** Whether the user chose to wait on a document that has not answered since. */
+    boolean isPatient() {
+        return patient;
     }
 
     /** Starts the ladder: rung 1, the abort. The shell's thread. */
@@ -100,7 +109,7 @@ final class AppHealth {
         switch (state) {
             case RESPONDING -> {
                 long since = waitingSince;
-                if (since == 0L || now < patientUntil || now - Math.max(since, lastCommit) < HANG_NANOS) return false;
+                if (since == 0L || now - Math.max(since, lastCommit) < HANG_NANOS) return false;
                 report = FaultReport.hung(name.get(), backend.runningThread());
                 state = State.NOT_RESPONDING;
                 return true;

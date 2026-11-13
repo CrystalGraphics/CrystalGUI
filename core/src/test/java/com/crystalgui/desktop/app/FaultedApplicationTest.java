@@ -13,6 +13,7 @@ import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.Resource;
@@ -21,6 +22,7 @@ import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.widget.text.UIText;
 
 /** A fault in one application shows its box, names it, and leaves every other window alone. */
 public class FaultedApplicationTest extends UiDocumentTestBase {
@@ -131,9 +133,18 @@ public class FaultedApplicationTest extends UiDocumentTestBase {
         return desktop.windowManager().registry().windows().size();
     }
 
-    private boolean titled(String title) {
+    /** Whether a failure box says {@code headline}: its window's title is the application's name, so the headline tells them apart. */
+    private boolean titled(String headline) {
         for (WindowFrame frame : desktop.windowManager().registry().windows()) {
-            if (frame.getTitle().equals(title)) return true;
+            if (frame.hasClass(FailureWindow.CLASS) && says(frame.content(), headline)) return true;
+        }
+        return false;
+    }
+
+    private static boolean says(UIElement node, String headline) {
+        if (node instanceof UIText text && text.getText().equals(headline)) return true;
+        for (UIElement child : node.children()) {
+            if (says(child, headline)) return true;
         }
         return false;
     }
@@ -146,6 +157,23 @@ public class FaultedApplicationTest extends UiDocumentTestBase {
         assertTrue("dimmed", running.mainWindow().frame().isGhosted());
         assertEquals("its box opened", before + 1, windows());
         assertTrue("names the application", titled("Faulty has stopped working"));
+    }
+
+    @Test
+    public void theBoxOpensCentredOnTheApplicationsWindow() {
+        application.fault(new IllegalStateException("no shader"));
+        desktop.applications().check(System.nanoTime());
+        frame();
+        frame();
+        WindowFrame box = null;
+        for (WindowFrame each : desktop.windowManager().registry().windows()) {
+            if (each.hasClass(FailureWindow.CLASS)) box = each;
+        }
+        assertTrue(box != null);
+        var over = running.mainWindow().frame().box();
+        var at = box.box();
+        assertEquals("horizontally", over.x() + over.width() / 2f, at.x() + at.width() / 2f, 1f);
+        assertEquals("vertically", over.y() + over.height() / 2f, at.y() + at.height() / 2f, 1f);
     }
 
     @Test
@@ -186,7 +214,7 @@ public class FaultedApplicationTest extends UiDocumentTestBase {
     }
 
     @Test
-    public void theThirdFaultInAMinuteStopsOfferingRestart() {
+    public void theThirdFaultInAMinuteCountsAsALoop() {
         long now = System.nanoTime();
         ApplicationRegistry registry = desktop.applications();
         assertEquals(1, registry.recordFault("test:faulted", now));
@@ -209,6 +237,6 @@ public class FaultedApplicationTest extends UiDocumentTestBase {
                 frame();
             }
         }
-        assertTrue("no Restart is offered", titled("Faulty keeps stopping"));
+        assertTrue("the third fault is titled as a loop", titled("Faulty keeps stopping"));
     }
 }

@@ -435,6 +435,16 @@ public final class WindowManager {
             return;
         }
 
+        // OVER ITS SUBJECT when it has one, kept inside the work area.
+        WindowFrame over = frame.centreOver();
+        Box overBox = over == null || over.state() == WindowState.DESTROYED ? null : over.box();
+        if (overBox != null && overBox.width() > 0f) {
+            float left = overBox.x() + (overBox.width() - frameWidth) / 2f;
+            float top = overBox.y() + (overBox.height() - frameHeight) / 2f;
+            frame.moveTo(Math.max(0f, Math.min(left, areaWidth - frameWidth)),
+                    Math.max(0f, Math.min(top, areaHeight - frameHeight)));
+            return;
+        }
         // Centred rather than the corner: every GuiContainer opens centred, and the corner is where an unplaced
         // window is drawn, so the two would look alike. Alone on the desktop there is nothing to cascade from.
         if (shell.visibleFrames().size() <= 1) cascadeStep = 0;

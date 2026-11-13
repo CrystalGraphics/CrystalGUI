@@ -97,12 +97,15 @@ public class AppHealthTest {
     }
 
     @Test
-    public void waitDefersTheNextVerdict() {
+    public void waitKeepsTheWindowGhostedUntilTheDocumentAnswers() {
         health.offered();
         health.step(now + 6 * SECOND);
-        health.patient(now + 6 * SECOND);
-        assertFalse(health.step(now + 10 * SECOND));
-        assertTrue("five more seconds later it is again", health.step(now + 12 * SECOND));
+        health.patient();
+        assertEquals("still not responding", AppHealth.State.NOT_RESPONDING, health.state());
+        assertTrue("the box does not reopen by itself", health.isPatient());
+        health.committed();
+        assertEquals(AppHealth.State.RESPONDING, health.state());
+        assertFalse("an answer ends the patience", health.isPatient());
     }
 
     @Test

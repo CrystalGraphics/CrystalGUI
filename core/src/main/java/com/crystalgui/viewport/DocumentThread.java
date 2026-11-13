@@ -90,6 +90,25 @@ abstract class DocumentThread implements UIDocument.Owner {
     void close() {
     }
 
+    /** How long closing waits on a running turn at each rung before it climbs. */
+    private static final long CLOSE_GRACE_NANOS = 250_000_000L;
+
+    /**
+     * Ends {@code sequence} without ever waiting on it for good: what is queued runs (an application's dispose among it),
+     * but a turn that does not return is aborted at its next checkpoint, then abandoned, so the closer is held for at most
+     * two graces. The shell closes a document on its own thread, which a document stuck in a loop must not freeze.
+     */
+    static void closeSequence(UiSequence sequence) {
+        if (!sequence.runNow(() -> { }, CLOSE_GRACE_NANOS)) {
+            sequence.abort();
+            if (!sequence.runNow(() -> { }, CLOSE_GRACE_NANOS)) {
+                sequence.interrupt();
+                sequence.abandon();
+            }
+        }
+        sequence.close();
+    }
+
     // ── The strategies ──────────────────────────────────────────────────────────────────────────
 
     /**
@@ -226,8 +245,7 @@ abstract class DocumentThread implements UIDocument.Owner {
 
         @Override
         void close() {
-            sequence.runNow(() -> { });
-            sequence.close();
+            closeSequence(sequence);
         }
     }
 
@@ -366,8 +384,7 @@ abstract class DocumentThread implements UIDocument.Owner {
 
         @Override
         void close() {
-            sequence.runNow(() -> { });
-            sequence.close();
+            closeSequence(sequence);
             JobScheduler.asynchronousDocumentClosed();
         }
     }
