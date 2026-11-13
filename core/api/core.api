@@ -623,6 +623,16 @@ com/crystalgui/app/machine/ui/StreamsPanel
   method public build (Lcom/crystalgui/app/machine/MachineModel;)V
   method public client (Lcom/crystalgui/net/window/ClientScope;)V
   method public serve (Lcom/crystalgui/app/machine/MachineModel;Lcom/crystalgui/net/window/ServerScope;)V
+com/crystalgui/app/screens/InventoryScreen
+  access public,final
+  extends java/lang/Object
+  field public,static,final ID Ljava/lang/String;
+  field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
+  field public,static,final PLAYER_VIEW Ljava/lang/String;
+  field public,static,final SCREEN Lcom/crystalgui/screen/ScreenKind;
+  field public,static,final SLOT Ljava/lang/String;
+  method public,static declareKey ()V
+  method public,static slotId (I)Ljava/lang/String;
 com/crystalgui/app/screens/ScreenExample
   access public,final
   extends java/lang/Object
@@ -9036,6 +9046,7 @@ com/crystalgui/render/texture/CgUiRect
   method public toString ()Ljava/lang/String;
   method public withBorder (FI)Lcom/crystalgui/render/texture/CgUiRect;
   method public withBorder (FIII)Lcom/crystalgui/render/texture/CgUiRect;
+  method public withBorder (FIIIII)Lcom/crystalgui/render/texture/CgUiRect;
   method public withCornerRadius (FF)Lcom/crystalgui/render/texture/CgUiRect;
   method public withCornerRadius (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiRect;
   method public withFill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect;
@@ -9051,6 +9062,7 @@ com/crystalgui/render/texture/CgUiRect$Draw
   method public begin (Lcom/crystalgui/render/CgUiPaintContext;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public border (FI)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public border (FIII)Lcom/crystalgui/render/texture/CgUiRect$Draw;
+  method public border (FIIIII)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public borderSides (FFFF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public fill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public fillColor (I)Lcom/crystalgui/render/texture/CgUiRect$Draw;
@@ -9626,7 +9638,7 @@ com/crystalgui/screen/ScreenContext
 com/crystalgui/screen/ScreenKind
   access public,final,record
   extends java/lang/Record
-  method public <init> (Ljava/lang/String;Lcom/crystalgui/screen/ScreenKind$Builder;Lcom/crystalgui/screen/ScreenKind$Background;ZLjava/util/List;Lcom/crystalgui/desktop/app/ApplicationKind$Threading;)V
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/screen/ScreenKind$Builder;Lcom/crystalgui/screen/ScreenKind$Background;ZLjava/util/List;Lcom/crystalgui/desktop/app/ApplicationKind$Threading;F)V
   method public background ()Lcom/crystalgui/screen/ScreenKind$Background;
   method public background (Lcom/crystalgui/screen/ScreenKind$Background;)Lcom/crystalgui/screen/ScreenKind;
   method public builder ()Lcom/crystalgui/screen/ScreenKind$Builder;
@@ -9637,6 +9649,8 @@ com/crystalgui/screen/ScreenKind
   method public pausesGame (Z)Lcom/crystalgui/screen/ScreenKind;
   method public threading ()Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
   method public threading (Lcom/crystalgui/desktop/app/ApplicationKind$Threading;)Lcom/crystalgui/screen/ScreenKind;
+  method public uiScale ()F
+  method public uiScale (F)Lcom/crystalgui/screen/ScreenKind;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
@@ -9779,7 +9793,11 @@ com/crystalgui/style/GeneralGroup
   method public borderBottomColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public borderColor ()I
   method public borderColor (I)Lcom/crystalgui/style/GeneralGroup;
+  method public borderLeftColor ()I
+  method public borderLeftColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public borderRadius (F)Lcom/crystalgui/style/GeneralGroup;
+  method public borderRightColor ()I
+  method public borderRightColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public borderTopColor ()I
   method public borderTopColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public caretColor ()I
@@ -10338,6 +10356,8 @@ com/crystalgui/style/property/StylePropertyRegistry
   field public,static,final BACKGROUND_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_BOTTOM_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BORDER_LEFT_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BORDER_RIGHT_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_TOP_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CARET_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CARET_WIDTH Lcom/crystalgui/style/property/StyleProperty;

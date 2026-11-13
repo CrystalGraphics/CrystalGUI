@@ -1,6 +1,7 @@
 package com.crystalgui.screen;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgui.app.screens.InventoryScreen;
 import com.crystalgui.app.screens.ScreenExample;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIElement;
@@ -141,6 +142,32 @@ public class GameScreenTest {
 
         assertEquals(CgUiScreen.Mode.GAME_SCREEN, CgUiScreen.mode());
         assertTrue(CgUiScreen.desktop().windowManager().hasPinnedWindows());
+        screen.owner().hidden();
+    }
+
+    /** The inventory has a frame for each of vanilla's 46 menu slots, by id, and a box for the player. */
+    @Test
+    public void theInventoryHasEverySlotOfTheMenuAndAPlayerView() {
+        GameScreen screen = up(InventoryScreen.SCREEN);
+
+        assertNull(screen.fault());
+        var document = screen.viewport().document();
+        for (int i = 0; i < 46; i++) {
+            UIElement slot = document.getElementById(InventoryScreen.slotId(i));
+            assertNotNull("slot " + i, slot);
+            assertTrue(slot.hasClass(InventoryScreen.SLOT));
+        }
+        assertNull(document.getElementById(InventoryScreen.slotId(46)));
+        assertEquals("pinned, whatever the preference", 1f, document.boxes().uiScale(), 0f);
+        screen.viewport().document().update(1280f, 720f);
+        UIElement first = document.getElementById(InventoryScreen.slotId(9));
+        float unit = 3f;   // a vanilla GUI unit: 3 screen pixels, the scale being pinned to 1
+        assertEquals("18 units", 18 * unit, first.box().width(), 0.5f);
+        assertEquals("8 units in", 8 * unit, first.box().x(), 0.5f);
+        assertEquals("84 units down", 84 * unit, first.box().y(), 0.5f);
+        UIElement panel = (UIElement) first.parent();
+        assertEquals(176 * unit, panel.box().width(), 0.5f);
+        assertEquals(166 * unit, panel.box().height(), 0.5f);
         screen.owner().hidden();
     }
 

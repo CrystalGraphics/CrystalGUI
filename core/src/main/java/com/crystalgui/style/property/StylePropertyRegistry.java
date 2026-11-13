@@ -515,13 +515,17 @@ public class StylePropertyRegistry {
     // this pair reads as "unset" rather than as a real colour: CgUiRect falls back to
     // border-color's own resolved value whenever an edge's alpha is 0, so a widget that only ever sets
     // border-color keeps painting exactly as it always has. Unity's inset text-field bevel (a darker
-    // top edge, a lighter bottom edge, same colour left/right) is what this exists for — the SDF border
-    // shader has no notion of "which edge" a pixel belongs to beyond top/bottom, so that is the one
-    // split this pair offers; there is no border-left/right-color to match.
+    // top edge, a lighter bottom edge) is what this exists for, and a bevelled slot's dark top and left
+    // against light bottom and right is what the left/right pair adds. The shader splits the corners on
+    // the diagonal.
     public static final StyleProperty<Integer> BORDER_TOP_COLOR =
             create(new ColorProperty("border-top-color", 0x00000000));
     public static final StyleProperty<Integer> BORDER_BOTTOM_COLOR =
             create(new ColorProperty("border-bottom-color", 0x00000000));
+    public static final StyleProperty<Integer> BORDER_LEFT_COLOR =
+            create(new ColorProperty("border-left-color", 0x00000000));
+    public static final StyleProperty<Integer> BORDER_RIGHT_COLOR =
+            create(new ColorProperty("border-right-color", 0x00000000));
     // A third drawable layer, drawn last (above `overlay`) and — unlike `border-width`, which feeds
     // Taffy — completely layout-free. That's exactly why CSS has `outline`: it's the standard way to
     // mark focus without resizing the element. Also frees `overlay` to stay a widget's own

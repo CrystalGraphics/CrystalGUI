@@ -88,16 +88,20 @@ public final class CgUiRect implements CgUiDrawable {
      * text-field bevel). See {@link CgShapeTable#SPLIT_BORDER}. */
     private final int borderTopColorArgb;
     private final int borderBottomColorArgb;
+    /** Likewise for the left and right edges: a bevelled slot is dark above and left, light below and right. */
+    private final int borderLeftColorArgb;
+    private final int borderRightColorArgb;
     private final Fill fill;
 
     public CgUiRect() {
         this(new Fill.Color(0xFFFFFFFF), 0f, 0f, 0f, 0f, 0f, 0f, 0f, 0f,
-                0f, 0xFF000000, 0xFF000000, 0xFF000000);
+                0f, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000, 0xFF000000);
     }
 
     private CgUiRect(Fill fill, float rxTL, float ryTL, float rxTR, float ryTR,
                      float rxBR, float ryBR, float rxBL, float ryBL,
-                     float borderWidth, int borderColorArgb, int borderTopColorArgb, int borderBottomColorArgb) {
+                     float borderWidth, int borderColorArgb, int borderTopColorArgb, int borderBottomColorArgb,
+                     int borderLeftColorArgb, int borderRightColorArgb) {
         this.fill = Objects.requireNonNull(fill, "fill");
         this.rxTL = rxTL; this.ryTL = ryTL;
         this.rxTR = rxTR; this.ryTR = ryTR;
@@ -107,6 +111,8 @@ public final class CgUiRect implements CgUiDrawable {
         this.borderColorArgb = borderColorArgb;
         this.borderTopColorArgb = borderTopColorArgb;
         this.borderBottomColorArgb = borderBottomColorArgb;
+        this.borderLeftColorArgb = borderLeftColorArgb;
+        this.borderRightColorArgb = borderRightColorArgb;
     }
 
     /** A flat fill, which is what a {@code #rrggbb} or {@code rgba()} background parses to. */
@@ -123,7 +129,8 @@ public final class CgUiRect implements CgUiDrawable {
     public CgUiRect withCornerRadius(float rxTL, float ryTL, float rxTR, float ryTR,
                                      float rxBR, float ryBR, float rxBL, float ryBL) {
         return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
-                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
+                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb,
+                borderLeftColorArgb, borderRightColorArgb);
     }
 
     public CgUiRect withBorder(float width, int colorArgb) {
@@ -142,13 +149,23 @@ public final class CgUiRect implements CgUiDrawable {
      * {@code SPLIT_BORDER} when top or bottom actually differs from it.</p>
      */
     public CgUiRect withBorder(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
+        return withBorder(width, uniformColorArgb, topColorArgb, uniformColorArgb, bottomColorArgb, uniformColorArgb);
+    }
+
+    /**
+     * Each edge its own colour, CSS's order (top, right, bottom, left): a bevelled slot is dark on top and left and
+     * light on bottom and right. A caller passing {@code uniformColorArgb} for all four is the uniform path.
+     */
+    public CgUiRect withBorder(float width, int uniformColorArgb, int topColorArgb, int rightColorArgb,
+                               int bottomColorArgb, int leftColorArgb) {
         return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
-                width, uniformColorArgb, topColorArgb, bottomColorArgb);
+                width, uniformColorArgb, topColorArgb, bottomColorArgb, leftColorArgb, rightColorArgb);
     }
 
     public CgUiRect withFill(Fill fill) {
         return new CgUiRect(fill, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL,
-                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
+                borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb,
+                borderLeftColorArgb, borderRightColorArgb);
     }
 
     public Fill getFill() {
@@ -191,7 +208,8 @@ public final class CgUiRect implements CgUiDrawable {
         ctx.rect()
                 .at(x, y).size(width, height)
                 .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
-                .border(borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb)
+                .border(borderWidth, borderColorArgb, borderTopColorArgb, borderRightColorArgb,
+                        borderBottomColorArgb, borderLeftColorArgb)
                 .fill(fill)
                 .submit();
     }
@@ -238,7 +256,7 @@ public final class CgUiRect implements CgUiDrawable {
         private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
         /** Per side, CSS order for a box: left, top, right, bottom. */
         private float borderLeft, borderTop, borderRight, borderBottom;
-        private int borderColorArgb, borderTopColorArgb, borderBottomColorArgb;
+        private int borderColorArgb, borderTopColorArgb, borderBottomColorArgb, borderLeftColorArgb, borderRightColorArgb;
         private Kind kind;
         private int fillColorArgb;
         private CgTexture2D texture;
@@ -255,6 +273,8 @@ public final class CgUiRect implements CgUiDrawable {
             borderColorArgb = 0xFF000000;
             borderTopColorArgb = 0xFF000000;
             borderBottomColorArgb = 0xFF000000;
+            borderLeftColorArgb = 0xFF000000;
+            borderRightColorArgb = 0xFF000000;
             kind = Kind.COLOR;
             fillColorArgb = 0xFFFFFFFF;
             texture = null;
@@ -295,10 +315,18 @@ public final class CgUiRect implements CgUiDrawable {
 
         /** @see CgUiRect#withBorder(float, int, int, int) for what the top/bottom pair is for. */
         public Draw border(float width, int uniformColorArgb, int topColorArgb, int bottomColorArgb) {
+            return border(width, uniformColorArgb, topColorArgb, uniformColorArgb, bottomColorArgb, uniformColorArgb);
+        }
+
+        /** @see CgUiRect#withBorder(float, int, int, int, int, int) */
+        public Draw border(float width, int uniformColorArgb, int topColorArgb, int rightColorArgb,
+                           int bottomColorArgb, int leftColorArgb) {
             borderSides(width, width, width, width);
             this.borderColorArgb = uniformColorArgb;
             this.borderTopColorArgb = topColorArgb;
+            this.borderRightColorArgb = rightColorArgb;
             this.borderBottomColorArgb = bottomColorArgb;
+            this.borderLeftColorArgb = leftColorArgb;
             return this;
         }
 
@@ -417,8 +445,8 @@ public final class CgUiRect implements CgUiDrawable {
             CgShapeTable.Shape shape = ctx.shapes().begin(kind, width, height)
                     .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
             if (bordered()) {
-                shape.border(borderLeft, borderTop, borderRight, borderBottom,
-                        borderColorArgb, borderTopColorArgb, borderBottomColorArgb);
+                shape.border(borderLeft, borderTop, borderRight, borderBottom, borderColorArgb,
+                        borderTopColorArgb, borderRightColorArgb, borderBottomColorArgb, borderLeftColorArgb);
             }
             if (sprite != null) {
                 float scale = sprite.getBorderScale();
@@ -463,6 +491,8 @@ public final class CgUiRect implements CgUiDrawable {
                 && borderColorArgb == r.borderColorArgb
                 && borderTopColorArgb == r.borderTopColorArgb
                 && borderBottomColorArgb == r.borderBottomColorArgb
+                && borderLeftColorArgb == r.borderLeftColorArgb
+                && borderRightColorArgb == r.borderRightColorArgb
                 && rxTL == r.rxTL && ryTL == r.ryTL && rxTR == r.rxTR && ryTR == r.ryTR
                 && rxBR == r.rxBR && ryBR == r.ryBR && rxBL == r.rxBL && ryBL == r.ryBL;
     }
@@ -471,7 +501,7 @@ public final class CgUiRect implements CgUiDrawable {
     public int hashCode() {
         if (!(fill instanceof Fill.Color)) return System.identityHashCode(this);
         return Objects.hash(fill, borderWidth, borderColorArgb, borderTopColorArgb, borderBottomColorArgb,
-                rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+                borderLeftColorArgb, borderRightColorArgb, rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
     }
 
     @Override

@@ -5,6 +5,7 @@ import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
 import com.crystalgraphics.mc.CgReloadListener;
+import com.crystalgui.app.screens.InventoryScreen;
 import com.crystalgui.app.screens.ScreenExample;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.gauntlet.DesktopScriptTest;
@@ -38,6 +39,7 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
         // Its stages, its input and its key, before any key can be pressed.
         CgUiScreen.install();
         ScreenExample.declareKey();
+        InventoryScreen.declareKey();
         CgUiStart.ahead();
         CgUiRenderer.precache();
         gauntlet();

@@ -84,8 +84,9 @@ final class GameScreen {
         viewport = CgUiViewport.open(document, kind.threading() == ApplicationKind.Threading.INLINE
                 ? CgUiViewport.Threading.INLINE : CgUiViewport.Threading.fromFlags(), "screen:" + kind.id());
         context = new ScreenContext(this, kind, document, root);
-        scale = Preferences.PUBLISHED.changes().subscribe(
+        scale = kind.uiScale() > 0f ? null : Preferences.PUBLISHED.changes().subscribe(
                 () -> document.execute(() -> document.boxes().setUiScale(Preferences.current().uiScale())));
+        if (kind.uiScale() > 0f) document.execute(() -> document.boxes().setUiScale(kind.uiScale()));
         viewport.onFault(this::fault);
         content = new CgUiViewport.Content() {
             @Override
@@ -187,7 +188,7 @@ final class GameScreen {
 
     /** Runs the kind's close hooks on the document and drops it. Render thread. */
     void dispose() {
-        scale.disconnect();
+        if (scale != null) scale.disconnect();
         try {
             viewport.run(context::runClosed);
         } catch (RuntimeException | LinkageError failed) {

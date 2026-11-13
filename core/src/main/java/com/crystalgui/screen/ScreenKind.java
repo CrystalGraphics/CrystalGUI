@@ -37,9 +37,11 @@ import java.util.Objects;
  * @param closeKeys  {@link CgKeyCodes} keys that close it besides Escape
  * @param threading  where its document runs: {@code SEQUENCED} (default), or {@code INLINE} on the render thread for a
  *                   small screen that reads the game every frame
+ * @param uiScale    the document's UI scale; 0 follows the player's preference. A screen laid out in the game's own
+ *                   units pins it to 1, so its pixels are screen pixels
  */
 public record ScreenKind(String id, Builder builder, Background background, boolean pausesGame, List<Integer> closeKeys,
-                         ApplicationKind.Threading threading) {
+                         ApplicationKind.Threading threading, float uiScale) {
 
     /** What is drawn behind a screen's content. */
     public enum Background {
@@ -67,27 +69,32 @@ public record ScreenKind(String id, Builder builder, Background background, bool
 
     /** A screen that dims the game, leaves it running and closes on Escape. */
     public static ScreenKind of(String id, Builder builder) {
-        return new ScreenKind(id, builder, Background.DIM, false, List.of(), ApplicationKind.Threading.SEQUENCED);
+        return new ScreenKind(id, builder, Background.DIM, false, List.of(), ApplicationKind.Threading.SEQUENCED, 0f);
     }
 
     public ScreenKind background(Background background) {
-        return new ScreenKind(id, builder, background, pausesGame, closeKeys, threading);
+        return new ScreenKind(id, builder, background, pausesGame, closeKeys, threading, uiScale);
     }
 
     /** Whether the game stops while it is up. A server's game is never paused. */
     public ScreenKind pausesGame(boolean pauses) {
-        return new ScreenKind(id, builder, background, pauses, closeKeys, threading);
+        return new ScreenKind(id, builder, background, pauses, closeKeys, threading, uiScale);
     }
 
     /** Keys that close it besides Escape: the key that opened it, usually. */
     public ScreenKind closedBy(int... keys) {
         Integer[] boxed = new Integer[keys.length];
         for (int i = 0; i < keys.length; i++) boxed[i] = keys[i];
-        return new ScreenKind(id, builder, background, pausesGame, List.of(boxed), threading);
+        return new ScreenKind(id, builder, background, pausesGame, List.of(boxed), threading, uiScale);
     }
 
     public ScreenKind threading(ApplicationKind.Threading threading) {
-        return new ScreenKind(id, builder, background, pausesGame, closeKeys, threading);
+        return new ScreenKind(id, builder, background, pausesGame, closeKeys, threading, uiScale);
+    }
+
+    /** Pins the document's UI scale, ignoring the player's preference: {@code 1} makes its pixels screen pixels. */
+    public ScreenKind uiScale(float scale) {
+        return new ScreenKind(id, builder, background, pausesGame, closeKeys, threading, scale);
     }
 
     /** Whether {@code key} closes it. */

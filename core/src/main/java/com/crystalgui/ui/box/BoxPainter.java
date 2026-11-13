@@ -915,6 +915,8 @@ public final class BoxPainter {
         int borderColor = style.get(StylePropertyRegistry.BORDER_COLOR);
         int borderTop = edgeColor(style.get(StylePropertyRegistry.BORDER_TOP_COLOR), borderColor);
         int borderBottom = edgeColor(style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR), borderColor);
+        int borderLeft = edgeColor(style.get(StylePropertyRegistry.BORDER_LEFT_COLOR), borderColor);
+        int borderRight = edgeColor(style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR), borderColor);
         if (background == CgUiDrawable.EMPTY) {
             int fillArgb;
             if (explicitBackgroundColor) {
@@ -928,7 +930,7 @@ public final class BoxPainter {
             }
             ctx.setColor(WHITE);
             shaped(ctx, radii).size(width, height)
-                    .border(borderWidth, borderColor, borderTop, borderBottom)
+                    .border(borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft)
                     .borderSides(sides[0], sides[1], sides[2], sides[3])
                     .fillColor(fillArgb)
                     .submit();
@@ -936,29 +938,30 @@ public final class BoxPainter {
         }
         if (!canPaintRounded(background)) return false;
         ctx.setColor(backgroundColor);
-        paintRoundedLayer(ctx, background, width, height, radii, borderWidth, borderColor, borderTop, borderBottom);
+        paintRoundedLayer(ctx, background, width, height, radii, borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft);
         return true;
     }
 
     private void paintRoundedLayer(CgUiPaintContext ctx, CgUiDrawable d, float width, float height,
-                                          Radii radii, float borderWidth, int borderColor, int borderTop, int borderBottom) {
+                                          Radii radii, float borderWidth, int borderColor, int borderTop, int borderRight,
+                                          int borderBottom, int borderLeft) {
         if (d instanceof CgUiCrossFade cf) {
             float previous = ctx.pushLayerOpacity(1f - cf.getT());
             try {
-                paintRoundedLayer(ctx, cf.getFrom(), width, height, radii, borderWidth, borderColor, borderTop, borderBottom);
+                paintRoundedLayer(ctx, cf.getFrom(), width, height, radii, borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft);
             } finally {
                 ctx.popLayerOpacity(previous);
             }
             previous = ctx.pushLayerOpacity(cf.getT());
             try {
-                paintRoundedLayer(ctx, cf.getTo(), width, height, radii, borderWidth, borderColor, borderTop, borderBottom);
+                paintRoundedLayer(ctx, cf.getTo(), width, height, radii, borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft);
             } finally {
                 ctx.popLayerOpacity(previous);
             }
             return;
         }
         shaped(ctx, radii).size(width, height)
-                .border(borderWidth, borderColor, borderTop, borderBottom)
+                .border(borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft)
                 .borderSides(sides[0], sides[1], sides[2], sides[3])
                 .fill(((CgUiRect) d).getFill())
                 .submit();
