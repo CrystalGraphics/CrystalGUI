@@ -5,6 +5,7 @@ import com.crystalgui.ui.dom.UIElement;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * What a {@link ScreenKind}'s builder is given: the screen's document and its root, and the way to close it.
@@ -28,6 +29,7 @@ public final class ScreenContext {
     private final UIElement root;
     private final GameScreen screen;
     private final List<Runnable> closed = new ArrayList<>();
+    private final List<Runnable> hostFrame = new CopyOnWriteArrayList<>();
 
     ScreenContext(GameScreen screen, ScreenKind kind, UIDocument document, UIElement root) {
         this.screen = screen;
@@ -57,6 +59,32 @@ public final class ScreenContext {
     /** Runs {@code then} on the document when the screen closes, before the document is dropped. */
     public void onClosed(Runnable then) {
         closed.add(then);
+    }
+
+    /**
+     * Runs {@code work} on the host's thread, once every host frame while the screen is up: where the game may be
+     * asked, since the document never asks it. Hand what it finds to the document with {@code document().execute}.
+     *
+     * <pre>{@code
+     * screen.onHostFrame(() -> {
+     *     Menu now = CgContainers.menu();                        // the game's client thread
+     *     screen.document().execute(() -> show(now));            // the document's
+     * });
+     * }</pre>
+     *
+     * Any thread; a throw in it is the screen's fault. It is dropped when the screen is.
+     */
+    public void onHostFrame(Runnable work) {
+        hostFrame.add(work);
+    }
+
+    /** Render thread: every {@link #onHostFrame} work. */
+    void runHostFrame() {
+        for (Runnable work : hostFrame) work.run();
+    }
+
+    void dropHostFrame() {
+        hostFrame.clear();
     }
 
     /** On the document. */

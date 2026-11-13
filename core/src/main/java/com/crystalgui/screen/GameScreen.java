@@ -186,8 +186,19 @@ final class GameScreen {
         root.append(host);
     }
 
+    /** The kind's host-frame work, once a host frame. Render thread. */
+    void hostFrame() {
+        if (fault != null) return;
+        try {
+            context.runHostFrame();
+        } catch (RuntimeException | LinkageError failed) {
+            fault(failed);
+        }
+    }
+
     /** Runs the kind's close hooks on the document and drops it. Render thread. */
     void dispose() {
+        context.dropHostFrame();
         if (scale != null) scale.disconnect();
         try {
             viewport.run(context::runClosed);

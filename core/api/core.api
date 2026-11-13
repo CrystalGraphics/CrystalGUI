@@ -9619,6 +9619,14 @@ com/crystalgui/screen/CgUiScreen$Mode
   method public,static of (ZZZZZ)Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public,static values ()[Lcom/crystalgui/screen/CgUiScreen$Mode;
+com/crystalgui/screen/ContainerView
+  access public,final
+  extends java/lang/Object
+  field public,final onChanged Lcom/crystalgui/core/signal/Signal$Value;
+  method public click (IILcom/crystalgraphics/platform/service/CgContainers$Click;)V
+  method public close ()V
+  method public menu ()Lcom/crystalgraphics/platform/service/CgContainers$Menu;
+  method public,static of (Lcom/crystalgui/screen/ScreenContext;)Lcom/crystalgui/screen/ContainerView;
 com/crystalgui/screen/HitRegions
   access public,final
   extends java/lang/Object
@@ -9634,6 +9642,7 @@ com/crystalgui/screen/ScreenContext
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public kind ()Lcom/crystalgui/screen/ScreenKind;
   method public onClosed (Ljava/lang/Runnable;)V
+  method public onHostFrame (Ljava/lang/Runnable;)V
   method public root ()Lcom/crystalgui/ui/dom/UIElement;
 com/crystalgui/screen/ScreenKind
   access public,final,record

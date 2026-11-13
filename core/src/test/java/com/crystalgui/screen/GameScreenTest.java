@@ -1,17 +1,28 @@
 package com.crystalgui.screen;
 
+import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.service.CgContainers;
+import com.crystalgraphics.platform.service.CgItemStack;
 import com.crystalgui.app.screens.InventoryScreen;
 import com.crystalgui.app.screens.ScreenExample;
+import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.widget.control.Button;
+import com.crystalgui.widget.text.UIText;
+import org.joml.Vector2f;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -169,6 +180,68 @@ public class GameScreenTest {
         assertEquals(176 * unit, panel.box().width(), 0.5f);
         assertEquals(166 * unit, panel.box().height(), 0.5f);
         screen.owner().hidden();
+    }
+
+    /** The player's menu as the game would answer it: 46 slots, a stack of stone in the first of the hotbar, coal carried. */
+    private static CgContainers.Host menuHost(int windowId, String type, List<int[]> clicks) {
+        return new CgContainers.Host() {
+            @Override
+            public CgContainers.Menu menu() {
+                List<CgContainers.Slot> slots = new ArrayList<>();
+                for (int i = 0; i < 46; i++) {
+                    slots.add(new CgContainers.Slot(i, i == 36 ? CgItemStack.of("minecraft:stone", 16) : CgItemStack.EMPTY));
+                }
+                return new CgContainers.Menu(windowId, type, slots, CgItemStack.of("minecraft:coal", 2), Map.of());
+            }
+
+            @Override
+            public void click(int containerId, int slot, int button, CgContainers.Click click) {
+                clicks.add(new int[]{containerId, slot, button, click.ordinal()});
+            }
+
+            @Override
+            public void close() {
+            }
+        };
+    }
+
+    /** What the game holds shows in the slots, and a press on one is clicked into the game against the menu shown. */
+    @Test
+    public void theInventoryShowsTheMenuAndClicksIntoIt() {
+        List<int[]> clicks = new ArrayList<>();
+        CgPlatform.provide(CgContainers.HOST, menuHost(0, CgContainers.Menu.PLAYER, clicks));
+        try {
+            GameScreen screen = up(InventoryScreen.SCREEN);
+            screen.hostFrame();
+            var document = screen.viewport().document();
+
+            UIElement stone = document.getElementById(InventoryScreen.slotId(36));
+            assertEquals("its name and its count", 2, stone.childCount());
+            assertEquals(0, document.getElementById(InventoryScreen.slotId(37)).childCount());
+            assertEquals("coal x2", ((UIText) document.getElementById("carried")).text());
+
+            document.input().send(stone, new MouseEvent.Down(stone, new ReadOnlyVec2f(new Vector2f()), 0, 1));
+
+            assertEquals(1, clicks.size());
+            assertArrayEquals(new int[]{0, 36, 0, CgContainers.Click.PICKUP.ordinal()}, clicks.get(0));
+            screen.owner().hidden();
+        } finally {
+            CgPlatform.provide(CgContainers.HOST, null);
+        }
+    }
+
+    /** A container the server opens is another screen's: the inventory asks to close. */
+    @Test
+    public void theInventoryClosesWhenAContainerOpensOverIt() {
+        CgPlatform.provide(CgContainers.HOST, menuHost(7, "minecraft:furnace", new ArrayList<>()));
+        try {
+            GameScreen screen = up(InventoryScreen.SCREEN);
+            screen.hostFrame();
+            assertTrue(screen.takeCloseRequest());
+            screen.owner().hidden();
+        } finally {
+            CgPlatform.provide(CgContainers.HOST, null);
+        }
     }
 
     /** The worked example builds a panel and its Close button asks the screen to close. */

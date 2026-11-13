@@ -2,10 +2,17 @@ package com.crystalgui.app.screens;
 
 import com.crystalgraphics.platform.input.CgKeyBindings;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.platform.input.CgModifiers;
+import com.crystalgraphics.platform.input.CgMouseCodes;
+import com.crystalgraphics.platform.service.CgContainers;
+import com.crystalgraphics.platform.service.CgItemStack;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.screen.CgUiScreen;
+import com.crystalgui.screen.ContainerView;
+import com.crystalgui.screen.ScreenContext;
 import com.crystalgui.screen.ScreenKind;
 import com.crystalgui.style.sheet.StyleSheet;
+import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 
@@ -35,6 +42,10 @@ public final class InventoryScreen {
 
     private static final String PANEL = "__inv__";
     private static final String PLACED = "__inv-placed__";
+    /** The slots of vanilla's {@code InventoryMenu}, 0 to 45. */
+    private static final int SLOTS = 46;
+    private static final String ITEM = "__inv-item__";
+    private static final String COUNT = "__inv-count__";
 
     /**
      * The game's GUI scale the screen is drawn at: a vanilla GUI unit is this many screen pixels, the document's UI scale
@@ -52,6 +63,10 @@ public final class InventoryScreen {
                 .%4$s { position: absolute; }
                 .%6$s { font-size: %7$spx; text-align: center; }
                 .__inv-arrow-part__ { position: absolute; background-color: var(--border-strong, #5A5D63); }
+                /* What a slot holds until items are drawn: the item's name's first letters, and its count below. */
+                .%10$s, .%11$s { position: absolute; left: 0px; width: %12$s; text-align: center; font-size: %13$spx; }
+                .%10$s { top: %14$s; }
+                .%11$s { top: %15$s; text-align: right; }
                 /* Vanilla's bevel, one unit: dark above and left, light below and right. Every slot-like box has it. */
                 .%8$s, .%5$s, .__inv-button__ {
                     background-color: var(--surface-base, #26282B); border-width: %9$s;
@@ -59,7 +74,7 @@ public final class InventoryScreen {
                     border-bottom-color: var(--border-strong, #5A5D63); border-right-color: var(--border-strong, #5A5D63); }
                 .%5$s { background-color: var(--surface-recessed, #131416); }
                 """.formatted(PANEL, px(unit, 176), px(unit, 166), PLACED, PLAYER_VIEW, "__inv-title__", 8 * unit + 2,
-                SLOT, px(unit, 1));
+                SLOT, px(unit, 1), ITEM, COUNT, px(unit, 16), 6 * unit, px(unit, 2), px(unit, 9));
     }
 
     /** What the screen is: built each time it is shown, on its own document. */
@@ -80,8 +95,11 @@ public final class InventoryScreen {
         for (int col = 0; col < 9; col++) panel.append(slot(unit, sheet, 36 + col, 8 + 18 * col, 142));
         // last, so it paints over the grid; 1 px above vanilla's line
         panel.append(placed(unit, sheet, new UIText("Crafting").addClass("__inv-title__"), "title", 86, 8 - 1f / unit, 60, 10));
+        // what the cursor carries, under the panel, until the cursor draws it
+        panel.append(placed(unit, sheet, new UIText("").addClass("__inv-title__"), "carried", 0, 168, 176, 10));
         screen.document().styles().addStylesheet(StyleSheet.parse(sheet.toString()));
         screen.root().append(panel);
+        bind(screen);
     }).closedBy(CgKeyCodes.KEY_E).uiScale(1f);
 
     /** The launcher's entry: shows the screen in place of the desktop. */
@@ -100,6 +118,46 @@ public final class InventoryScreen {
     /** Lists the inventory in the game's controls, unbound until the player binds it. Client start. */
     public static void declareKey() {
         CgKeyBindings.declare(ID, CgKeyCodes.KEY_NONE, "crystalgui:keys", () -> CgUiScreen.show(SCREEN));
+    }
+
+    /** Wires the slots to the player's menu: what each holds shown, and a press on one clicked into the game. On the document. */
+    private static void bind(ScreenContext screen) {
+        UIDocument document = screen.document();
+        ContainerView view = ContainerView.of(screen);
+        for (int i = 0; i < SLOTS; i++) {
+            int index = i;
+            document.getElementById(slotId(i)).onMouseDown.subscribe((slot, press) -> {
+                int button = press.getButtonId();
+                boolean shift = CgModifiers.hasShift(document.input().modifiers());
+                if (button == CgMouseCodes.MIDDLE_BUTTON) view.click(index, button, CgContainers.Click.CLONE);
+                else view.click(index, button, shift ? CgContainers.Click.QUICK_MOVE : CgContainers.Click.PICKUP);
+            }, false, true);
+        }
+        UIText carried = (UIText) document.getElementById("carried");
+        view.onChanged.connect(menu -> {
+            if (menu == null) return;
+            // a container the server opened (a chest, a furnace) is another screen's
+            if (!menu.isPlayerInventory()) {
+                screen.close();
+                return;
+            }
+            for (int i = 0; i < SLOTS && i < menu.slots().size(); i++) show(document.getElementById(slotId(i)), menu.slot(i).stack());
+            carried.setText(menu.carried().isEmpty() ? "" : name(menu.carried()) + " x" + menu.carried().count());
+        });
+    }
+
+    /** What a slot shows of {@code stack}: its item's first letters and its count, which items drawn replace. */
+    private static void show(UIElement slot, CgItemStack stack) {
+        slot.removeAll();
+        if (stack.isEmpty()) return;
+        slot.append(new UIText(name(stack).substring(0, Math.min(3, name(stack).length()))).addClass(ITEM));
+        if (stack.count() > 1) slot.append(new UIText(String.valueOf(stack.count())).addClass(COUNT));
+    }
+
+    /** The item's name without its namespace. */
+    private static String name(CgItemStack stack) {
+        String item = stack.item();
+        return item.substring(item.indexOf(':') + 1);
     }
 
     /**

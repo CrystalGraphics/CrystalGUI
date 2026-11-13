@@ -442,7 +442,10 @@ public final class CgUiScreen {
         }
         connection.frame(state);
         GameScreen up = gameScreen;
-        if (up != null && up.takeCloseRequest()) CgScreens.close(up.owner());
+        if (up != null) {
+            up.hostFrame();
+            if (up.takeCloseRequest()) CgScreens.close(up.owner());
+        }
         if (launchPending) execute(CgUiScreen::bringForward);
         decideMode(CgScreens.isOpen(OWNER));
         CgTrace.zoneDone(UiTrace.FLOW, "screen:tick", ticking);
