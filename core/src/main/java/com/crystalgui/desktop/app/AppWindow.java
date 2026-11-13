@@ -160,6 +160,18 @@ public final class AppWindow {
         });
     }
 
+    /**
+     * Where this window's client area is on the desktop, for turning a point in the application's own document into a
+     * desktop one. The border and caption are what the client size leaves of the outer size.
+     */
+    public WindowBounds clientBounds(float fallbackWidth, float fallbackHeight) {
+        WindowBounds outer = frame.bounds(fallbackWidth, fallbackHeight);
+        float cw = document == null ? 0f : document.windowWidth(), ch = document == null ? 0f : document.windowHeight();
+        if (cw <= 0f || ch <= 0f || cw > outer.width() || ch > outer.height()) return outer;
+        float side = (outer.width() - cw) / 2f;
+        return new WindowBounds(outer.left() + side, outer.top() + (outer.height() - ch) - side, cw, ch);
+    }
+
     /** The title shown in the caption, the taskbar and the switcher. */
     public String title() {
         return frame.getTitle();

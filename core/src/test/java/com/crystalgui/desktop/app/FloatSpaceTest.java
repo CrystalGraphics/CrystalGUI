@@ -128,4 +128,11 @@ public class FloatSpaceTest extends UiDocumentTestBase {
         assertSame(WindowState.DESTROYED, peer.frame().state());
         assertFalse("its client left the document with it", view.document() == own);
     }
+
+    @Test
+    public void aPointInTheApplicationsDocumentIsMovedByItsWindowsPlaceOnTheDesktop() {
+        float[] at = floats.toDesktop(10f, 10f);
+        assertTrue("the window sits at (20, 20), so a point in it is past that: " + at[0], at[0] >= 30f);
+        assertTrue(at[1] >= 30f);
+    }
 }

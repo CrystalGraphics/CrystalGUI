@@ -4872,6 +4872,7 @@ com/crystalgui/desktop/app/AppWindow
   method public addCaptionAction (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow$CaptionAction;
   method public addSettingsAction (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow$CaptionAction;
   method public bounds (FF)Lcom/crystalgui/desktop/window/WindowBounds;
+  method public clientBounds (FF)Lcom/crystalgui/desktop/window/WindowBounds;
   method public close ()Z
   method public content ()Lcom/crystalgui/ui/dom/UIElement;
   method public destroy ()V
@@ -4906,6 +4907,7 @@ com/crystalgui/desktop/app/AppWindows
   extends java/lang/Object
   method public active ()Lcom/crystalgui/desktop/app/AppWindow;
   method public all ()Ljava/util/List;
+  method public application ()Lcom/crystalgui/desktop/app/AppDocument;
   method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
   method public,static openOnDesktop (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
 com/crystalgui/desktop/app/Application
@@ -5056,6 +5058,7 @@ com/crystalgui/desktop/app/FloatSpace
   method public main ()Lcom/crystalgui/desktop/app/AppWindow;
   method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
   method public openOwned (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public toDesktop (FF)[F
   method public,static of (Lcom/crystalgui/desktop/app/AppWindows;Lcom/crystalgui/desktop/app/AppWindow;)Lcom/crystalgui/desktop/app/FloatSpace;
   method public,static onDesktop (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/AppWindow;)Lcom/crystalgui/desktop/app/FloatSpace;
 com/crystalgui/desktop/app/PopupLayer
@@ -21149,6 +21152,7 @@ com/crystalgui/workbench/toolwindow/ToolWindowManager
   method public showPanel (Ljava/lang/String;)Z
   method public showPanel (Ljava/lang/String;Z)Z
   method public sideOf (Ljava/lang/String;)Lcom/crystalgui/workbench/region/RegionSide;
+  method public toDesktop (FF)[F
   method public togglePanel (Ljava/lang/String;)Z
   method public toolWindows ()Lcom/crystalgui/workbench/toolwindow/ToolWindowLayout;
   method public typeOf (Ljava/lang/String;)Lcom/crystalgui/workbench/toolwindow/ToolWindowType;

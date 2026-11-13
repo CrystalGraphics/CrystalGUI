@@ -55,8 +55,9 @@ public final class ToolWindowCommands {
                     float left = remembered != null ? remembered.left() : 0f;
                     float top = remembered != null ? remembered.top() : 0f;
                     if (remembered == null && container.box() != null) {
-                        left = container.box().worldX();
-                        top = container.box().worldY();
+                        float[] at = manager.toDesktop(container.box().worldX(), container.box().worldY());
+                        left = at[0];
+                        top = at[1];
                     }
                     manager.floatPanel(typeId, left, top, type);
                 });

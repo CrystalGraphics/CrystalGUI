@@ -29,6 +29,11 @@ public final class AppWindows {
     @Nullable
     private final AppDocument document;
 
+    /** The application these windows belong to. */
+    public AppDocument application() {
+        return document;
+    }
+
     AppWindows(Desktop desktop, ApplicationKind kind, @Nullable AppDocument document) {
         this.desktop = desktop;
         this.kind = kind;

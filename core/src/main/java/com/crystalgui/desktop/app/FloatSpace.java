@@ -5,6 +5,7 @@ import java.util.function.Function;
 import javax.annotation.Nullable;
 
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowBounds;
 
 /**
  * How a workbench opens its floating windows: tool windows and torn-out editors are windows of the desktop, so they can
@@ -25,22 +26,24 @@ import com.crystalgui.desktop.Desktop;
 public final class FloatSpace {
 
     private final Function<WindowSpec, AppWindow> opener;
+    private final boolean inApplication;
     @Nullable
     private final AppWindow main;
 
-    private FloatSpace(Function<WindowSpec, AppWindow> opener, @Nullable AppWindow main) {
+    private FloatSpace(Function<WindowSpec, AppWindow> opener, @Nullable AppWindow main, boolean inApplication) {
         this.opener = opener;
+        this.inApplication = inApplication;
         this.main = main;
     }
 
     /** Opens through {@code windows}, owned by {@code main}: the application's own windows. */
     public static FloatSpace of(AppWindows windows, @Nullable AppWindow main) {
-        return new FloatSpace(windows::open, main);
+        return new FloatSpace(windows::open, main, true);
     }
 
     /** Opens on {@code desktop} with content in the shell's document, owned by {@code main} when there is one. */
     public static FloatSpace onDesktop(Desktop desktop, @Nullable ApplicationKind kind, @Nullable AppWindow main) {
-        return new FloatSpace(spec -> AppWindows.openOnDesktop(desktop, kind, spec), main);
+        return new FloatSpace(spec -> AppWindows.openOnDesktop(desktop, kind, spec), main, false);
     }
 
     /** A window of its own. */
@@ -51,6 +54,16 @@ public final class FloatSpace {
     /** A window owned by the main window: above it, and minimised and closed with it; a peer when there is no main window. */
     public AppWindow openOwned(WindowSpec spec) {
         return opener.apply(main == null ? spec : spec.ownedBy(main));
+    }
+
+    /**
+     * Turns a point in the document the floats came out of into a desktop point, the space a window is placed in. An
+     * application's own document is not the desktop's: its origin is its window's client area.
+     */
+    public float[] toDesktop(float x, float y) {
+        if (!inApplication || main == null) return new float[] {x, y};
+        WindowBounds client = main.clientBounds(0f, 0f);
+        return new float[] {client.left() + x, client.top() + y};
     }
 
     /** The window the floats came out of, or null. */

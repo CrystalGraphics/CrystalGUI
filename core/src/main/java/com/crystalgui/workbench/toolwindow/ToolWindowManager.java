@@ -788,7 +788,13 @@ public final class ToolWindowManager {
         ToolWindowState.Bounds remembered = placementOf(typeId).floatingBounds();
         boolean usable = remembered != null && remembered.width() > 0f;
         float width = usable ? remembered.width() : ToolWindowFloat.DEFAULT_WIDTH;
-        floatPanel(typeId, x - width / 2f, y, ToolWindowType.WINDOWED);
+        float[] at = toDesktop(x, y);
+        floatPanel(typeId, at[0] - width / 2f, at[1], ToolWindowType.WINDOWED);
+    }
+
+    /** A point in the workbench's document as a desktop point, which is what a float's bounds are in. */
+    public float[] toDesktop(float x, float y) {
+        return floats == null ? new float[] {x, y} : floats.toDesktop(x, y);
     }
 
     /** @see #floatPanel(String, float, float) */
