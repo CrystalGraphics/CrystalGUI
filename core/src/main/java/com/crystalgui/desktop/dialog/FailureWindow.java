@@ -164,7 +164,7 @@ public final class FailureWindow {
     }
 
     /** The innermost cause's message, with its type when it has none. */
-    private static String detail(@Nullable Throwable cause) {
+    public static String detail(@Nullable Throwable cause) {
         if (cause == null) return "";
         Throwable root = cause;
         while (root.getCause() != null && root.getCause() != root) root = root.getCause();

@@ -1,5 +1,6 @@
 package com.crystalgui.screen;
 
+import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.loading.CgLoadingScreen;
 import com.crystalgraphics.platform.input.CgInputStage;
 import com.crystalgraphics.platform.input.CgKeyBindings;
@@ -48,6 +49,8 @@ import java.util.function.Predicate;
  * CgUiScreen.open();                // the Show Desktop key: the desktop, nothing on it touched
  * CgUiScreen.openApplication();     // the primary application forward, launched if nothing runs it
  * CgUiScreen.close();               // it plays itself off, then its screen closes
+ * CgUiScreen.show(SETTINGS);        // a ScreenKind of ours over the game, no desktop; one at a time
+ * CgUiScreen.closeScreen();         // that screen, at the next tick
  * CgUiScreen.dispose();             // game shutdown
  * }</pre>
  *
@@ -88,6 +91,8 @@ public final class CgUiScreen {
     public enum Mode {
         /** Our screen is up: the whole desktop, taking input. */
         DESKTOP,
+        /** One of our {@link ScreenKind}s is up, with its own document; pinned windows draw over it and take their presses. */
+        GAME_SCREEN,
         /** Another screen is up over pinned windows: the window layer, taking the presses that land on it. */
         OVERLAY,
         /** No screen is up and windows are pinned: the window layer over the game, taking no input. */
@@ -99,19 +104,22 @@ public final class CgUiScreen {
          * What the desktop shows, from what is up and what the desktop holds.
          *
          * @param ourScreenUp the desktop's screen is the one in front
+         * @param gameScreenUp one of our game screens is the one in front
          * @param anyScreenUp some screen is up, ours or another's
          * @param attached    the desktop is in its document's tree
          * @param pinned      a window is pinned
          */
-        public static Mode of(boolean ourScreenUp, boolean anyScreenUp, boolean attached, boolean pinned) {
+        public static Mode of(boolean ourScreenUp, boolean gameScreenUp, boolean anyScreenUp, boolean attached,
+                              boolean pinned) {
             if (ourScreenUp) return DESKTOP;
+            if (gameScreenUp) return GAME_SCREEN;
             if (!attached || !pinned) return NONE;
             return anyScreenUp ? OVERLAY : HUD;
         }
 
         /** Whether it takes input. */
         public boolean isInteractive() {
-            return this == DESKTOP || this == OVERLAY;
+            return this == DESKTOP || this == GAME_SCREEN || this == OVERLAY;
         }
 
         /** Whether menus, dialogs and tooltips paint with it. */
@@ -161,6 +169,10 @@ public final class CgUiScreen {
     /** The primary application, once launched. Written on the document. */
     @Nullable
     private static volatile Application primary;
+
+    /** The game screen up, between the host's {@code shown} and {@code hidden}; null for none. */
+    @Nullable
+    private static volatile GameScreen gameScreen;
 
     /** What this host frame shows. Decided at the end of the last, and when the desktop's own screen comes or goes. */
     private static volatile Mode mode = Mode.NONE;
@@ -279,6 +291,70 @@ public final class CgUiScreen {
         return installed && CgScreens.isOpen(OWNER);
     }
 
+    /**
+     * Puts {@code kind} up over the game, with no desktop, in place of any screen that is up: built on a document of
+     * its own, dropped when it closes. Windows pinned on the desktop stay over it. Showing the one that is up does
+     * nothing. Any thread: from another it is posted to the client's.
+     *
+     * <pre>{@code
+     * CgKeyBindings.declare("mymod:settings", CgKeyCodes.KEY_O, "mymod:keys", () -> CgUiScreen.show(SETTINGS));
+     * }</pre>
+     */
+    public static void show(ScreenKind kind) {
+        CgHostThread.CLIENT.run(() -> showHere(kind));
+    }
+
+    private static void showHere(ScreenKind kind) {
+        requireInstalled();
+        GameScreen up = gameScreen;
+        if (up != null && up.kind().equals(kind) || !mayOpen()) return;
+        // The desktop's viewport frames the pinned windows over it and decides the mode, so it is built first.
+        if (game == null) preload();
+        GameScreen next = new GameScreen(kind);
+        CgScreens.open(next.owner());
+        if (gameScreen != next) {
+            // No host took it (a server, a test): nothing will call hidden, so it ends here.
+            CrystalGuiCore.LOGGER.warn("[cgui] the screen '{}' did not open: no host screen", kind.id());
+            next.dispose();
+        }
+    }
+
+    /** Closes the game screen at the host's next tick, if one is up. Any thread. */
+    public static void closeScreen() {
+        CgHostThread.CLIENT.run(() -> {
+            GameScreen up = gameScreen;
+            if (up != null) CgScreens.close(up.owner());
+        });
+    }
+
+    /** Closes the game screen at the host's next tick, if {@code kind} is the one up. Any thread. */
+    public static void closeScreen(ScreenKind kind) {
+        CgHostThread.CLIENT.run(() -> {
+            GameScreen up = gameScreen;
+            if (up != null && up.kind().equals(kind)) CgScreens.close(up.owner());
+        });
+    }
+
+    /** The kind of the game screen that is up, or null. */
+    @Nullable
+    public static ScreenKind screen() {
+        GameScreen up = gameScreen;
+        return up == null ? null : up.kind();
+    }
+
+    /** A game screen is up (the host's {@code shown}, again on every resize). */
+    static void gameScreenShown(GameScreen screen) {
+        gameScreen = screen;
+        decideMode(CgScreens.isOpen(OWNER));
+    }
+
+    /** A game screen is down: closed, or another screen took its place. It is dropped here. */
+    static void gameScreenHidden(GameScreen screen) {
+        if (gameScreen == screen) gameScreen = null;
+        screen.dispose();
+        decideMode(CgScreens.isOpen(OWNER));
+    }
+
     /** Never while the loading screen shows, which nothing opens over. */
     private static boolean mayOpen() {
         if (!CgLoadingScreen.shown()) return true;
@@ -365,6 +441,8 @@ public final class CgUiScreen {
             close.run();
         }
         connection.frame(state);
+        GameScreen up = gameScreen;
+        if (up != null && up.takeCloseRequest()) CgScreens.close(up.owner());
         if (launchPending) execute(CgUiScreen::bringForward);
         decideMode(CgScreens.isOpen(OWNER));
         CgTrace.zoneDone(UiTrace.FLOW, "screen:tick", ticking);
@@ -385,7 +463,8 @@ public final class CgUiScreen {
         }
         Boolean attachedNow = shown.readout(DesktopContent.ATTACHED);
         // Before the first commit the desktop is attached and holds nothing pinned, as it was built.
-        mode = Mode.of(ours, any, attachedNow == null || attachedNow, Boolean.TRUE.equals(shown.readout(DesktopContent.PINNED)));
+        mode = Mode.of(ours, gameScreen != null, any, attachedNow == null || attachedNow,
+                Boolean.TRUE.equals(shown.readout(DesktopContent.PINNED)));
     }
 
     /** What the desktop shows this host frame. */
@@ -420,6 +499,7 @@ public final class CgUiScreen {
         CrystalGuiDownloads.LOCATIONS.useCacheRoot(made.cacheRoot());
         made.useLocalWorld(state::localWorldDirectory);
         DesktopWindowMount mount = new DesktopWindowMount(built, () -> appDocuments.openServer("connection"));
+        mount.useScreens(new ServerScreens());
         // WHERE A SERVER'S WINDOW IS OFFERED FIRST: the primary application takes what it recognises and hands the
         // rest back, so a client with it closed still gets every window.
         DesktopConnection wire = new DesktopConnection(built, mount, () -> {
@@ -533,6 +613,9 @@ public final class CgUiScreen {
             for (WindowFrame frame : new ArrayList<>(gone.windowManager().windows())) frame.destroy();
             gone.suspend();
         };
+        GameScreen screenUp = gameScreen;
+        gameScreen = null;
+        if (screenUp != null) screenUp.dispose();
         CgUiViewport shown = viewport;
         if (shown == null) down.run();
         else {
@@ -605,7 +688,8 @@ public final class CgUiScreen {
     /** The focus owner's caret area in surface pixels, {@code [x, y, width, height]}, of the frame on screen; or null. */
     @Nullable
     public static float[] textInputArea() {
-        CgUiViewport shown = viewport;
+        GameScreen up = gameScreen;
+        CgUiViewport shown = up != null && mode == Mode.GAME_SCREEN ? up.viewport() : viewport;
         return shown == null ? null : shown.readout(CgUiViewport.TEXT_INPUT_AREA);
     }
 
@@ -716,7 +800,17 @@ public final class CgUiScreen {
         try {
             // THE CLIENTS FIRST: their surfaces have executed when the desktop's frame draws them.
             appDocuments.frame(stage);
-            if (shown.frame(stage, byMode[now.ordinal()])) painted = true;
+            GameScreen up = now == Mode.GAME_SCREEN ? gameScreen : null;
+            if (up != null) {
+                up.viewport().frame(stage, up.content());
+                INPUT.returnUnhandledKeys(up.viewport());
+            }
+            // Over a game screen the desktop draws only what is pinned. The readout is the last frame's: nothing on the
+            // desktop can be pinned while this screen holds the input.
+            if ((up == null || !Boolean.FALSE.equals(shown.readout(DesktopContent.PINNED)))
+                    && shown.frame(stage, byMode[now.ordinal()])) {
+                painted = true;
+            }
             CgTrace.zoneDone(UiTrace.FLOW, "screen:paint", painting);
         } catch (RuntimeException | LinkageError failed) {
             CrystalGuiCore.LOGGER.error("[cgui] the desktop's paint failed; leaving HUD mode", failed);
@@ -726,6 +820,11 @@ public final class CgUiScreen {
     }
 
     // ── For the package ─────────────────────────────────────────────────────────────────────────
+
+    @Nullable
+    static GameScreen gameScreen() {
+        return gameScreen;
+    }
 
     static CgUiScreenInput input() {
         requireInstalled();

@@ -89,8 +89,13 @@ final class CgUiScreenInput implements CgInputListener, CgSystemInput.Mouse, CgS
 
     @Override
     public boolean composition(String text, int caret) {
+        CgUiScreen.Mode mode = CgUiScreen.mode();
+        if (mode == CgUiScreen.Mode.GAME_SCREEN) {
+            GameScreen screen = CgUiScreen.gameScreen();
+            return screen != null && screen.viewport().consumeComposition(text, caret);
+        }
         CgUiViewport viewport = CgUiScreen.viewport();
-        return CgUiScreen.mode() == CgUiScreen.Mode.DESKTOP && viewport != null && viewport.consumeComposition(text, caret);
+        return mode == CgUiScreen.Mode.DESKTOP && viewport != null && viewport.consumeComposition(text, caret);
     }
 
     private boolean pointer(CgSystemInput.Mouse.Event e, int button, boolean pressed, float wheel) {
@@ -99,6 +104,7 @@ final class CgUiScreenInput implements CgInputListener, CgSystemInput.Mouse, CgS
                 consumeMouseEvent(HostPointer.of(e.x(), e.y(), e.dx(), e.dy(), button, pressed, wheel, e.millis()));
                 yield true;
             }
+            case GAME_SCREEN -> gameScreenMouse(e, button, pressed, wheel);
             case OVERLAY -> overlayMouse(CgInput.pointerGrabbed(), e.x(), e.y(), button, pressed, wheel);
             default -> false;
         };
@@ -107,9 +113,46 @@ final class CgUiScreenInput implements CgInputListener, CgSystemInput.Mouse, CgS
     private boolean keyboard(CgSystemInput.Keyboard.Event e) {
         return switch (CgUiScreen.mode()) {
             case DESKTOP -> consumeKeyboardEvent(e);
+            case GAME_SCREEN -> gameScreenKey(e);
             case OVERLAY -> keyboardIsOurs && viewportKey(e);
             default -> false;
         };
+    }
+
+    // ── On a game screen ────────────────────────────────────────────────────────────────────────
+
+    /**
+     * A pointer event on a game screen: a pinned window under the point takes it first, as over another screen; every
+     * other press, and every move, is the screen's. The screen has no place the game could take a press.
+     */
+    private boolean gameScreenMouse(CgSystemInput.Mouse.Event e, int button, boolean pressed, float wheel) {
+        GameScreen screen = CgUiScreen.gameScreen();
+        if (screen == null) return false;
+        if (desktopIsPinned() && overlayMouse(CgInput.pointerGrabbed(), e.x(), e.y(), button, pressed, wheel)) return true;
+        screen.viewport().consumeMouseEvent(HostPointer.of(e.x(), e.y(), e.dx(), e.dy(), button, pressed, wheel, e.millis()));
+        return true;
+    }
+
+    /**
+     * A key on a game screen: a focused pinned window's, else the screen's own close keys (while no text field has
+     * focus), else its document. What the document leaves comes back through {@code returnUnhandledKeys}, an Escape to
+     * the host's screen, which closes it.
+     */
+    private boolean gameScreenKey(CgSystemInput.Keyboard.Event e) {
+        GameScreen screen = CgUiScreen.gameScreen();
+        if (screen == null) return false;
+        if (keyboardIsOurs) return viewportKey(e);
+        if (e.pressed() && e.character() == 0 && screen.kind().closesOn(e.key()) && CgUiScreen.textInputArea() == null) {
+            screen.requestClose();
+            return true;
+        }
+        return screen.viewport().consumeKeyboardEvent(e);
+    }
+
+    /** Whether the desktop draws anything over a game screen: a window is pinned, or nothing has been framed yet. */
+    private static boolean desktopIsPinned() {
+        CgUiViewport viewport = CgUiScreen.viewport();
+        return viewport != null && !Boolean.FALSE.equals(viewport.readout(DesktopContent.PINNED));
     }
 
     // ── On the desktop's screen, and by hand ────────────────────────────────────────────────────

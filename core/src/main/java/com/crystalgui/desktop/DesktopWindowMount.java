@@ -2,6 +2,8 @@ package com.crystalgui.desktop;
 
 import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BiConsumer;
 import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
@@ -51,6 +53,9 @@ import com.crystalgui.ui.dom.UIElement;
  *       What it declines opens as a frame.</li>
  *   <li><b>Windows open in the background</b>: a server pushing a UI must not take the keyboard from what is being typed.
  *       The frame asks for attention instead.</li>
+ *   <li><b>A window asked to be a screen</b> ({@link Presentation#SCREEN}) goes to {@link Screens}, when the host has
+ *       given it, whichever mount would have taken it: the tree stays in the connection's document and the screen shows
+ *       it through a portal, as a frame does. Without one it opens as a window.</li>
  *   <li>It owes the context one report: {@link ClientWindowContext#userClosed()} when the <em>user</em> closes the frame,
  *       never when the server or the connection did.</li>
  * </ul>
@@ -61,7 +66,32 @@ public final class DesktopWindowMount implements WindowMount {
     public record Preferred(WindowMount mount, @Nullable AppDocument document) {
     }
 
+    /**
+     * Where a window shown as a screen of the game goes: the host's game screens, which this names no type of.
+     *
+     * <pre>{@code
+     * mount.useScreens((name, build, closedByUser) -> screens.show(name, build, closedByUser));
+     * }</pre>
+     */
+    public interface Screens {
+
+        /**
+         * Puts a screen up and, on its own thread, calls {@code build} with its document and the element that fills it.
+         * {@code closedByUser} is called on that thread when the screen goes away for any reason but {@link Shown#close}.
+         */
+        Shown show(String name, BiConsumer<UIDocument, UIElement> build, Runnable closedByUser);
+
+        /** One screen, up. */
+        interface Shown {
+
+            /** Takes it down: the server ended the window or the connection did. Any thread; never reported back. */
+            void close();
+        }
+    }
+
     private final UIDocument shell;
+    @Nullable
+    private volatile Screens screens;
     @Nullable
     private final Supplier<AppDocument> documents;
     /** The connection's document, made when the first connection binds; null where none is built. */
@@ -92,6 +122,15 @@ public final class DesktopWindowMount implements WindowMount {
                 treeDocument().styles().removeStylesheet(sheet, root);
             }
         });
+    }
+
+    /** Gives windows that ask to be screens somewhere to go; without it they open as windows. */
+    public void useScreens(@Nullable Screens screens) {
+        this.screens = screens;
+    }
+
+    private boolean asksForScreen(ClientWindowContext context) {
+        return screens != null && context.presentation().kind() == Presentation.Kind.SCREEN;
     }
 
     /** The connection's document, built on first ask; the shell's thread. Null where none is built. */
@@ -147,10 +186,14 @@ public final class DesktopWindowMount implements WindowMount {
     public MountedWindow mount(ClientWindowContext context) {
         if (context instanceof Routed routed) {
             // From an application's mount, on its thread: the window is the connection's to open.
+            if (asksForScreen(routed.original)) {
+                return routed.home.toConnection(() -> openScreen(routed.original, routed.client));
+            }
             return routed.home.toConnection(() -> open(routed.original, routed.client));
         }
         AppDocument connection = host;
         if (connection == null) return openInShell(context);
+        if (asksForScreen(context)) return openScreen(context, connection.openClient(context.root()));
         return open(context, connection.openClient(context.root()));
     }
 
@@ -170,6 +213,69 @@ public final class DesktopWindowMount implements WindowMount {
             throw failed;
         }
         return wire(frame, context, connection, client);
+    }
+
+    /**
+     * The connection's thread: a screen of the game showing {@code client}, a portal in its own document. The player
+     * closing it is reported; the server or the connection ending it is not.
+     */
+    private MountedWindow openScreen(ClientWindowContext context, ClientRoot client) {
+        AppDocument connection = host;
+        AtomicBoolean released = new AtomicBoolean();
+        AtomicReference<UIDocument> showing = new AtomicReference<>();
+        Runnable release = () -> {
+            if (!released.compareAndSet(false, true)) return;
+            release(connection, client);
+            UIDocument was = showing.get();
+            if (was != null) connection.hidePopupsIn(was);
+        };
+        Screens.Shown shown;
+        try {
+            shown = screens.show(title(context), (screen, root) -> {
+                showing.set(screen);
+                ClientPortal portal = connection.portalTo(client);
+                root.append(portal);
+                connection.showPopupsIn(screen);
+                screen.focus().requestFocus(portal);
+            }, () -> connection.execute(() -> {
+                release.run();
+                context.userClosed();
+            }));
+        } catch (RuntimeException failed) {
+            release.run();
+            throw failed;
+        }
+        return new MountedScreen(shown, client, release);
+    }
+
+    /** A server's window shown as a screen. */
+    private static final class MountedScreen implements MountedWindow {
+
+        private final Screens.Shown shown;
+        private final ClientRoot client;
+        private final Runnable release;
+
+        MountedScreen(Screens.Shown shown, ClientRoot client, Runnable release) {
+            this.shown = shown;
+            this.client = client;
+            this.release = release;
+        }
+
+        @Override
+        public void closedByServer(String reason) {
+            release.run();
+            shown.close();
+        }
+
+        /** Re-opening what is open: it is the screen in front already. */
+        @Override
+        public void focus() {
+        }
+
+        @Override
+        public void contentReplaced(UIElement newRoot) {
+            client.setContent(newRoot);
+        }
     }
 
     /** No document of the connection's own: the tree is the shell's. */

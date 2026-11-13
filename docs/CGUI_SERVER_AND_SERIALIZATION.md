@@ -409,13 +409,19 @@ Three properties make it safe, and each fails separately:
 
 ## 7c. Where a window appears — `Presentation`
 
-`ui/openWindow` carries `WINDOW`, `EDITOR_TAB` or `TOOL_WINDOW(region)`. Only the server knows what a
+`ui/openWindow` carries `WINDOW`, `EDITOR_TAB`, `TOOL_WINDOW(region)` or `SCREEN`. Only the server knows what a
 panel is *for*, and a client cannot tell a machine's controls from a live log by reading the tree.
 
 It is a **hint**: a host with no workbench opens a window regardless, and an unrecognised placement
 parses as `WINDOW` rather than failing — refusing to parse a placement is refusing the window. A client
 may not name one; it is declared beside the resolver (`openable(type, resolver, presentation)`),
 because where a panel belongs is the mod's statement about its own UI.
+
+`SCREEN` shows the panel as a screen of the game: it fills the window over the world, with no desktop, closed by
+Escape. The tree stays in the connection's document and the screen shows it through a portal, as a window does
+(`DesktopWindowMount.Screens`, given by `CgUiScreen`). The player closing it reaches the server as `userClosed`;
+the server's own close does not echo. One screen is up at a time: a second replaces the first, and the first
+reports as closed. Without a host that has screens it opens as a window.
 
 ## 7d. Children the viewer added — `addLocal`
 

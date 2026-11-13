@@ -4,6 +4,7 @@ import com.crystalgui.app.crystaleditor.CrystalEditor;
 import com.crystalgui.app.cues.CueSelector;
 import com.crystalgui.app.frameprofiler.FrameProfiler;
 import com.crystalgui.app.machine.MachineExample;
+import com.crystalgui.app.screens.ScreenExample;
 import com.crystalgui.app.vfxlab.VfxLab;
 import com.crystalgui.desktop.app.ApplicationKinds;
 import com.crystalgui.desktop.app.ApplicationRegistry;
@@ -33,6 +34,7 @@ public final class Applications implements ApplicationKinds {
         applications.install(VfxLab.KIND);
         applications.install(CueSelector.KIND);
         applications.install(MachineExample.KIND);
+        applications.install(ScreenExample.KIND);
         // AN INSTRUMENT, not a product, and installed all the same: the frames worth measuring are an
         // editor's and a game client's, and a profiler reachable only from a harness scene can see
         // neither. Every desktop that has this jar can open it.

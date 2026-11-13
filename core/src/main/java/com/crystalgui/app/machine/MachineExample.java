@@ -4,6 +4,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.lifecycle.CgEngineLifecycle;
 import com.crystalgraphics.net.protocol.CgProtocolConnection;
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgui.app.machine.ui.MachinePanel;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.net.window.ClientWindows;
@@ -38,6 +39,10 @@ public final class MachineExample {
 
     private static boolean registered;
 
+    /** {@code -Dcrystalgui.machine.screen=true}: the panel opens as a screen of the game, as a furnace does, not a window. */
+    private static final boolean AS_SCREEN = CgVar.bool("crystalgui.machine.screen", false, CgVar.DEV,
+            "The machine example's panel opens as a screen of the game instead of a desktop window.").get();
+
     /** The launcher's entry: asks the server for the panel, which opens as a window of its own. Needs a connection. */
     /** The launcher entry's id, which the panel's type names as its application. */
     public static final String ID = "crystalgui:machine-example";
@@ -61,7 +66,7 @@ public final class MachineExample {
             ServerWindows.openable(MachinePanel.TYPE, (viewer, args) -> {
                 MachineTrace.log(MachineTrace.SERVER, "a client asked for a panel");
                 return MACHINE;
-            }, Presentation.WINDOW);
+            }, AS_SCREEN ? Presentation.SCREEN : Presentation.WINDOW);
             CgEngineLifecycle.onServerTick(MACHINE::tick);
         }
     }

@@ -301,7 +301,10 @@ com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, fou
 com.crystalgui.screen          THE CLIENT'S ONE DESKTOP: CgUiScreen (static: install, open, close, Mode, the
                                tick, the paint at HUD and SCREEN), CgUiScreenInput (the one input router),
                                DesktopConnection, GameState, DesktopContent per Mode, HitRegions, the
-                               rehearsal. Names `viewport` and `desktop`; neither names it.
+                               rehearsal; game screens: ScreenKind (a value: id, builder, background,
+                               pause, closing keys), ScreenContext, GameScreen (one shown kind, its own
+                               document), ServerScreens (a server window shown as one). Names `viewport`
+                               and `desktop`; neither names it.
 
 com.crystalgui.viewport        ONE DOCUMENT ON SCREEN: CgUiViewport (owns the document's thread, input, frames,
                                readouts) over a DocumentThread per threading (inline, lockstep, sequenced),
@@ -373,7 +376,7 @@ com.crystalgui.workbench       The shell, and THE ROOT IS THE HUB ONLY. Everythi
                                TextEditor as a DocumentEditor) and TextFileKind
 com.crystalgui.app             The MANIFESTS, and what each product declares about itself:
                                .crystaleditor (CrystalEditor — an ApplicationKind and three choices,
-                               and no longer an element at all), .shadergraph, .machine.
+                               and no longer an element at all), .shadergraph, .machine, .screens (a worked game screen).
 
 com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, Selection,
                                SelectionModel, TextPoint, TextRange, WordClassifier, WordOperations,

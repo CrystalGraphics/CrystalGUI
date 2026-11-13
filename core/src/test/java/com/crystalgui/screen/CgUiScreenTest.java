@@ -27,7 +27,7 @@ public class CgUiScreenTest {
     }
 
     private static CgUiScreen.Mode modeOf(Desktop desktop, boolean anyScreenUp) {
-        return CgUiScreen.Mode.of(false, anyScreenUp, desktop.parent() != null, desktop.windowManager().hasPinnedWindows());
+        return CgUiScreen.Mode.of(false, false, anyScreenUp, desktop.parent() != null, desktop.windowManager().hasPinnedWindows());
     }
 
     /** Closing the screen with something pinned goes to the HUD, not to a suspend, which would answer NONE. */
@@ -60,10 +60,12 @@ public class CgUiScreenTest {
     /** Our screen is the desktop whatever it holds; with none up, only pinned windows show. */
     @Test
     public void theModeFollowsWhatIsUpAndWhatIsPinned() {
-        assertEquals(CgUiScreen.Mode.DESKTOP, CgUiScreen.Mode.of(true, true, false, false));
-        assertEquals(CgUiScreen.Mode.NONE, CgUiScreen.Mode.of(false, true, true, false));
-        assertEquals(CgUiScreen.Mode.NONE, CgUiScreen.Mode.of(false, false, false, true));
-        assertEquals(CgUiScreen.Mode.HUD, CgUiScreen.Mode.of(false, false, true, true));
-        assertEquals(CgUiScreen.Mode.OVERLAY, CgUiScreen.Mode.of(false, true, true, true));
+        assertEquals(CgUiScreen.Mode.DESKTOP, CgUiScreen.Mode.of(true, false, true, false, false));
+        assertEquals(CgUiScreen.Mode.NONE, CgUiScreen.Mode.of(false, false, true, true, false));
+        assertEquals(CgUiScreen.Mode.NONE, CgUiScreen.Mode.of(false, false, false, false, true));
+        assertEquals(CgUiScreen.Mode.HUD, CgUiScreen.Mode.of(false, false, false, true, true));
+        assertEquals(CgUiScreen.Mode.OVERLAY, CgUiScreen.Mode.of(false, false, true, true, true));
+        assertEquals("a game screen is ours whatever the desktop holds",
+                CgUiScreen.Mode.GAME_SCREEN, CgUiScreen.Mode.of(false, true, true, false, false));
     }
 }

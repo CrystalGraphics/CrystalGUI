@@ -623,6 +623,13 @@ com/crystalgui/app/machine/ui/StreamsPanel
   method public build (Lcom/crystalgui/app/machine/MachineModel;)V
   method public client (Lcom/crystalgui/net/window/ClientScope;)V
   method public serve (Lcom/crystalgui/app/machine/MachineModel;Lcom/crystalgui/net/window/ServerScope;)V
+com/crystalgui/app/screens/ScreenExample
+  access public,final
+  extends java/lang/Object
+  field public,static,final ID Ljava/lang/String;
+  field public,static,final KIND Lcom/crystalgui/desktop/app/ApplicationKind;
+  field public,static,final SCREEN Lcom/crystalgui/screen/ScreenKind;
+  method public,static declareKey ()V
 com/crystalgui/app/shadergraph/GeneratedSourceView
   access public,final
   extends java/lang/Object
@@ -4793,6 +4800,7 @@ com/crystalgui/desktop/DesktopWindowMount
   method public <init> (Lcom/crystalgui/ui/dom/UIDocument;Ljava/util/function/Supplier;)V
   method public bind (Lcom/crystalgraphics/net/protocol/CgProtocolConnection;Lcom/crystalgui/desktop/DesktopWindowMount$Preferred;)V
   method public mount (Lcom/crystalgui/net/window/ClientWindowContext;)Lcom/crystalgui/net/window/WindowMount$MountedWindow;
+  method public useScreens (Lcom/crystalgui/desktop/DesktopWindowMount$Screens;)V
 com/crystalgui/desktop/DesktopWindowMount$Preferred
   access public,final,record
   extends java/lang/Record
@@ -4802,6 +4810,14 @@ com/crystalgui/desktop/DesktopWindowMount$Preferred
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/desktop/DesktopWindowMount$Screens
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract show (Ljava/lang/String;Ljava/util/function/BiConsumer;Ljava/lang/Runnable;)Lcom/crystalgui/desktop/DesktopWindowMount$Screens$Shown;
+com/crystalgui/desktop/DesktopWindowMount$Screens$Shown
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract close ()V
 com/crystalgui/desktop/SnapPreview
   access public,final
   extends java/lang/Object
@@ -4843,6 +4859,7 @@ com/crystalgui/desktop/app/AppDocument
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
   method public execute (Ljava/lang/Runnable;)V
   method public fault (Ljava/lang/Throwable;)V
+  method public hidePopupsIn (Lcom/crystalgui/ui/dom/UIDocument;)V
   method public openClient (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/ClientRoot;
   method public popups ()Lcom/crystalgui/desktop/app/PopupLayer;
   method public portalTo (Lcom/crystalgui/desktop/app/ClientRoot;)Lcom/crystalgui/desktop/app/ClientPortal;
@@ -5128,6 +5145,7 @@ com/crystalgui/desktop/dialog/FailureWindow
   field public,static,final REPORT_CLASS Ljava/lang/String;
   field public,static,final SCROLL_CLASS Ljava/lang/String;
   field public,static,final TEXT_CLASS Ljava/lang/String;
+  method public,static detail (Ljava/lang/Throwable;)Ljava/lang/String;
   method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public,static openReport (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/desktop/window/WindowFrame;
@@ -8356,6 +8374,7 @@ com/crystalgui/net/window/Presentation
   access public,final
   extends java/lang/Object
   field public,static,final EDITOR_TAB Lcom/crystalgui/net/window/Presentation;
+  field public,static,final SCREEN Lcom/crystalgui/net/window/Presentation;
   field public,static,final WINDOW Lcom/crystalgui/net/window/Presentation;
   method public encode ()Ljava/lang/String;
   method public equals (Ljava/lang/Object;)Z
@@ -8369,6 +8388,7 @@ com/crystalgui/net/window/Presentation$Kind
   access public,final,enum
   extends java/lang/Enum
   field public,static,final EDITOR_TAB Lcom/crystalgui/net/window/Presentation$Kind;
+  field public,static,final SCREEN Lcom/crystalgui/net/window/Presentation$Kind;
   field public,static,final TOOL_WINDOW Lcom/crystalgui/net/window/Presentation$Kind;
   field public,static,final WINDOW Lcom/crystalgui/net/window/Presentation$Kind;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/net/window/Presentation$Kind;
@@ -9544,6 +9564,8 @@ com/crystalgui/screen/CgUiScreen
   field public,static,final UI_SCALE F
   method public,static application ()Lcom/crystalgui/desktop/app/Application;
   method public,static close ()V
+  method public,static closeScreen ()V
+  method public,static closeScreen (Lcom/crystalgui/screen/ScreenKind;)V
   method public,static desktop ()Lcom/crystalgui/desktop/Desktop;
   method public,static dispose ()V
   method public,static document ()Lcom/crystalgui/ui/dom/UIDocument;
@@ -9565,6 +9587,8 @@ com/crystalgui/screen/CgUiScreen
   method public,static rehearseStep ()Z
   method public,static replaceNextPaint (Ljava/util/function/BiConsumer;)V
   method public,static run (Ljava/lang/Runnable;)V
+  method public,static screen ()Lcom/crystalgui/screen/ScreenKind;
+  method public,static show (Lcom/crystalgui/screen/ScreenKind;)V
   method public,static textInputArea ()[F
   method public,static tick ()V
   method public,static viewport ()Lcom/crystalgui/viewport/CgUiViewport;
@@ -9573,13 +9597,14 @@ com/crystalgui/screen/CgUiScreen$Mode
   access public,final,enum
   extends java/lang/Enum
   field public,static,final DESKTOP Lcom/crystalgui/screen/CgUiScreen$Mode;
+  field public,static,final GAME_SCREEN Lcom/crystalgui/screen/CgUiScreen$Mode;
   field public,static,final HUD Lcom/crystalgui/screen/CgUiScreen$Mode;
   field public,static,final NONE Lcom/crystalgui/screen/CgUiScreen$Mode;
   field public,static,final OVERLAY Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public coversSurface ()Z
   method public isInteractive ()Z
   method public paintsTopLayer ()Z
-  method public,static of (ZZZZ)Lcom/crystalgui/screen/CgUiScreen$Mode;
+  method public,static of (ZZZZZ)Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public,static values ()[Lcom/crystalgui/screen/CgUiScreen$Mode;
 com/crystalgui/screen/HitRegions
@@ -9590,6 +9615,44 @@ com/crystalgui/screen/HitRegions
   method public size ()I
   method public takes (FF)Z
   method public,static capture (Lcom/crystalgui/ui/dom/UIDocument;)Lcom/crystalgui/screen/HitRegions;
+com/crystalgui/screen/ScreenContext
+  access public,final
+  extends java/lang/Object
+  method public close ()V
+  method public document ()Lcom/crystalgui/ui/dom/UIDocument;
+  method public kind ()Lcom/crystalgui/screen/ScreenKind;
+  method public onClosed (Ljava/lang/Runnable;)V
+  method public root ()Lcom/crystalgui/ui/dom/UIElement;
+com/crystalgui/screen/ScreenKind
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/screen/ScreenKind$Builder;Lcom/crystalgui/screen/ScreenKind$Background;ZLjava/util/List;Lcom/crystalgui/desktop/app/ApplicationKind$Threading;)V
+  method public background ()Lcom/crystalgui/screen/ScreenKind$Background;
+  method public background (Lcom/crystalgui/screen/ScreenKind$Background;)Lcom/crystalgui/screen/ScreenKind;
+  method public builder ()Lcom/crystalgui/screen/ScreenKind$Builder;
+  method public closeKeys ()Ljava/util/List;
+  method public closedBy ([I)Lcom/crystalgui/screen/ScreenKind;
+  method public id ()Ljava/lang/String;
+  method public pausesGame ()Z
+  method public pausesGame (Z)Lcom/crystalgui/screen/ScreenKind;
+  method public threading ()Lcom/crystalgui/desktop/app/ApplicationKind$Threading;
+  method public threading (Lcom/crystalgui/desktop/app/ApplicationKind$Threading;)Lcom/crystalgui/screen/ScreenKind;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static of (Ljava/lang/String;Lcom/crystalgui/screen/ScreenKind$Builder;)Lcom/crystalgui/screen/ScreenKind;
+com/crystalgui/screen/ScreenKind$Background
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final BLUR Lcom/crystalgui/screen/ScreenKind$Background;
+  field public,static,final DIM Lcom/crystalgui/screen/ScreenKind$Background;
+  field public,static,final NONE Lcom/crystalgui/screen/ScreenKind$Background;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/screen/ScreenKind$Background;
+  method public,static values ()[Lcom/crystalgui/screen/ScreenKind$Background;
+com/crystalgui/screen/ScreenKind$Builder
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract build (Lcom/crystalgui/screen/ScreenContext;)V
 com/crystalgui/serialization/style/DrawableParts
   access public,final
   extends java/lang/Object

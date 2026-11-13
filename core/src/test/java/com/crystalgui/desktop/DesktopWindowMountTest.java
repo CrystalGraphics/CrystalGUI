@@ -1,11 +1,13 @@
 package com.crystalgui.desktop;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotSame;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import java.util.List;
+import java.util.function.BiConsumer;
 
 import org.junit.After;
 import org.junit.Before;
@@ -47,6 +49,7 @@ public class DesktopWindowMountTest {
 
     private static final class Context implements ClientWindowContext {
         final UIElement root = new UIElement();
+        Presentation presentation = Presentation.WINDOW;
         int userClosed;
 
         @Override
@@ -71,7 +74,7 @@ public class DesktopWindowMountTest {
 
         @Override
         public Presentation presentation() {
-            return Presentation.WINDOW;
+            return presentation;
         }
 
         @Override
@@ -148,6 +151,65 @@ public class DesktopWindowMountTest {
         window.closedByServer("done");
         assertEquals(WindowState.DESTROYED, frame.state());
         assertEquals("a server's close is not the user's", 0, context.userClosed);
+    }
+
+    /** What the host's game screens are, as the mount sees them: one document, and what it was told. */
+    private static final class Screens implements DesktopWindowMount.Screens {
+        final UIDocument document = new UIDocument();
+        final UIElement root = new UIElement();
+        Runnable closedByUser;
+        boolean closed;
+
+        @Override
+        public Shown show(String name, BiConsumer<UIDocument, UIElement> build, Runnable closedByUser) {
+            this.closedByUser = closedByUser;
+            document.append(root);
+            build.accept(document, root);
+            return () -> closed = true;
+        }
+    }
+
+    /** A window the server wants as a screen is the host's screen, showing a portal to the tree, and no frame at all. */
+    @Test
+    public void aWindowAskedToBeAScreenGoesToTheHostsScreens() {
+        Screens screens = new Screens();
+        mount.useScreens(screens);
+        Context context = new Context();
+        context.presentation = Presentation.SCREEN;
+
+        WindowMount.MountedWindow window = mount.mount(context);
+
+        assertTrue("no frame on the desktop", Desktop.of(shell).windowManager().registry().windows().isEmpty());
+        assertTrue(screens.root.children().get(0) instanceof ClientPortal);
+        assertSame("the tree is still the connection's", connection, context.root.document());
+        window.closedByServer("done");
+        assertTrue(screens.closed);
+        assertEquals("a server's close is not the player's", 0, context.userClosed);
+    }
+
+    @Test
+    public void aScreenThePlayerClosesIsReported() {
+        Screens screens = new Screens();
+        mount.useScreens(screens);
+        Context context = new Context();
+        context.presentation = Presentation.SCREEN;
+        mount.mount(context);
+
+        screens.closedByUser.run();
+
+        assertEquals(1, context.userClosed);
+        assertFalse(screens.closed);
+    }
+
+    /** A host with no screens still shows the window the server asked for: a hint, never a refusal. */
+    @Test
+    public void withNoScreensAScreenIsAWindow() {
+        Context context = new Context();
+        context.presentation = Presentation.SCREEN;
+
+        mount.mount(context);
+
+        assertEquals(1, Desktop.of(shell).windowManager().registry().windows().size());
     }
 
     @Test

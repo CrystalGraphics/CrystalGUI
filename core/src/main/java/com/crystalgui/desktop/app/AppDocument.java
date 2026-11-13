@@ -1,7 +1,9 @@
 package com.crystalgui.desktop.app;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Queue;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CompletableFuture;
@@ -97,8 +99,8 @@ public final class AppDocument {
     /** The window whose client last took input: the one the popups belong to, when more than one is open. */
     @Nullable
     private volatile ClientPortal active;
-    @Nullable
-    private PopupPortal popupPortal;
+    /** The documents that show this one's popups, a portal each: the shell, and a game screen while one shows its tree. */
+    private final Map<UIDocument, PopupPortal> popupPortals = new ConcurrentHashMap<>();
     /** The client the pointer is aimed at, which is on top of the others. */
     @Nullable
     private volatile ClientRoot aimed;
@@ -183,13 +185,19 @@ public final class AppDocument {
         return windowHeight;
     }
 
-    /** The shell's thread: shows the document's popups, once, in the shell's top layer. */
-    public void showPopupsIn(UIDocument shell) {
+    /** {@code shown}'s thread: shows the document's popups, once, in {@code shown}'s top layer: the shell's, or a game screen's. */
+    public void showPopupsIn(UIDocument shown) {
         PopupLayer layer = popups();
-        if (layer == null || popupPortal != null) return;
-        popupPortal = new PopupPortal(this, layer);
-        shell.append(popupPortal);
-        shell.promote(popupPortal);
+        if (layer == null || popupPortals.containsKey(shown)) return;
+        PopupPortal portal = new PopupPortal(this, layer);
+        popupPortals.put(shown, portal);
+        shown.append(portal);
+        shown.promote(portal);
+    }
+
+    /** A game screen that showed the popups has closed: they are shown there no more. */
+    public void hidePopupsIn(UIDocument gone) {
+        popupPortals.remove(gone);
     }
 
     public UIDocument document() {

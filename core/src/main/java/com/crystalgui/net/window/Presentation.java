@@ -11,6 +11,7 @@ import javax.annotation.Nullable;
  * <pre>{@code
  * ServerWindows.of(connection).open(MachinePanel.TYPE, machine, Presentation.EDITOR_TAB);
  * ServerWindows.of(connection).open(LogPanel.TYPE, log, Presentation.toolWindow("panel"));
+ * ServerWindows.of(connection).open(FurnacePanel.TYPE, furnace, Presentation.SCREEN);
  * }</pre>
  *
  * <p>A <b>hint</b>, and the word is doing work: the server says what it would like and the client says
@@ -28,7 +29,7 @@ import javax.annotation.Nullable;
  *
  * <h3>One string on the wire</h3>
  *
- * <p>{@code "window"}, {@code "tab"} or {@code "tool:<region>"}. String-shaped so it survives into a
+ * <p>{@code "window"}, {@code "tab"}, {@code "tool:<region>"} or {@code "screen"}. String-shaped so it survives into a
  * saved layout as an ordinary {@code DockPanelRef} state entry, and so a client that predates a region
  * name it does not know can fall back rather than fail to parse.</p>
  */
@@ -41,7 +42,9 @@ public final class Presentation {
         /** A tab in the editor area, beside the files. */
         EDITOR_TAB,
         /** A tool window on a rail — the region names which one. */
-        TOOL_WINDOW
+        TOOL_WINDOW,
+        /** A screen of the game: the panel fills the window with no desktop around it, as a furnace's or a chest's does. */
+        SCREEN
     }
 
     /** A desktop window. The default, and what a host with nowhere else to put one falls back to. */
@@ -49,6 +52,9 @@ public final class Presentation {
 
     /** A tab in the editor area. */
     public static final Presentation EDITOR_TAB = new Presentation(Kind.EDITOR_TAB, null);
+
+    /** A screen of the game, over the world, closed by Escape. One is up at a time; a second replaces the first. */
+    public static final Presentation SCREEN = new Presentation(Kind.SCREEN, null);
 
     private final Kind kind;
 
@@ -88,6 +94,8 @@ public final class Presentation {
                 return "tab";
             case TOOL_WINDOW:
                 return "tool:" + region;
+            case SCREEN:
+                return "screen";
             default:
                 return "window";
         }
@@ -104,6 +112,7 @@ public final class Presentation {
         if (encoded == null) return WINDOW;
         String text = encoded.trim().toLowerCase(Locale.ROOT);
         if (text.equals("tab")) return EDITOR_TAB;
+        if (text.equals("screen")) return SCREEN;
         if (text.startsWith("tool:")) {
             String named = text.substring("tool:".length());
             return named.isEmpty() ? WINDOW : toolWindow(named);

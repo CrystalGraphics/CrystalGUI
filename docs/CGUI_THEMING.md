@@ -283,6 +283,8 @@ editor scheme's.
 | `--error` | `#F14C4C` | crystal-dark.css |
 | `--error-icon` | `#E55765` | crystal-dark.css |
 | `--failure-bg` | `#16171A66` | crystal-dark.css |
+| `--failure-button-active-bg` | `#FFFFFF44` | crystal-dark.css |
+| `--failure-button-hover-bg` | `#FFFFFF33` | crystal-dark.css |
 | `--failure-icon-bg` | `#E8483F` | crystal-dark.css |
 | `--failure-icon-rim` | `#B3261E` | crystal-dark.css |
 | `--failure-title-bg` | `#FFFFFF1C` | crystal-dark.css |
@@ -588,6 +590,8 @@ editor scheme's.
 | `--sample-block-bg` | `var(--surface-editor)` | base.css |
 | `--sample-block-border` | `var(--border-strong)` | base.css |
 | `--sample-line-fg` | `var(--fg-hint)` | base.css |
+| `--screen-scrim` | `#0000008C` | crystal-dark.css |
+| `--screen-scrim-blur` | `#00000059` | crystal-dark.css |
 | `--scrollbar-corner` | `#00000000` | base.css |
 | `--scrollbar-tail` | `#00000000` | crystal-dark.css |
 | `--scrollbar-tail-hover` | `#8C8C8C33` | crystal-dark.css |

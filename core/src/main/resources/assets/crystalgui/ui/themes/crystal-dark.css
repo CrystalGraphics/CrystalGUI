@@ -154,6 +154,11 @@ theme {
     --failure-title-bg: #FFFFFF1C;
     --failure-icon-bg: #E8483F;
     --failure-icon-rim: #B3261E;
+    --failure-button-hover-bg: #FFFFFF33;
+    --failure-button-active-bg: #FFFFFF44;
+    /* A game screen's scrim over the game, the same in both themes: Minecraft's own darkening, and the lighter one under a blur. */
+    --screen-scrim: #0000008C;
+    --screen-scrim-blur: #00000059;
     --glass-mark-fg: #FFFFFF;
     /* WHITE AT LOW ALPHA, not a grey, so they composite with the blurred bar rather than replace it.
      * Hover 10%, active 20%, both 30%: set by eye against Windows' taskbar, side by side (2026-11-04).

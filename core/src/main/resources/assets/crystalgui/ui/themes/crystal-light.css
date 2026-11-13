@@ -138,6 +138,11 @@ theme {
     --failure-title-bg: #FFFFFF1C;
     --failure-icon-bg: #E8483F;
     --failure-icon-rim: #B3261E;
+    --failure-button-hover-bg: #FFFFFF33;
+    --failure-button-active-bg: #FFFFFF44;
+    /* A game screen's scrim over the game, the same in both themes: Minecraft's own darkening, and the lighter one under a blur. */
+    --screen-scrim: #0000008C;
+    --screen-scrim-blur: #00000059;
     --glass-mark-fg: #FFFFFF;
     /* The same ladder in black: hover Fluent's SubtleFillColorSecondary (3.5%), then active, then active-hovered. */
     --taskbar-entry-hover-bg: #00000009;
