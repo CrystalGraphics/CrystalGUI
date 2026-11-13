@@ -2400,8 +2400,6 @@ public class CgUiGalleryScene extends UiDocumentScene {
             "// GLSL - the language the node graph will generate.",
             "#version 330 core",
             "",
-            "#pragma cg_use quad",
-            "",
             "uniform sampler2D _MainTex;",
             "uniform vec4 _Color;",
             "uniform float _Time;",

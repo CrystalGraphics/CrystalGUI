@@ -1361,7 +1361,7 @@ and over other screens -- is a renderer on each at `CgUiScreen.ORDER`, so the or
 side of it you land on.
 
 ```java
-CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // declares #pragma cg_use quad
+CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // a #domain ui material
 
 CgRenderStage.Registration badge = CgRenderStage.HUD.register(CgUiScreen.ORDER + 1, frame ->   // over the windows
         frame.canvas().quad(material).at(8f, 8f).size(32f, 32f).color(0xFFFF8800).submit());
