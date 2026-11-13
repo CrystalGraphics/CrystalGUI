@@ -14,6 +14,7 @@ import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
 import com.crystalgui.workbench.dock.panel.DockPanelRegistry;
 import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionSide;
+import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.region.WorkbenchRegions;
@@ -115,7 +116,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     }
 
     /** Presses a frame's caption, where a drag begins. */
-    private void pressCaption(ToolWindowFrame frame) {
+    private void pressCaption(WindowFrame frame) {
         var box = frame.box();
         // The frame's position ON SCREEN, not inside its host. An owned float is parented onto its
         // owner, so `box.x()` is an offset within that window and pressing it aims somewhere near the
@@ -152,7 +153,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void pressingAFloatFocusesItsPanel() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
         settle();
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull(frame);
 
         // SOMEWHERE OUTSIDE EVERY WINDOW. Not the workbench frame: focusing a frame now delegates
@@ -181,7 +182,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void pressingAWindowedToolWindowFocusesItsPanel() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.WINDOWED);
         settle();
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull(frame);
 
         document.focus().requestFocus(elsewhere);
@@ -206,13 +207,26 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
         settle();
 
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull("the float has a frame", frame);
-        assertSame("parented into its owner's overlay slot",
-                workbenchWindow.overlaySlot(), frame.parent());
-        assertTrue("and the owner knows it is there", workbenchWindow.hasOwnedWindows());
-        assertFalse("it is not a taskbar citizen",
-                Desktop.of(document).windowManager().registry().windows().contains(frame));
+        assertSame("owned by the workbench's window", workbenchWindow, frame.ownerWindow());
+        assertSame("a window of the desktop, so it can leave its owner", Desktop.of(document), frame.desktop());
+        assertTrue("and a tool window: no taskbar entry of its own", frame.isToolWindow());
+    }
+
+    /** A float is dragged anywhere on the desktop, not clamped inside the window it came out of. */
+    @Test
+    public void aFloatCanLeaveItsOwnersWindow() {
+        manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
+        settle();
+
+        WindowFrame frame = frameOf(manager, INSPECTOR);
+        Box ownerBox = workbenchWindow.box();
+        frame.moveTo(ownerBox.worldX() + ownerBox.width() + 20f, 30f);
+        settle();
+
+        assertTrue("the float stayed inside its owner's window",
+                frame.box().worldX() >= ownerBox.worldX() + ownerBox.width());
     }
 
     /**
@@ -228,8 +242,8 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
         settle();
 
-        ToolWindowFrame float_ = manager.frameOf(INSPECTOR);
-        assertTrue("the owner still holds it", workbenchWindow.hasOwnedWindows());
+        WindowFrame float_ = frameOf(manager, INSPECTOR);
+        assertSame("the owner still holds it", workbenchWindow, float_.ownerWindow());
 
         // THERE IS NO SLOT TO MEASURE ANY MORE, and the bug it was measuring cannot occur. The old
         // engine gave an owner a dedicated overlay ELEMENT that took a full-size box whenever it held
@@ -259,7 +273,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
 
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull(frame);
         assertEquals(ToolWindowType.WINDOWED, manager.typeOf(INSPECTOR));
         assertFalse("it should not be owned by the editor", workbenchWindow.hasOwnedWindows());
@@ -282,7 +296,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
         assertSame("floated", docked, manager.containerOf(INSPECTOR));
-        assertTrue("and it is inside the frame", isInside(docked, manager.frameOf(INSPECTOR)));
+        assertTrue("and it is inside the frame", isInside(docked, frameOf(manager, INSPECTOR)));
 
         manager.dockPanel(INSPECTOR);
         settle();
@@ -300,7 +314,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
 
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         ViewContainer container = manager.containerOf(INSPECTOR);
         assertSame("the header is the frame's caption chrome",
                 container.captionChrome(), frame.adoptedChrome());
@@ -372,7 +386,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         settle();
 
         assertTrue("the header is in the caption",
-                isInside(header, manager.frameOf(INSPECTOR).titleBar()));
+                isInside(header, frameOf(manager, INSPECTOR).titleBar()));
         assertEquals("it lost its height when it left the container",
                 dockedHeight, header.box().height(), 0.01f);
         // The indent is deliberately DROPPED in a caption (ua/desktop.css), so this asserts the one
@@ -440,13 +454,13 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void closingAFloatReleasesItsOwnersSurface() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
         settle();
-        assertTrue(workbenchWindow.hasOwnedWindows());
+        WindowFrame frame = frameOf(manager, INSPECTOR);
 
         manager.hidePanel(INSPECTOR);
         settle();
 
-        assertFalse("the slot is empty again", workbenchWindow.hasOwnedWindows());
-        assertNull("and the frame is gone", manager.frameOf(INSPECTOR));
+        assertSame("the window is gone", WindowState.DESTROYED, frame.state());
+        assertNull("and the float is forgotten", manager.floatOf(INSPECTOR));
     }
 
     /**
@@ -460,10 +474,10 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.FLOATING);
         settle();
 
-        manager.frameOf(INSPECTOR).requestClose();
+        frameOf(manager, INSPECTOR).requestClose();
         settle();
 
-        assertNull("the frame is gone", manager.frameOf(INSPECTOR));
+        assertNull("the frame is gone", manager.floatOf(INSPECTOR));
         assertFalse("the surface is released", workbenchWindow.hasOwnedWindows());
         assertFalse("and the model agrees it is shut", manager.isPanelOpen(INSPECTOR));
     }
@@ -498,7 +512,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void raisingTheOwnerCarriesItsToolWindows() {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
-        ToolWindowFrame floated = manager.frameOf(INSPECTOR);
+        WindowFrame floated = frameOf(manager, INSPECTOR);
         assertNotNull(floated);
         assertSame("the float should be owned by the workbench's document",
                 workbenchWindow, floated.ownerWindow());
@@ -516,7 +530,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         WindowFrame other = Desktop.of(document).addWindow(new WindowFrame("Other"));
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
-        ToolWindowFrame floated = manager.frameOf(INSPECTOR);
+        WindowFrame floated = frameOf(manager, INSPECTOR);
 
         Desktop.of(document).windowManager().raise(other);
         settle();
@@ -550,7 +564,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         settle();
 
         assertEquals(ToolWindowType.WINDOWED, manager.typeOf(INSPECTOR));
-        assertNotNull("in a frame, not in its region", manager.frameOf(INSPECTOR));
+        assertNotNull("in a frame, not in its region", manager.floatOf(INSPECTOR));
         assertNull("and the region is empty",
                 regions.host(DockRegion.AUXILIARY).showing(RegionSide.PRIMARY));
     }
@@ -563,7 +577,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void aFloatRemembersWhereItWas() {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
-        manager.frameOf(INSPECTOR).moveTo(90f, 70f);
+        frameOf(manager, INSPECTOR).moveTo(90f, 70f);
         settle();
 
         manager.hidePanel(INSPECTOR);
@@ -571,7 +585,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.showPanel(INSPECTOR);
         settle();
 
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertEquals(90f, frame.getWantedLeft(), 0.01f);
         assertEquals(70f, frame.getWantedTop(), 0.01f);
     }
@@ -584,7 +598,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void aFloatKeepsItsSizeThroughHideAndDock() {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
-        manager.frameOf(INSPECTOR).resizeTo(420f, 300f).moveTo(70f, 90f);
+        frameOf(manager, INSPECTOR).resizeTo(420f, 300f).moveTo(70f, 90f);
         settle();
 
         manager.hidePanel(INSPECTOR);
@@ -592,14 +606,14 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         manager.showPanel(INSPECTOR);
         settle();
         assertEquals("lost across hide/show", 420f,
-                manager.frameOf(INSPECTOR).box().width(), 0.01f);
+                frameOf(manager, INSPECTOR).box().width(), 0.01f);
 
         manager.dockPanel(INSPECTOR);
         settle();
         manager.floatPanel(INSPECTOR, 55f, 65f);
         settle();
 
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull(frame);
         assertEquals("the remembered width was lost across the dock",
                 420f, frame.box().width(), 0.01f);
@@ -621,18 +635,18 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
     public void aFloatHiddenByItsOwnButtonKeepsItsGeometry() {
         manager.floatPanel(INSPECTOR, 40f, 40f);
         settle();
-        manager.frameOf(INSPECTOR).resizeTo(360f, 280f).moveTo(75f, 95f);
+        frameOf(manager, INSPECTOR).resizeTo(360f, 280f).moveTo(75f, 95f);
         settle();
 
         // THE REAL PATH: through the frame, not through the manager.
-        manager.frameOf(INSPECTOR).requestClose();
+        frameOf(manager, INSPECTOR).requestClose();
         settle();
-        assertNull("setup: the frame should be gone", manager.frameOf(INSPECTOR));
+        assertNull("setup: the frame should be gone", manager.floatOf(INSPECTOR));
 
         manager.showPanel(INSPECTOR);
         settle();
 
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull(frame);
         assertEquals("the width was measured after the detach", 360f,
                 frame.box().width(), 0.01f);
@@ -655,7 +669,7 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
 
         assertEquals(ToolWindowType.FLOATING, manager.typeOf(INSPECTOR));
         assertFalse("still shut", manager.isPanelOpen(INSPECTOR));
-        assertNull("and no frame was built", manager.frameOf(INSPECTOR));
+        assertNull("and no frame was built", manager.floatOf(INSPECTOR));
     }
 
     /**
@@ -725,5 +739,11 @@ public class ToolWindowFloatTest extends UiDocumentTestBase {
         int found = from == target ? 1 : 0;
         for (UIElement child : from.children()) found += countMatching(child, target);
         return found;
+    }
+
+    /** The shell window a floating tool window is shown in. */
+    private static WindowFrame frameOf(ToolWindowManager manager, String typeId) {
+        ToolWindowFloat floating = manager.floatOf(typeId);
+        return floating == null ? null : floating.window().frame();
     }
 }

@@ -49,7 +49,7 @@ public class NodeKindDeclarationTest {
      * old engine has the counter-example written down: {@code Dropdown extends Button} does NOT answer
      * {@code button}, because a dropdown taking a button's whole look is wrong.</p>
      */
-    private static final Set<String> INHERITS_ON_PURPOSE = Set.of("DockWindow", "ToolWindowFrame");
+    private static final Set<String> INHERITS_ON_PURPOSE = Set.of();
 
     @Test
     public void everyDeclaredKindIsActuallyReported() throws IOException {

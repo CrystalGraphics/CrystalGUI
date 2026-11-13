@@ -58,6 +58,7 @@ import com.crystalgui.workbench.chrome.status.StatusBarView;
 import com.crystalgui.workbench.decoration.FileDecoration;
 import com.crystalgui.workbench.decoration.FileDecorationProvider;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.desktop.app.FloatSpace;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockGroup;
 import com.crystalgui.workbench.dock.layout.DockLayout;
@@ -1176,6 +1177,21 @@ public class Workbench extends UIElement implements WorkbenchContext, DataProvid
 
     public DockArea dock() {
         return dock;
+    }
+
+    /**
+     * Sets how this workbench's floating windows open: its tool windows and torn-out editors become windows of the desktop,
+     * so they can leave the window the workbench is in.
+     *
+     * <pre>{@code
+     * workbench.useFloats(FloatSpace.of(context.windows(), mainWindow));
+     * }</pre>
+     *
+     * <p>Without it they open on the desktop of the workbench's own document, owned by the window that holds it.</p>
+     */
+    public void useFloats(FloatSpace space) {
+        dock.useFloats(space);
+        toolWindowManager().useFloats(space);
     }
 
     /**

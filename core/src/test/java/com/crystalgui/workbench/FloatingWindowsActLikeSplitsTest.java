@@ -134,7 +134,6 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
         workbench.dock().layout().leafContaining(bottom).remove(bottom);
         workbench.dock().requestRebuild();
         DockWindow torn = new DockWindow(workbench.dock(), DockLayout.of(new DockLeaf(bottom)), "bottom.txt");
-        Desktop.of(document).addWindow(torn);
         frames(12);
         workbench.dock().activatePanel(bottom);
         frames(4);
@@ -157,7 +156,6 @@ public class FloatingWindowsActLikeSplitsTest extends UiDocumentTestBase {
         workbench.dock().layout().leafContaining(ref).remove(ref);
         workbench.dock().requestRebuild();
         DockWindow torn = new DockWindow(workbench.dock(), DockLayout.of(new DockLeaf(ref)), path.toString());
-        Desktop.of(document).addWindow(torn);
         frames(12);
         return torn;
     }

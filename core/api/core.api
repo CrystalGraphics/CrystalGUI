@@ -4869,7 +4869,9 @@ com/crystalgui/desktop/app/AppWindow
   access public,final
   extends java/lang/Object
   method public activate ()V
+  method public addCaptionAction (Ljava/lang/String;Ljava/lang/String;Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow$CaptionAction;
   method public addSettingsAction (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow$CaptionAction;
+  method public bounds (FF)Lcom/crystalgui/desktop/window/WindowBounds;
   method public close ()Z
   method public content ()Lcom/crystalgui/ui/dom/UIElement;
   method public destroy ()V
@@ -4877,6 +4879,7 @@ com/crystalgui/desktop/app/AppWindow
   method public execute (Ljava/lang/Runnable;)V
   method public frame ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public hashCode ()I
+  method public hide ()V
   method public icon (Ljava/lang/String;)Lcom/crystalgui/desktop/app/AppWindow;
   method public isActive ()Z
   method public maximise ()V
@@ -4884,11 +4887,13 @@ com/crystalgui/desktop/app/AppWindow
   method public moveTo (FF)Lcom/crystalgui/desktop/app/AppWindow;
   method public onCloseRequested (Ljava/util/function/BooleanSupplier;)Lcom/crystalgui/desktop/app/AppWindow;
   method public onClosed (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public onHidden (Ljava/lang/Runnable;)Lcom/crystalgui/desktop/app/AppWindow;
   method public openOwned (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
   method public resizeTo (FF)Lcom/crystalgui/desktop/app/AppWindow;
   method public restore ()V
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/AppWindow;
   method public state ()Lcom/crystalgui/core/window/WindowState;
+  method public styleClass (Ljava/lang/String;Z)Lcom/crystalgui/desktop/app/AppWindow;
   method public title ()Ljava/lang/String;
   method public title (Ljava/lang/String;)Lcom/crystalgui/desktop/app/AppWindow;
   method public,static of (Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/app/AppWindow;
@@ -4902,7 +4907,7 @@ com/crystalgui/desktop/app/AppWindows
   method public active ()Lcom/crystalgui/desktop/app/AppWindow;
   method public all ()Ljava/util/List;
   method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
-  method public,static addFloat (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/desktop/window/WindowFrame;)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public,static openOnDesktop (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
 com/crystalgui/desktop/app/Application
   access public,abstract,interface
   extends java/lang/Object
@@ -5045,6 +5050,14 @@ com/crystalgui/desktop/app/FaultReport$Kind
   field public,static,final STOPPED Lcom/crystalgui/desktop/app/FaultReport$Kind;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/desktop/app/FaultReport$Kind;
   method public,static values ()[Lcom/crystalgui/desktop/app/FaultReport$Kind;
+com/crystalgui/desktop/app/FloatSpace
+  access public,final
+  extends java/lang/Object
+  method public main ()Lcom/crystalgui/desktop/app/AppWindow;
+  method public open (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public openOwned (Lcom/crystalgui/desktop/app/WindowSpec;)Lcom/crystalgui/desktop/app/AppWindow;
+  method public,static of (Lcom/crystalgui/desktop/app/AppWindows;Lcom/crystalgui/desktop/app/AppWindow;)Lcom/crystalgui/desktop/app/FloatSpace;
+  method public,static onDesktop (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/app/AppWindow;)Lcom/crystalgui/desktop/app/FloatSpace;
 com/crystalgui/desktop/app/PopupLayer
   access public,final
   extends com/crystalgui/ui/dom/UIElement
@@ -5066,6 +5079,7 @@ com/crystalgui/desktop/app/WindowSpec
   extends java/lang/Object
   method public at (FF)Lcom/crystalgui/desktop/app/WindowSpec;
   method public background ()Lcom/crystalgui/desktop/app/WindowSpec;
+  method public classes ()Ljava/util/List;
   method public content ()Lcom/crystalgui/ui/dom/UIElement;
   method public content (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/desktop/app/WindowSpec;
   method public height ()F
@@ -5075,6 +5089,7 @@ com/crystalgui/desktop/app/WindowSpec
   method public key ()Ljava/lang/String;
   method public key (Ljava/lang/String;)Lcom/crystalgui/desktop/app/WindowSpec;
   method public left ()F
+  method public maximizable ()Z
   method public ownedBy (Lcom/crystalgui/desktop/app/AppWindow;)Lcom/crystalgui/desktop/app/WindowSpec;
   method public owner ()Lcom/crystalgui/desktop/app/AppWindow;
   method public pinned ()Z
@@ -5083,11 +5098,15 @@ com/crystalgui/desktop/app/WindowSpec
   method public policy ()Lcom/crystalgui/core/window/WindowPolicy;
   method public policy (Lcom/crystalgui/core/window/WindowPolicy;)Lcom/crystalgui/desktop/app/WindowSpec;
   method public size (FF)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public styled (Ljava/lang/String;)Lcom/crystalgui/desktop/app/WindowSpec;
   method public takesFocus ()Z
   method public title ()Ljava/lang/String;
   method public titleShown ()Z
   method public titleShown (Z)Lcom/crystalgui/desktop/app/WindowSpec;
+  method public tool ()Z
+  method public toolWindow ()Lcom/crystalgui/desktop/app/WindowSpec;
   method public top ()F
+  method public unmaximizable ()Lcom/crystalgui/desktop/app/WindowSpec;
   method public width ()F
   method public,static titled (Ljava/lang/String;)Lcom/crystalgui/desktop/app/WindowSpec;
 com/crystalgui/desktop/dialog/FailureWindow
@@ -5564,6 +5583,17 @@ com/crystalgui/desktop/window/SystemMenu
   method public,static isJumpListOpen (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)Z
   method public,static showFor (Lcom/crystalgui/desktop/window/WindowFrame;)V
   method public,static showJumpList (Lcom/crystalgui/desktop/window/WindowFrame;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/overlay/Menu;
+com/crystalgui/desktop/window/WindowBounds
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (FFFF)V
+  method public height ()F
+  method public left ()F
+  method public top ()F
+  method public width ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/desktop/window/WindowChrome
   access public,abstract,interface
   extends java/lang/Object
@@ -5639,6 +5669,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public applyResizeOrigin (FF)V
   method public attachOwned (Lcom/crystalgui/ui/dom/UIElement;)V
   method public badge ()Ljava/lang/String;
+  method public bounds (FF)Lcom/crystalgui/desktop/window/WindowBounds;
   method public boxHeight ()F
   method public boxWidth ()F
   method public boxX ()F
@@ -5683,11 +5714,13 @@ com/crystalgui/desktop/window/WindowFrame
   method public isToolWindow ()Z
   method public keepsSurface ()Z
   method public key ()Ljava/lang/String;
+  method public lastBounds ()Lcom/crystalgui/desktop/window/WindowBounds;
   method public left ()F
   method public markApplicationMain ()Lcom/crystalgui/desktop/window/WindowFrame;
   method public markHidden ()V
   method public maximize ()V
   method public maximizeButton ()Lcom/crystalgui/widget/control/Button;
+  method public measureBounds ()V
   method public minimize ()V
   method public minimizeButton ()Lcom/crystalgui/widget/control/Button;
   method public minimumSize (Z)F
@@ -19354,6 +19387,7 @@ com/crystalgui/workbench/Workbench
   method public useCache (Ljava/nio/file/Path;)Lcom/crystalgui/workbench/Workbench;
   method public useConfig (Lcom/crystalgraphics/storage/config/CgConfigStorage;)Lcom/crystalgui/workbench/Workbench;
   method public useExtensionStores (Ljava/util/function/Function;)Lcom/crystalgui/workbench/Workbench;
+  method public useFloats (Lcom/crystalgui/desktop/app/FloatSpace;)V
   method public windowMount (Lcom/crystalgui/net/window/WindowMount;)Lcom/crystalgui/workbench/NetworkedPanels;
   method public workspace ()Lcom/crystalgui/fs/client/WorkspaceClient;
 com/crystalgui/workbench/Workbench$RootWatch
@@ -19983,6 +20017,7 @@ com/crystalgui/workbench/dock/DockArea
   method public toggleMaximize (Lcom/crystalgui/workbench/dock/layout/DockLeaf;)V
   method public tornWindowApplication ()Lcom/crystalgui/desktop/app/ApplicationKind;
   method public tornWindowIcon ()Ljava/lang/String;
+  method public useFloats (Lcom/crystalgui/desktop/app/FloatSpace;)V
   method public watermarkHeading ()Ljava/lang/String;
   method public watermarkLines ()Ljava/util/List;
   method public windows ()Ljava/util/List;
@@ -20058,17 +20093,19 @@ com/crystalgui/workbench/dock/DockTab
   method public,final toString ()Ljava/lang/String;
   method public,static of (Lcom/crystalgui/core/command/CommandContext;)Lcom/crystalgui/workbench/dock/DockTab;
 com/crystalgui/workbench/dock/DockWindow
-  access public
-  extends com/crystalgui/desktop/window/WindowFrame
+  access public,final
+  extends java/lang/Object
   field public,static,final DEFAULT_HEIGHT F
   field public,static,final DEFAULT_WIDTH F
   field public,static,final DOCK_WINDOW_CLASS Ljava/lang/String;
-  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
-  method protected focusDelegate ()Lcom/crystalgui/ui/dom/UIElement;
   method public <init> (Lcom/crystalgui/workbench/dock/DockArea;Lcom/crystalgui/workbench/dock/layout/DockLayout;Ljava/lang/String;)V
+  method public <init> (Lcom/crystalgui/workbench/dock/DockArea;Lcom/crystalgui/workbench/dock/layout/DockLayout;Ljava/lang/String;FFFF)V
   method public area ()Lcom/crystalgui/workbench/dock/DockArea;
+  method public bounds ()Lcom/crystalgui/desktop/window/WindowBounds;
   method public closeIfEmpty ()Z
   method public isEmpty ()Z
+  method public title ()Ljava/lang/String;
+  method public window ()Lcom/crystalgui/desktop/app/AppWindow;
 com/crystalgui/workbench/dock/WorkbenchOpener
   access public,final
   extends java/lang/Object
@@ -20999,26 +21036,24 @@ com/crystalgui/workbench/toolwindow/ToolWindowCommands
   field public,static,final FLOAT Ljava/lang/String;
   field public,static,final WINDOW Ljava/lang/String;
   method public,static register ()V
-com/crystalgui/workbench/toolwindow/ToolWindowFrame
-  access public
-  extends com/crystalgui/desktop/window/WindowFrame
-  field public,final onDockRequested Lcom/crystalgui/core/signal/Signal$Action;
+com/crystalgui/workbench/toolwindow/ToolWindowFloat
+  access public,final
+  extends java/lang/Object
   field public,static,final DEFAULT_HEIGHT F
   field public,static,final DEFAULT_WIDTH F
   field public,static,final DOCK_CLASS Ljava/lang/String;
   field public,static,final DOCK_TOOLTIP Ljava/lang/String;
   field public,static,final FLOATING_CLASS Ljava/lang/String;
-  field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final TOOL_WINDOW_CLASS Ljava/lang/String;
   field public,static,final WINDOWED_CLASS Ljava/lang/String;
-  method public <init> (Ljava/lang/String;Ljava/lang/String;Lcom/crystalgui/workbench/view/ViewContainer;)V
+  method public <init> (Lcom/crystalgui/desktop/app/FloatSpace;Ljava/lang/String;Ljava/lang/String;Lcom/crystalgui/workbench/view/ViewContainer;Lcom/crystalgui/workbench/toolwindow/ToolWindowType;Lcom/crystalgui/workbench/toolwindow/ToolWindowState$Bounds;Ljava/lang/Runnable;Ljava/lang/Runnable;)V
   method public bounds ()Lcom/crystalgui/workbench/toolwindow/ToolWindowState$Bounds;
   method public container ()Lcom/crystalgui/workbench/view/ViewContainer;
-  method public getTitle ()Ljava/lang/String;
-  method public hide ()V
+  method public destroy ()V
   method public mode ()Lcom/crystalgui/workbench/toolwindow/ToolWindowType;
   method public setMode (Lcom/crystalgui/workbench/toolwindow/ToolWindowType;)V
   method public typeId ()Ljava/lang/String;
+  method public window ()Lcom/crystalgui/desktop/app/AppWindow;
 com/crystalgui/workbench/toolwindow/ToolWindowKind
   access public,final
   extends java/lang/Object
@@ -21091,11 +21126,11 @@ com/crystalgui/workbench/toolwindow/ToolWindowManager
   method public containerOf (Ljava/lang/String;)Lcom/crystalgui/workbench/view/ViewContainer;
   method public descriptorOf (Ljava/lang/String;)Lcom/crystalgui/workbench/dock/panel/DockPanelDescriptor;
   method public dockPanel (Ljava/lang/String;)V
+  method public floatOf (Ljava/lang/String;)Lcom/crystalgui/workbench/toolwindow/ToolWindowFloat;
   method public floatPanel (Ljava/lang/String;FF)V
   method public floatPanel (Ljava/lang/String;FFLcom/crystalgui/workbench/toolwindow/ToolWindowType;)V
   method public floatPanelUnder (Ljava/lang/String;FF)V
   method public floatingGeometryOf (Ljava/lang/String;)Lcom/crystalgui/workbench/toolwindow/ToolWindowState$Bounds;
-  method public frameOf (Ljava/lang/String;)Lcom/crystalgui/workbench/toolwindow/ToolWindowFrame;
   method public groupOf (Lcom/crystalgui/workbench/region/DockRegion;Lcom/crystalgui/workbench/region/RegionSide;)Ljava/util/List;
   method public hidden ()Ljava/util/List;
   method public hidePanel (Ljava/lang/String;)Z
@@ -21117,6 +21152,7 @@ com/crystalgui/workbench/toolwindow/ToolWindowManager
   method public togglePanel (Ljava/lang/String;)Z
   method public toolWindows ()Lcom/crystalgui/workbench/toolwindow/ToolWindowLayout;
   method public typeOf (Ljava/lang/String;)Lcom/crystalgui/workbench/toolwindow/ToolWindowType;
+  method public useFloats (Lcom/crystalgui/desktop/app/FloatSpace;)V
   method public viewContainers ()Lcom/crystalgui/workbench/view/ViewContainerRegistry;
 com/crystalgui/workbench/toolwindow/ToolWindowState
   access public,final

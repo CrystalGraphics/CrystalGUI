@@ -3,7 +3,6 @@ package com.crystalgui.workbench;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.storage.config.CgConfigStorage;
-import com.crystalgui.desktop.app.AppWindows;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.document.DocumentEditor;
 import com.crystalgui.document.EditorInput;
@@ -12,6 +11,7 @@ import com.crystalgui.fs.Resource;
 import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgui.ui.dom.SessionState;
 import com.crystalgui.ui.dom.UIDocument;
+import com.crystalgui.desktop.window.WindowBounds;
 import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLayoutCodec;
@@ -428,15 +428,16 @@ public final class WorkbenchSession {
      * picking "the first panel" would rename the window on every restore.</p>
      */
     private static void writeDockWindow(CgStateMap<JsonElement> out, DockWindow frame) {
-        out.putString(KEY_TITLE, frame.getTitle());
-        out.putFloat(KEY_LEFT, frame.getWantedLeft());
-        out.putFloat(KEY_TOP, frame.getWantedTop());
-        out.putFloat(KEY_WIDTH, frame.recordedWidth());
-        out.putFloat(KEY_HEIGHT, frame.recordedHeight());
+        WindowBounds bounds = frame.bounds();
+        out.putString(KEY_TITLE, frame.title());
+        out.putFloat(KEY_LEFT, bounds.left());
+        out.putFloat(KEY_TOP, bounds.top());
+        out.putFloat(KEY_WIDTH, bounds.width());
+        out.putFloat(KEY_HEIGHT, bounds.height());
         // The window's OWN box as the viewport, not the workbench's: this tree lives inside this window,
         // so that is the box its weights were resolved against.
         out.putRaw(KEY_DOCK, DockLayoutCodec.encode(frame.area().layout(), CgJsonOps.INSTANCE,
-                frame.recordedWidth(), frame.recordedHeight()));
+                bounds.width(), bounds.height()));
     }
 
     /** A torn-out window as read back, before anything has been opened for it. */
@@ -496,12 +497,9 @@ public final class WorkbenchSession {
         List<TornOutWindow> opening = new ArrayList<>(pendingWindows);
         pendingWindows.clear();
         for (TornOutWindow record : opening) {
-            DockWindow frame = new DockWindow(workbench.dock(), record.layout(), record.title());
-            // BEFORE the open, so it appears at the size and place it is meant to be rather than flying
-            // in at a default and jumping -- Desktop.addWindow's own note, from the other side.
-            frame.resizeTo(record.width(), record.height());
-            frame.moveTo(record.left(), record.top());
-            AppWindows.addFloat(workbench.dock(), frame);
+            // AT THE SIZE AND PLACE IT IS MEANT TO BE, not flying in at a default and jumping.
+            new DockWindow(workbench.dock(), record.layout(), record.title(), record.width(), record.height(),
+                    record.left(), record.top());
         }
     }
 

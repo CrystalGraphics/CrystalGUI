@@ -1,7 +1,9 @@
 package com.crystalgui.workbench.toolwindow;
 
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.desktop.app.AppWindows;
+import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.app.AppWindow;
+import com.crystalgui.desktop.app.FloatSpace;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.workbench.dock.panel.DockPanelDescriptor;
@@ -84,7 +86,7 @@ public final class ToolWindowManager {
     }
 
     /** Every tool window currently in a frame rather than a region, by type id. */
-    private final Map<String, ToolWindowFrame> frames = new LinkedHashMap<>();
+    private final Map<String, ToolWindowFloat> frames = new LinkedHashMap<>();
 
     /**
      * Docked, floating or windowed — its remembered mode, or docked.
@@ -698,9 +700,29 @@ public final class ToolWindowManager {
         return containers.get(typeId);
     }
 
-    /** Its frame while it is floating or windowed, or null. For tests and diagnostics. */
+    /** How its floats open as windows of the desktop; null until {@link #useFloats}. */
     @Nullable
-    public ToolWindowFrame frameOf(String typeId) {
+    private FloatSpace floats;
+
+    /**
+     * Sets how floating and windowed tool windows open: as windows of the desktop, owned by the workbench's own window.
+     * Without it they open on the desktop of the workbench's document, owned by the window that holds it.
+     */
+    public void useFloats(FloatSpace space) {
+        this.floats = space;
+    }
+
+    private FloatSpace floats(UIDocument window, UIElement anchor) {
+        if (floats == null) {
+            AppWindow owner = window.focus().scopeOf(anchor) instanceof WindowFrame frame ? AppWindow.of(frame) : null;
+            floats = FloatSpace.onDesktop(Desktop.of(window), null, owner);
+        }
+        return floats;
+    }
+
+    /** Its window while it is floating or windowed, or null. For tests and diagnostics. */
+    @Nullable
+    public ToolWindowFloat floatOf(String typeId) {
         return frames.get(typeId);
     }
 
@@ -765,7 +787,7 @@ public final class ToolWindowManager {
     public void floatPanelUnder(String typeId, float x, float y) {
         ToolWindowState.Bounds remembered = placementOf(typeId).floatingBounds();
         boolean usable = remembered != null && remembered.width() > 0f;
-        float width = usable ? remembered.width() : ToolWindowFrame.DEFAULT_WIDTH;
+        float width = usable ? remembered.width() : ToolWindowFloat.DEFAULT_WIDTH;
         floatPanel(typeId, x - width / 2f, y, ToolWindowType.WINDOWED);
     }
 
@@ -774,8 +796,8 @@ public final class ToolWindowManager {
         if (typeId == null || mode == null || !mode.isWindowed()) return;
         ToolWindowState.Bounds remembered = placementOf(typeId).floatingBounds();
         boolean usable = remembered != null && remembered.width() > 0f && remembered.height() > 0f;
-        float width = usable ? remembered.width() : ToolWindowFrame.DEFAULT_WIDTH;
-        float height = usable ? remembered.height() : ToolWindowFrame.DEFAULT_HEIGHT;
+        float width = usable ? remembered.width() : ToolWindowFloat.DEFAULT_WIDTH;
+        float height = usable ? remembered.height() : ToolWindowFloat.DEFAULT_HEIGHT;
         toolWindows.put(placementOf(typeId)
                 .withFloatingBounds(new ToolWindowState.Bounds(left, top, width, height)));
         setType(typeId, mode);
@@ -801,9 +823,9 @@ public final class ToolWindowManager {
      */
     @Nullable
     public ToolWindowState.Bounds floatingGeometryOf(String typeId) {
-        ToolWindowFrame frame = frames.get(typeId);
+        ToolWindowFloat frame = frames.get(typeId);
         // `bounds()` never answers a zero box -- it falls back to the last measurement it had. @see
-        // ToolWindowFrame#bounds()
+        // ToolWindowFloat#bounds()
         return frame != null ? frame.bounds() : placementOf(typeId).floatingBounds();
     }
 
@@ -843,51 +865,23 @@ public final class ToolWindowManager {
         pendingWindowedShows.remove(typeId);
         releaseRegionSlot(typeId);
 
-        ToolWindowFrame frame = frames.get(typeId);
+        ToolWindowFloat frame = frames.get(typeId);
         if (frame == null) {
             DockPanelDescriptor descriptor = registry.descriptor(typeId);
-            frame = new ToolWindowFrame(typeId, descriptor != null ? descriptor.title() : typeId, container);
-            frame.onDockRequested.connect(() -> dockPanel(typeId));
-            // ITS OWN ✕ AND ITS OWN MINIMISE both come through here, and both mean hide -- the frame's
-            // policy is HIDE_ON_CLOSE. Routed back through hidePanel rather than left to the frame, or
-            // the record would still say visible and a session restore would reopen something the user
-            // had just put away.
-            frame.onHidden.connect(() -> hidePanel(typeId));
+            // The frame's caption has a close button, so the container's own would be a second one beside it.
+            container.setHideButtonVisible(false);
+            // A ZERO RECT IS REFUSED, not honoured: a 0x0 frame at the origin is a legal encoding and an unusable window,
+            // so it cannot be told from "never floated" by looking at it. The float takes the remembered place or none.
+            //
+            // ITS OWN X AND ITS OWN MINIMISE both mean hide (the policy is HIDE_ON_CLOSE), routed back through hidePanel
+            // rather than left to the window, or the record would still say visible and a session restore would reopen
+            // something the user had just put away.
+            frame = new ToolWindowFloat(floats(window, anchor), typeId, descriptor != null ? descriptor.title() : typeId,
+                    container, type, placementOf(typeId).floatingBounds(), () -> dockPanel(typeId),
+                    () -> hidePanel(typeId));
             frames.put(typeId, frame);
-        }
-        frame.setMode(type);
-        // The frame's caption has a close button, so the container's own would be a second one beside it.
-        container.setHideButtonVisible(false);
-
-        // A ZERO RECT IS REFUSED, not honoured, and it is the same test the codec makes on the way in:
-        // a 0x0 frame at the origin is a legal encoding and an unusable window, so it cannot be told
-        // from "never floated" by looking at it. Restoring one puts a window on screen with nothing to
-        // see and nothing to grab.
-        ToolWindowState.Bounds bounds = placementOf(typeId).floatingBounds();
-        if (bounds != null && bounds.width() > 0f && bounds.height() > 0f) {
-            frame.moveTo(bounds.left(), bounds.top());
-            frame.resizeTo(bounds.width(), bounds.height());
         } else {
-            frame.resizeTo(ToolWindowFrame.DEFAULT_WIDTH, ToolWindowFrame.DEFAULT_HEIGHT);
-        }
-
-        if (type == ToolWindowType.FLOATING) {
-            // OWNED BY THE WORKBENCH'S OWN WINDOW, which is what makes a float travel with the thing it
-            // was torn out of -- and NON-BLOCKING, or the owner's whole surface goes under a transparent
-            // slot and the panel reads as a modal dialog. Falls back to a top-level window when the
-            // workbench is not in a frame at all: a bare UIDocument with no desktop window open is a
-            // legitimate host, and refusing there would make the gesture work in the application and
-            // not in a test.
-            UIElement scope = window.focus().scopeOf(anchor);
-            if (scope instanceof WindowFrame owner) owner.attachOwned(frame);
-            else AppWindows.addFloat(anchor, frame);
-        } else {
-            AppWindows.addFloat(anchor, frame);
-            // TOP-LEVEL, BUT OWNED. The frame keeps everything a window has -- it can be dragged
-            // anywhere on the desktop and has its own taskbar entry -- and gains the one thing a tool
-            // window needs from the editor it came out of: it stays above it. Without this, clicking the
-            // editor buries the panel that was torn out of it, which is the behaviour no desktop has.
-            if (window.focus().scopeOf(anchor) instanceof WindowFrame owner) frame.setOwnerWindow(owner);
+            frame.setMode(type);
         }
 
         toolWindows.put(placementOf(typeId).withVisible(true));
@@ -917,7 +911,7 @@ public final class ToolWindowManager {
      * re-read the bounds of a frame that is mid-destroy and release the owner twice.</p>
      */
     private boolean hideFrame(String typeId) {
-        ToolWindowFrame frame = frames.remove(typeId);
+        ToolWindowFloat frame = frames.remove(typeId);
         if (frame == null) return false;
 
         toolWindows.put(placementOf(typeId).withFloatingBounds(frame.bounds()).withVisible(false));

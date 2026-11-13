@@ -419,7 +419,6 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         workbench.dock().layout().leafContaining(page).remove(page);
         workbench.dock().requestRebuild();
         DockWindow torn = new DockWindow(workbench.dock(), DockLayout.of(new DockLeaf(page)), "new.cgui");
-        Desktop.of(document).addWindow(torn);
         for (int i = 0; i < 16; i++) frameAndPump();
         assertEquals(List.of(torn), workbench.dock().windows());
 
@@ -433,12 +432,12 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
         assertSame("working in the window did not make it the active dock", torn.area(), workbench.dock().activeArea());
         assertEquals(FILE.toString(), String.valueOf(workbench.activeResource()));
 
-        torn.hide();
+        torn.window().hide();
         for (int i = 0; i < 12; i++) frameAndPump();
         assertSame(workbench.dock(), workbench.dock().activeArea());
         assertNull("a minimised window is not on screen", panel().hierarchy());
 
-        torn.destroy();
+        torn.window().destroy();
         for (int i = 0; i < 4; i++) frameAndPump();
         assertTrue(workbench.dock().windows().isEmpty());
     }

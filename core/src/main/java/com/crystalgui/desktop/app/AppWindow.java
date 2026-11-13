@@ -6,6 +6,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.window.WindowBounds;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.ui.dom.UIDocument;
@@ -176,6 +177,31 @@ public final class AppWindow {
         return this;
     }
 
+    /**
+     * Where the window is and how big, for a session record; never a zero size, and {@code fallbackWidth} by
+     * {@code fallbackHeight} when it never had one. From the application's thread it is the last measurement the shell
+     * took, refreshed for the next ask.
+     */
+    public WindowBounds bounds(float fallbackWidth, float fallbackHeight) {
+        UIDocument shell = shellDocument();
+        if (shell == null || shell.isCurrent()) return frame.bounds(fallbackWidth, fallbackHeight);
+        shell.execute(frame::measureBounds);
+        WindowBounds known = frame.lastBounds();
+        return known != null ? known
+                : new WindowBounds(frame.getWantedLeft(), frame.getWantedTop(), fallbackWidth, fallbackHeight);
+    }
+
+    /** Puts the window away without ending it; a window with a {@link WindowSpec#hideOnClose} policy does the same on its X. */
+    public void hide() {
+        onShell(frame::hide);
+    }
+
+    /** Adds or removes a style class on the frame, for a sheet to key a mode on. */
+    public AppWindow styleClass(String cssClass, boolean on) {
+        onShell(() -> frame.toggleClass(cssClass, on));
+        return this;
+    }
+
     /** Sends the window to its taskbar entry; {@link #activate()} brings it back. */
     public void minimise() {
         onShell(frame::minimize);
@@ -231,6 +257,12 @@ public final class AppWindow {
         return this;
     }
 
+    /** Runs on the application's thread when the window is hidden, by its X or its minimise when it hides on close. */
+    public AppWindow onHidden(Runnable then) {
+        onShell(() -> frame.onHidden.connect(() -> onApplication(then)));
+        return this;
+    }
+
     /** Runs once the window has been destroyed, however it ended, on the application's thread. */
     public AppWindow onClosed(Runnable then) {
         onShell(() -> frame.onDestroyed.connect(() -> onApplication(then)));
@@ -257,9 +289,19 @@ public final class AppWindow {
      * }</pre>
      */
     public CaptionAction addSettingsAction(Runnable onPress) {
+        return addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings", onPress);
+    }
+
+    /**
+     * Adds a button of the application's own to the title bar, its glyph a sheet's rule on {@code partClass}.
+     *
+     * <pre>{@code
+     * window.addCaptionAction("__dock__", "Dock", () -> dockBack());
+     * }</pre>
+     */
+    public CaptionAction addCaptionAction(String partClass, String tooltip, Runnable onPress) {
         CaptionAction action = new CaptionAction(this);
-        onShell(() -> action.button = frame.addCaptionAction(WindowFrame.SETTINGS_ACTION_CLASS, "Settings",
-                () -> onApplication(onPress)));
+        onShell(() -> action.button = frame.addCaptionAction(partClass, tooltip, () -> onApplication(onPress)));
         return action;
     }
 

@@ -4,8 +4,7 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.desktop.app.AppWindow;
-import com.crystalgui.desktop.app.AppWindows;
+import com.crystalgui.desktop.app.FloatSpace;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.style.StyleGroup;
@@ -454,6 +453,29 @@ public class DockArea extends UIElement implements MinimumSize {
         return out;
     }
 
+    /** On a home: how its torn-out windows open. @see #useFloats */
+    @Nullable
+    private FloatSpace floats;
+
+    /**
+     * Sets how this home's torn-out windows open: as windows of the desktop, owned by the application's window.
+     * Without it they open on the desktop of this dock's document, with their content in that document.
+     */
+    public void useFloats(FloatSpace space) {
+        home().floats = space;
+    }
+
+    /** How a window torn out of this home opens. */
+    FloatSpace floats() {
+        DockArea home = home();
+        if (home.floats == null) {
+            UIDocument document = home.document();
+            if (document == null) throw new IllegalStateException("a dock outside any document cannot open a window");
+            home.floats = FloatSpace.onDesktop(Desktop.of(document), home.tornWindowApplication, null);
+        }
+        return home.floats;
+    }
+
     /** A window torn out of this home. @see DockWindow */
     void adopt(DockWindow window) {
         windows.add(window);
@@ -535,7 +557,7 @@ public class DockArea extends UIElement implements MinimumSize {
         UIDocument surface = home.document();
         if (surface == null) return;
         for (DockWindow window : home.windows) {
-            if (window.area() == this && !window.isActive()) AppWindow.of(window).activate();
+            if (window.area() == this && !window.window().isActive()) window.window().activate();
         }
     }
 
@@ -1773,9 +1795,7 @@ public class DockArea extends UIElement implements MinimumSize {
                 ? DockLayout.of((DockLeaf) moved)
                 : DockLayout.of((DockBranch) moved, DockOrientation.HORIZONTAL);
         String title = payload.panel() != null ? registry.windowTitleOf(payload.panel()) : "";
-        DockWindow frame = new DockWindow(this, torn, title);
-        frame.moveTo(left, top);
-        AppWindows.addFloat(this, frame);
+        new DockWindow(this, torn, title, DockWindow.DEFAULT_WIDTH, DockWindow.DEFAULT_HEIGHT, left, top);
         requestRebuild();
     }
 

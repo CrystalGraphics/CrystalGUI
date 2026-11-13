@@ -322,7 +322,7 @@ public class ViewContainer extends UIElement implements WindowChrome, DataProvid
      *
      * <h3>The two-headers problem, one level down from the editor's</h3>
      *
-     * <p>A container in a {@link ToolWindowFrame} would otherwise draw its own header immediately below
+     * <p>A container in a {@code ToolWindowFloat} would otherwise draw its own header immediately below
      * the frame's caption: two title rows, one of them nearly empty, in a panel that is already small.
      * It is the same fault {@code CrystalEditor}'s menu bar had and the same seam fixes it — the header
      * is <b>moved</b> into the caption and moved back when the frame lets go, so there is only ever one

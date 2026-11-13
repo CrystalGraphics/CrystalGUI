@@ -28,6 +28,7 @@ import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.app.Application;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.app.AppContext;
+import com.crystalgui.desktop.app.FloatSpace;
 import com.crystalgui.desktop.app.ServerWindowHost;
 import com.crystalgui.desktop.window.WindowChrome;
 import com.crystalgui.desktop.app.AppWindow;
@@ -308,6 +309,9 @@ public class WorkbenchApplication extends UIElement
         // instead of in the group belonging to nobody -- a group that sorts FIRST, so a torn-out tab
         // landed to the LEFT of the editor it came out of.
         workbench.dock().setTornWindowApplication(kind);
+        // AND ITS FLOATS ARE WINDOWS OF THE DESKTOP, owned by this one: a tool window or a torn-out tab can leave the
+        // window the workbench is in, while what they show stays in this application's document.
+        workbench.useFloats(FloatSpace.of(context.windows(), window));
         // setContent, not content().append -- it is what ADOPTS the workbench's menu bar into the
         // caption, so the window has one header rather than two stacked on each other.
         window.setContent(this);

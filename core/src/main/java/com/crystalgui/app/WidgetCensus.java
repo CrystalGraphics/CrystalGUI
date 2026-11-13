@@ -38,7 +38,6 @@ import com.crystalgui.desktop.taskbar.WindowThumbnail;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
 import com.crystalgui.workbench.dock.DockGroup;
-import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.widget.texteditor.suggest.CompletionPopup;
 import com.crystalgui.widget.texteditor.doc.DocumentationPopup;
 import com.crystalgui.widget.texteditor.find.SearchReplaceBar;
@@ -60,7 +59,6 @@ import com.crystalgui.workbench.explorer.ProjectFileTree;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionHost;
 import com.crystalgui.workbench.stripe.StripeView;
-import com.crystalgui.workbench.toolwindow.ToolWindowFrame;
 import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.Workbench;
 
@@ -194,9 +192,6 @@ public final class WidgetCensus {
         WidgetContracts.localOnly(RegionHost.class, "Workbench shell -- one half of a region.");
         WidgetContracts.localOnly(RegionDropOverlay.class, "Workbench shell -- a drop target shown during a drag.");
         WidgetContracts.localOnly(StripeView.class, "Workbench shell -- the tool-window rail.");
-        WidgetContracts.localOnly(ToolWindowFrame.class,
-                "Workbench shell. A tool window's placement lives on its ToolWindowState record, which "
-                        + "the session persists.");
         WidgetContracts.localOnly(ProjectFileTree.class,
                 "Workbench shell, and its contents are the workspace filesystem -- already a protocol.");
         WidgetContracts.localOnly(DiffView.class, "Workbench shell -- a view over two documents.");
@@ -205,7 +200,6 @@ public final class WidgetCensus {
         WidgetContracts.localOnly(DockArea.class,
                 "Dock layout, persisted by DockLayout in the workbench session record.");
         WidgetContracts.localOnly(DockGroup.class, "Dock layout, as DockArea.");
-        WidgetContracts.localOnly(DockWindow.class, "Dock layout: a torn-out editor window.");
         WidgetContracts.localOnly(DockBannerBar.class,
                 "Dock chrome: a notice strip a panel raises about itself, so its content is the panel's "
                         + "and its presence is a local decision.");

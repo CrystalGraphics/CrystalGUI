@@ -63,7 +63,7 @@ import java.util.function.BooleanSupplier;
  * <p>{@code Dialog}'s bundle is modality, a close watcher and a backdrop — exactly what a frame must not
  * inherit, and {@code FloatingDock} paid for that lesson once already: it extended {@code Dialog} and
  * then spent three paragraphs of its own javadoc listing what it must not be allowed to inherit, which
- * is the tell for a wrong base class. (It was deleted at W8; {@code ToolWindowFrame} is a frame.) What is taken from
+ * is the tell for a wrong base class. (It was deleted at W8.) What is taken from
  * {@code Dialog} is the <em>pattern</em>: a positional drag from the title bar writing {@code left}/
  * {@code top} at <b>INLINE</b> origin, matching what CSS {@code resize} mandates for the size
  * {@code UIResizer} writes, so an author's {@code !important} can still pin a window down. The two
@@ -1782,6 +1782,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public void hide() {
         if (record.state() != WindowState.VISIBLE) return;
+        // BEFORE THE DETACH: a detached frame has no box, and its listeners ask for the bounds as it leaves.
+        measureBounds();
         // FIRST, while this window is still the thing they are owned by and still has a box. Win32's
         // rule: an owner going away takes its owned windows with it. Only tool windows, and only
         // top-level ones -- a FLOATING tool window is a child of the overlay slot and leaves with the
@@ -1982,7 +1984,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * zero. Persisting that writes a 0x0 window into the record, and a 0x0 rect is indistinguishable from
      * "never placed" — so the window is dropped on the way back in and simply does not come back. The
      * plan states the rule W8 paid for and this is it one level up: <em>capture before the thing goes
-     * away, not after</em>. {@code ToolWindowFrame} snapshots in its own {@code hide()} for the same
+     * away, not after</em>. {@link #hide()} snapshots its bounds for the same
      * reason.</p>
      *
      * <p>It cannot be answered from the inline style instead: a window sized by a drag has its width
@@ -2315,6 +2317,35 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     public float getWantedLeft() {
         return record.wantedLeft();
+    }
+
+    /** The last size measured while this frame had a box; read by any thread. @see #bounds() */
+    private volatile WindowBounds lastBounds;
+
+    /**
+     * Its geometry for a session record: where it was asked to be and its size, never a zero box.
+     *
+     * <p>Falls back to the last measurement taken while it had a box (taken as it hides, and by {@link #measureBounds}),
+     * and to {@code fallback} when it never had one. A zero here is a window that cannot be seen or grabbed, and a
+     * caller cannot tell it from a small one.</p>
+     */
+    public WindowBounds bounds(float fallbackWidth, float fallbackHeight) {
+        measureBounds();
+        WindowBounds known = lastBounds;
+        return known != null ? known : new WindowBounds(getWantedLeft(), getWantedTop(), fallbackWidth, fallbackHeight);
+    }
+
+    /** The last measurement, or null when the window never had a box. Any thread. */
+    public WindowBounds lastBounds() {
+        return lastBounds;
+    }
+
+    /** Takes the measurement {@link #bounds} reads; the shell's thread. */
+    public void measureBounds() {
+        Box box = box();
+        float width = box == null ? 0f : box.width();
+        float height = box == null ? 0f : box.height();
+        if (width > 0f && height > 0f) lastBounds = new WindowBounds(getWantedLeft(), getWantedTop(), width, height);
     }
 
     /** @see #getWantedLeft() */

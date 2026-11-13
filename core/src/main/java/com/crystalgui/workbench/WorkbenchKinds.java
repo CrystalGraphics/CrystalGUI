@@ -12,7 +12,6 @@ import com.crystalgui.workbench.diff.DiffView;
 import com.crystalgui.workbench.diff.MergeView;
 import com.crystalgui.workbench.dock.DockArea;
 import com.crystalgui.workbench.dock.DockGroup;
-import com.crystalgui.workbench.dock.DockWindow;
 import com.crystalgui.workbench.dock.banner.DockBannerBar;
 import com.crystalgui.workbench.dock.layout.DockLayout;
 import com.crystalgui.workbench.dock.layout.DockLeaf;
@@ -22,7 +21,6 @@ import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionHost;
 import com.crystalgui.workbench.stripe.StripeView;
-import com.crystalgui.workbench.toolwindow.ToolWindowFrame;
 import com.crystalgui.workbench.view.ViewContainer;
 
 /**
@@ -62,7 +60,6 @@ public final class WorkbenchKinds implements NodeKinds {
         // difference between a registration that exists and one that works.
         UIElementRegistry.register(DockGroup.NAME,
                 () -> new DockGroup(emptyArea(), new DockLeaf()), NodeContract.INERT, KindInfo.hidden());
-        UIElementRegistry.registerTag(DockWindow.NAME, NodeContract.INERT);
         // A banner bar is built from a Notification and never decoded; registered so the tag exists,
         // since `ua/workbench.css` styles it. An EMPTY notification rather than null, because unlike
         // the three above it reads its argument in the constructor -- which the coverage walk found
@@ -96,10 +93,6 @@ public final class WorkbenchKinds implements NodeKinds {
         // exists and one that works -- the same lesson DockGroup's `null, null` taught two stages ago.
         UIElementRegistry.register(MergeView.NAME,
                 () -> new MergeView(ThreeWayMerge.of("", "", "")), NodeContract.INERT, KindInfo.hidden());
-        // A tool window's frame: built per show and destroyed per hide, never decoded. Registered so
-        // the TAG exists -- and it has one of its own rather than answering `window`, because a Name
-        // is bound to a factory. `WindowFrame.WINDOW_CLASS` is what carries a window's look to it.
-        UIElementRegistry.registerTag(ToolWindowFrame.NAME, NodeContract.INERT);
     }
 
     /** One empty dock, for the registrations above. */

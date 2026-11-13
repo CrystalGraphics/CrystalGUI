@@ -1,5 +1,8 @@
 package com.crystalgui.desktop.app;
 
+import java.util.ArrayList;
+import java.util.List;
+
 import javax.annotation.Nullable;
 
 import com.crystalgui.core.window.WindowPolicy;
@@ -67,6 +70,14 @@ public final class WindowSpec {
     private AppWindow owner;
     @Setter(AccessLevel.NONE)
     private boolean takesFocus = true;
+    /** Part of its owner rather than a window of its own: no taskbar entry, hides and shows with the owner. */
+    @Setter(AccessLevel.NONE)
+    private boolean tool;
+    @Setter(AccessLevel.NONE)
+    private boolean maximizable = true;
+    /** Style classes on the frame, so a sheet can tell this window from another. */
+    @Setter(AccessLevel.NONE)
+    private final List<String> classes = new ArrayList<>();
 
     public static WindowSpec titled(String title) {
         WindowSpec spec = new WindowSpec();
@@ -98,6 +109,27 @@ public final class WindowSpec {
     /** Opens without taking focus, as a server's window does: it asks for attention instead. */
     public WindowSpec background() {
         this.takesFocus = false;
+        return this;
+    }
+
+    /**
+     * A tool window: part of its owner, with no taskbar or switcher entry of its own, hidden and shown with the owner.
+     * Pair it with {@link #ownedBy}.
+     */
+    public WindowSpec toolWindow() {
+        this.tool = true;
+        return this;
+    }
+
+    /** No maximise button and no maximise on a double-click on the frame. */
+    public WindowSpec unmaximizable() {
+        this.maximizable = false;
+        return this;
+    }
+
+    /** A style class on the frame. */
+    public WindowSpec styled(String cssClass) {
+        classes.add(cssClass);
         return this;
     }
 

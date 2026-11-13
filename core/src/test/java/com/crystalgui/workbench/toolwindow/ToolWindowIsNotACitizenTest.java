@@ -73,10 +73,10 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
     }
 
     /** Opens the Inspector as a top-level tool document, owned by the workbench's frame. */
-    private ToolWindowFrame openWindowed() {
+    private WindowFrame openWindowed() {
         manager.floatPanel(INSPECTOR, 40f, 40f, ToolWindowType.WINDOWED);
         settle();
-        ToolWindowFrame frame = manager.frameOf(INSPECTOR);
+        WindowFrame frame = frameOf(manager, INSPECTOR);
         assertNotNull("the fixture did not open a windowed tool document", frame);
         return frame;
     }
@@ -92,7 +92,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
      */
     @Test
     public void aWindowedToolWindowIsLiveButIsNotAnEntry() {
-        ToolWindowFrame frame = openWindowed();
+        WindowFrame frame = openWindowed();
         var registry = Desktop.of(document).windowManager().registry();
 
         assertTrue("a tool document is still a live document", registry.windows().contains(frame));
@@ -137,7 +137,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
      */
     @Test
     public void hidingTheOwnerHidesItsToolWindowAndShowingBringsItBack() {
-        ToolWindowFrame frame = openWindowed();
+        WindowFrame frame = openWindowed();
         assertEquals(WindowState.VISIBLE, frame.state());
 
         workbenchWindow.hide();
@@ -168,7 +168,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
      */
     @Test
     public void aToolWindowClosedBeforeItsOwnerStaysClosed() {
-        ToolWindowFrame frame = openWindowed();
+        WindowFrame frame = openWindowed();
 
         frame.hide();
         settle();
@@ -181,7 +181,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
 
         assertFalse("restoring the owner reopened a panel the user had closed",
                 manager.isPanelOpen(INSPECTOR));
-        assertNull("restoring the owner built a frame for a closed panel", manager.frameOf(INSPECTOR));
+        assertNull("restoring the owner built a frame for a closed panel", manager.floatOf(INSPECTOR));
     }
 
     /**
@@ -208,7 +208,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
         // document's own OPEN timeline is still running when the gesture starts, so isAnimating() answers
         // true whatever the minimise did and the test passes against no fix at all. Caught by a mutant,
         // exactly as the standing note about this fixture shape warns.
-        ToolWindowFrame frame = openWindowed();
+        WindowFrame frame = openWindowed();
 
         Desktop.setAnimationsEnabled(true);
         try {
@@ -234,7 +234,7 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
      */
     @Test
     public void theOwnersOwnHideDoesNotCutShortTheFlightItStarted() {
-        ToolWindowFrame frame = openWindowed();
+        WindowFrame frame = openWindowed();
 
         Desktop.setAnimationsEnabled(true);
         try {
@@ -286,12 +286,18 @@ public class ToolWindowIsNotACitizenTest extends UiDocumentTestBase {
      */
     @Test
     public void hidingAToolWindowDirectlyStillClosesThePanel() {
-        ToolWindowFrame frame = openWindowed();
+        WindowFrame frame = openWindowed();
 
         frame.hide();
         settle();
 
         assertFalse("hiding a tool document by hand did not record the panel closed",
                 manager.isPanelOpen(INSPECTOR));
+    }
+
+    /** The shell window a floating tool window is shown in. */
+    private static WindowFrame frameOf(ToolWindowManager manager, String typeId) {
+        ToolWindowFloat floating = manager.floatOf(typeId);
+        return floating == null ? null : floating.window().frame();
     }
 }

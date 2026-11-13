@@ -1351,6 +1351,14 @@ target-phase only — hears nothing at all.
 > *stripe's* bounds. Ours bands the window. The "Move to …" wording is IntelliJ's around a target
 > computed differently; do not read it as a port.
 
+### Floating windows are windows of the desktop
+
+A tool window out of its region (`ToolWindowFloat`) and a torn-out editor (`DockWindow`) are windows of the desktop: the
+shell owns the frame, so they can leave the window the workbench is in, while the view stays in the workbench's document and
+is shown through a `ClientPortal`. A workbench is told how to open them with `Workbench.useFloats(FloatSpace.of(context.windows(), main))`;
+tool windows are owned by `main` (above it, hidden and closed with it, no taskbar entry), torn-out editors are peers.
+Without it they open on the desktop of the workbench's own document (a test, a bare host).
+
 ### Two widgets that came out of this, and are not workbench-specific
 
 - **`DragPreview`** (`ui.service`) — what a drag looks like under the pointer, as values: an icon, a label, a style

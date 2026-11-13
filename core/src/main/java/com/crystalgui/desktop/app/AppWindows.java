@@ -63,30 +63,11 @@ public final class AppWindows {
     }
 
     /**
-     * Puts a window the workbench built (a torn-out tab, a tool window) beside {@code anchor}, as a window that is not an
-     * application's main window.
-     *
-     * <pre>{@code
-     * DockWindow torn = new DockWindow(area, layout, title);
-     * AppWindows.addFloat(area, torn);
-     * }</pre>
-     *
-     * <ul>
-     *   <li>An anchor in an application's own document gets a float in that document, over the window it is in and kept
-     *       inside it: its content cannot leave the thread that owns it.</li>
-     *   <li>Any other anchor gets a window of the desktop of its document.</li>
-     *   <li>For code that builds its own {@link WindowFrame} subclass, which only the workbench's floats do; everything
-     *       else opens a window with {@link #open}.</li>
-     * </ul>
+     * Opens a window of {@code kind} on {@code desktop} whose content lives in the shell's own document: what a workbench
+     * does when it was not launched as an application with a document of its own.
      */
-    public static <T extends WindowFrame> T addFloat(UIElement anchor, T frame) {
-        for (UIElement node = anchor; node != null; node = node.parentElement()) {
-            if (node instanceof ClientRoot client) {
-                client.append(frame);
-                return frame;
-            }
-        }
-        return Desktop.of(anchor.document()).addWindow(frame);
+    public static AppWindow openOnDesktop(Desktop desktop, @Nullable ApplicationKind kind, WindowSpec spec) {
+        return open(desktop, kind, null, spec);
     }
 
     static AppWindow open(Desktop desktop, @Nullable ApplicationKind kind, @Nullable AppDocument document,
@@ -112,6 +93,12 @@ public final class AppWindows {
         if (spec.key() != null) frame.setKey(spec.key());
         if (spec.icon() != null) frame.setIcon(spec.icon());
         frame.setPolicy(spec.policy());
+        for (String cssClass : spec.classes()) frame.addClass(cssClass);
+        if (spec.tool()) frame.setToolWindow(true);
+        if (!spec.maximizable()) {
+            frame.maximizeButton().setDisplayed(false);
+            frame.setMaximizable(false);
+        }
         frame.setTitleShown(spec.titleShown());
         if (spec.pinned()) frame.setPinned(true);
         if (client != null) frame.setContent(new ClientPortal(document, client));
@@ -127,6 +114,9 @@ public final class AppWindows {
         if (client != null) {
             document.showPopupsIn(desktop.document());
             document.windowOpened(frame);
+            // ITS CLIENT GOES WITH IT: a window opened and closed over and over (a tool window, a torn-out tab) would
+            // otherwise leave a root in the document per opening, laid out every frame for nothing.
+            frame.onDestroyed.connect(() -> document.execute(() -> document.removeClient(client)));
         }
         return frame;
     }
