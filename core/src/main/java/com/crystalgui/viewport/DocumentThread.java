@@ -203,7 +203,20 @@ abstract class DocumentThread implements UIDocument.Owner {
 
         @Override
         boolean offer(BooleanSupplier dispatch) {
-            return dispatch.getAsBoolean();
+            if (isCurrent()) return dispatch.getAsBoolean();
+            // The shell's sequence forwarding input: the tree's owner is the host, so it runs in the host's drain.
+            execute(dispatch::getAsBoolean);
+            return true;
+        }
+
+        @Override
+        boolean offerKey(CgSystemInput.Keyboard.Event key, BooleanSupplier dispatch,
+                         Queue<CgSystemInput.Keyboard.Event> unhandled) {
+            if (isCurrent()) return dispatch.getAsBoolean();
+            execute(() -> {
+                if (!dispatch.getAsBoolean()) unhandled.add(key);
+            });
+            return true;
         }
 
         @Override

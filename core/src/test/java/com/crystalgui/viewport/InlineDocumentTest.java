@@ -125,8 +125,23 @@ public class InlineDocumentTest {
         assertTrue("the shell's turn was left waiting for the host", answered[0]);
     }
 
+    /** The shell forwarding a click from its sequence: it is the host's to dispatch, in the host's drain. */
     @Test
-    public void workThatThrowsIsTheDocumentsFaultAndTheRestStillRuns() {
+    public void inputOfferedFromTheShellRunsInTheHostsDrain() {
+        viewport.drain();
+        Thread[] ranOn = new Thread[1];
+        boolean taken = onShell(() -> viewport.offer(() -> {
+            ranOn[0] = Thread.currentThread();
+            return true;
+        }));
+        assertTrue(taken);
+        assertEquals(null, ranOn[0]);
+        viewport.drain();
+        assertSame(Thread.currentThread(), ranOn[0]);
+    }
+
+    @Test
+    public void workThatThrowsIsTheDocumentsFaultAndTheRestStillRunsAndTheRestStillRuns() {
         List<Throwable> faults = new ArrayList<>();
         viewport.onFault(faults::add);
         boolean[] later = {false};
