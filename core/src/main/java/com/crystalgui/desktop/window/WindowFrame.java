@@ -332,6 +332,17 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
         return record.state() == WindowState.HIDDEN;
     }
 
+    /** A window is at most the desktop: its surface is made that size once, so a resize never reallocates it. */
+    @Override
+    public int reserveWidth() {
+        return (int) Math.ceil(document().boxes().viewportWidth() * document().boxes().uiScale());
+    }
+
+    @Override
+    public int reserveHeight() {
+        return (int) Math.ceil(document().boxes().viewportHeight() * document().boxes().uiScale());
+    }
+
     /** What wants its picture: a thumbnail showing it. A window minimising wants it too. */
     private final Set<Object> pictureWanters = Collections.newSetFromMap(new IdentityHashMap<>());
 

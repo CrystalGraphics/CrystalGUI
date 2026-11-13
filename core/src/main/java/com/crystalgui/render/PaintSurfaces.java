@@ -53,8 +53,10 @@ final class PaintSurfaces {
         Surface surface = surfaces.get(key);
         if (surface != null) {
             int wide = surface.target().getWidth(), tall = surface.target().getHeight();
-            if (wide < region.width() || tall < region.height()
-                    || wide > Math.max(64, region.width() * 2) || tall > Math.max(64, region.height() * 2)) {
+            int reservedWide = reserved(key, true), reservedTall = reserved(key, false);
+            if (wide < region.width() || tall < region.height() || wide < reservedWide || tall < reservedTall
+                    || wide > Math.max(Math.max(64, region.width() * 2), reservedWide)
+                    || tall > Math.max(Math.max(64, region.height() * 2), reservedTall)) {
                 CgTrace.add(UiTrace.FRAME, "surfaces-resized", 1);
                 surfaces.remove(key);
                 retire(surface);
@@ -62,8 +64,9 @@ final class PaintSurfaces {
             }
         }
         if (surface == null) {
-            CgGraphTexture target = ctx.requestTexture("cgui_surface_" + created++, bucket(region.width()),
-                    bucket(region.height()), CgUiPaintContext.LAYER_FORMAT);
+            CgGraphTexture target = ctx.requestTexture("cgui_surface_" + created++,
+                    Math.max(bucket(region.width()), reserved(key, true)),
+                    Math.max(bucket(region.height()), reserved(key, false)), CgUiPaintContext.LAYER_FORMAT);
             ctx.warmUpLayer(target);
             surface = new Surface(target);
             surfaces.put(key, surface);
@@ -218,6 +221,13 @@ final class PaintSurfaces {
         surface.releaseThumbnail(ctx);
         ctx.releaseTexture(surface.target());
         if (surface.checkTarget != null) ctx.releaseTexture(surface.checkTarget);
+    }
+
+    /** What the owner promised its surface will need, capped at the largest texture a surface takes; 0 for no promise. */
+    private static int reserved(Object key, boolean width) {
+        if (!(key instanceof Surface.Owner owner)) return 0;
+        int size = width ? owner.reserveWidth() : owner.reserveHeight();
+        return size <= 0 ? 0 : bucket(Math.min(MAX_SIDE, size));
     }
 
     /** Rounded up, so an element resizing by a pixel a frame does not reallocate its texture every frame. */

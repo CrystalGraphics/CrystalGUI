@@ -146,6 +146,24 @@ public final class ClientRoot extends UIElement implements Surface.Owner {
         return true;
     }
 
+    private volatile int reserveWidth, reserveHeight;
+
+    /** The shell's thread: the desktop's size in device pixels, which no window outgrows. */
+    void reserve(int width, int height) {
+        reserveWidth = width;
+        reserveHeight = height;
+    }
+
+    @Override
+    public int reserveWidth() {
+        return reserveWidth;
+    }
+
+    @Override
+    public int reserveHeight() {
+        return reserveHeight;
+    }
+
     /** Always: the shell shows nothing but this picture, so glass inside the client must not take it off the surface. */
     @Override
     public boolean wantsPicture() {

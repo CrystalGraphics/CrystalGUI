@@ -4992,6 +4992,8 @@ com/crystalgui/desktop/app/ClientRoot
   method public keepsSurface ()Z
   method public onChanged (Ljava/lang/Runnable;)V
   method public picture ()Lcom/crystalgui/render/Surface;
+  method public reserveHeight ()I
+  method public reserveWidth ()I
   method public setClientSize (FF)V
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)V
   method public surface (Lcom/crystalgui/render/Surface;)V
@@ -5638,6 +5640,8 @@ com/crystalgui/desktop/window/WindowFrame
   method public releaseChrome ()V
   method public requestAttention ()V
   method public requestClose ()Z
+  method public reserveHeight ()I
+  method public reserveWidth ()I
   method public resizeContainingBlock ()Lcom/crystalgui/ui/dom/UIElement;
   method public resizeOriginLeft ()F
   method public resizeOriginTop ()F
@@ -8623,6 +8627,8 @@ com/crystalgui/render/Surface
 com/crystalgui/render/Surface$Owner
   access public,abstract,interface
   extends java/lang/Object
+  method public reserveHeight ()I
+  method public reserveWidth ()I
   method public wantsPicture ()Z
   method public,abstract keepsSurface ()Z
   method public,abstract surface (Lcom/crystalgui/render/Surface;)V
@@ -13290,6 +13296,8 @@ com/crystalgui/ui/box/BoxTree
   method public transformsChanged (Lcom/crystalgui/ui/box/Box;)V
   method public uiScale ()F
   method public unmirror (Lcom/crystalgui/ui/box/Box;)V
+  method public viewportHeight ()F
+  method public viewportWidth ()F
 com/crystalgui/ui/box/HitShape
   access public,final
   extends java/lang/Object

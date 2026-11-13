@@ -77,6 +77,19 @@ public final class Surface {
         default boolean wantsPicture() {
             return false;
         }
+
+        /**
+         * The largest width in device pixels its surface will need, or 0 for no promise. A new surface is made this
+         * wide at once, so growing toward it never reallocates the texture mid-animation.
+         */
+        default int reserveWidth() {
+            return 0;
+        }
+
+        /** @see #reserveWidth */
+        default int reserveHeight() {
+            return 0;
+        }
     }
 
     /** The box's border box in the texture's pixels, top-down, and its size in the box's own units. */

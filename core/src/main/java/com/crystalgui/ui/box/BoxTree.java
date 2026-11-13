@@ -211,6 +211,16 @@ public final class BoxTree {
 
     private float uiScale = 1f;
 
+    /** The size, in logical pixels, the document was last laid out at. */
+    public float viewportWidth() {
+        return viewportWidth;
+    }
+
+    /** @see #viewportWidth */
+    public float viewportHeight() {
+        return viewportHeight;
+    }
+
     public Matrix4f rootTransform() {
         return new Matrix4f(rootTransform);
     }

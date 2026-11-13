@@ -9,6 +9,7 @@ import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.Surface;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.box.BoxTree;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -165,6 +166,9 @@ public final class ClientPortal extends UIElement implements CursorSource {
     @Override
     public void paintContent(CgUiPaintContext ctx, Box box) {
         float width = box.width(), height = box.height();
+        BoxTree shell = document().boxes();
+        client.reserve((int) Math.ceil(shell.viewportWidth() * shell.uiScale()),
+                (int) Math.ceil(shell.viewportHeight() * shell.uiScale()));
         if (width != sentWidth || height != sentHeight) {
             sentWidth = width;
             sentHeight = height;
