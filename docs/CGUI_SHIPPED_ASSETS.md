@@ -4,12 +4,10 @@
 
 ## Shipped assets
 
-> **A new shader or keyword set must be precached.** Every shader the UI draws is listed in `CgUiPaintContext`'s
-> `QUAD_SHADERS` or `CURVE_SHADERS`, registered at client init and built behind the loading screen, and every keyword a
-> style can switch is in its shader's `#pragma cg_permutation`. One missing shows late on first use and counts
-> `pipeline.missed`: `CrystalGraphics/docs/PRECACHE.md`. Editing
-> a shipped shader also stales CrystalGraphics' shipped pipeline list, refreshed before a release
-> ([`CGUI_BUILD.md`](CGUI_BUILD.md) § *Releasing*).
+> **CrystalGUI ships no shader.** Everything the UI draws is a CrystalGraphics canvas material (`CgCanvasMaterials`:
+> box, curve, text, image, gradient, grid, glass), precached by the engine. A surface the canvas cannot draw is a canvas
+> feature added to CrystalGraphics, as the colour picker's conic ring and checkerboard were, never a shader here
+> (`CrystalGraphics/docs/PRECACHE.md`).
 
 `core/src/main/resources/assets/crystalgui/`
 
@@ -34,19 +32,3 @@
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
 | `ui/fonts/IBMPlexSans-Regular.ttf`, `JetBrainsMono-Regular.ttf` | The UI face and the code face, SIL OFL 1.1, each with its licence beside it (`IBMPlexSans-OFL.txt`, `OFL.txt`). IBM Plex moved here from CrystalGraphics on 2026-09-11, which now ships no fonts: anything neither face covers comes from the installed fonts (`CgSystemFonts`). |
 | (boxes, curves, gradients, grids, glass, coverage, the blur) | **Not shipped here: CrystalGraphics' canvas** (`CgCanvasMaterials`, `crystalgraphics:shaders/canvas/`, `CANVAS.md` § 3) and its blur (`CgGpuOps.blurScaled`, compute). The paint context draws every box through `SCREEN.box()`, every stroke and cell through `SCREEN.curve()`, gradients, grids and glass through `CgCanvasGradient`, `CgCanvasGrid` and `CgCanvasGlass`, and an icon's coverage through `SCREEN.coverage()`; a thumbnail is `CgGpuOps.shrink`, on compute. A composite of a layer is a box quad stamped `CgShapeTable.PREMULTIPLIED`, its texture on the quad. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `env/buffer/quad.glsl`; the `edges` page of `cgui-gallery` shows every material rotated and skewed. |
-
-> **Every quad shader here declares `#pragma cg_use quad`, and any new one must too.** Everything
-> here draws through `CgQuadBatch`, whose per-instance buffer supplies `CG_QUAD_WORLD_POS` /
-> `CG_QUAD_UV` / `CG_QUAD_COLOR` — the pragma is what wires it, during parsing, before anything can
-> compile. Omitting it is a parse error naming the missing line (it used to be a GLSL error about an
-> undefined `QUAD_DATA`, reported four layers up as an unrelated `#pragma cg_feature` complaint).
-> Never attach the buffer from Java. See `CrystalGraphics/docs/SHADERS.md` § *Engine Buffers*.
-
-> **A `#include` in a `.shader` is compiled into the vertex stage as well as the fragment stage.**
-> The material compiler hoists every material-scope `#`-line into both. The canvas box is
-> one of several shaders with an include, and its `sdf.glsl` needed a stage guard around
-> `sdf_coverage` — `fwidth` is fragment-only, NVIDIA accepted it anyway, and AMD's refusal made the
-> whole gallery unlaunchable on that hardware. Guard fragment-only code inside the lib, with
-> `#if !defined(CG_VERTEX_STAGE) && !defined(CG_COMPUTE_STAGE)` and never `#ifdef CG_FRAGMENT_STAGE`
-> (raw `.vert`/`.frag` get no stage define; a kernel is the third stage). `ShippedShaderStagePurityTest` enforces it GL-free; `--mode=shader-compile-audit` checks it
-> against a real driver. See `CrystalGraphics/docs/SHADERS.md` § *Stage defines*.

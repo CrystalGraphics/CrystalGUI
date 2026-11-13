@@ -13,7 +13,7 @@ import static org.junit.Assert.*;
  * once by a quarter turn and once by a half turn — and neither failure throws. The ring simply lies:
  * the handle sits on a colour that is not the one selected, and clicking magenta yields green.</p>
  *
- * <p>The reference is {@code gui_color_field.shader}, which computes
+ * <p>The reference is {@code CgUiColorField}'s ring, red at the top and counter-clockwise:
  * {@code fract(atan2(x, y) / 2π + 0.5)} with <b>y pointing down</b>. Everything below is that function
  * or its inverse.</p>
  */

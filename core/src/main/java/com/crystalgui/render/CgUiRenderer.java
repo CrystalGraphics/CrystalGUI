@@ -3,7 +3,6 @@ package com.crystalgui.render;
 import com.crystalgui.core.trace.FrameLog;
 import com.crystalgui.core.trace.FrameStats;
 import com.crystalgraphics.compute.ops.CgGpuOps;
-import com.crystalgraphics.render.draw.CgInstanceKind;
 import com.crystalgraphics.render.world.CgPipelinePrecache;
 import org.jspecify.annotations.Nullable;
 
@@ -21,7 +20,6 @@ import com.crystalgraphics.platform.rhi.format.CgFormat;
  *
  * <pre>{@code
  * CgUiRenderer.precache();                         // client init: CgUiClientLifecycle.onPreInit
- * CgUiRenderer.parseAhead();                       // graphics start: onContextInit
  * CgUiRenderer.View view = CgUiRenderer.openView(); // one per document; a CgUiViewport opens its own
  * ...
  * view.close();                                    // render thread, when the document goes
@@ -36,8 +34,6 @@ import com.crystalgraphics.platform.rhi.format.CgFormat;
  */
 public final class CgUiRenderer {
 
-    private static final String[] QUAD_SHADERS = {"crystalgui:shaders/gui_color_field.shader"};
-
     /** Every view with a paint context made and not closed: what {@link #contextDestroyed} frees. */
     // Threads: guarded by its own monitor.
     private static final Set<View> PAINTING = new LinkedHashSet<>();
@@ -46,12 +42,11 @@ public final class CgUiRenderer {
     }
 
     /**
-     * Names every shader and kernel the UI draws to CrystalGraphics' precache, so the desktop's first frame compiles
-     * nothing. Once, at client init; any thread. The canvas materials are CrystalGraphics', precached there.
+     * Names every kernel the UI runs to CrystalGraphics' precache, so the desktop's first frame compiles nothing. Once,
+     * at client init; any thread. The UI draws only canvas materials, which are CrystalGraphics', precached there.
      */
     public static void precache() {
         CgPipelinePrecache.register("crystalgui:ui", pipelines -> {
-            for (String quad : QUAD_SHADERS) pipelines.addPass(quad, CgInstanceKind.QUAD);
             // The backdrop's blur and a thumbnail's shrink on the layer format, and an icon shadow's blur on the atlas's.
             pipelines.kernels(() -> {
                 CgGpuOps.precacheBlur(CgFormat.RGBA8_UNORM);
@@ -59,11 +54,6 @@ public final class CgUiRenderer {
                 CgGpuOps.precacheShrink(CgFormat.RGBA8_UNORM);
             });
         });
-    }
-
-    /** Parses the UI's own shaders on a worker, from the graphics start: the precache's first collect then parses none. */
-    public static void parseAhead() {
-        CgPipelinePrecache.parseAhead(QUAD_SHADERS);
     }
 
     /** A place to draw a document: its recorder and its presenter. Any thread; nothing is made until it paints. */

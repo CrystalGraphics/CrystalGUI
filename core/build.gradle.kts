@@ -240,49 +240,6 @@ val headlessTestTask = tasks.register<Test>("headlessTest") {
 
 tasks.named("check") { dependsOn(headlessTestTask) }
 
-// -- deviceTest ----------------------------------------------------------------
-// CrystalGUI's shaders compiled by shaderc into pipelines on CrystalGraphics' null device, as a Vulkan device will run
-// them (plan/device-seam.md §6). Its own source set and task: the device it installs is process-wide, and LWJGL 3's
-// natives belong on no other test's classpath.
-val deviceTest: SourceSet by sourceSets.creating {
-    runtimeClasspath += sourceSets["main"].output
-}
-
-val lwjglVulkan = rootProject.properties["dep.lwjgl3.vulkan"].toString()
-val lwjglNatives = System.getProperty("os.name").lowercase().let { os ->
-    when {
-        os.contains("win") -> "natives-windows"
-        os.contains("mac") -> if (System.getProperty("os.arch") == "aarch64") "natives-macos-arm64" else "natives-macos"
-        else -> "natives-linux"
-    }
-}
-
-dependencies {
-    "deviceTestImplementation"("junit:junit:4.13.2")
-    "deviceTestImplementation"("com.crystalgraphics:core:$crystalgraphics")
-    "deviceTestImplementation"("com.crystalgraphics:platform:$crystalgraphics")
-    "deviceTestImplementation"("com.crystalgraphics:vulkan:$crystalgraphics")
-    "deviceTestImplementation"("org.joml:joml:${rootProject.properties["jomlVersion"]}")
-    "deviceTestRuntimeOnly"("org.apache.logging.log4j:log4j-core:2.26.1")
-    for (module in listOf("lwjgl", "lwjgl-shaderc", "lwjgl-spvc")) {
-        "deviceTestImplementation"("org.lwjgl:$module:$lwjglVulkan")
-        "deviceTestRuntimeOnly"("org.lwjgl:$module:$lwjglVulkan:$lwjglNatives")
-    }
-}
-
-val deviceTestTask = tasks.register<Test>("deviceTest") {
-    description = "CrystalGUI's shaders compiled into pipelines on CrystalGraphics' null device, as on Vulkan."
-    group = "verification"
-    testClassesDirs = deviceTest.output.classesDirs
-    classpath = deviceTest.runtimeClasspath
-    useJUnit()
-    // shaderc's natives load through System.load, which JDK 25 warns about unless native access is granted.
-    jvmArgs("--enable-native-access=ALL-UNNAMED")
-}
-
-tasks.named("check") { dependsOn(deviceTestTask) }
-
-
 // -- M5 acceptance ------------------------------------------------------------
 // The new engine's own definition of done, as ONE invocation: `./gradlew :core:m5Acceptance`.
 //

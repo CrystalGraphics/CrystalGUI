@@ -715,9 +715,7 @@ com/crystalgui/app/shadergraph/ShaderGraphServices
 com/crystalgui/app/shadergraph/ShaderGraphSettings
   access public,final
   extends java/lang/Object
-  field public,static,final QUEUE Lcom/crystalgui/core/settings/Setting;
-  field public,static,final RENDER_TYPE Lcom/crystalgui/core/settings/Setting;
-  field public,static,final VERTEX_FORMAT Lcom/crystalgui/core/settings/Setting;
+  field public,static,final BLEND_MODE Lcom/crystalgui/core/settings/Setting;
   method public,static all ()Ljava/util/List;
   method public,static applyTo (Lcom/crystalgui/core/settings/SettingsScope;Lcom/crystalgraphics/shadergraph/CgMasterNode;)V
   method public,static register ()V
@@ -7853,7 +7851,6 @@ com/crystalgui/lifecycle/CgUiClientLifecycle
   implements com/crystalgraphics/lifecycle/CgLifecycleListener
   implements com/crystalgraphics/mc/CgReloadListener
   method public onContextDestroy ()V
-  method public onContextInit (II)V
   method public onFrame (J)V
   method public onLoad (Lcom/crystalgraphics/loading/task/CgLoadPlan;)V
   method public onPreInit ()V
@@ -8650,7 +8647,6 @@ com/crystalgui/render/CgUiRenderer
   extends java/lang/Object
   method public,static contextDestroyed ()V
   method public,static openView ()Lcom/crystalgui/render/CgUiRenderer$View;
-  method public,static parseAhead ()V
   method public,static precache ()V
 com/crystalgui/render/CgUiRenderer$View
   access public,final

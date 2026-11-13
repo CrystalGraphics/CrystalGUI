@@ -18,7 +18,7 @@ Read the files relevant to your task scope **before** doing any work.
 **Guides load themselves.** A folder with a `CLAUDE.md` puts its guide into your context the first time you Read a
 file anywhere under it: `ui/dom`, `ui/box`, `ui/service`, `style`, `render`, `widget`, `net`, `lifecycle`,
 `text/cursor`, `core/cursor`, `core/cache`, `runtime/mc`, `harness-scenes`, `download`, and every CrystalGraphics package. Nothing under `resources/` has
-one, since all of it ships: before touching an asset or a shader, read the doc in the table below. **So Read a file before you change it, and never change one through the
+one, since all of it ships: before touching an asset, read the doc in the table below. **So Read a file before you change it, and never change one through the
 shell that you have not Read**: a shell edit loads nothing, and the guide holds the rules you would then break.
 
 | When | Read |
@@ -31,7 +31,7 @@ shell that you have not Read**: a shell edit loads nothing, and the guide holds 
 | Touching `fs/`, `document/` or `workbench/editor/` | `docs/CGUI_WORKBENCH_SERVICES.md` §Resources and §Opening things — the same rule applies |
 | Touching any rendering/buffer/shader/VAO/mesh code | `CrystalGraphics/AGENTS.md` — it loads itself with any CrystalGraphics file and any file under CrystalGUI's `render/` or `lifecycle/`; read it by hand for rendering work anywhere else |
 | Working inside a package | its guide, the folder's `CLAUDE.md`, which loads itself (above). A package's guide is always `CLAUDE.md`; only a repository root keeps `AGENTS.md` |
-| Touching anything in `core/src/main/resources/assets/crystalgui/` — a shader, a sheet, an icon, a font | [`docs/CGUI_SHIPPED_ASSETS.md`](docs/CGUI_SHIPPED_ASSETS.md), and for a shader `CrystalGraphics/docs/SHADERS.md` |
+| Touching anything in `core/src/main/resources/assets/crystalgui/` — a sheet, an icon, a font | [`docs/CGUI_SHIPPED_ASSETS.md`](docs/CGUI_SHIPPED_ASSETS.md); CrystalGUI ships no shader: one the UI needs is a CrystalGraphics canvas feature |
 | Finding where something lives | [`docs/CGUI_ARCHITECTURE.md`](docs/CGUI_ARCHITECTURE.md) — every module and the package map of `core/` |
 
 ## Where documentation goes
@@ -121,7 +121,7 @@ Guides below are relative to `core/src/main/java/com/crystalgui/` and load thems
 | Understand a frame | [Frame lifecycle](#frame-lifecycle) |
 | Debug "my selector doesn't match" or "my layout is wrong by default" | [Load-bearing invariants](#load-bearing-invariants) |
 | Work on a Minecraft host | `runtime/mc/CLAUDE.md` — loader modules are wiring, never logic |
-| Ship an asset, a shader or a theme | `docs/CGUI_SHIPPED_ASSETS.md` · `CrystalGraphics/docs/SHADERS.md` |
+| Ship an asset or a theme | `docs/CGUI_SHIPPED_ASSETS.md` |
 | Add or move a runtime download | `download/CLAUDE.md` |
 | Find where something lives | `docs/CGUI_ARCHITECTURE.md` |
 | Add a rendering backend capability | [CrystalGraphics boundary](#crystalgraphics-ownership-boundary) · `CrystalGraphics/AGENTS.md` |
@@ -144,13 +144,12 @@ resolved to local source. Each row in full: [`docs/CGUI_ARCHITECTURE.md`](docs/C
 | `runtime/mc/1710/`, `legacy/`, `modern/` | The hosts: Forge 1.7.10; Forge 1.8–1.12.2; Forge 1.13.2+, NeoForge 1.20.2+ and Fabric 1.14.4+ |
 | `runtime/mc/shared/`, `forge-stubs/` | What several hosts share, merged once: `forge-stubs/` is every Forge and NeoForge `@Mod` class |
 
-## Four test source sets, and they are not interchangeable
+## Three test source sets, and they are not interchangeable
 
 | Source set | CrystalGraphics on classpath? | What belongs there |
 |---|---|---|
 | `core/src/test/` | ✅ `testImplementation` | Anything needing `CgIO`, fonts, `StyleSheet`, sprites, drawables |
 | `core/src/headlessTest/` | ✅ `core` and `platform`, **no GL context and no fonts** | Everything a dedicated server must run: `serialization/`, `net/`, tree/state logic, and **`text.lang` — the language SPIs, which run here precisely because no engine and no grammar is on this classpath** |
-| `core/src/deviceTest/` | ✅ `core`, `platform` and `vulkan`, with LWJGL 3 | CrystalGUI's shaders on CrystalGraphics' null device over shaderc: every `.shader`, pass and keyword variant, built into a pipeline as a Vulkan device will build them. Its own task, `:core:deviceTest` — the device it installs is process-wide |
 | `language/src/test/` | ✅ (plus the tree-sitter natives) | Grammars, queries, the tokenizer. Skips cleanly when a native will not load on the running platform |
 | harness scenes | ✅ full GL | Anything visual |
 

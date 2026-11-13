@@ -48,11 +48,6 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
         CgGauntlet.register(DesktopScriptTest.ID, DesktopScriptTest::new);
     }
     
-    @Override
-    public void onContextInit(int width, int height) {
-        CgUiRenderer.parseAhead();
-    }
-
     /** The paint preload, then the desktop built and rehearsed behind the loading screen. */
     @Override
     public void onLoad(CgLoadPlan plan) {

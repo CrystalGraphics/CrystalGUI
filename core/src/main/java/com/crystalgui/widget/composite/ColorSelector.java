@@ -314,10 +314,10 @@ public class ColorSelector extends UIElement {
     }
 
     /**
-     * The hue at an offset from the ring's centre — <b>the exact inverse of what the shader draws</b>.
+     * The hue at an offset from the ring's centre — <b>the exact inverse of what the ring draws</b>.
      *
-     * <p>{@code gui_color_field.shader} computes {@code fract(atan2(x, y) / 2π + 0.5)} with y pointing
-     * DOWN, and this has to be the same function or the ring lies about itself. Three conventions were
+     * <p>{@code CgUiColorField}'s ring is red at the top, counter-clockwise: {@code fract(atan2(x, y) / 2π + 0.5)}
+     * with y pointing DOWN, and this has to be the same function or the ring lies about itself. Three conventions were
      * in play before: the shader's, a handle placement missing the half-turn, and a click path that
      * negated y — so hue 300 drew upper-left while the colour under it was upper-right, and clicking
      * the magenta side of the ring returned green.</p>
