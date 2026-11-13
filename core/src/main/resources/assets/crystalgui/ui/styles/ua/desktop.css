@@ -1115,6 +1115,11 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     gap: 0px;
 }
 
+/* An application's own caption actions arrive through a portal of the actions' size: centred, not stretched. */
+.__window__ .__controls__ > clientportal {
+    align-self: center;
+}
+
 /* THE GLYPH IS SMALL INSIDE A BIG BUTTON, which is what the padding is for -- `overlay-size: contain`
  * scales the artwork to whatever box it is given, so a 16px button would otherwise draw a 16px mark.
  * `overlay-origin: content-box` moves that box inside the padding, shrinking the DRAWING without

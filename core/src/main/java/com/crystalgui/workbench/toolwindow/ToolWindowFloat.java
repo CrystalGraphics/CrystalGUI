@@ -56,6 +56,7 @@ public final class ToolWindowFloat {
     private final ViewContainer container;
     private final AppWindow window;
     private ToolWindowType mode;
+    private boolean destroyed;
 
     /**
      * Opens the window.
@@ -81,7 +82,10 @@ public final class ToolWindowFloat {
         // one pointer-transparent element in the caption, which is what lets a press reach the title bar's move gesture.
         window.setContent(container);
         window.addCaptionAction(DOCK_CLASS, DOCK_TOOLTIP, onDock);
-        window.onHidden(onHidden);
+        // A destroy's own hide arrives on this thread after the caller has moved on; it must not hide what is shown by then.
+        window.onHidden(() -> {
+            if (!destroyed) onHidden.run();
+        });
     }
 
     private static String classOf(ToolWindowType mode) {
@@ -126,6 +130,7 @@ public final class ToolWindowFloat {
 
     /** Ends the window. */
     public void destroy() {
+        destroyed = true;
         container.reclaimChrome();
         window.destroy();
     }
