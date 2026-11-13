@@ -191,7 +191,7 @@ final class VfxViewport extends UIElement {
             }
             target = View.of(width, height);
         }
-        // editor_grid.shader's grey.
+        // materials/grid.shader's grey.
         CgRenderer.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 0.0, false, 0);
 
         double atX = x + eyeX, atY = y + eyeY, atZ = z + eyeZ;

@@ -121,8 +121,8 @@ public class VfxLab extends UIElement {
     /** Lab space's floor: effects spawn above the origin of it, aimed along +x. */
     public static final double LAB_Y = -8192.0;
 
-    private static final String FLOOR_SHADER = "crystalgraphics:shaders/demo/editor_grid.shader";
-    private static final String SKY_SHADER = "crystalgraphics:shaders/demo/editor_sky.shader";
+    private static final String FLOOR_SHADER = "crystalgraphics:shaders/materials/grid.shader";
+    private static final String SKY_SHADER = "crystalgraphics:shaders/materials/sky.shader";
     private static final Matrix4fc SKY_SCALE = new Matrix4f().scale(600f);
     private static final float MAX_SPEED = 10f;
     /** Metres the floor's grid fades out by, from a quarter of it; the plane spans past it, so its edge never shows. */
