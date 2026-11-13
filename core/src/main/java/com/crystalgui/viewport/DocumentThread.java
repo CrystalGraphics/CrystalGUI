@@ -80,6 +80,12 @@ abstract class DocumentThread implements UIDocument.Owner {
         return false;
     }
 
+    /** The sequence this document runs on, or null where it runs on the host's thread (which cannot be abandoned). */
+    @Nullable
+    UiSequence sequence() {
+        return null;
+    }
+
     /** Stops the thread, after the work queued on it. Render thread. */
     void close() {
     }
@@ -211,6 +217,11 @@ abstract class DocumentThread implements UIDocument.Owner {
         long shownIndex() {
             UiCommit commit = shown;
             return commit == null ? 0L : commit.index();
+        }
+
+        @Override
+        UiSequence sequence() {
+            return sequence;
         }
 
         @Override
@@ -346,6 +357,11 @@ abstract class DocumentThread implements UIDocument.Owner {
         @Override
         long shownIndex() {
             return queue.shownIndex();
+        }
+
+        @Override
+        UiSequence sequence() {
+            return sequence;
         }
 
         @Override

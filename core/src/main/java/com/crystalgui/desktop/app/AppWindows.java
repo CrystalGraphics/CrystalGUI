@@ -124,7 +124,10 @@ public final class AppWindows {
         if (spec.width() > 0 && spec.height() > 0) frame.resizeTo(spec.width(), spec.height());
         if (spec.placed()) frame.moveTo(spec.left(), spec.top());
         desktop.addWindow(frame, spec.takesFocus());
-        if (client != null) document.showPopupsIn(desktop.document());
+        if (client != null) {
+            document.showPopupsIn(desktop.document());
+            document.windowOpened(frame);
+        }
         return frame;
     }
 

@@ -711,7 +711,10 @@ public final class UIDocument extends UIElement {
 
     private void runFrame(float deltaSeconds, float width, float height) {
         claimFrameThread();
-        for (Runnable arrived; (arrived = inbox.poll()) != null; ) arrived.run();
+        for (Runnable arrived; (arrived = inbox.poll()) != null; ) {
+            UiSequence.checkpoint();
+            arrived.run();
+        }
         // Unowned, the host calls this on its own thread, which is where an extract reads; an owner reads them itself.
         if (owner == null) {
             Runnable delivery = extracts.read();

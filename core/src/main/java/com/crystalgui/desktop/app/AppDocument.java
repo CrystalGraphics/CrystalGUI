@@ -47,12 +47,40 @@ public final class AppDocument {
             return false;
         }
 
+        /** The thread running the document's work now, or null when idle: what a hang report takes the stack of. Any thread. */
+        @Nullable
+        default Thread runningThread() {
+            return null;
+        }
+
+        /** Rung 1 of closing a document that does not answer: its engine checkpoints throw {@code ApplicationAborted}. Any thread. */
+        default void abort() {
+        }
+
+        /** Rung 2: interrupts the thread running it. Any thread. */
+        default void interrupt() {
+        }
+
+        /** Rung 3: gives its thread up so {@link #close} does not wait for it. Any thread. */
+        default void abandon() {
+        }
+
+        /** Whether its thread has ended, by unwinding at a checkpoint or by being abandoned. Any thread. */
+        default boolean stopped() {
+            return false;
+        }
+
         /** Ends the thread and frees what the document drew with; the host's thread, once. */
         void close();
     }
 
     private final UIDocument document;
     private final Backend backend;
+    private final AppHealth health;
+    /** What the application is called in a fault's report; set by the registry at launch. */
+    private volatile String name = "Application";
+    /** The shell's frames for this document's windows, which the shell dims while it does not answer. */
+    private final List<WindowFrame> frames = new CopyOnWriteArrayList<>();
     private final List<ClientRoot> clients = new CopyOnWriteArrayList<>();
     /** What the application asked of the shell while the shell waits for it. */
     private final Queue<Runnable> pump = new ConcurrentLinkedQueue<>();
@@ -70,6 +98,7 @@ public final class AppDocument {
     public AppDocument(UIDocument document, Backend backend) {
         this.document = document;
         this.backend = backend;
+        this.health = new AppHealth(backend, () -> name);
         // What the pointer looks like over a window is what the shell shows there, asked of this document.
         document.input().presentsCursor(false);
     }
@@ -236,6 +265,8 @@ public final class AppDocument {
 
     /** Offers the document a pointer event, in its own surface pixels. */
     void mouse(CgSystemInput.Mouse.Event event) {
+        if (event.button() >= 0 && event.state() && health.state() == AppHealth.State.NOT_RESPONDING) hungPoke.run();
+        health.offered();
         backend.consumeMouseEvent(event);
     }
 
@@ -322,6 +353,7 @@ public final class AppDocument {
 
     /** Offers the document a key. */
     void key(CgSystemInput.Keyboard.Event event) {
+        health.offered();
         backend.consumeKeyboardEvent(event);
     }
 
@@ -358,8 +390,54 @@ public final class AppDocument {
         document.remove(client);
     }
 
+    /** What the shell does when a press lands on a window that does not answer: shows its dialog. */
+    private volatile Runnable hungPoke = () -> { };
+    private long hungSince;
+
+    void hungPoke(Runnable poke) {
+        this.hungPoke = poke;
+    }
+
+    /** The shell's thread: the verdict that it does not answer was reached at {@code now}. */
+    void hungSince(long now) {
+        hungSince = now;
+    }
+
+    /** How long, in nanoseconds, the shell has shown it as not answering; 0 while it answers. */
+    long hungFor(long now) {
+        return health.state() == AppHealth.State.NOT_RESPONDING ? now - hungSince : 0L;
+    }
+
+    AppHealth health() {
+        return health;
+    }
+
+    /** What the application is called in a fault's report. */
+    void name(String name) {
+        this.name = name;
+    }
+
+    /** The shell's thread: {@code frame} shows one of this document's windows. */
+    void windowOpened(WindowFrame frame) {
+        frames.add(frame);
+        frame.onDestroyed.connect(() -> frames.remove(frame));
+        frame.setUnresponsive(health.state() == AppHealth.State.NOT_RESPONDING);
+    }
+
+    /** The shell's frames for this document's windows. */
+    List<WindowFrame> frames() {
+        return frames;
+    }
+
+    /** The shell's thread: dims or restores the windows to match what the document is doing. */
+    void showHealth() {
+        boolean hung = health.state() != AppHealth.State.RESPONDING;
+        for (WindowFrame frame : frames) frame.setUnresponsive(hung);
+    }
+
     /** The document's thread, after each commit: tells the windows whose client changed. */
     public void committed() {
+        health.committed();
         caret = document.input().textInputArea();
         for (ClientRoot client : clients) client.committed();
         PopupLayer layer = popups();

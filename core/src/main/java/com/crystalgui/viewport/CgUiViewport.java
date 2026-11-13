@@ -4,6 +4,8 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.ApplicationAborted;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiFrame;
@@ -375,6 +377,46 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
      * freeing what its frames drew with: after it returns nothing of the document runs. The document is not touched;
      * dispose it first, through {@link #run}. Render thread; idempotent.
      */
+    /**
+     * The thread running this document's work now, or null when it is idle or runs on the host's thread: what a hang
+     * report takes the stack of. Any thread.
+     */
+    @Nullable
+    public Thread runningThread() {
+        UiSequence sequence = thread.sequence();
+        return sequence == null ? null : sequence.runningThread();
+    }
+
+    /**
+     * Rung 1 of ending an unresponsive document: its engine checkpoints throw {@link ApplicationAborted}. Any thread; a
+     * no-op for a document on the host's thread.
+     */
+    public void abort() {
+        UiSequence sequence = thread.sequence();
+        if (sequence != null) sequence.abort();
+    }
+
+    /** Whether the document's sequence has ended: it unwound at a checkpoint after {@link #abort}, or was abandoned. */
+    public boolean stopped() {
+        UiSequence sequence = thread.sequence();
+        return sequence != null && sequence.isClosed();
+    }
+
+    /** Rung 2: interrupts the thread running the document, ending a wait or a sleep. Any thread. */
+    public void interrupt() {
+        UiSequence sequence = thread.sequence();
+        if (sequence != null) sequence.interrupt();
+    }
+
+    /**
+     * Rung 3: gives the document's sequence up, so {@link #close} no longer waits for it. The stuck thread is left at
+     * minimum priority. Any thread.
+     */
+    public void abandon() {
+        UiSequence sequence = thread.sequence();
+        if (sequence != null) sequence.abandon();
+    }
+
     public void close() {
         if (closed) return;
         closed = true;

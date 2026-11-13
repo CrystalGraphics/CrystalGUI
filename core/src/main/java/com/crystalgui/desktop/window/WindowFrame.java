@@ -931,11 +931,42 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
 
     public WindowFrame setTitle(String text) {
         record.title(text == null ? "" : text);
-        titleLabel.setText(record.titleShown() ? record.title() : "");
+        titleLabel.setText(captionText());
         // The monogram is the title's initial, and the taskbar entry carries the title too.
         refreshIcon();
         if (owner != null) owner.windowManager().registry().changed();
         return this;
+    }
+
+    /** What the class that dims a window of an application that is not answering is called. */
+    public static final String UNRESPONSIVE_CLASS = "__unresponsive__";
+
+    private boolean unresponsive;
+
+    /**
+     * Dims the window and appends "(Not responding)" to its caption while its application does not answer; the frame
+     * itself still moves, minimises and closes, as DWM's ghost does.
+     *
+     * <pre>{@code
+     * frame.setUnresponsive(health.state() == AppHealth.State.NOT_RESPONDING);
+     * }</pre>
+     */
+    public WindowFrame setUnresponsive(boolean on) {
+        if (unresponsive == on) return this;
+        unresponsive = on;
+        toggleClass(UNRESPONSIVE_CLASS, on);
+        String title = record.titleShown() ? record.title() : "";
+        titleLabel.setText(on ? (title + " (Not responding)").trim() : title);
+        return this;
+    }
+
+    private String captionText() {
+        String title = record.titleShown() ? record.title() : "";
+        return unresponsive ? (title + " (Not responding)").trim() : title;
+    }
+
+    public boolean isUnresponsive() {
+        return unresponsive;
     }
 
     public String getTitle() {

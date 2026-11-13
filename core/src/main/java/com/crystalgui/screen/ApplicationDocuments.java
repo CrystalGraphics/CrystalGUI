@@ -65,6 +65,31 @@ final class ApplicationDocuments implements AppDocuments {
         public boolean consumeComposition(String text, int caret) {
             return viewport.consumeComposition(text, caret);
         }
+
+        @Override
+        public Thread runningThread() {
+            return viewport.runningThread();
+        }
+
+        @Override
+        public void abort() {
+            viewport.abort();
+        }
+
+        @Override
+        public void interrupt() {
+            viewport.interrupt();
+        }
+
+        @Override
+        public void abandon() {
+            viewport.abandon();
+        }
+
+        @Override
+        public boolean stopped() {
+            return viewport.stopped();
+        }
     }
 
     private final List<Entry> open = new CopyOnWriteArrayList<>();

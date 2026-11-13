@@ -1,5 +1,6 @@
 package com.crystalgui.core.signal;
 
+import com.crystalgui.core.async.UiSequence;
 import java.util.List;
 import java.util.function.Predicate;
 
@@ -60,6 +61,7 @@ public final class Signal {
             try {
                 List<SlotEntry<Runnable>> slots = slots();
                 for (int i = 0, n = slots.size(); i < n; i++) {
+                    UiSequence.checkpoint();
                     SlotEntry<Runnable> entry = slots.get(i);
                     if (entry.connected) {
                         entry.listener.run();
@@ -98,6 +100,7 @@ public final class Signal {
             try {
                 List<SlotEntry<Listener<T>>> slots = slots();
                 for (int i = 0, n = slots.size(); i < n; i++) {
+                    UiSequence.checkpoint();
                     SlotEntry<Listener<T>> entry = slots.get(i);
                     if (entry.connected) {
                         entry.listener.accept(value);
@@ -113,6 +116,7 @@ public final class Signal {
             try {
                 List<SlotEntry<Listener<T>>> slots = slots();
                 for (int i = 0, n = slots.size(); i < n; i++) {
+                    UiSequence.checkpoint();
                     if (condition.test(value)) break;
                     SlotEntry<Listener<T>> entry = slots.get(i);
                     if (entry.connected) {
@@ -155,6 +159,7 @@ public final class Signal {
             try {
                 List<SlotEntry<Listener<A, B>>> slots = slots();
                 for (int i = 0, n = slots.size(); i < n; i++) {
+                    UiSequence.checkpoint();
                     SlotEntry<Listener<A, B>> entry = slots.get(i);
                     if (entry.connected) {
                         entry.listener.accept(a, b);
@@ -170,6 +175,7 @@ public final class Signal {
             try {
                 List<SlotEntry<Listener<A, B>>> slots = slots();
                 for (int i = 0, n = slots.size(); i < n; i++) {
+                    UiSequence.checkpoint();
                     if (condition.test(b)) break;
                     SlotEntry<Listener<A, B>> entry = slots.get(i);
                     if (entry.connected) {

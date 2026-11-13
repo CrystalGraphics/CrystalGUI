@@ -2134,3 +2134,8 @@ window.__failure__ .__title-bar__ > .__icon__ {
 window.__failure__ .__title-bar__ .__pin__ {
     display: none;
 }
+
+/* A window of an application that does not answer: its last picture, dimmed; the frame still moves and closes. */
+window.__unresponsive__ {
+    opacity: 0.6;
+}

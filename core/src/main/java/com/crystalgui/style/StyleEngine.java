@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgraphics.job.CgJob;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.style.property.FontRelative;
@@ -414,6 +415,7 @@ public final class StyleEngine {
         matchNanos = 0L;
         applyNanos = 0L;
         for (int round = 0; round < MAX_SETTLE_ROUNDS && !dirtyMatch.isEmpty(); round++) {
+            UiSequence.checkpoint();
             var batch = new ArrayList<>(dirtyMatch);
             dirtyMatch.clear();
             batch.sort((a, b) -> Integer.compare(depthOf(a), depthOf(b)));
@@ -424,6 +426,7 @@ public final class StyleEngine {
             if (recordRematches) rematchedForTesting.addAll(batch);
             if (sharing != null && parallelMin > 0 && batch.size() >= parallelMin) prematch(batch);
             for (var element : batch) {
+                UiSequence.checkpoint();
                 rematch(element);
             }
             total += batch.size();

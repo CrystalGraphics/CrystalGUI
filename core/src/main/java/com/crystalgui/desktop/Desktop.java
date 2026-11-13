@@ -38,6 +38,7 @@ import com.crystalgui.core.notify.NotificationService;
 import com.crystalgui.desktop.notification.NotificationBalloons;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.ui.box.Box;
+import com.crystalgui.ui.service.Animation;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.input.keymap.KeyChord;
 import com.crystalgui.ui.input.keymap.Keymap;
@@ -516,6 +517,22 @@ public class Desktop extends UIElement implements DataProvider {
             }
         };
         document.execute(show);
+    }
+
+    /**
+     * Runs {@code hook} every frame of the desktop's document, for as long as the desktop is on it; a hook that answers
+     * false ends.
+     *
+     * <pre>{@code
+     * desktop.everyFrame(delta -> {
+     *     poll();
+     *     return true;
+     * });
+     * }</pre>
+     */
+    public void everyFrame(Animation.Hook hook) {
+        UIDocument shell = document();
+        if (shell != null) shell.animation().every(windows, hook);
     }
 
     /** Each application's open failure window. */

@@ -23,6 +23,7 @@ import com.crystalgui.core.signal.Signal;
 import com.crystalgraphics.storage.config.CgConfigStorage;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.Desktop;
+import com.crystalgui.desktop.dialog.FailureWindow;
 import com.crystalgui.desktop.manager.SessionRecord;
 import com.crystalgui.desktop.window.StartingMark;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -75,6 +76,11 @@ public final class ApplicationRegistry {
     private final List<Application> running = new ArrayList<>();
     /** Each running application's own client on the workspace, released when it quits. */
     private final java.util.Map<Application, WorkspaceClient> clients = new java.util.IdentityHashMap<>();
+    /** The Not responding box each hung document has open. */
+    private final Map<AppDocument, WindowFrame> hangDialogs = new java.util.IdentityHashMap<>();
+    /** Documents being closed so their application can start again once they are gone. */
+    private final Set<AppDocument> restarting = java.util.Collections.newSetFromMap(new java.util.IdentityHashMap<>());
+    private boolean watching;
     /** The documents applications of a {@link ApplicationKind#separateDocument() separate} kind run in, until they quit. */
     private final java.util.Map<Application, AppDocument> documentsOf = new java.util.IdentityHashMap<>();
     @Nullable
@@ -324,7 +330,12 @@ public final class ApplicationRegistry {
             return null;
         }
         if (own != null) clients.put(application, own);
-        if (document != null) documentsOf.put(application, document);
+        if (document != null) {
+            documentsOf.put(application, document);
+            document.name(kind.displayName());
+            document.hungPoke(() -> showNotResponding(document, application));
+            watch();
+        }
         refusedForNoServer.remove(kind.id());
         running.add(application);
         // Its main window destroyed is the application quit: closing it under DESTROY_ON_CLOSE, or anything else
@@ -520,6 +531,86 @@ public final class ApplicationRegistry {
         target.execute(() -> {
             for (Resource resource : dragged.resources()) receiver.open(resource);
         });
+    }
+
+    /** Starts the per-frame check of every application's document, once. */
+    private void watch() {
+        if (watching) return;
+        watching = true;
+        desktop.everyFrame(delta -> {
+            check(System.nanoTime());
+            return true;
+        });
+    }
+
+    /**
+     * The shell's thread, once a frame: dims the windows of a document that does not answer and offers its dialog,
+     * climbs the close ladder of one being closed, and finishes a close that has ended.
+     */
+    void check(long now) {
+        for (Application application : new ArrayList<>(documentsOf.keySet())) {
+            AppDocument document = documentsOf.get(application);
+            if (document == null) continue;
+            AppHealth health = document.health();
+            boolean moved = health.step(now);
+            if (moved) {
+                if (health.state() == AppHealth.State.NOT_RESPONDING) document.hungSince(now);
+                document.showHealth();
+            }
+            if (health.state() == AppHealth.State.NOT_RESPONDING && document.hungFor(now) >= AppHealth.HANG_NANOS) {
+                showNotResponding(document, application);
+            }
+            if (health.state() == AppHealth.State.RESPONDING) {
+                WindowFrame box = hangDialogs.remove(document);
+                if (box != null && box.state() != WindowState.DESTROYED) box.requestClose();
+                document.showHealth();
+            }
+            if (health.ended()) finishClose(document, application);
+        }
+    }
+
+    /** The Not responding box for {@code document}: Wait, Restart, Close. One per document. */
+    private void showNotResponding(AppDocument document, Application application) {
+        if (document.health().state() != AppHealth.State.NOT_RESPONDING) return;
+        WindowFrame open = hangDialogs.get(document);
+        if (open != null && open.state() != WindowState.DESTROYED && !open.isClosing()) {
+            desktop.windowManager().activateByUser(open);
+            return;
+        }
+        FaultReport report = document.health().report();
+        ApplicationKind kind = application.kind();
+        String name = kind.displayName();
+        WindowFrame box = FailureWindow.open(desktop, kind, name, name + " is not responding",
+                report == null || report.origin().isEmpty() ? "" : "In " + report.origin(), List.of(
+                        new FailureWindow.Action("Wait", () -> document.health().patient(System.nanoTime())),
+                        new FailureWindow.Action("Restart", () -> restart(document)),
+                        new FailureWindow.Action("Close", () -> document.health().close(System.nanoTime()))));
+        hangDialogs.put(document, box);
+        if (report != null) CrystalGuiCore.LOGGER.warn("[cgui] {}", report.text());
+    }
+
+    /** Closes the unresponsive document by the ladder, and starts the application again once it is gone. */
+    private void restart(AppDocument document) {
+        restarting.add(document);
+        document.health().close(System.nanoTime());
+    }
+
+    /** The ladder ended: the application's windows go, it is taken off the list, and a restart launches it again. */
+    private void finishClose(AppDocument document, Application application) {
+        WindowFrame box = hangDialogs.remove(document);
+        if (box != null && box.state() != WindowState.DESTROYED) box.destroy();
+        ApplicationKind kind = application.kind();
+        WorkspaceClient workspace = clients.get(application);
+        boolean again = restarting.remove(document);
+        for (WindowFrame frame : new ArrayList<>(document.frames())) frame.destroy();
+        forget(application);
+        if (again) {
+            CgConfigStorage storage = desktop.config();
+            if (storage != null) {
+                launch(kind, new AppContext(kind, desktop, workspace, scoped(kind, storage),
+                        cacheFor(kind, desktop.cacheRoot()), List.of()));
+            }
+        }
     }
 
     /** Quits {@code application} once its main window is gone: its own {@code dispose()}, then off the list. */

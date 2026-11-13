@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.InkOverflow;
 import com.crystalgraphics.render.graph.CgGraphTexture;
@@ -94,6 +95,7 @@ public final class BoxPainter {
      * for a stacking context and for the root of a paint.
      */
     private void paintBox(Box box, CgUiPaintContext ctx, Matrix4f base, boolean asContext) {
+        UiSequence.checkpoint();
         float opacity = box.opacity();
         if (opacity <= 0f) return;
         // NOTHING OF IT CAN LAND: a row scrolled past its list's edge draws nothing the scissor would keep.

@@ -68,6 +68,10 @@ public final class UiSequence implements Executor {
     private final Queue<Runnable> tasks = new ConcurrentLinkedQueue<>();
     private final AtomicBoolean scheduled = new AtomicBoolean();
     private volatile boolean closed;
+    /** Set by {@link #abort}: the next checkpoint on this sequence throws. */
+    private volatile boolean aborting;
+    /** Set by {@link #abandon}: a thread may still hold the turn, so nothing waits for it. */
+    private volatile boolean abandoned;
     /** The thread running this sequence's work now, or null between turns. */
     @Nullable
     private volatile Thread running;
@@ -177,20 +181,30 @@ public final class UiSequence implements Executor {
             task.run();
             return;
         }
+        if (abandoned) return;
         // CLAIMED THE WAY A TURN CLAIMS IT, so a turn and this can never overlap.
-        while (!scheduled.compareAndSet(false, true)) LockSupport.parkNanos(20_000L);
+        while (!scheduled.compareAndSet(false, true)) {
+            if (abandoned) return;
+            LockSupport.parkNanos(20_000L);
+        }
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);
         running = Thread.currentThread();
         try (CgJobLoop.Scope ignored = jobs().loop().enter()) {
-            for (Runnable queued; !closed && (queued = tasks.poll()) != null; ) {
+            for (Runnable queued; !closed && !endedByAbort() && (queued = tasks.poll()) != null; ) {
                 try {
                     queued.run();
+                } catch (ApplicationAborted unwound) {
+                    unwind();
                 } catch (RuntimeException | Error failed) {
                     CrystalGuiCore.LOGGER.error("[cgui] a task on sequence '{}' threw", name, failed);
                 }
             }
-            task.run();
+            try {
+                task.run();
+            } catch (ApplicationAborted unwound) {
+                unwind();
+            }
         } finally {
             running = null;
             CURRENT.set(outer);
@@ -203,6 +217,58 @@ public final class UiSequence implements Executor {
     @Nullable
     public Thread runningThread() {
         return running;
+    }
+
+    /**
+     * Rung 1 of closing a document: its next {@linkplain #checkpoint checkpoint} throws {@link ApplicationAborted}, the
+     * turn unwinds, and the sequence closes. A no-op on the shared sequences.
+     */
+    public void abort() {
+        if (!shared) aborting = true;
+    }
+
+    /** Whether {@link #abort} was called. */
+    public boolean aborting() {
+        return aborting;
+    }
+
+    /**
+     * The engine's checkpoint: throws {@link ApplicationAborted} when the calling thread is running a sequence that was
+     * {@linkplain #abort aborted}. One thread-local read and one volatile read, so it is cheap enough per listener and
+     * per node.
+     *
+     * <pre>{@code
+     * for (Listener each : listeners) {
+     *     UiSequence.checkpoint();
+     *     each.run();
+     * }
+     * }</pre>
+     */
+    public static void checkpoint() {
+        UiSequence sequence = CURRENT.get();
+        if (sequence != null && sequence.aborting) throw new ApplicationAborted(sequence.name);
+    }
+
+    /** Rung 2: interrupts the thread running this sequence, which ends a wait, a sleep or an interruptible lock. */
+    public void interrupt() {
+        Thread thread = running;
+        if (thread != null && !shared) thread.interrupt();
+    }
+
+    /**
+     * Rung 3: gives the sequence up. Its queue is dropped and nothing more is accepted; the thread stuck in it is
+     * interrupted and left at minimum priority, and the pool serves the next turn on another thread.
+     */
+    public void abandon() {
+        if (shared) return;
+        closed = true;
+        abandoned = true;
+        tasks.clear();
+        Thread thread = running;
+        if (thread != null) {
+            thread.setPriority(Thread.MIN_PRIORITY);
+            thread.interrupt();
+        }
     }
 
     /** Drops what is queued and refuses what comes after. The services sequence and the single sequence stay open. */
@@ -243,11 +309,13 @@ public final class UiSequence implements Executor {
         running = Thread.currentThread();
         long turn = CgTrace.stamp(UiTrace.FRAME);
         try (CgJobLoop.Scope ignored = jobs().loop().enter()) {
-            for (int i = 0; i < TASKS_PER_TURN && !closed; i++) {
+            for (int i = 0; i < TASKS_PER_TURN && !closed && !endedByAbort(); i++) {
                 Runnable task = tasks.poll();
                 if (task == null) break;
                 try {
                     task.run();
+                } catch (ApplicationAborted unwound) {
+                    unwind();
                 } catch (RuntimeException | Error failed) {
                     CrystalGuiCore.LOGGER.error("[cgui] a task on sequence '{}' threw", name, failed);
                 }
@@ -260,6 +328,20 @@ public final class UiSequence implements Executor {
         }
         // Posted while this turn ran, or left over from it: another turn, which may land on another thread.
         if (!tasks.isEmpty() && !closed) schedule();
+    }
+
+    /** Whether an abort has ended the sequence between tasks, which closes it as a checkpoint would. */
+    private boolean endedByAbort() {
+        if (!aborting) return false;
+        unwind();
+        return true;
+    }
+
+    /** An aborted task reached its checkpoint: the sequence is over. */
+    private void unwind() {
+        closed = true;
+        tasks.clear();
+        CrystalGuiCore.LOGGER.info("[cgui] sequence '{}' unwound at a checkpoint and closed", name);
     }
 
     @Override

@@ -2931,6 +2931,9 @@ com/crystalgui/core/async/ActiveJob
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
+com/crystalgui/core/async/ApplicationAborted
+  access public,final
+  extends java/lang/Error
 com/crystalgui/core/async/Broadcast
   access public,final
   extends java/lang/Object
@@ -3059,8 +3062,12 @@ com/crystalgui/core/async/UiSequence
   extends java/lang/Object
   field public,static,final ZONE_PREFIX Ljava/lang/String;
   implements java/util/concurrent/Executor
+  method public abandon ()V
+  method public abort ()V
+  method public aborting ()Z
   method public close ()V
   method public execute (Ljava/lang/Runnable;)V
+  method public interrupt ()V
   method public isClosed ()Z
   method public isCurrent ()Z
   method public jobs ()Lcom/crystalgui/core/async/JobScheduler;
@@ -3068,6 +3075,7 @@ com/crystalgui/core/async/UiSequence
   method public runNow (Ljava/lang/Runnable;)V
   method public runningThread ()Ljava/lang/Thread;
   method public toString ()Ljava/lang/String;
+  method public,static checkpoint ()V
   method public,static create (Ljava/lang/String;)Lcom/crystalgui/core/async/UiSequence;
   method public,static create (Ljava/lang/String;Ljava/util/concurrent/Executor;)Lcom/crystalgui/core/async/UiSequence;
   method public,static current ()Lcom/crystalgui/core/async/UiSequence;
@@ -4697,6 +4705,7 @@ com/crystalgui/desktop/Desktop
   method public connection ()Lcom/crystalgraphics/net/protocol/CgProtocolConnection;
   method public desktopSettings ()Lcom/crystalgui/desktop/DesktopSettings;
   method public endStartingWindow (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/desktop/window/WindowFrame;)V
+  method public everyFrame (Lcom/crystalgui/ui/service/Animation$Hook;)V
   method public extensionStore (Ljava/lang/String;)Lcom/crystalgraphics/storage/config/CgConfigStorage;
   method public getData (Lcom/crystalgui/core/data/DataKey;)Ljava/lang/Object;
   method public isLive ()Z
@@ -4842,7 +4851,12 @@ com/crystalgui/desktop/app/AppDocument$Backend
   extends java/lang/Object
   implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
   implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
+  method public abandon ()V
+  method public abort ()V
   method public consumeComposition (Ljava/lang/String;I)Z
+  method public interrupt ()V
+  method public runningThread ()Ljava/lang/Thread;
+  method public stopped ()Z
   method public,abstract close ()V
 com/crystalgui/desktop/app/AppDocuments
   access public,abstract,interface
@@ -4999,6 +5013,28 @@ com/crystalgui/desktop/app/ClientRoot
   method public setContent (Lcom/crystalgui/ui/dom/UIElement;)V
   method public surface (Lcom/crystalgui/render/Surface;)V
   method public wantsPicture ()Z
+com/crystalgui/desktop/app/FaultReport
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Lcom/crystalgui/desktop/app/FaultReport$Kind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)V
+  method public application ()Ljava/lang/String;
+  method public deadlock ()Ljava/lang/String;
+  method public kind ()Lcom/crystalgui/desktop/app/FaultReport$Kind;
+  method public origin ()Ljava/lang/String;
+  method public stack ()Ljava/lang/String;
+  method public text ()Ljava/lang/String;
+  method public timeMillis ()J
+  method public title ()Ljava/lang/String;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static hung (Ljava/lang/String;Ljava/lang/Thread;)Lcom/crystalgui/desktop/app/FaultReport;
+com/crystalgui/desktop/app/FaultReport$Kind
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final NOT_RESPONDING Lcom/crystalgui/desktop/app/FaultReport$Kind;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/desktop/app/FaultReport$Kind;
+  method public,static values ()[Lcom/crystalgui/desktop/app/FaultReport$Kind;
 com/crystalgui/desktop/app/PopupLayer
   access public,final
   extends com/crystalgui/ui/dom/UIElement
@@ -5055,7 +5091,17 @@ com/crystalgui/desktop/dialog/FailureWindow
   field public,static,final ICON_CLASS Ljava/lang/String;
   field public,static,final MESSAGE_CLASS Ljava/lang/String;
   field public,static,final TEXT_CLASS Ljava/lang/String;
+  method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public,static open (Lcom/crystalgui/desktop/Desktop;Lcom/crystalgui/desktop/app/ApplicationKind;Ljava/lang/String;Ljava/lang/String;Ljava/lang/Throwable;)Lcom/crystalgui/desktop/window/WindowFrame;
+com/crystalgui/desktop/dialog/FailureWindow$Action
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;Ljava/lang/Runnable;)V
+  method public label ()Ljava/lang/String;
+  method public run ()Ljava/lang/Runnable;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/desktop/launcher/Launcher
   access public
   extends com/crystalgui/widget/overlay/Popover
@@ -5559,6 +5605,7 @@ com/crystalgui/desktop/window/WindowFrame
   field public,static,final TITLE_BAR_CLASS Ljava/lang/String;
   field public,static,final TITLE_CLASS Ljava/lang/String;
   field public,static,final UNPIN_TOOLTIP Ljava/lang/String;
+  field public,static,final UNRESPONSIVE_CLASS Ljava/lang/String;
   field public,static,final WINDOW_CLASS Ljava/lang/String;
   field public,static,final WINDOW_FRAME Lcom/crystalgui/core/data/DataKey;
   implements com/crystalgui/core/data/DataProvider
@@ -5614,6 +5661,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public isPlaced ()Z
   method public isSized ()Z
   method public isToolWindow ()Z
+  method public isUnresponsive ()Z
   method public keepsSurface ()Z
   method public key ()Ljava/lang/String;
   method public left ()F
@@ -5670,6 +5718,7 @@ com/crystalgui/desktop/window/WindowFrame
   method public setTitle (Ljava/lang/String;)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setTitleShown (Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public setToolWindow (Z)Lcom/crystalgui/desktop/window/WindowFrame;
+  method public setUnresponsive (Z)Lcom/crystalgui/desktop/window/WindowFrame;
   method public show (Z)V
   method public snapTo (Lcom/crystalgui/desktop/window/SnapZones$Zone;FFFF)Lcom/crystalgui/desktop/window/WindowFrame;
   method public snappedZone ()Lcom/crystalgui/desktop/window/SnapZones$Zone;
@@ -14811,6 +14860,8 @@ com/crystalgui/viewport/CgUiViewport
   field public,static,final TEXT_INPUT_AREA Lcom/crystalgui/viewport/Readout;
   implements com/crystalgraphics/platform/input/CgSystemInput$Keyboard
   implements com/crystalgraphics/platform/input/CgSystemInput$Mouse
+  method public abandon ()V
+  method public abort ()V
   method public advance ()F
   method public ask (Ljava/util/function/Supplier;)Ljava/lang/Object;
   method public close ()V
@@ -14824,6 +14875,7 @@ com/crystalgui/viewport/CgUiViewport
   method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;FLcom/crystalgui/viewport/CgUiViewport$Content;)Z
   method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/viewport/CgUiViewport$Content;)Z
   method public hasCommitted ()Z
+  method public interrupt ()V
   method public isSequenced ()Z
   method public offer (Ljava/util/function/BooleanSupplier;)Z
   method public offerKey (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;Ljava/util/function/BooleanSupplier;)Z
@@ -14834,6 +14886,8 @@ com/crystalgui/viewport/CgUiViewport
   method public presenter ()Lcom/crystalgui/render/UiPresenter;
   method public readout (Lcom/crystalgui/viewport/Readout;)Ljava/lang/Object;
   method public run (Ljava/lang/Runnable;)V
+  method public runningThread ()Ljava/lang/Thread;
+  method public stopped ()Z
   method public threading ()Lcom/crystalgui/viewport/CgUiViewport$Threading;
   method public view ()Lcom/crystalgui/render/CgUiRenderer$View;
   method public,static open (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/viewport/CgUiViewport$Threading;Ljava/lang/String;)Lcom/crystalgui/viewport/CgUiViewport;

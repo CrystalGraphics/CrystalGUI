@@ -1,5 +1,7 @@
 package com.crystalgui.desktop.dialog;
 
+import java.util.List;
+
 import javax.annotation.Nullable;
 
 import com.crystalgui.desktop.Desktop;
@@ -44,6 +46,23 @@ public final class FailureWindow {
     /** Opens the box on {@code desktop}, active, and asks for attention. On the desktop's document's thread. */
     public static WindowFrame open(Desktop desktop, @Nullable ApplicationKind kind, String title, String message,
                                    @Nullable Throwable cause) {
+        return open(desktop, kind, title, message, detail(cause), List.of(new Action("OK", () -> { })));
+    }
+
+    /** One button of the box: it runs, then the box closes. */
+    public record Action(String label, Runnable run) {
+    }
+
+    /**
+     * The same box with {@code detail} under the sentence and a button per action, the first the default.
+     *
+     * <pre>{@code
+     * FailureWindow.open(desktop, kind, "VFX Lab", "VFX Lab is not responding", "",
+     *         List.of(new FailureWindow.Action("Wait", () -> { }), new FailureWindow.Action("Close", close)));
+     * }</pre>
+     */
+    public static WindowFrame open(Desktop desktop, @Nullable ApplicationKind kind, String title, String message,
+                                   String detail, List<Action> actions) {
         WindowFrame frame = new WindowFrame(title);
         frame.addClass(CLASS);
         if (kind != null) {
@@ -69,24 +88,32 @@ public final class FailureWindow {
         headline.addClass(MESSAGE_CLASS);
         text.append(headline);
 
-        String detail = detail(cause);
         if (!detail.isEmpty()) {
             UIText why = new UIText(detail);
             why.addClass(DETAIL_CLASS);
             text.append(why);
         }
 
-        UIElement actions = new UIElement();
-        actions.addClass(FOOTER_CLASS);
-        frame.content().append(actions);
-        Button ok = new Button("OK");
-        ok.addClass(DEFAULT_CLASS);
-        ok.onPressed.connect(frame::requestClose);
-        actions.append(ok);
+        UIElement buttons = new UIElement();
+        buttons.addClass(FOOTER_CLASS);
+        frame.content().append(buttons);
+        Button first = null;
+        for (Action action : actions) {
+            Button button = new Button(action.label());
+            if (first == null) {
+                first = button;
+                button.addClass(DEFAULT_CLASS);
+            }
+            button.onPressed.connect(() -> {
+                action.run().run();
+                frame.requestClose();
+            });
+            buttons.append(button);
+        }
 
         desktop.addWindow(frame, true);
         frame.requestAttention();
-        if (desktop.document() != null) desktop.document().focus().requestFocus(ok);
+        if (desktop.document() != null && first != null) desktop.document().focus().requestFocus(first);
         return frame;
     }
 

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
@@ -647,6 +648,7 @@ public final class BoxTree {
 
     private @Nullable Box syncNode(UIElement node, @Nullable Box naturalHost, Map<UIElement, Box> realm,
                                    boolean mirror, Set<Box> live, List<Box> inOrder) {
+        UiSequence.checkpoint();
         // No box, and none below it -- reaped with everything else not walked to. A FROZEN subtree is
         // the same answer for a different reason: it is still in the tree and is not live, so it lays
         // out nothing, paints nothing and hit-tests nothing until it is thawed.
