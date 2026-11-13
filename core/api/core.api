@@ -3079,15 +3079,19 @@ com/crystalgui/core/async/UiSequence
   method public,static create (Ljava/lang/String;Ljava/util/concurrent/Executor;)Lcom/crystalgui/core/async/UiSequence;
   method public,static current ()Lcom/crystalgui/core/async/UiSequence;
   method public,static forDocument (Ljava/lang/String;)Lcom/crystalgui/core/async/UiSequence;
+  method public,static serveWhileWaiting (Ljava/lang/Thread;Ljava/lang/Runnable;)V
   method public,static services ()Lcom/crystalgui/core/async/UiSequence;
 com/crystalgui/core/async/UiThread
   access public,final
   extends java/lang/Object
   method public,static enter ()V
+  method public,static enterHost ()V
   method public,static exit ()V
+  method public,static exitHost ()V
   method public,static forgetForTesting ()V
   method public,static isCurrent ()Z
   method public,static isEnforcing ()Z
+  method public,static isHosting ()Z
   method public,static markCurrent ()V
   method public,static require (Ljava/lang/String;Lcom/crystalgui/core/async/UiSequence;)V
   method public,static require (Ljava/lang/String;Ljava/lang/Thread;)V
@@ -14953,6 +14957,7 @@ com/crystalgui/viewport/CgUiViewport
   method public consumeKeyboardEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Keyboard$Event;)Z
   method public consumeMouseEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;)Z
   method public document ()Lcom/crystalgui/ui/dom/UIDocument;
+  method public drain ()V
   method public execute (Ljava/lang/Runnable;)V
   method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;FLcom/crystalgui/viewport/CgUiViewport$Content;)Z
   method public frame (Lcom/crystalgraphics/render/stage/CgStageFrame;Lcom/crystalgui/viewport/CgUiViewport$Content;)Z

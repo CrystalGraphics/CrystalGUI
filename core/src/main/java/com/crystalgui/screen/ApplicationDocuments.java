@@ -2,6 +2,9 @@ package com.crystalgui.screen;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.stage.CgStageFrame;
+import com.crystalgraphics.variable.CgVar;
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.desktop.app.AppDocument;
@@ -92,6 +95,11 @@ final class ApplicationDocuments implements AppDocuments {
         }
     }
 
+    /** What an inline application's frame may cost the host before it is named once, in milliseconds. */
+    private static final int INLINE_BUDGET_MS = CgVar.integer("crystalgui.ui.inlineBudgetMs", 8, 1, 1000, CgVar.DEV,
+            "An INLINE application's frame (layout and paint on the host's thread) longer than this is logged once, naming it.")
+            .get();
+
     private final List<Entry> open = new CopyOnWriteArrayList<>();
     private final Queue<Entry> closing = new ConcurrentLinkedQueue<>();
 
@@ -116,19 +124,37 @@ final class ApplicationDocuments implements AppDocuments {
         viewport.presenter().composites(false);
         AppDocument[] made = new AppDocument[1];
         CgUiViewport.Content whole = CgUiViewport.Content.whole(document);
+        boolean inline = threading == CgUiViewport.Threading.INLINE;
+        // The frame's cost to the host, which an inline application is a part of: named once, past the budget.
+        long[] spent = {0L};
+        boolean[] named = {false};
         CgUiViewport.Content content = new CgUiViewport.Content() {
             @Override
             public boolean frame(float deltaSeconds, int width, int height) {
-                // At the active window's size, so a popup flips and centres within the window it belongs to.
-                AppDocument app = made[0];
-                if (app == null || app.windowWidth() <= 0f) return whole.frame(deltaSeconds, width, height);
-                document.frame(deltaSeconds, app.windowWidth(), app.windowHeight());
-                return true;
+                long began = inline ? System.nanoTime() : 0L;
+                try {
+                    // At the active window's size, so a popup flips and centres within the window it belongs to.
+                    AppDocument app = made[0];
+                    if (app == null || app.windowWidth() <= 0f) return whole.frame(deltaSeconds, width, height);
+                    document.frame(deltaSeconds, app.windowWidth(), app.windowHeight());
+                    return true;
+                } finally {
+                    if (inline) spent[0] = System.nanoTime() - began;
+                }
             }
 
             @Override
             public void paint(CgUiPaintContext ctx) {
+                long began = inline ? System.nanoTime() : 0L;
                 whole.paint(ctx);
+                if (!inline || named[0]) return;
+                long took = spent[0] + System.nanoTime() - began;
+                if (took > INLINE_BUDGET_MS * 1_000_000L) {
+                    named[0] = true;
+                    CrystalGuiCore.LOGGER.warn("[cgui] the INLINE application '{}' took {} ms of the host's thread in one "
+                            + "frame, past its {} ms budget (-Dcrystalgui.ui.inlineBudgetMs)", name, took / 1_000_000L,
+                            INLINE_BUDGET_MS);
+                }
             }
 
             @Override
@@ -152,6 +178,21 @@ final class ApplicationDocuments implements AppDocuments {
         open.add(entry);
         return made[0];
     }
+
+    /** Runs what was sent to the documents on this thread, whatever the host is drawing. Render thread, every host frame. */
+    void drain() {
+        Thread self = Thread.currentThread();
+        // The host waiting on the shell serves these too, or a launch waiting on the host and the host waiting on the
+        // launch's turn wait for each other for good.
+        if (host != self) {
+            host = self;
+            UiSequence.serveWhileWaiting(self, this::drain);
+        }
+        for (Entry entry : open) entry.viewport.drain();
+    }
+
+    /** The thread that drains: the render thread. */
+    private volatile Thread host;
 
     /** Ends what has quit, then frames every document at {@code stage}. Render thread, before the shell's frame. */
     void frame(CgStageFrame stage) {

@@ -49,6 +49,26 @@ public final class UiThread {
     /** How deep this thread is inside documents' frames, input events or tasks, from {@link #enter}. */
     private static final ThreadLocal<int[]> DEPTH = ThreadLocal.withInitial(() -> new int[1]);
 
+    /** How deep this thread is inside the work of an inline document it hosts, from {@link #enterHost}. */
+    private static final ThreadLocal<int[]> HOSTING = ThreadLocal.withInitial(() -> new int[1]);
+
+    /**
+     * This thread is now running an inline document's own work, a frame or what was sent to it, on no sequence: a signal
+     * used meanwhile belongs to the thread, as one used on a sequence belongs to it. Pair with {@link #exitHost}.
+     */
+    public static void enterHost() {
+        HOSTING.get()[0]++;
+    }
+
+    public static void exitHost() {
+        HOSTING.get()[0]--;
+    }
+
+    /** Whether this thread is inside the work of an inline document it hosts. */
+    public static boolean isHosting() {
+        return HOSTING.get()[0] > 0;
+    }
+
     /** Marks the calling thread as running frames until {@link #forgetForTesting}: for tests and hosts with no document. */
     public static void markCurrent() {
         MARKED.set(Boolean.TRUE);
@@ -75,6 +95,7 @@ public final class UiThread {
     public static void forgetForTesting() {
         MARKED.remove();
         DEPTH.remove();
+        HOSTING.remove();
     }
 
     // ── The assertion ────────────────────────────────────────────────────────────

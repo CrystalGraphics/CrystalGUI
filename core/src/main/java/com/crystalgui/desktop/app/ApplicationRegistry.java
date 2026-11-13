@@ -10,6 +10,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.ServiceLoader;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 import javax.annotation.Nullable;
 
@@ -309,21 +310,23 @@ public final class ApplicationRegistry {
         WorkspaceClient shared = context.workspace();
         AppDocument document = documents != null && kind.hasSeparateDocument() ? documents.open(kind) : null;
         String clientName = kind.displayName();
-        WorkspaceClient own = shared == null ? null
-                : document == null ? shared.service().client(clientName)
-                : document.ask(() -> shared.service().client(clientName));
-        if (own != null) {
-            context = new AppContext(kind, context.desktop(), own, context.storage(), context.cache(),
-                    context.open());
-        }
+        AppContext base = context;
+        WorkspaceClient[] madeClient = {null};
+        // THE CLIENT AND THE APPLICATION IN ONE HOP to the document's thread: where that is the host's, each hop waits
+        // for the host's next frame, and the shell's thread waits with it.
+        Supplier<Application> build = () -> {
+            WorkspaceClient client = shared == null ? null : shared.service().client(clientName);
+            madeClient[0] = client;
+            AppContext made = client == null ? base : new AppContext(kind, base.desktop(), client, base.storage(),
+                    base.cache(), base.open());
+            return kind.factory().apply(made.withDocument(document));
+        };
         Application application;
-        AppContext launched = context.withDocument(document);
         // On the document's thread outside any frame: without a zone, a launch is a stretch of nothing in the trace.
         long launching = CgTrace.stamp(UiTrace.FLOW);
         try {
             // ITS OWN DOCUMENT BUILDS IT: the tree an application makes is touched by its thread alone.
-            application = document == null ? kind.factory().apply(launched)
-                    : document.ask(() -> kind.factory().apply(launched));
+            application = document == null ? build.get() : document.ask(build);
             CgTrace.zoneDone(UiTrace.FLOW, "app:launch", launching);
         } catch (RuntimeException | LinkageError failed) {
             // AN APPLICATION THAT THROWS COSTS ITS OWN LAUNCH AND NOTHING ELSE. A desktop is a shell:
@@ -333,10 +336,11 @@ public final class ApplicationRegistry {
             CrystalGuiCore.LOGGER.error("[cgui] the application '{}' failed to launch: {}",
                     kind.id(), failed.getMessage(), failed);
             couldntStart(kind, failed);
-            if (own != null) own.dispose();
+            if (madeClient[0] != null) madeClient[0].dispose();
             if (document != null) document.close();
             return null;
         }
+        WorkspaceClient own = madeClient[0];
         if (application == null) {
             if (own != null) own.dispose();
             if (document != null) document.close();

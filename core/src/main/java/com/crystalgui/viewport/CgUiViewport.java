@@ -397,12 +397,24 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
     }
 
     /**
-     * Hears each exception a task of the document's sequence lets escape, on its thread; a no-op for a document on the
-     * host's thread, whose failed frames reach {@link Content#failed} instead.
+     * Hears each exception a task sent to the document lets escape, on its thread: a sequence's task, or work an
+     * inline document's host runs in {@link #drain} or a frame. A failed frame reaches {@link Content#failed} instead.
      */
     public void onFault(java.util.function.Consumer<Throwable> listener) {
-        UiSequence sequence = thread.sequence();
-        if (sequence != null) sequence.onFault(listener);
+        thread.onFault(listener);
+    }
+
+    /**
+     * Runs what was sent to an {@link Threading#INLINE} document, outside any frame: the host calls it once every host
+     * frame, so a launch or a close sent from another thread is answered whatever the frame draws (a loading screen, no
+     * desktop, a game screen). Takes the calling thread for the document's. A no-op in the other threadings. Host thread.
+     *
+     * <pre>{@code
+     * appDocuments.forEach(CgUiViewport::drain);     // at the top of the host's tick
+     * }</pre>
+     */
+    public void drain() {
+        thread.drain();
     }
 
     /** Whether the document's sequence has ended: it unwound at a checkpoint after {@link #abort}, or was abandoned. */

@@ -2,14 +2,17 @@ package com.crystalgui.viewport;
 
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.render.stage.CgStageFrame;
+import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.JobScheduler;
 import com.crystalgui.core.async.UiSequence;
+import com.crystalgui.core.async.UiThread;
 import com.crystalgui.ui.dom.UIDocument;
 
 import javax.annotation.Nullable;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -86,6 +89,19 @@ abstract class DocumentThread implements UIDocument.Owner {
         return null;
     }
 
+    /**
+     * Runs what was sent to the document, off any frame: where the document runs on the host's thread, work sent
+     * from another waits for the host to come by, and the host comes by here every frame whatever it draws. Host thread.
+     */
+    void drain() {
+    }
+
+    /** Hears each exception work sent to the document lets escape, on the document's thread. */
+    void onFault(Consumer<Throwable> listener) {
+        UiSequence sequence = sequence();
+        if (sequence != null) sequence.onFault(listener);
+    }
+
     /** Stops the thread, after the work queued on it. Render thread. */
     void close() {
     }
@@ -112,8 +128,9 @@ abstract class DocumentThread implements UIDocument.Owner {
     // ── The strategies ──────────────────────────────────────────────────────────────────────────
 
     /**
-     * The host's thread: whoever builds the document until its first frame, then the thread that frames it. Work sent
-     * from another thread waits for the next frame.
+     * The host's thread: a plain thread builds the document until the host first comes by ({@link #drain} or a
+     * frame), which takes it. A sequence's thread is never the host's, so the shell launching an application from
+     * its own sequence posts to it. Work sent from another thread waits for the host's next visit.
      */
     static final class Inline extends DocumentThread {
         private final Queue<Runnable> sent = new ConcurrentLinkedQueue<>();
@@ -121,6 +138,8 @@ abstract class DocumentThread implements UIDocument.Owner {
         private volatile Thread thread;
         @Nullable
         private volatile UiCommit shown;
+        @Nullable
+        private volatile Consumer<Throwable> faults;
 
         Inline(CgUiViewport viewport, String name) {
             super(viewport, name);
@@ -129,12 +148,47 @@ abstract class DocumentThread implements UIDocument.Owner {
         @Override
         public boolean isCurrent() {
             Thread known = thread;
+            // Running the document's own work, whatever sequence's turn the host's thread is also lending itself to.
+            if (known == Thread.currentThread() && UiThread.isHosting()) return true;
+            // A sequence's task is never the host's work, even where it runs on the host's thread (the shell closing an
+            // application from the render thread): it is sent, and run in place, as the host's.
+            if (UiSequence.current() != null) return false;
             return known == null || known == Thread.currentThread() || !known.isAlive();
+        }
+
+        @Override
+        void onFault(Consumer<Throwable> listener) {
+            faults = listener;
+        }
+
+        @Override
+        void drain() {
+            thread = Thread.currentThread();
+            UiThread.enterHost();
+            try {
+                for (Runnable work; (work = sent.poll()) != null; ) {
+                    try {
+                        work.run();
+                    } catch (RuntimeException | LinkageError failed) {
+                        // As a sequence contains a task: the application's fault, never the host frame's.
+                        Consumer<Throwable> listener = faults;
+                        if (listener == null) {
+                            CrystalGuiCore.LOGGER.error("[cgui] work sent to document '{}' failed", name(), failed);
+                        } else {
+                            listener.accept(failed);
+                        }
+                    }
+                }
+            } finally {
+                UiThread.exitHost();
+            }
         }
 
         @Override
         public void execute(Runnable work) {
             sent.add(work);
+            // On the host's own thread there is no one to wait for: run what was sent now, as the host's.
+            if (thread == Thread.currentThread()) drain();
         }
 
         @Override
@@ -155,9 +209,14 @@ abstract class DocumentThread implements UIDocument.Owner {
         @Override
         boolean frame(@Nullable CgStageFrame stage, float deltaSeconds, int width, int height,
                       CgUiViewport.Content content, int held, @Nullable Runnable delivery) {
-            thread = Thread.currentThread();
-            for (Runnable work; (work = sent.poll()) != null; ) work.run();
-            UiCommit commit = viewport.recordOnDocument(held, delivery, content, deltaSeconds, width, height);
+            drain();
+            UiCommit commit;
+            UiThread.enterHost();
+            try {
+                commit = viewport.recordOnDocument(held, delivery, content, deltaSeconds, width, height);
+            } finally {
+                UiThread.exitHost();
+            }
             shown = commit;
             viewport.show(stage, commit);
             return true;

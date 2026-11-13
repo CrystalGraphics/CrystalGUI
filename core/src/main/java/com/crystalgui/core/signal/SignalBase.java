@@ -1,6 +1,7 @@
 package com.crystalgui.core.signal;
 
 import com.crystalgui.core.async.UiSequence;
+import com.crystalgui.core.async.UiThread;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -17,17 +18,21 @@ import javax.annotation.Nullable;
  *
  * <p><b>Local: one document's, on its sequence.</b> A signal binds to the sequence that first uses it, and a connect,
  * disconnect or emit from anywhere else throws, naming the signal and both threads (Chromium's
- * {@code SEQUENCE_CHECKER}). Use outside every sequence (a tree built on the render thread before its document is
- * handed to a sequence) neither binds nor is checked. Across sequences, use a
+ * {@code SEQUENCE_CHECKER}). Use inside an inline document's own work (its frame, or what was sent to it, on the
+ * host's thread) binds to that thread the same way; use anywhere else outside every sequence (a tree built on the
+ * render thread before its document is handed to a sequence) neither binds nor is checked. Across sequences, use a
  * {@link com.crystalgui.core.async.Broadcast}.</p>
  *
  * @param <L> the listener type for this signal variant
  */
 public abstract class SignalBase<L> {
 
-    /** The sequence this signal belongs to, once one has used it. */
+    /**
+     * What this signal belongs to, once something has used it: a {@link UiSequence}, or the thread that used it while
+     * running a document of its own on no sequence (an inline document's host).
+     */
     @Nullable
-    private UiSequence bound;
+    private Object bound;
 
     /**
      * Optional debug hook for signal connect/disconnect logging.
@@ -114,16 +119,27 @@ public abstract class SignalBase<L> {
 
     /** Binds to the first sequence that uses this signal; throws on use from anywhere else after. */
     private void checkSequence(String what) {
-        UiSequence here = UiSequence.current();
-        UiSequence mine = bound;
+        UiSequence sequence = UiSequence.current();
+        // A thread running an inline document's own work is its owner, which a signal used inside it belongs to as it
+        // would to a sequence. Any other use on the host's thread, building a tree to hand on, binds nothing.
+        boolean hosting = UiThread.isHosting();
+        Object mine = bound;
         if (mine == null) {
-            if (here != null) bound = here;
+            Object first = sequence != null ? sequence : hosting ? Thread.currentThread() : null;
+            if (first != null) bound = first;
             return;
         }
-        if (here == mine) return;
-        throw new IllegalStateException(getClass().getSimpleName() + " belongs to sequence '" + mine.name()
-                + "' and was " + what + " from " + (here == null ? "" : "sequence '" + here.name() + "' on ")
+        // Both owners are current where a sequence's task runs on the host's thread (the shell closing an application
+        // from the render thread): either one's signal is in reach.
+        if (mine == sequence || mine == Thread.currentThread() && (hosting || sequence == null)) return;
+        throw new IllegalStateException(getClass().getSimpleName() + " belongs to " + describe(mine) + " and was "
+                + what + " from " + (sequence == null || hosting ? "" : "sequence '" + sequence.name() + "' on ")
                 + "thread " + Thread.currentThread().getName() + ". Across sequences, use a Broadcast.");
+    }
+
+    private static String describe(Object owner) {
+        return owner instanceof UiSequence ? "sequence '" + ((UiSequence) owner).name() + "'"
+                : "thread '" + ((Thread) owner).getName() + "'";
     }
 
     /**

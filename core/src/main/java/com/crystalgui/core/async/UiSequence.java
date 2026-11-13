@@ -181,6 +181,24 @@ public final class UiSequence implements Executor {
         runNow(task, Long.MAX_VALUE);
     }
 
+    @Nullable
+    private static volatile Runnable HOST_WAIT;
+    @Nullable
+    private static volatile Thread HOST_THREAD;
+
+    /**
+     * Names what {@code host} does while it waits in {@link #runNow} for a turn that is running: the work inline
+     * documents were sent, which that turn may be waiting on. Only {@code host} runs it.
+     *
+     * <pre>{@code
+     * UiSequence.serveWhileWaiting(Thread.currentThread(), inlineDocuments::drain);   // once, on the host thread
+     * }</pre>
+     */
+    public static void serveWhileWaiting(@Nullable Thread host, @Nullable Runnable serving) {
+        HOST_THREAD = host;
+        HOST_WAIT = serving;
+    }
+
     /**
      * {@link #runNow(Runnable)} that gives up waiting for a running turn after {@code timeoutNanos}: answers whether
      * {@code task} ran (also true when the sequence was abandoned, which nothing waits for). What closing a document
@@ -197,7 +215,11 @@ public final class UiSequence implements Executor {
         while (!scheduled.compareAndSet(false, true)) {
             if (abandoned) return true;
             if (System.nanoTime() - started >= timeoutNanos) return false;
-            LockSupport.parkNanos(20_000L);
+            // THE HOST WAITING ON A SEQUENCE SERVES WHAT THE SEQUENCE WAITS ON: a turn that sent work to an inline
+            // document is parked until the host comes by, and the host is here, parked for that turn.
+            Runnable serving = HOST_WAIT;
+            if (serving != null && Thread.currentThread() == HOST_THREAD) serving.run();
+            else LockSupport.parkNanos(20_000L);
         }
         UiSequence outer = CURRENT.get();
         CURRENT.set(this);

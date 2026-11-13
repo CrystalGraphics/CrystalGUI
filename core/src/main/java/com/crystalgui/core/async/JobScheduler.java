@@ -176,7 +176,8 @@ public final class JobScheduler implements Disposable {
     }
 
     private <T> CgJob<T> start(Job<T> description) {
-        if (this == shared && asynchronousDocuments.get() > 0 && !undrainedReported) {
+        // An inline document's own work is drained by the host's frame, which drains this scheduler on its thread.
+        if (this == shared && asynchronousDocuments.get() > 0 && !undrainedReported && !UiThread.isHosting()) {
             undrainedReported = true;
             CrystalGuiCore.LOGGER.warn("[cgui] job {} was posted to the process-wide scheduler from {}, which no "
                     + "asynchronous document drains: post it from the document's sequence", description.key,

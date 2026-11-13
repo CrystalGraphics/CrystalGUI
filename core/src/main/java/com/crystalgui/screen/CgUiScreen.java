@@ -351,6 +351,9 @@ public final class CgUiScreen {
      * pending launch retried, the next {@link Mode} decided. The client lifecycle's {@code onFrame}. Render thread.
      */
     public static void tick() {
+        // BEFORE ANYTHING THAT MAY RETURN: an inline application's launch is sent from the shell and waits for this, in
+        // the loading screen, with no desktop up and on a game screen, where nothing is painted.
+        appDocuments.drain();
         GameState state = game;
         if (state == null) return;
         long ticking = CgTrace.stamp(UiTrace.FLOW);
