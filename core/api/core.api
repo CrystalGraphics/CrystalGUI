@@ -4946,6 +4946,7 @@ com/crystalgui/desktop/app/ApplicationRegistry
   field public,final onDidChange Lcom/crystalgui/core/signal/Signal$Action;
   method public <init> (Lcom/crystalgui/desktop/Desktop;)V
   method public activateOrLaunch (Lcom/crystalgui/desktop/app/ApplicationKind;Lcom/crystalgui/fs/client/WorkspaceClient;)Lcom/crystalgui/desktop/app/Application;
+  method public applicationOf (Lcom/crystalgui/desktop/app/AppDocument;)Lcom/crystalgui/desktop/app/Application;
   method public autostart ()V
   method public bootstrap ()V
   method public byId (Ljava/lang/String;)Lcom/crystalgui/desktop/app/ApplicationKind;
@@ -5900,7 +5901,10 @@ com/crystalgui/document/Documents$DocumentFactory
 com/crystalgui/document/DraggedResources
   access public,final,record
   extends java/lang/Record
+  implements com/crystalgui/ui/service/TransferData
   method public <init> (Ljava/util/List;)V
+  method public as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public portable ()Z
   method public resources ()Ljava/util/List;
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
@@ -14638,6 +14642,14 @@ com/crystalgui/ui/service/Focus
   method public scopeOf (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/dom/UIElement;
   method public tabbable (Lcom/crystalgui/ui/dom/UIElement;)Z
   method public traversalOrder (Lcom/crystalgui/ui/dom/UIElement;)Ljava/util/List;
+com/crystalgui/ui/service/ForeignDrag
+  access public,final
+  extends java/lang/Object
+  field public,static,final SOURCE Lcom/crystalgui/ui/event/EventTarget;
+  method public active ()Z
+  method public drop (FF)Z
+  method public leave ()V
+  method public move (Ljava/lang/Object;FF)V
 com/crystalgui/ui/service/Input
   access public,final
   extends java/lang/Object
@@ -14658,6 +14670,7 @@ com/crystalgui/ui/service/Input
   method public endFrame ()Z
   method public followPointer (Lcom/crystalgui/ui/dom/UIElement;)V
   method public followPointer (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)V
+  method public foreignDrag ()Lcom/crystalgui/ui/service/ForeignDrag;
   method public forget (Lcom/crystalgui/ui/dom/UIElement;)V
   method public hasMode (Lcom/crystalgui/ui/service/InputMode;)Z
   method public hoverTarget ()Lcom/crystalgui/ui/dom/UIElement;
@@ -14679,6 +14692,7 @@ com/crystalgui/ui/service/Input
   method public pointerFollowerWithin ()Lcom/crystalgui/ui/dom/UIElement;
   method public pointerMovedSincePress ()Z
   method public popMode (Lcom/crystalgui/ui/service/InputMode;)V
+  method public portableDrag ()Ljava/lang/Object;
   method public presentsCursor (Z)Lcom/crystalgui/ui/service/Input;
   method public pushMode (Lcom/crystalgui/ui/service/InputMode;)V
   method public reconcile (I)V
@@ -14732,17 +14746,35 @@ com/crystalgui/ui/service/RotationCursor
 com/crystalgui/ui/service/TransferData
   access public,abstract,interface
   extends java/lang/Object
+  method public portable ()Z
+  method public shared ()Lcom/crystalgui/ui/service/TransferData;
   method public text ()Ljava/lang/String;
   method public,abstract as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public,static carrying (Ljava/lang/Object;Lcom/crystalgui/ui/service/TransferData;)Lcom/crystalgui/ui/service/TransferData;
   method public,static find (Ljava/lang/Object;Ljava/lang/Class;)Ljava/lang/Object;
   method public,static of ([Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
+  method public,static shared (Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
+  method public,static values ([Ljava/lang/Object;)Lcom/crystalgui/ui/service/TransferData;
+com/crystalgui/ui/service/TransferData$Carrying
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/ui/service/TransferData
+  method public <init> (Ljava/lang/Object;Lcom/crystalgui/ui/service/TransferData;)V
+  method public as (Ljava/lang/Class;)Ljava/lang/Object;
+  method public local ()Ljava/lang/Object;
+  method public shared ()Lcom/crystalgui/ui/service/TransferData;
+  method public values ()Lcom/crystalgui/ui/service/TransferData;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/ui/service/TransferData$Forms
   access public,final,record
   extends java/lang/Record
   implements com/crystalgui/ui/service/TransferData
-  method public <init> (Ljava/util/List;)V
+  method public <init> (Ljava/util/List;Z)V
   method public as (Ljava/lang/Class;)Ljava/lang/Object;
   method public held ()Ljava/util/List;
+  method public portable ()Z
   method public,final equals (Ljava/lang/Object;)Z
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
