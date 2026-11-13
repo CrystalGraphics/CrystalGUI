@@ -31,8 +31,8 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.ui.service.Input;
-import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.collection.tree.TreeRenderer;
 import com.crystalgui.widget.collection.tree.TreeView;
@@ -167,8 +167,6 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     private final UIElement content = new UIElement();
     private final LibraryDetail detail = new LibraryDetail();
 
-    /** The label a dragged card leaves behind the pointer: a tree row's, since it lands as one in the Hierarchy. */
-    private final DragGhost ghost = new DragGhost();
     private final Map<UIElement, RowView> views = new HashMap<>();
 
     /**
@@ -255,9 +253,6 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         StyleGroup.defaultPipeline(parked.getStyle().getLayoutGroup(), l -> l.display(TaffyDisplay.NONE));
         append(parked);
         onSelect.connect(detail::show);
-        ghost.addClass("__row-ghost__");
-        // IN THE TREE BEFORE A DRAG CAN PROMOTE IT. @see DragGhost
-        ghost.parkIn(this);
 
         // A MENU BY WHAT WAS PRESSED: a card's, a user's group's, or the panel's.
         tree().suppressDefaultContextMenu();
@@ -764,9 +759,10 @@ public final class LibraryPanel extends UIElement implements DataProvider {
         }
         UIDocument window = document();
         if (window == null) return;
-        ghost.follow(window, entry.glyph().icon(), entry.label());
         Drag.start(source, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
-                new NewNode(entry.label(), entry.kind(), entry::build), Drag.DEFAULT_THRESHOLD_PX, (x, y, sx, sy, dx, dy) -> { });
+                new NewNode(entry.label(), entry.kind(), entry::build), Drag.DEFAULT_THRESHOLD_PX, (x, y, sx, sy, dx, dy) -> { })
+                // A TREE ROW'S LABEL: it lands as one in the Hierarchy.
+                .preview(DragPreview.of(entry.glyph().icon(), entry.label()).styled("__row-ghost__"));
     }
 
     private final class Renderer implements TreeRenderer<Row> {

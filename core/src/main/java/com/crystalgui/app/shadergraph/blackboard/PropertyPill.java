@@ -2,6 +2,7 @@ package com.crystalgui.app.shadergraph.blackboard;
 
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.graph.GraphProperty;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.UIDocument;
@@ -39,19 +40,12 @@ public class PropertyPill extends UIElement {
     public static final String RENAMING_CLASS = "__renaming__";
     public static final String EDITOR_CLASS = "__rename__";
 
-    /** On the floating copy that follows the cursor during a drag. */
-    public static final String GHOST_CLASS = "__ghost__";
-
     private final String propertyId;
 
     private final UIElement capsule = new UIElement();
     private final UIElement dot = new UIElement();
     private final UIText name;
     private final UIText type;
-
-    /** The floating copy shown while dragging. One per pill, re-registered per drag. @see #buildGhost */
-    private final UIElement ghost = new UIElement();
-    private final UIText ghostName = new UIText("");
 
     private boolean selected;
 
@@ -119,7 +113,6 @@ public class PropertyPill extends UIElement {
         capsule.append(name);
         append(capsule);
         append(type);
-        buildGhost();
         installPress();
 
         rename = new InlineRename(this, EDITOR_CLASS, RENAMING_CLASS, property.name(), name::setText,
@@ -207,10 +200,6 @@ public class PropertyPill extends UIElement {
         if (window == null || rename.isRunning()) return;
 
         float rawX = event.getPosition().x(), rawY = event.getPosition().y();
-        // PER DRAG, which is what the controller expects -- it drops the ghost when the drag ends, so a
-        // ghost registered once would appear for the first drag and never again.
-        // The name may have changed since the ghost was built.
-        ghostName.setText(name.getText());
         Drag.startWithPayload(capsule, rawX, rawY, new Payload(propertyId),
                 new Drag.Listener() {
                     @Override
@@ -219,39 +208,7 @@ public class PropertyPill extends UIElement {
                         // Nothing to move: the pill stays put, the ghost follows the cursor and the DROP
                         // does the work. The controller still needs a listener -- that is the gesture.
                     }
-                });
-    }
-
-    /**
-     * Builds the floating copy that follows the cursor. Called once, at construction.
-     *
-     * <p><b>It has to be IN THE TREE.</b> {@code UIDragController.showGhost} promotes it to the top
-     * layer, and promotion needs a window to promote from — so it checks {@code document()} and
-     * silently does nothing for an unparented element. A ghost built fresh per drag and handed straight
-     * to {@code setGhost} was therefore never shown at all, with no error to explain it. Same lesson the
-     * row menu already learned: a Popover must be in the tree before it can be promoted.</p>
-     *
-     * <p>So one ghost, parented here and hidden by the stylesheet until a drag promotes it —
-     * {@code showGhost} writes {@code display} at IMPORTANT origin, which is what lets a resting
-     * {@code display: none} in CSS be overridden for the duration.</p>
-     */
-    private void buildGhost() {
-        ghost.addClass(PILL_CLASS);
-        ghost.addClass(GHOST_CLASS);
-
-        UIElement body = new UIElement();
-        body.addClass(CAPSULE_CLASS);
-        UIElement ghostDot = new UIElement();
-        ghostDot.addClass(DOT_CLASS);
-        ghostName.addClass(NAME_CLASS);
-
-        // Nothing in a ghost may take the pointer: it sits under the cursor for the whole drag, so a
-        // hittable ghost would be the drop target for every frame of it.
-        ghost.setHitTest(false);
-        body.append(ghostDot);
-        body.append(ghostName);
-        ghost.append(body);
-        append(ghost);
+                }).preview(DragPreview.of(name.getText()).styled("__row-ghost__"));
     }
 
     public void beginRename() {

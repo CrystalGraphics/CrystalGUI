@@ -24,8 +24,10 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.ui.service.ForeignDrag;
 import com.crystalgui.ui.service.TransferData;
+import com.crystalgui.widget.dnd.DragGhost;
 
 /** A drag of values leaves its application's document: another application's window hears it, the bare desktop opens it. */
 public class CrossDocumentDropTest extends UiDocumentTestBase {
@@ -86,7 +88,7 @@ public class CrossDocumentDropTest extends UiDocumentTestBase {
                     @Override
                     public void onDragUpdate(float x, float y, float startX, float startY, float dx, float dy) {
                     }
-                }), false, true);
+                }).preview(DragPreview.of("crystalgui:folder", "Main.java")), false, true);
         well = new UIElement();
         well.layout(l -> l.widthPercent(100f).heightPercent(100f));
         well.setHitTest(true);
@@ -180,5 +182,27 @@ public class CrossDocumentDropTest extends UiDocumentTestBase {
         assertTrue("the other application heard nothing: " + heard, heard.isEmpty());
         release(over[0], over[1]);
         settle();
+    }
+
+    /** One ghost at a time, and the shell's: a node payload stays in its document but its ghost is not cut off at the window's edge. */
+    @Test
+    public void theShellDrawsTheGhostOfAnyDragOfAClientDocument() {
+        float[] at = onHandle();
+        carried = new Object();
+        press(at[0], at[1]);
+        settle();
+        float[] over = centre(to);
+        move(at[0] + 20f, at[1] + 20f);
+        settle();
+        move(over[0], over[1]);
+        settle();
+        DragGhost shells = (DragGhost) document.input().presenter().element();
+        assertNotNull("the shell has a ghost", shells);
+        assertTrue("the shell shows it", shells.isDisplayed() && shells.box() != null);
+        assertTrue("the source is told its own is handed over", fromDocument.input().ghostHandedOver());
+        assertTrue("the source's own ghost is hidden", fromDocument.input().presenter().element().box() == null);
+        release(over[0], over[1]);
+        settle();
+        assertFalse("the shell's ghost goes with the drag", shells.isDisplayed());
     }
 }

@@ -20,9 +20,10 @@ import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.event.DragEvent;
 import com.crystalgui.ui.event.MouseEvent;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.ui.service.TransferData;
 import com.crystalgui.ui.service.Input;
-import com.crystalgui.widget.dnd.DragGhost;
+import com.crystalgui.widget.text.UIText;
 
 /**
  * {@link TreeEditing}'s drag: rows carry the selection, and the row under the pointer says where it lands.
@@ -59,7 +60,6 @@ final class TreeDragAndDrop<T> {
 
     private final TreeEditing<T> editing;
 
-    private final DragGhost ghost = new DragGhost();
 
     @Nullable
     private UIElement markedRow;
@@ -135,10 +135,8 @@ final class TreeDragAndDrop<T> {
     /** How far under the last row, in row-heights, each further level out is. */
     static final float LEVEL_STEP_ROWS = 0.5f;
 
-    TreeDragAndDrop(TreeEditing<T> editing, UIElement host) {
+    TreeDragAndDrop(TreeEditing<T> editing) {
         this.editing = editing;
-        ghost.addClass(ROW_GHOST_CLASS);
-        ghost.parkIn(host);
     }
 
     /**
@@ -163,12 +161,19 @@ final class TreeDragAndDrop<T> {
             carried.removeIf(each -> !model.canEdit(each));
             if (carried.isEmpty()) return;
             // ONE ITEM IS THE PRESSED ROW, which is always editable and always carried.
-            if (carried.size() == 1) ghost.follow(window, icon, label);
-            else ghost.follow(window, null, carried.size() + " items");
+            DragPreview preview = carried.size() == 1 ? previewOf(icon, label) : DragPreview.of(carried.size() + " items");
             Drag.start(row, event.getPosition().x(), event.getPosition().y(), CgMouseCodes.LEFT_BUTTON,
                     new Payload(editing, carried, model.transfer(carried)), Drag.DEFAULT_THRESHOLD_PX,
-                    (x, y, sx, sy, dx, dy) -> { });
+                    (x, y, sx, sy, dx, dy) -> { }).preview(preview.styled(ROW_GHOST_CLASS));
         }, false, true);
+    }
+
+    /** The pressed row's icon as it is drawn now, and its words. */
+    private static DragPreview previewOf(@Nullable UIElement icon, UIElement label) {
+        String text = label instanceof UIText words ? words.getText() : "";
+        if (icon == null) return DragPreview.of(text);
+        return DragPreview.of(icon.computedStyle().get(StylePropertyRegistry.OVERLAY),
+                icon.computedStyle().get(StylePropertyRegistry.OVERLAY_TINT), text);
     }
 
     private static boolean isInside(@Nullable UIElement node, UIElement ancestor) {

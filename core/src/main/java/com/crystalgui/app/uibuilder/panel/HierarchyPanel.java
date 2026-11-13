@@ -183,7 +183,7 @@ public final class HierarchyPanel extends UIElement implements DataProvider, Und
         append(content);
         content.append(tree);
 
-        this.editing = new TreeEditing<>(tree, this, this::itemForRow, () -> withoutWritingBack(tree::refresh),
+        this.editing = new TreeEditing<>(tree, this::itemForRow, () -> withoutWritingBack(tree::refresh),
                 CLIPBOARD);
         editing.setModel(new HierarchyEditModel(builder));
         editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(CONTEXT_MENU));

@@ -494,7 +494,6 @@
  * from the moment the page is built. show/hide use IMPORTANT origin, which outranks this. */
 
 
-.chip-ghost    { display: none; opacity: 0.75; }
 
 
 .bin           { width: 110px; height: 48px; background: #3A4450; padding: 6px; }

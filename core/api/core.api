@@ -878,7 +878,6 @@ com/crystalgui/app/shadergraph/blackboard/PropertyPill
   field public,static,final CAPSULE_CLASS Ljava/lang/String;
   field public,static,final DOT_CLASS Ljava/lang/String;
   field public,static,final EDITOR_CLASS Ljava/lang/String;
-  field public,static,final GHOST_CLASS Ljava/lang/String;
   field public,static,final NAME_CLASS Ljava/lang/String;
   field public,static,final PILL_CLASS Ljava/lang/String;
   field public,static,final RENAMING_CLASS Ljava/lang/String;
@@ -14663,7 +14662,6 @@ com/crystalgui/ui/service/Drag
   method public ended ()V
   method public follows (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/service/Drag;
   method public follows (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/ui/service/Drag;
-  method public ghost ()Lcom/crystalgui/ui/dom/UIElement;
   method public isActivated ()Z
   method public isDropAccepted ()Z
   method public keyPressed (IIZ)Z
@@ -14671,8 +14669,9 @@ com/crystalgui/ui/service/Drag
   method public payload ()Ljava/lang/Object;
   method public pointerButton (IZFF)Z
   method public pointerMoved (FF)Z
+  method public preview ()Lcom/crystalgui/ui/service/DragPreview;
+  method public preview (Lcom/crystalgui/ui/service/DragPreview;)Lcom/crystalgui/ui/service/Drag;
   method public source ()Lcom/crystalgui/ui/dom/UIElement;
-  method public withGhost (Lcom/crystalgui/ui/dom/UIElement;FF)Lcom/crystalgui/ui/service/Drag;
   method public,static pixelsPerLocalUnit (Lcom/crystalgui/ui/dom/UIElement;)F
   method public,static scrub (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/input/DragScrub$Target;)V
   method public,static start (Lcom/crystalgui/ui/dom/UIElement;FFILjava/lang/Object;FLcom/crystalgui/ui/service/Drag$Listener;)Lcom/crystalgui/ui/service/Drag;
@@ -14684,6 +14683,32 @@ com/crystalgui/ui/service/Drag$Listener
   method public onDragCancel ()V
   method public onDragEnd (FF)V
   method public,abstract onDragUpdate (FFFFFF)V
+com/crystalgui/ui/service/DragPresenter
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract element ()Lcom/crystalgui/ui/dom/UIElement;
+  method public,abstract hide ()V
+  method public,abstract show (Lcom/crystalgui/ui/service/DragPreview;FF)V
+com/crystalgui/ui/service/DragPreview
+  access public,final
+  extends java/lang/Object
+  method public flipped (Z)Lcom/crystalgui/ui/service/DragPreview;
+  method public glyph ()Lcom/crystalgui/render/texture/CgUiDrawable;
+  method public grabX ()F
+  method public grabY ()F
+  method public grabbing ()Lcom/crystalgui/ui/service/DragPreview;
+  method public iconName ()Ljava/lang/String;
+  method public isFlipped ()Z
+  method public isGrabbing ()Z
+  method public label ()Ljava/lang/String;
+  method public style ()Ljava/lang/String;
+  method public styled (Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
+  method public text (Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
+  method public tint ()I
+  method public version ()I
+  method public,static of (Lcom/crystalgui/render/texture/CgUiDrawable;ILjava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
+  method public,static of (Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
+  method public,static of (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
 com/crystalgui/ui/service/Focus
   access public,final
   extends java/lang/Object
@@ -14724,6 +14749,7 @@ com/crystalgui/ui/service/ForeignDrag
 com/crystalgui/ui/service/Input
   access public,final
   extends java/lang/Object
+  field public,static presenterFactory Ljava/util/function/Function;
   field public,static,final KEYBOARD_DETAIL I
   field public,static,final WHEEL_LATCH_MOVE_DELAY_MS J
   field public,static,final WHEEL_LATCH_TIMEOUT_MS J
@@ -14738,6 +14764,7 @@ com/crystalgui/ui/service/Input
   method public consumeMouseEvent (Lcom/crystalgraphics/platform/input/CgSystemInput$Mouse$Event;)Z
   method public currentCursor ()Lcom/crystalgui/core/cursor/Cursor;
   method public cursorDecoration ()Lcom/crystalgui/ui/service/CursorDecoration;
+  method public dragPreview ()Lcom/crystalgui/ui/service/DragPreview;
   method public endFrame ()Z
   method public followPointer (Lcom/crystalgui/ui/dom/UIElement;)V
   method public followPointer (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)V
@@ -14755,8 +14782,6 @@ com/crystalgui/ui/service/Input
   method public mode (Ljava/lang/Class;)Lcom/crystalgui/ui/service/InputMode;
   method public modes ()Ljava/util/List;
   method public modifiers ()I
-  method public offerGhost (Lcom/crystalgui/ui/dom/UIElement;)V
-  method public offerGhost (Lcom/crystalgui/ui/dom/UIElement;FF)V
   method public paintCursorDecoration (Lcom/crystalgui/render/CgUiPaintContext;)V
   method public pointer ()Lcom/crystalgui/core/data/ReadOnlyVec2f;
   method public pointerArt ()Lcom/crystalgui/ui/service/CursorDecoration;
@@ -14766,6 +14791,7 @@ com/crystalgui/ui/service/Input
   method public pointerMovedSincePress ()Z
   method public popMode (Lcom/crystalgui/ui/service/InputMode;)V
   method public portableDrag ()Ljava/lang/Object;
+  method public presenter ()Lcom/crystalgui/ui/service/DragPresenter;
   method public presentsCursor (Z)Lcom/crystalgui/ui/service/Input;
   method public pushMode (Lcom/crystalgui/ui/service/InputMode;)V
   method public reconcile (I)V
@@ -15333,7 +15359,7 @@ com/crystalgui/widget/collection/tree/TreeEditing
   extends java/lang/Object
   field public,static,final CUT_CLASS Ljava/lang/String;
   field public,static,final KEY Lcom/crystalgui/core/data/DataKey;
-  method public <init> (Lcom/crystalgui/widget/collection/tree/TreeView;Lcom/crystalgui/ui/dom/UIElement;Ljava/util/function/Function;Ljava/lang/Runnable;Lcom/crystalgui/widget/collection/tree/TreeClipboard;)V
+  method public <init> (Lcom/crystalgui/widget/collection/tree/TreeView;Ljava/util/function/Function;Ljava/lang/Runnable;Lcom/crystalgui/widget/collection/tree/TreeClipboard;)V
   method public attachContextMenu (Lcom/crystalgui/core/command/Commands;Ljava/util/function/Supplier;)V
   method public bindRow (Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/widget/control/TextField;Ljava/lang/Object;)V
   method public canCopy ()Z
@@ -16726,34 +16752,25 @@ com/crystalgui/widget/dnd/CanvasOverlayMove$ContainingBlock
   extends java/lang/Object
   method public,abstract get ()Lcom/crystalgui/ui/dom/UIElement;
 com/crystalgui/widget/dnd/DragGhost
-  access public
+  access public,final
   extends com/crystalgui/ui/dom/UIElement
   field public,static,final FLIPPED_CLASS Ljava/lang/String;
   field public,static,final GHOST_CLASS Ljava/lang/String;
   field public,static,final ICONLESS_CLASS Ljava/lang/String;
-  field public,static,final ICON_COPY_PART Ljava/lang/String;
   field public,static,final ICON_PART Ljava/lang/String;
-  field public,static,final LABEL_COPY_PART Ljava/lang/String;
   field public,static,final LABEL_PART Ljava/lang/String;
   field public,static,final NAME Lcom/crystalgui/ui/dom/Name;
   field public,static,final UNLABELLED_CLASS Ljava/lang/String;
-  method protected connected ()V
-  method protected disconnected ()V
   method public <init> ()V
-  method public anchoredBy (Lcom/crystalgui/widget/dnd/DragGhost$Anchor;)Lcom/crystalgui/widget/dnd/DragGhost;
-  method public flipped (Z)Lcom/crystalgui/widget/dnd/DragGhost;
-  method public follow (Lcom/crystalgui/ui/dom/UIDocument;Lcom/crystalgui/ui/dom/UIElement;Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/dnd/DragGhost;
-  method public follow (Lcom/crystalgui/ui/dom/UIDocument;Ljava/lang/String;)Lcom/crystalgui/widget/dnd/DragGhost;
-  method public follow (Lcom/crystalgui/ui/dom/UIDocument;Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/widget/dnd/DragGhost;
-  method public parkIn (Lcom/crystalgui/ui/dom/UIElement;)Lcom/crystalgui/widget/dnd/DragGhost;
-  method public text (Ljava/lang/String;)Lcom/crystalgui/widget/dnd/DragGhost;
-com/crystalgui/widget/dnd/DragGhost$Anchor
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final CURSOR Lcom/crystalgui/widget/dnd/DragGhost$Anchor;
-  field public,static,final GRAB Lcom/crystalgui/widget/dnd/DragGhost$Anchor;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/widget/dnd/DragGhost$Anchor;
-  method public,static values ()[Lcom/crystalgui/widget/dnd/DragGhost$Anchor;
+  method public apply (Lcom/crystalgui/ui/service/DragPreview;)V
+com/crystalgui/widget/dnd/DragGhostPresenter
+  access public,final
+  extends java/lang/Object
+  implements com/crystalgui/ui/service/DragPresenter
+  method public element ()Lcom/crystalgui/ui/dom/UIElement;
+  method public hide ()V
+  method public show (Lcom/crystalgui/ui/service/DragPreview;FF)V
+  method public,static install ()V
 com/crystalgui/widget/dnd/InsertionMarker
   access public
   extends com/crystalgui/ui/dom/UIElement

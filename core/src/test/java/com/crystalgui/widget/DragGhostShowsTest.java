@@ -4,66 +4,74 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+
+import org.joml.Vector3f;
+import org.junit.Before;
+import org.junit.Test;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.widget.dnd.DragGhost;
-import org.joml.Vector3f;
-import org.junit.Test;
+import com.crystalgui.widget.dnd.DragGhostPresenter;
 
 /**
- * A real {@link DragGhost} gets a box while its drag runs — which is the only thing "on screen" means.
+ * A drag's preview gets a ghost with a box while the drag runs, under the pointer on the first frame, and nowhere once
+ * the shell has taken it over or the drag has ended.
  *
- * <p><b>Driven with a real ghost on purpose.</b> The same test over a plain {@code UIElement} passes
- * against the bug: a bare node is hidden only by the {@code hidden} attribute, so showing it is
- * showing it. A {@code DragGhost} hides itself at construction as well, and the two halves used to
- * disagree — it hid with a cascade {@code display: none} and was shown by clearing the attribute, so
- * it came out promoted, unhidden, and still resolving {@code display: none}. The box tree gives no box
- * for either reason, so there was nothing to draw while every observable said it was being shown.</p>
- *
- * <p>That is why this asserts on the BOX rather than on {@code isDisplayed()} or {@code isPromoted()}:
- * a node can pass both and still not exist as far as the painter is concerned.</p>
+ * <p>Asserted on the BOX, not on {@code isDisplayed()} or {@code isPromoted()}: a ghost can pass both and still resolve
+ * {@code display: none}, which gives no box and draws nothing.</p>
  */
 public class DragGhostShowsTest extends UiDocumentTestBase {
 
-    @Test
-    public void aGhostHasABoxWhileItsDragRuns() {
-        // THE SHEET IS OPT-IN in this fixture, and without it every rule in this test's subject is
-        // absent -- which is how a first pass measured the ghost at its content size and read it as a
-        // rule that would not match.
-        withDefaultStyles();
+    private static final Drag.Listener NOTHING = new Drag.Listener() {
+        @Override
+        public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
+        }
+    };
+
+    @Before
+    public void installPresenter() {
+        DragGhostPresenter.install();
+    }
+
+    private UIElement source() {
         UIElement source = new UIElement();
         document.append(source);
-        DragGhost ghost = new DragGhost();
-        document.append(ghost);
+        return source;
+    }
+
+    private Drag drag(UIElement source, DragPreview preview) {
+        return Drag.start(source, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload", Drag.DEFAULT_THRESHOLD_PX, NOTHING)
+                .preview(preview);
+    }
+
+    private DragGhost ghost() {
+        return (DragGhost) document.input().presenter().element();
+    }
+
+    @Test
+    public void aPreviewHasABoxWhileItsDragRuns() {
+        withDefaultStyles();
+        UIElement source = source();
         frame();
 
-        assertNull("a ghost takes a box before any drag has started", ghost.box());
+        Drag drag = drag(source, DragPreview.of("crystalgui:folder", "carrying"));
+        DragGhost ghost = ghost();
+        frame();
+        assertNull("a ghost takes a box before any drag has activated", ghost.box());
 
-        // WITH AN ICON, as a rail button's ghost has: the box is the icon's, and an icon-less ghost is its label alone.
-        ghost.follow(document, "crystalgui:folder", "carrying");
-        Drag drag = Drag.start(source, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload",
-                Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
-                    @Override
-                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                    }
-                });
         // PAST THE THRESHOLD, because a ghost belongs to a drag and a press that never moved is a click.
         drag.pointerMoved(60f, 60f);
         frame();
 
-        assertNotNull("the ghost has no box while its drag runs, so there is nothing to draw",
-                ghost.box());
-        // AND IT IS THE SIZE OF WHAT IT STANDS FOR -- the rail button's 16px square. Asserted because
-        // the two numbers live in different rules and nothing else pairs them: a ghost that drifts away
-        // from `workbench .__activity-item__` stops being a stand-in and starts being a second widget.
-        assertEquals("the ghost is not the size of the thing being carried", 16f,
-                ghost.box().width(), 0.01f);
-        assertEquals("the ghost is not the size of the thing being carried", 16f,
-                ghost.box().height(), 0.01f);
+        assertNotNull("the ghost has no box while its drag runs, so there is nothing to draw", ghost.box());
+        assertEquals("the ghost is not the size of the thing being carried", 16f, ghost.box().width(), 0.01f);
+        assertEquals("the ghost is not the size of the thing being carried", 16f, ghost.box().height(), 0.01f);
 
         drag.cancel();
         frame();
@@ -71,31 +79,17 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
         assertFalse("the ghost stayed promoted after the drag", document.isPromoted(ghost));
     }
 
-    /**
-     * On the first frame it is drawn, the ghost is already under the pointer.
-     *
-     * <p>A ghost has no box until the move that shows it, so that move could not place it: it painted at the
-     * top layer's origin -- the window's top-left corner -- until the pointer moved again.</p>
-     */
     @Test
-    public void aGhostIsUnderThePointerOnTheFirstFrameItIsShown() {
+    public void aPreviewIsUnderThePointerOnTheFirstFrameItIsShown() {
         withDefaultStyles();
-        UIElement source = new UIElement();
-        document.append(source);
-        DragGhost ghost = new DragGhost();
-        document.append(ghost);
+        UIElement source = source();
         frame();
 
-        ghost.follow(document, "crystalgui:folder", "carrying");
-        Drag drag = Drag.start(source, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload",
-                Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
-                    @Override
-                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                    }
-                });
+        Drag drag = drag(source, DragPreview.of("crystalgui:folder", "carrying"));
         drag.pointerMoved(300f, 200f);
         frame();
 
+        DragGhost ghost = ghost();
         assertNotNull(ghost.box());
         Vector3f at = ghost.box().localToWorld().transformPosition(new Vector3f());
         assertTrue("the ghost is not under the pointer on its first frame: " + at,
@@ -105,33 +99,37 @@ public class DragGhostShowsTest extends UiDocumentTestBase {
     }
 
     @Test
-    public void aCopyingGhostTakesItsSourcesSize() {
+    public void aDragWithNoPreviewDrawsNoGhost() {
         withDefaultStyles();
-        UIElement row = new UIElement().layout(l -> l.width(200).height(20));
-        UIElement icon = new UIElement().layout(l -> l.width(14).height(14));
-        row.append(icon);
-        document.append(row);
-        DragGhost ghost = new DragGhost();
-        document.append(ghost);
+        UIElement source = source();
         frame();
 
-        ghost.follow(document, icon, null);
-        Drag drag = Drag.start(row, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload",
-                Drag.DEFAULT_THRESHOLD_PX, new Drag.Listener() {
-                    @Override
-                    public void onDragUpdate(float mx, float my, float sx, float sy, float dx, float dy) {
-                    }
-                });
+        Drag drag = Drag.start(source, 10f, 10f, CgMouseCodes.LEFT_BUTTON, "payload", Drag.DEFAULT_THRESHOLD_PX, NOTHING);
         drag.pointerMoved(60f, 60f);
-        // Two frames: the copy is sized after the layout that first gives the ghost a box.
-        frame();
         frame();
 
-        UIElement copy = (UIElement) ghost.shadowRoot().children().get(1);
-        assertNotNull("the icon copy has no box", copy.box());
-        assertEquals("the icon copy is not its source's size", 14f, copy.box().width(), 0.01f);
-        assertEquals("the icon copy is not its source's size", 14f, copy.box().height(), 0.01f);
+        assertNull("a drag with no preview shows nothing", document.input().dragPreview());
         drag.cancel();
+    }
+
+    /** The shell draws the ghost over a window's client, so the source's own stays hidden: it would be cut off at the edge. */
+    @Test
+    public void noGhostIsDrawnWhileTheShellCarriesIt() {
+        withDefaultStyles();
+        UIElement source = source();
         frame();
+
+        DragPreview preview = DragPreview.of("crystalgui:folder", "carrying");
+        Drag drag = drag(source, preview);
+        document.input().handOverGhost(true);
+        drag.pointerMoved(60f, 60f);
+        frame();
+
+        assertNull("the document drew a ghost the shell was carrying", ghost().box());
+        assertSame("the shell reads the drag's preview", preview, document.input().dragPreview());
+
+        drag.cancel();
+        assertNull("the preview outlived its drag", document.input().dragPreview());
+        assertFalse("the hand-over outlived its drag", document.input().ghostHandedOver());
     }
 }

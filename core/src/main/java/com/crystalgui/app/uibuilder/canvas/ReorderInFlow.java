@@ -24,7 +24,7 @@ import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.service.Drag;
-import com.crystalgui.widget.dnd.DragGhost;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.widget.surface.EdgePan;
 
 import dev.vfyjxf.taffy.style.TaffyPosition;
@@ -62,7 +62,8 @@ public final class ReorderInFlow extends UIElement {
 
     private final UiBuilderDocument document;
 
-    private final DragGhost ghost = new DragGhost();
+    /** What the carried nodes look like under the pointer; its label says Alt would copy them. */
+    private DragPreview preview = DragPreview.of("");
 
     private final EdgePan pan;
 
@@ -89,8 +90,6 @@ public final class ReorderInFlow extends UIElement {
         StyleGroup.defaultPipeline(getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f)
                         .widthPercent(100f).heightPercent(100f));
-        // IN THE TREE BEFORE A DRAG CAN PROMOTE IT. @see DragGhost
-        ghost.parkIn(this);
     }
 
     /**
@@ -128,8 +127,7 @@ public final class ReorderInFlow extends UIElement {
         if (sources.isEmpty() || window == null) return false;
         activated = false;
         carried = sources;
-        // BEFORE THE DRAG STARTS, which is the moment the drag takes its ghost. @see DragGhost#follow
-        ghost.follow(window, labelFor(sources, false));
+        preview = DragPreview.of(labelFor(sources, false));
         Drag.start(this, rawX, rawY, CgMouseCodes.LEFT_BUTTON, null, Drag.DEFAULT_THRESHOLD_PX,
                 new Drag.Listener() {
                     @Override
@@ -149,7 +147,7 @@ public final class ReorderInFlow extends UIElement {
                     public void onDragCancel() {
                         finish();
                     }
-                });
+                }).preview(preview);
         return true;
     }
 
@@ -178,7 +176,7 @@ public final class ReorderInFlow extends UIElement {
         boolean copy = CgModifiers.hasAlt(modifiers);
         if (copy != duplicating) {
             duplicating = copy;
-            ghost.text(labelFor(carried, copy));
+            preview.text(labelFor(carried, copy));
         }
         drop = DropResolver.forPane(ctx).resolve(carried, rawX, rawY);
         ctx.dropIndicator().show(drop);

@@ -289,7 +289,7 @@ public class ProjectFileTree extends UIElement
         // DEFERRED REBUILD, like every other refresh here: an edit begins from a key press or a menu row,
         // and a rebuild now would replace the element that dispatch is still walking. The kit also takes
         // the list's Cut/Copy/Paste, which would otherwise be a row-text copier. @see ListView#setClipboardActions
-        this.editing = new TreeEditing<>(tree, this, this::itemForRow, this::requestRefresh, CLIPBOARD);
+        this.editing = new TreeEditing<>(tree, this::itemForRow, this::requestRefresh, CLIPBOARD);
 
         find.build();
     }

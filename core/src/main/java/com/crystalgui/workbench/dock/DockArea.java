@@ -16,10 +16,10 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.document.DraggedResources;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.ui.service.TransferData;
 import com.crystalgui.widget.layout.MinimumSize;
 import com.crystalgui.widget.layout.SplitView;
-import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.layout.Tab;
 import com.crystalgui.widget.layout.TabView;
 import com.crystalgui.ui.event.DragEvent;
@@ -1624,7 +1624,6 @@ public class DockArea extends UIElement implements MinimumSize {
             if (event.getButtonId() != CgMouseCodes.LEFT_BUTTON) return;
             UIDocument window = document();
             if (window == null) return;
-            parkGhost();
             setActiveGroup(group);
             // A PRESS DOES NOT SELECT THE TAB: a click does, through TabView, and a drop selects what it dropped
             // (performDrop's focusPanel). Selecting on the press swapped a background tab's content in the
@@ -1634,9 +1633,7 @@ public class DockArea extends UIElement implements MinimumSize {
             dragMoved = false;
             // THE SAME GHOST A RAIL BUTTON GETS, for the same reason: a drag with pointer capture pins
             // :hover to its source, so without one the only thing under the cursor is the tab strip the
-            // tab has notionally left. DragGhost rather than a hand-built element -- three of its rules
-            // are invisible in setGhost's signature and each is silent when broken.
-            dragGhost.follow(window, registry.iconOf(panel), registry.titleOf(panel));
+            // tab has notionally left.
             // The PAYLOAD overload, which is the seven-argument one -- there is no
             // (source, x, y, payload, listener) form, because a drag that carries something also has
             // a button and a threshold worth stating rather than inheriting silently.
@@ -1713,7 +1710,8 @@ public class DockArea extends UIElement implements MinimumSize {
                             group.endTabDrag();
                             endDragVisuals();
                         }
-                    });
+                    }).preview(DragPreview.of(registry.iconOf(panel), registry.titleOf(panel))
+                            .styled(TAB_GHOST_CLASS).grabbing());
         }, false, false);
     }
 
@@ -1721,14 +1719,6 @@ public class DockArea extends UIElement implements MinimumSize {
         removeClass(DRAGGING_CLASS);
         clearPreview();
     }
-
-    /**
-     * The thing that follows the pointer while a tab is being dragged.
-     *
-     * <p>Parked in this area and re-registered per drag, which {@code DragGhost} handles — a ghost that
-     * outlives its drag reappears on unrelated screens, which has happened here before.</p>
-     */
-    private final DragGhost dragGhost = new DragGhost();
 
     /** Whether the live tab drag ever passed the activation threshold. @see #installTabDrag */
     private boolean dragMoved;
@@ -1798,13 +1788,6 @@ public class DockArea extends UIElement implements MinimumSize {
      * reads as a different kind of object being dragged. One class, and the sheet says the rest.</p>
      */
     public static final String TAB_GHOST_CLASS = "__tab-ghost__";
-
-    /** @see #dragGhost */
-    private void parkGhost() {
-        if (dragGhost.parent() != null) return;
-        dragGhost.addClass(TAB_GHOST_CLASS);
-        dragGhost.anchoredBy(DragGhost.Anchor.GRAB).parkIn(this);
-    }
 
     private void registerDropHandling() {
         // Over and Drop bubble, so listening on the area alone covers every group inside it. Doing it per

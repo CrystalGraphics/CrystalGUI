@@ -16,12 +16,11 @@ import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgui.core.cursor.Cursor;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.document.DraggedResources;
-import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.ui.service.TransferData;
+import com.crystalgui.ui.service.DragPresenter;
+import com.crystalgui.ui.service.DragPreview;
 import org.joml.Vector2f;
 
 /**
@@ -308,17 +307,20 @@ public final class AppDocument {
     private AppDocument crossing;
 
     /**
-     * The shell's thread, for each pointer event while this document holds the pointer: offers a drag of this document that
-     * carries a value to what the pointer is over. Another application's window hears it as a drag of its own; the bare
-     * desktop on release opens it in a window of this application ({@link ApplicationRegistry#openDropped}).
+     * The shell's thread, for each pointer event while this document holds the pointer: draws the document's running drag
+     * (its preview, wherever the pointer is) and, when it carries a value, offers it to what the pointer is over. Another
+     * application's window hears it as a drag of its own; the bare desktop on release opens it in a window of this
+     * application ({@link ApplicationRegistry#openDropped}).
      *
-     * <p>A drag whose payload holds nodes is not portable and never leaves; nothing here runs for it.</p>
+     * <p>A drag whose payload holds nodes is not portable and never leaves; only its ghost is the shell's.</p>
      */
     void carry(UIDocument shell, float x, float y, boolean released) {
+        DragPreview preview = document.input().dragPreview();
         Object payload = document.input().portableDrag();
+        showGhost(shell, preview, x, y, released);
+        Desktop desktop = Desktop.ifPresent(shell);
         if (payload == null) {
             leaveCrossing();
-            if (crossGhost != null) crossGhost.hide();
             return;
         }
         ClientPortal portal = null;
@@ -336,8 +338,6 @@ public final class AppDocument {
             leaveCrossing();
             crossing = receiver;
         }
-        Desktop desktop = Desktop.ifPresent(shell);
-        if (desktop != null) showGhost(desktop, payload, x, y, released);
         if (receiver != null) {
             Vector2f local = portal.toLocal(x, y);
             float scale = shell.boxes().uiScale();
@@ -356,28 +356,20 @@ public final class AppDocument {
         }
     }
 
-    /** The shell's ghost for a drag outside its own application's windows, where the source's ghost is cut off. */
-    @Nullable
-    private CrossingGhost crossGhost;
-
     /**
-     * Draws the ghost of the drag, for as long as this shell carries it: the source's own is cut off at its document's
-     * edge, so the source is told to hide it ({@code handOverGhost}) and this one follows the pointer everywhere.
+     * Draws the running drag's preview for as long as this shell carries it: the source's own is cut off at its document's
+     * edge, so the source is told to hide it ({@code handOverGhost}) and the shell's own presenter draws it, under the
+     * pointer wherever that is.
      */
-    private void showGhost(Desktop desktop, Object payload, float x, float y, boolean released) {
-        if (released) {
-            if (crossGhost != null) crossGhost.hide();
+    private void showGhost(UIDocument shell, @Nullable DragPreview preview, float x, float y, boolean released) {
+        DragPresenter presenter = shell.input().presenter();
+        if (presenter == null) return;
+        if (released || preview == null) {
+            presenter.hide();
             return;
         }
         document.input().handOverGhost(true);
-        if (crossGhost == null) crossGhost = new CrossingGhost();
-        DraggedResources files = TransferData.find(payload, DraggedResources.class);
-        String name = files == null ? "" : files.resources().get(0).name();
-        String icon = files == null ? null : FileIconTheme.getDefault().iconFor(name, false, false);
-        String text = files == null ? "" : files.resources().size() == 1 ? name : files.resources().size() + " items";
-        UIDocument shell = desktop.document();
-        float scale = shell == null ? 1f : Math.max(0.01f, shell.boxes().uiScale());
-        crossGhost.showAt(desktop.overlayLayer(), files != null && files.resources().size() == 1 ? icon : null, text, x, y, scale);
+        presenter.show(preview, x, y);
     }
 
     private void leaveCrossing() {

@@ -1171,21 +1171,6 @@ treeview .__cut__ {
     opacity: 0.5;
 }
 
-/* THE DRAG GHOST. A loose copy of the capsule that follows the cursor -- sized to its own content
- * rather than to a row, since it is not in the list any more. Slightly transparent so what is underneath
- * still reads, which is what tells you WHERE you are about to drop. */
-.__property-pill__ .__ghost__ {
-    /* HIDDEN AT REST. The ghost lives in the tree permanently -- it has to, or the controller cannot
-     * promote it -- so the stylesheet is what keeps it out of the row until a drag starts.
-     * UIDragController writes `display` at IMPORTANT origin, which outranks this for the duration. */
-    display: none;
-    flex-direction: row;
-    align-items: center;
-    /* Slightly transparent, so what is underneath still reads -- which is what tells you where you are
-     * about to drop. */
-    opacity: 0.8;
-}
-
 /* Round, not a square with soft corners -- at 4px a 1px radius still reads as a box. */
 .__property-pill__ .__dot__ {
     width: 4px;

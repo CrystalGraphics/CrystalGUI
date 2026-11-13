@@ -1846,8 +1846,7 @@ workbench splitview.__vertical__ > .__divider__ {
     display: none;
 }
 
-/* A TREE ROW'S GHOST: live copies of the row's own icon and label (DragGhost's icon-copy and label-copy parts)
- * in one capsule, outlined in the accent on a see-through panel ground. The chip above stands for a rail button,
+/* A ROW'S GHOST: its icon and label in one capsule, outlined in the accent on a see-through panel ground. The chip above stands for a rail button,
  * which has no label of its own. After the __iconless__ rule, which "3 items" also carries. */
 .__drag-ghost__.__row-ghost__,
 .__drag-ghost__.__row-ghost__.__iconless__ {

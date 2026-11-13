@@ -21,6 +21,7 @@ import com.crystalgui.core.data.DataProvider;
 import com.crystalgui.core.data.ReadOnlyVec2f;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.workbench.Workbench;
 import com.crystalgui.workbench.region.RegionDropOverlay;
 import com.crystalgui.workbench.region.RegionDropZones;
@@ -29,7 +30,6 @@ import com.crystalgui.workbench.view.ViewContainer;
 import com.crystalgui.workbench.view.ViewContainerRegistry;
 import org.joml.Vector2f;
 import com.crystalgui.widget.control.Button;
-import com.crystalgui.widget.dnd.DragGhost;
 import com.crystalgui.widget.dnd.InsertionMarker;
 import com.crystalgui.widget.overlay.ContextMenu;
 import com.crystalgui.widget.overlay.Menu;
@@ -241,8 +241,8 @@ public class StripeView extends UIElement {
     private final InsertionMarker insertion =
             new InsertionMarker(InsertionMarker.Axis.VERTICAL).mode(InsertionMarker.Mode.IN_FLOW);
 
-    /** The capsule that follows the cursor while a tool window is being moved. @see DragGhost */
-    private final DragGhost dragGhost = new DragGhost();
+    /** What follows the cursor while a tool window is being moved; its label says where a drop would put it. */
+    private DragPreview dragPreview = DragPreview.of("");
 
     /** The type currently in flight from this rail, so it can be left out of its own drop list. */
     @Nullable
@@ -293,10 +293,6 @@ public class StripeView extends UIElement {
         this.rail = rail;
         addClass(BAR_CLASS);
         addClass(rail == StripeRail.RIGHT ? RIGHT_CLASS : LEFT_CLASS);
-        // GRAB, not CURSOR. What is being dragged is the button, at the button's own size, so the ghost's
-        // icon must stay exactly under the point of the button you took hold of -- a nudge below and right
-        // makes it look like a different object appeared next to the one you grabbed.
-        dragGhost.anchoredBy(DragGhost.Anchor.GRAB).parkIn(this);
         insertion.parkIn(this);
         spacer.addClass(SPACER_CLASS);
         spacer.setHitTest(false);
@@ -500,8 +496,8 @@ public class StripeView extends UIElement {
             // label is true wherever the ghost is: over the editor, over another window, over the
             // desktop. A ghost that goes blank the moment you leave the workbench would say the
             // opposite of what the release is about to do.
-            dragGhost.text(aim.slot() != null ? RegionDropZones.labelFor(aim.slot()) : FLOAT_LABEL);
-            dragGhost.flipped(isRightOfCentre(aim.screenX()));
+            dragPreview.text(aim.slot() != null ? RegionDropZones.labelFor(aim.slot()) : FLOAT_LABEL);
+            dragPreview.flipped(isRightOfCentre(aim.screenX()));
         }
         if (aim.slot() == null) {
             hideInsertion();
@@ -1173,7 +1169,10 @@ public class StripeView extends UIElement {
             // THE ICON identifies what is being carried; the label is left EMPTY, because at drag start
             // the pointer is on the button and the only honest destination is "where it already is".
             // RegionDropOverlay writes one the moment the pointer resolves to a slot.
-            dragGhost.follow(window, iconName, null);
+            // GRABBING, not below and right. What is being dragged is the button, at the button's own size, so the
+            // icon must stay exactly under the point of the button you took hold of -- a nudge makes it look like a
+            // different object appeared next to the one you grabbed.
+            dragPreview = DragPreview.of(iconName, null).grabbing();
             // THE DRAG ITSELF, HELD, because by the time `onDragEnd` runs it is no longer findable.
             //
             // `Drag.end` pops the mode BEFORE it reports the end, so `input.mode(Drag.class)` inside the
@@ -1259,7 +1258,7 @@ public class StripeView extends UIElement {
                             endDrag();
                             workbench.dropOverlay().clear();
                         }
-                    });
+                    }).preview(dragPreview);
         }, false, false);
     }
 

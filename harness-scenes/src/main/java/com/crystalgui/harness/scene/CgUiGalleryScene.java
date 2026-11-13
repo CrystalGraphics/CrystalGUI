@@ -48,6 +48,7 @@ import com.crystalgui.ui.input.keymap.Keymap;
 import com.crystalgui.ui.input.keymap.KeymapResolver;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.ui.service.Drag;
+import com.crystalgui.ui.service.DragPreview;
 import com.crystalgui.widget.canvas.CanvasView;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
@@ -1143,22 +1144,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         label.setHitTest(false);
         chip.append(label);
 
-        // The ghost lives INSIDE the chip on purpose: the drag controller excludes the source and
-        // its descendants from drop targeting, so a ghost parented here can never become the drop
-        // target for its own drag. It is display:none until a drag activates.
-        UIElement ghost = new UIElement();
-        ghost.addClass("chip");
-        ghost.addClass("chip-ghost");
-        UIText ghostLabel = new UIText(name);
-        ghostLabel.addClass("label");
-        ghost.append(ghostLabel);
-        chip.append(ghost);
-
         chip.onMouseDown.attachListener((el, event) -> {
-            // THE GHOST IS OFFERED, not set on a controller: `Drag.start` collects it, because
-            // `DragGhost.follow` runs from the mouse-down handler that is about to call it and so has
-            // no drag to hand it to yet.
-            chip.document().input().offerGhost(ghost);
             // The payload overload => the default activation threshold, so a plain click stays a click.
             Drag.startWithPayload(chip, event.getPosition().x(), event.getPosition().y(), name,
                     new Drag.Listener() {
@@ -1170,7 +1156,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                                     ? name + ": dropped on nothing" : status.getText());
                         }
                         @Override public void onDragCancel() { status.setText(name + ": cancelled"); }
-                    });
+                    }).preview(DragPreview.of(name).styled("__row-ghost__"));
         }, false, false);
         return chip;
     }

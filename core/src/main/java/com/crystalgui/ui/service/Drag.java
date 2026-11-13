@@ -2,7 +2,6 @@ package com.crystalgui.ui.service;
 
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -88,11 +87,9 @@ public final class Drag implements InputMode {
     private final float startY;
 
     private boolean activated;
-    private @Nullable UIElement ghost;
-    private float ghostOffsetX, ghostOffsetY;
-    /** Where the pointer last was, in surface pixels, for a ghost placed after layout. @see #placeGhostAfterLayout */
-    private float ghostSurfaceX, ghostSurfaceY;
-    private boolean ghostPlacementPending;
+    private @Nullable DragPreview preview;
+    /** Where the press landed within the source, in surface pixels: what a {@linkplain DragPreview#grabbing grabbing} preview keeps. */
+    private final float grabX, grabY;
     private @Nullable UIElement dropTarget;
     private boolean dropAccepted;
     private boolean live = true;
@@ -111,6 +108,9 @@ public final class Drag implements InputMode {
         float[] local = toLocal(source, surfaceX, surfaceY);
         this.startX = local[0];
         this.startY = local[1];
+        Box sourceBox = source.box();
+        this.grabX = sourceBox == null ? 0f : surfaceX - sourceBox.worldX();
+        this.grabY = sourceBox == null ? 0f : surfaceY - sourceBox.worldY();
         this.activated = this.threshold <= 0f;
     }
 
@@ -242,19 +242,6 @@ public final class Drag implements InputMode {
                              @Nullable Object payload, float thresholdPx, Listener listener) {
         Input input = source.document().input();
         Drag drag = new Drag(input, source, surfaceX, surfaceY, button, payload, thresholdPx, listener);
-        // THE GHOST OFFERED ON THE WAY DOWN, which is the only moment a caller has: `DragGhost.follow`
-        // runs from the mouse-down handler that is about to call this, so it had no drag to hand it to.
-        UIElement offered = input.takePendingGhost();
-        if (offered != null) {
-            // GRAB RESOLVES TO THE PRESS WITHIN THE SOURCE, which is what `startX`/`startY` already are:
-            // `toLocal` puts the source's own origin at zero, so the press point in the source's space
-            // IS how far into it the cursor was. That is the offset the ghost has to keep, or the thing
-            // being carried jumps out from under the hand.
-            boolean grab = input.pendingGhostGrab();
-            drag.withGhost(offered,
-                    grab ? drag.startX : input.pendingGhostX(),
-                    grab ? drag.startY : input.pendingGhostY());
-        }
         input.setPointerCapture(source);
         input.pushMode(drag);
         return drag;
@@ -265,126 +252,41 @@ public final class Drag implements InputMode {
         return "drag";
     }
 
-    // ── The ghost ────────────────────────────────────────────────────────────
+    // ── The preview ──────────────────────────────────────────────────────────
 
     /**
-     * The thing that follows the cursor for this drag's duration — promoted to the top layer, moved
-     * each frame, and let go of when the drag ends.
+     * What this drag looks like under the pointer, drawn by the host from activation to the end: the shell while the
+     * document is a window's client, so it is never cut off at the window's edge, else the document.
      *
-     * <p><b>Per drag, never once.</b> The old controller dropped its ghost reference at the end of
-     * every drag on purpose, and a retained one once outlived its drag and reappeared on unrelated
-     * screens. Here it is a field of the gesture, so there is nothing to retain: a ghost belongs to
-     * a drag the way a drop target does.</p>
+     * <pre>{@code
+     * Drag.startWithPayload(row, x, y, payload, listener).preview(DragPreview.of(icon, "Problems"));
+     * }</pre>
      *
-     * <p>The node must already be IN the tree — promotion is a re-host of a box, and a node with no
-     * box has nothing to promote. Its own position is not written: the ghost is hosted in the top
-     * layer, whose containing block is the document, and a transform moves it. That is what keeps
-     * this free of the "only AnchoredPlacement writes left/top" rule and of any layout at all.</p>
-     *
-     * @param offsetX where the cursor sits within the ghost, in the ghost's own space
+     * <p>A drag with none shows nothing: sliders, splits and scrubs. Once, right after {@code start}; edit the preview
+     * itself to change it mid-drag.</p>
      */
-    public Drag withGhost(UIElement ghost, float offsetX, float offsetY) {
-        this.ghost = ghost;
-        if (followed == null) followed = ghost;
-        this.ghostOffsetX = offsetX;
-        this.ghostOffsetY = offsetY;
-        // RECORDED ONLY. This used to read `ghost.box()` here and give up when it was null -- which it
-        // always is, because a ghost is `display: none` until its drag and a node that is not
-        // displayed HAS NO BOX. So the whole body was skipped, `ghostBox` stayed null, and every
-        // `moveGhost` returned on its first line: the ghost was attached to the drag and never shown.
-        //
-        // It also wrote `box.setHost(top)`, which is the thing M6.0 records as not surviving: a box is
-        // destroyed and rebuilt whenever its subtree is hidden or restructured, and going from
-        // `display: none` to displayed is exactly that -- so even a box that HAD existed would have
-        // lost its host on the next sync. Promotion belongs on the NODE.
+    public Drag preview(@Nullable DragPreview value) {
+        preview = value;
+        if (value != null) {
+            value.grabbedAt(grabX, grabY);
+            // IN THE TREE BEFORE THE DRAG RUNS, and declared as following the pointer so a compositor may move it.
+            DragPresenter presenter = input.presenter();
+            if (presenter != null && followed == null) followed = presenter.element();
+        }
+        if (activated && live) input.dragPreview(value);
         return this;
     }
 
-    /**
-     * Shows the ghost and promotes it — idempotent, from the per-move update.
-     *
-     * <p><b>Here rather than at {@code withGhost}</b>, for the reason the old controller states at its
-     * own call site: showing on the threshold transition misses a zero-threshold positional drag, which
-     * activates immediately and never passes through that branch, and misses a ghost handed over after
-     * the drag has already begun. Promotion is idempotent, so asking every move costs a set lookup.</p>
-     *
-     * <p>The two halves are what the old engine's {@code showGhost} did — {@code display: FLEX} and
-     * {@code addToTopLayer} — expressed as this engine's own: {@code setDisplayed} for the box, and
-     * {@code UIDocument.promote} for the layer, which is recorded on the node and therefore survives
-     * the box being rebuilt by the display change itself.</p>
-     */
-    private void showGhost() {
-        if (ghost == null) return;
-        UIDocument document = ghost.document();
-        if (document == null) return;
-        if (document.isPromoted(ghost)) {
-            if (!ghost.isDisplayed()) ghost.setDisplayed(true);
-            return;
-        }
-        ghost.setDisplayed(true);
-        // Unhittable for the gesture's life: it is under the cursor by construction, so a hittable
-        // ghost is a ghost that answers every drop query with itself.
-        ghost.setHitTest(false);
-        document.promote(ghost);
-    }
-
     @Nullable
-    public UIElement ghost() {
-        return ghost;
+    public DragPreview preview() {
+        return preview;
     }
 
-    /** @return whether the ghost was placed -- false while it has no box to place */
-    private boolean moveGhost(float surfaceX, float surfaceY) {
-        // READ LIVE, never cached. The ghost's box comes into existence when it is shown and is
-        // rebuilt whenever anything restructures it, so a reference taken once is a reference to a box
-        // that may already be gone -- and, on the frame the ghost is first displayed, to no box at all.
-        Box box = ghost == null ? null : ghost.box();
-        if (box == null) return false;
-        Box top = box.host();
-        if (top == null) return false;
-        // Surface pixels into the top layer's own space: the ghost is hosted there, so that is the
-        // space its transform is applied in. The layer is at the document's origin, so this is the
-        // root transform's inverse and nothing more -- but going through the matrix is what keeps it
-        // right when uiScale moves.
-        org.joml.Vector4f p = new org.joml.Vector4f(surfaceX, surfaceY, 0f, 1f).mul(top.worldToLocal());
-        box.setTransform(Transform.translate(p.x - ghostOffsetX, p.y - ghostOffsetY));
-        return true;
-    }
-
-    /**
-     * Places the ghost under the pointer once this frame's layout has given it a box.
-     *
-     * <p>A ghost is {@code display: none} until its drag, and a node that is not displayed has no box, so the
-     * move that shows it cannot place it. Left there, it painted at the top layer's origin -- the window's
-     * top-left corner -- until the pointer moved again, and stayed there for a pointer held still. The hook runs
-     * after layout and before paint, so the first frame the ghost is drawn in has it under the pointer.</p>
-     */
-    private void placeGhostAfterLayout() {
-        UIElement shown = ghost;
-        UIDocument document = shown == null ? null : shown.document();
-        if (document == null || ghostPlacementPending) return;
-        ghostPlacementPending = true;
-        // UNTIL IT LANDS, at wherever the pointer is by then: one hook, ending on the first frame it can do the job.
-        document.animation().afterLayout(shown, delta -> {
-            boolean waiting = live && ghost == shown && !moveGhost(ghostSurfaceX, ghostSurfaceY);
-            ghostPlacementPending = waiting;
-            return waiting;
-        });
-    }
-
-    private void releaseGhost() {
-        if (ghost != null) {
-            Box box = ghost.box();
-            if (box != null) box.setTransform(null);
-            UIDocument document = ghost.document();
-            if (document != null) document.demote(ghost);
-            // BACK TO HIDDEN, which is the state rule 2 says a ghost is constructed in: it is a
-            // permanent node in somebody's tree, and one left displayed is a stray label sitting in a
-            // panel between drags.
-            ghost.setDisplayed(false);
-            ghost.setHitTest(true);
-        }
-        ghost = null;
+    private void showPreview(float surfaceX, float surfaceY) {
+        DragPresenter presenter = input.presenter();
+        if (presenter == null) return;
+        if (input.ghostHandedOver()) presenter.hide();
+        else presenter.show(preview, surfaceX, surfaceY);
     }
 
     public boolean isActivated() {
@@ -440,15 +342,9 @@ public final class Drag implements InputMode {
             activated = true;
             declareFollow();
             input.portableDrag(TransferData.shared(payload));
+            input.dragPreview(preview);
         }
-        ghostSurfaceX = x;
-        ghostSurfaceY = y;
-        if (input.ghostHandedOver()) {
-            if (ghost != null && ghost.isDisplayed()) ghost.setDisplayed(false);
-        } else {
-            showGhost();
-            if (!moveGhost(x, y)) placeGhostAfterLayout();
-        }
+        if (preview != null) showPreview(x, y);
         float[] local = toLocal(source, x, y);
         // THE DELTA IS A VECTOR, NOT A DIFFERENCE OF TWO POINTS, and it has to be: `toLocal` puts the
         // box's own origin at zero (M6.1), so a source that MOVES WITH THE DRAG changes the frame its
@@ -513,18 +409,20 @@ public final class Drag implements InputMode {
     @Override
     public void ended() {
         // Popped by someone else -- a teardown, a mode stack being cleared. Nothing to report; the
-        // two paths that DO report (end and cancel) pop themselves first. The ghost is released HERE
+        // two paths that DO report (end and cancel) pop themselves first. The preview is let go HERE
         // rather than in end()/cancel(), because this is the one path every ending goes through.
         live = false;
         input.portableDrag(null);
+        input.dragPreview(null);
         input.handOverGhost(false);
         follows(null);
-        releaseGhost();
+        DragPresenter own = preview == null ? null : input.presenter();
+        if (own != null) own.hide();
     }
 
     /**
      * Declares that {@code element} moves one for one with this drag's pointer, so a compositor may move it ahead of a
-     * busy document; null withdraws it. A drag ghost is declared already. From activation to the drag's end, however it
+     * busy document; null withdraws it. A drag preview's ghost is declared already. From activation to the drag's end, however it
      * ends.
      *
      * <pre>{@code

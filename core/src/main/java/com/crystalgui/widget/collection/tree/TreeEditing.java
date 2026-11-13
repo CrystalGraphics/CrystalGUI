@@ -30,7 +30,7 @@ import com.crystalgui.widget.overlay.ContextMenu;
  * <pre>{@code
  * private static final TreeClipboard<Node> CLIPBOARD = new TreeClipboard<>();
  *
- * editing = new TreeEditing<>(tree, this, this::itemForRow, tree::refresh, CLIPBOARD);
+ * editing = new TreeEditing<>(tree, this::itemForRow, tree::refresh, CLIPBOARD);
  * editing.setModel(new NodeModel());                              // performs the verbs; see TreeEditModel
  * editing.attachContextMenu(Commands.process(), () -> ContextMenu.of(NODE_MENU));
  * TreeEditing.contributeMenu(Commands.process(), NODE_MENU); // once: its six rows in that menu
@@ -48,7 +48,7 @@ import com.crystalgui.widget.overlay.ContextMenu;
  *   <li>Every verb acts on the selection, outermost items only, in tree order. With no model set every verb is
  *       disabled.</li>
  *   <li>A cut is performed at paste; until then its rows carry {@link #CUT_CLASS}.</li>
- *   <li>{@code host} is where the drag ghost parks, and must be an ancestor of the tree or the tree's owner.</li>
+ *   <li>A row drag shows the row's icon and label as its ghost, drawn by the host.</li>
  * </ul>
  */
 public final class TreeEditing<T> {
@@ -76,19 +76,18 @@ public final class TreeEditing<T> {
     private TreeEditModel<T> model;
 
     /**
-     * @param host       where the drag ghost parks — the tree's owner
      * @param itemForRow the item a realised row element shows now, or null
      * @param rebuild    rebinds the visible rows; deferred where an edit can begin from a handler on a row
      * @param clipboard  shared by every tree of this kind, so a cut in one pastes in another
      */
-    public TreeEditing(TreeView<T> tree, UIElement host, Function<UIElement, T> itemForRow, Runnable rebuild,
+    public TreeEditing(TreeView<T> tree, Function<UIElement, T> itemForRow, Runnable rebuild,
                        TreeClipboard<T> clipboard) {
         this.tree = Objects.requireNonNull(tree, "tree");
         this.itemForRow = Objects.requireNonNull(itemForRow, "itemForRow");
         this.rebuild = Objects.requireNonNull(rebuild, "rebuild");
         this.clipboard = Objects.requireNonNull(clipboard, "clipboard");
         this.rows = new RowEditing<>(tree, itemForRow, rebuild);
-        this.dragAndDrop = new TreeDragAndDrop<>(this, host);
+        this.dragAndDrop = new TreeDragAndDrop<>(this);
         TreeEditCommands.register();
         TreeEditCommands.bindKeys(tree.keymap());
         tree.putData(KEY, this);

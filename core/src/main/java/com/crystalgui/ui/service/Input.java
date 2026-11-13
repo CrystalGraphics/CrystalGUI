@@ -32,6 +32,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Function;
 import java.util.function.LongSupplier;
 import javax.annotation.Nullable;
 import org.joml.Vector2f;
@@ -108,78 +109,8 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     private boolean hoverValid;
     private @Nullable UIElement hover;
     private @Nullable UIElement lastFrameHover;
-    /**
-     * A ghost offered before its drag existed, waiting for {@code Drag.start} to claim it.
-     *
-     * <p><b>The one ordering a caller cannot avoid.</b> A ghost is offered from the mouse-DOWN handler
-     * and the drag is started from the same handler a few lines later, so at the moment
-     * {@code DragGhost.follow} runs there is no drag to hand it to — its own comment says as much
-     * ("null when nothing is dragging, which is the ordinary case") and then relies on
-     * {@code Drag.start} re-reading it, which nothing did. The ghost was set on nothing, every drag in
-     * the application carried none, and there was no error to explain it.</p>
-     *
-     * <p>Dropped when a drag claims it, and dropped again when a press ends without one — a ghost
-     * belongs to a single gesture, and the old engine's controller once let one outlive its drag and
-     * reappear on an unrelated screen.</p>
-     */
-    private @Nullable UIElement pendingGhost;
-
-    private float pendingGhostX, pendingGhostY;
-
     /** @see #releaseEndedDrag */
     private boolean releaseEndedDrag;
-
-    /** Offers a ghost at an explicit cursor offset, in the ghost's own space. */
-    public void offerGhost(@Nullable UIElement ghost, float offsetX, float offsetY) {
-        pendingGhost = ghost;
-        pendingGhostX = offsetX;
-        pendingGhostY = offsetY;
-        pendingGhostGrab = false;
-    }
-
-    /**
-     * Offers a ghost anchored where the press landed inside the SOURCE — the drag resolves the offset.
-     *
-     * <p><b>Not the ghost's own centre</b>, which is the mistake the old controller's javadoc warns
-     * about in as many words: "anchored by where inside the source the press landed, not by the ghost's
-     * own centre, so the ghost sits exactly where the source visually was relative to the pointer.
-     * Grabbing a card by its corner and having it jump to centre-on-cursor is the classic tell of a
-     * ghost positioned the wrong way." The port computed the centre, and computed it from a box the
-     * ghost does not have while it is hidden — so the offset was zero and every ghost hung below and
-     * right of the cursor.</p>
-     *
-     * <p>Resolved by the drag because only the drag knows it: the press within the source is exactly
-     * what {@code Drag}'s own start point is.</p>
-     */
-    public void offerGhost(@Nullable UIElement ghost) {
-        pendingGhost = ghost;
-        pendingGhostX = 0f;
-        pendingGhostY = 0f;
-        pendingGhostGrab = true;
-    }
-
-    private boolean pendingGhostGrab;
-
-    /** Whether the offered ghost wants the press-within-source offset. @see #offerGhost(UIElement) */
-    boolean pendingGhostGrab() {
-        return pendingGhostGrab;
-    }
-
-    /** Claims the offered ghost, if any, and forgets it. Called by {@code Drag.start}. */
-    @Nullable
-    UIElement takePendingGhost() {
-        UIElement ghost = pendingGhost;
-        pendingGhost = null;
-        return ghost;
-    }
-
-    float pendingGhostX() {
-        return pendingGhostX;
-    }
-
-    float pendingGhostY() {
-        return pendingGhostY;
-    }
 
     /** What a drag begun here carries when that may leave the document; any thread reads it. */
     @Nullable
@@ -199,6 +130,36 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
     /** Set and cleared by the drag. */
     void portableDrag(@Nullable Object payload) {
         portableDrag = payload;
+    }
+
+    /** The look of the drag now running, once it is past its threshold; any thread reads it. */
+    @Nullable
+    private volatile DragPreview dragPreview;
+
+    /**
+     * What the running drag looks like, or null before it activates and after it ends, and for a drag with no preview. Any
+     * thread: the shell draws it while this document is a window's client.
+     */
+    @Nullable
+    public DragPreview dragPreview() {
+        return dragPreview;
+    }
+
+    void dragPreview(@Nullable DragPreview preview) {
+        dragPreview = preview;
+    }
+
+    /** Makes a document's {@link DragPresenter}. Set once by the widget layer, which owns the element that draws. */
+    public static volatile Function<UIDocument, DragPresenter> presenterFactory = document -> null;
+
+    @Nullable
+    private DragPresenter presenter;
+
+    /** This document's own drawer of a drag's preview, made on first use; null when no factory is installed. */
+    @Nullable
+    public DragPresenter presenter() {
+        if (presenter == null) presenter = presenterFactory.apply(document);
+        return presenter;
     }
 
     private volatile boolean ghostHandedOver;
@@ -995,11 +956,6 @@ public final class Input implements CgSystemInput.Mouse, CgSystemInput.Keyboard 
             // Implicit release AFTER the up is delivered -- the spec's ordering, and what lets a drag
             // end anywhere on screen rather than only over its source.
             if (!anyButtonDown()) releasePointerCapture();
-            // AND A GHOST NOBODY CLAIMED GOES WITH THE PRESS. Offered on the way down, and if the
-            // gesture turned out to be an ordinary click there is no drag to have taken it -- leaving
-            // it would hand it to the next drag, which is how the old engine's controller once let a
-            // ghost outlive its drag and turn up on an unrelated screen.
-            if (!anyButtonDown()) pendingGhost = null;
         }
         return false;
     }

@@ -1353,11 +1353,19 @@ target-phase only — hears nothing at all.
 
 ### Two widgets that came out of this, and are not workbench-specific
 
-- **`DragGhost`** (`widget`) — the capsule under the cursor. `parkIn(host)` once, `follow(window,
-  icon, text)` per drag. It exists because `Drag.setGhost` takes any element by design, and
-  three rules are invisible in that signature: it must be in the tree before it can be promoted, it must
-  be `absolute`/`none` **from Java at IMPORTANT at construction** (the first layout runs before any rule
-  matches, and `UIText` latches its self-sizing there), and it must be registered per drag.
+- **`DragPreview`** (`ui.service`) — what a drag looks like under the pointer, as values: an icon, a label, a style
+  class, `grabbing()` for a thing carried at its own size, `text(..)` and `flipped(..)` to change it mid-drag.
+  Give it to the drag and nothing else: no element, nothing to park.
+
+  ```java
+  Drag.startWithPayload(row, x, y, payload, listener)
+          .preview(DragPreview.of("crystalgui:folder", "Problems").styled("__row-ghost__"));
+  ```
+
+  The **drag owns the ghost and the host draws it**: the shell while the drag's document is a window's client (so it
+  is never cut off at the window's edge, and a node payload that never leaves its document still gets it), else the
+  document itself through `DragGhostPresenter`, one `DragGhost` parked in its root. A drag with no preview shows
+  nothing: sliders, splits, scrubs, marquee, window move. `DragGhost` is only what draws; nobody constructs one.
 - **`InsertionMarker`** (`widget`) — the gap showing where a drop lands. `OVERLAY` floats over the
   list; `IN_FLOW` opens a real gap and everything after it shifts. `DockGroup` uses the first because its
   caret is not a sibling of the tabs; `StripeView` uses the second. It owns the two rules every reorder
