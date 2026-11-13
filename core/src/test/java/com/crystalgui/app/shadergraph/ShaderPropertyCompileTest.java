@@ -95,7 +95,7 @@ public class ShaderPropertyCompileTest {
     /**
      * <b>A Vector 3 property is declared as vec4 and read back as .xyz.</b>
      *
-     * <p>The landmine the plan found: {@code CgPropertiesParser} bans {@code vec3}, so a graph exposing
+     * <p>The landmine the plan found: {@code CgPropertyGrammar} bans {@code vec3}, so a graph exposing
      * one would have emitted a shader that fails to parse. This asserts both halves in one place — the
      * declaration and the read must agree or the GLSL is a type error instead.</p>
      */
