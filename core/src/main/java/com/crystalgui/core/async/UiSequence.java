@@ -388,7 +388,10 @@ public final class UiSequence implements Executor {
         return "UiSequence(" + name + ")";
     }
 
-    /** The UI pool: daemon threads, at the render thread's priority, since a document's frame is a frame. */
+    /**
+     * The UI pool: daemon threads at normal priority, set explicitly because a thread otherwise inherits its creator's,
+     * which would make a pool thread's priority depend on which sequence first needed it.
+     */
     private static final class Pool {
         static final ExecutorService EXECUTOR = create();
 
@@ -397,6 +400,7 @@ public final class UiSequence implements Executor {
             ThreadFactory factory = runnable -> {
                 Thread thread = new Thread(runnable, "cgui-ui-" + counter.incrementAndGet());
                 thread.setDaemon(true);
+                thread.setPriority(Thread.NORM_PRIORITY);
                 return thread;
             };
             return Executors.newCachedThreadPool(factory);
