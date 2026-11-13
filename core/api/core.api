@@ -4441,6 +4441,7 @@ com/crystalgui/core/signal/SignalBase
   method protected,final endEmit ()V
   method protected,final slots ()Ljava/util/List;
   method public <init> ()V
+  method public,final anyThread ()Lcom/crystalgui/core/signal/SignalBase;
   method public,final connectionCount ()I
   method public,final disconnectAll ()V
   method public,final hasListeners ()Z

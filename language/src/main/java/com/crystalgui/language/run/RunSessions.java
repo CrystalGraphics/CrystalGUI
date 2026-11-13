@@ -52,7 +52,7 @@ public final class RunSessions {
      * nothing called and is now true of nothing at all. Listeners still guard, and should: a null check
      * that can never fire is cheaper than a contract two classes have to agree about.</p>
      */
-    public final Signal.Value<Resource> onDidChange = new Signal.Value<>();
+    public final Signal.Value<Resource> onDidChange = new Signal.Value<Resource>().anyThread();
 
     /**
      * One script's current state, how many handlers it left registered, and when that run began.

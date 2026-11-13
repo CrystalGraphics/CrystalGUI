@@ -141,6 +141,22 @@ public class InlineDocumentTest {
     }
 
     @Test
+    public void aSignalDeclaredAnyThreadIsNeverRefused() throws Exception {
+        UiThread.enterHost();
+        Signal.Action reports = new Signal.Action().anyThread();
+        int[] heard = {0};
+        reports.connect(() -> heard[0]++);
+        Thread script = new Thread(reports::emit, "script");
+        script.start();
+        script.join();
+        onShell(() -> {
+            reports.emit();
+            return null;
+        });
+        assertEquals(2, heard[0]);
+    }
+
+    @Test
     public void workThatThrowsIsTheDocumentsFaultAndTheRestStillRunsAndTheRestStillRuns() {
         List<Throwable> faults = new ArrayList<>();
         viewport.onFault(faults::add);

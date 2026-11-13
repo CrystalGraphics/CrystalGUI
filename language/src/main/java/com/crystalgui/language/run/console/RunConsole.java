@@ -56,7 +56,7 @@ public final class RunConsole {
      * <p>So a listener may not touch the UI. Its only legitimate response is to mark something dirty and
      * let the next frame call {@link #drain}, which is exactly what the view does.</p>
      */
-    public final Signal.Action onDidChange = new Signal.Action();
+    public final Signal.Action onDidChange = new Signal.Action().anyThread();
 
     /** One line of the transcript, and everything the view needs to know about it. */
     public static final class Line {

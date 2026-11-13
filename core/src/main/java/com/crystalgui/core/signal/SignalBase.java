@@ -117,8 +117,28 @@ public abstract class SignalBase<L> {
         emitDepth++;
     }
 
+    /** Set by {@link #anyThread()}: the signal is not owned and is never checked. */
+    private volatile boolean anyThread;
+
+    /**
+     * Declares this signal one that other threads emit by design (a script's thread reporting its state): it binds to
+     * nothing and is never refused. Its listeners run on the emitting thread and must be safe there.
+     *
+     * <pre>{@code
+     * public final Signal.Value<Resource> onDidChange = new Signal.Value<Resource>().anyThread();
+     * }</pre>
+     *
+     * <p>Name the type argument: a diamond cannot infer through the call.</p>
+     */
+    @SuppressWarnings("unchecked")
+    public final <S extends SignalBase<L>> S anyThread() {
+        anyThread = true;
+        return (S) this;
+    }
+
     /** Binds to the first sequence that uses this signal; throws on use from anywhere else after. */
     private void checkSequence(String what) {
+        if (anyThread) return;
         UiSequence sequence = UiSequence.current();
         // A thread running an inline document's own work is its owner, which a signal used inside it belongs to as it
         // would to a sequence. Any other use on the host's thread, building a tree to hand on, binds nothing.
