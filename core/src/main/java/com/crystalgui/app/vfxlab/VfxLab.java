@@ -184,7 +184,7 @@ public class VfxLab extends UIElement {
     /** Metres along +x to the point on the floor effects aim at: where a beam hits and blasts. */
     private volatile float target = 30f;
     /** The lab's clock: the host's, scaled by the speed and held while paused. */
-    private double labClock, hostClock = Double.NaN;
+    private double hostClock = Double.NaN;
     private volatile int playing;
     private String message = "";
     private double messageUntil;
@@ -296,9 +296,11 @@ public class VfxLab extends UIElement {
         }
         if (live.isEmpty() && looping && !paused) spawn();
         double elapsed = Double.isNaN(hostClock) ? 0.0 : seconds - hostClock;
-        if (!paused) labClock += elapsed * speed;
         hostClock = seconds;
-        vfx.update(labClock);
+        scene.environment().set(CgView.main().environment());   // the game's settings and sky light
+        scene.clock().paused(paused).timeScale(speed);
+        scene.tick(elapsed);
+        vfx.update(scene.clock().seconds());
         vfx.submit();
         playing = live.size();
         if (floorMaterial == null) {

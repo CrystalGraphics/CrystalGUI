@@ -2,13 +2,7 @@ package com.crystalgui.app.vfxlab;
 
 import com.crystalgraphics.render.scene.CgScene;
 import com.crystalgraphics.render.view.CgView;
-import com.crystalgraphics.render.CgRenderer;
-import com.crystalgraphics.platform.rhi.CgExternalTarget;
 import com.crystalgraphics.api.texture.CgTexture;
-import com.crystalgraphics.api.texture.CgTextures;
-import com.crystalgraphics.gpu.resource.CgTexture2D;
-import com.crystalgraphics.gpu.resource.CgTextureDesc;
-import com.crystalgraphics.platform.rhi.format.CgFormat;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
 import com.crystalgraphics.camera.CgCamera;
@@ -24,8 +18,6 @@ import com.crystalgui.widget.text.UIText;
 import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
-import java.util.ArrayList;
-import java.util.List;
 import java.util.Locale;
 
 /**
@@ -46,8 +38,9 @@ final class VfxViewport extends UIElement {
     private static final float SPRINT = 4f;
     /** Metres a wheel notch. */
     private static final float DOLLY = 2f;
-    /** Draws a replaced target outlives its replacement: the UI may still present a frame recorded against it. */
-    private static final int RETIRE_DRAWS = 4;
+
+    /** materials/grid.shader's grey, what the picture is cleared to. */
+    private static final int GRID_GREY = 0xFF3D3D3D;
     /** Nanoseconds the frame rate is counted over. */
     private static final long FPS_WINDOW = 500_000_000L;
     private static final float START_YAW = 0.62f, START_PITCH = -0.23f;
@@ -66,28 +59,8 @@ final class VfxViewport extends UIElement {
     /** The eye, from the point {@link #draw} is given. */
     private volatile float eyeX = START_X, eyeY = START_Y, eyeZ = START_Z;
     private float dragYaw, dragPitch;
-    /** A colour and depth of the view's size, and the two as the stages draw into them. */
-    private record View(CgTexture2D colour, CgTexture2D depth, CgExternalTarget target) {
-        static View of(int width, int height) {
-            CgTexture2D colour = CgTextures.of("vfx_lab_viewport", CgTextureDesc.of(width, height, CgFormat.RGBA8_UNORM));
-            CgTexture2D depth = CgTextures.of("vfx_lab_viewport.depth",
-                    CgTextureDesc.of(width, height, CgFormat.DEPTH32_FLOAT_STENCIL8));
-            return new View(colour, depth, CgTextures.target("vfx_lab_viewport", colour, depth));
-        }
-
-        void release() {
-            colour.release();
-            depth.release();
-        }
-    }
-
-    @Nullable
-    private View target;
     @Nullable
     private volatile CgTexture picture;
-    private final List<View> retired = new ArrayList<>();
-    private final List<Long> retiredAt = new ArrayList<>();
-    private long draws;
     private final UIText stats = new UIText("");
     private long fpsSince, fpsDraws;
     private volatile int fps, particles;
@@ -169,13 +142,12 @@ final class VfxViewport extends UIElement {
     }
 
     /**
-     * Draws the lab's scene from the eye, relative to ({@code x}, {@code y}, {@code z}), into the viewport's target, on
+     * Draws the lab's scene from the eye, relative to ({@code x}, {@code y}, {@code z}), into the lab view's picture, on
      * the render thread after the frame's own world. {@code width} x {@code height} is the window's: the view renders at
      * it and is scaled into the element.
      */
     void draw(int width, int height, double x, double y, double z) {
         if (width <= 0 || height <= 0) return;
-        draws++;
         long now = System.nanoTime();
         if (++fpsDraws == 1) fpsSince = now;
         if (now - fpsSince >= FPS_WINDOW) {
@@ -183,19 +155,6 @@ final class VfxViewport extends UIElement {
             fpsDraws = 1;
             fpsSince = now;
         }
-        while (!retired.isEmpty() && draws - retiredAt.get(0) > RETIRE_DRAWS) {
-            retired.remove(0).release();
-            retiredAt.remove(0);
-        }
-        if (target == null || target.target().width() != width || target.target().height() != height) {
-            if (target != null) {
-                retired.add(target);
-                retiredAt.add(draws);
-            }
-            target = View.of(width, height);
-        }
-        // materials/grid.shader's grey.
-        CgRenderer.clear(target.target(), true, 0.239f, 0.239f, 0.239f, 1f, true, 0.0, false, 0);
 
         double atX = x + eyeX, atY = y + eyeY, atZ = z + eyeZ;
         float cosPitch = (float) Math.cos(pitch);
@@ -211,9 +170,8 @@ final class VfxViewport extends UIElement {
         }
 
         labView.camera().set(atX, atY, atZ, view, projection);
-        labView.environment().set(CgView.main().environment());   // the game's clock, settings and sky light
-        labView.renderInto(target.target());
-        picture = target.colour();
+        // Under the lab scene's environment and clock, on materials/grid.shader's grey
+        picture = labView.renderPicture(width, height, GRID_GREY);
         particles = CgVfxSystem.particlesDrawn(labView);
     }
 
@@ -235,14 +193,10 @@ final class VfxViewport extends UIElement {
         return eyeZ;
     }
 
-    /** Frees the target. On the render thread. */
+    /** Frees the lab view's picture. On the render thread. */
     void release() {
         picture = null;
-        if (target != null) target.release();
-        target = null;
-        for (View old : retired) old.release();
-        retired.clear();
-        retiredAt.clear();
+        labView.releasePicture();
     }
 
     @Override
@@ -252,7 +206,7 @@ final class VfxViewport extends UIElement {
         if (w <= 0f || h <= 0f) return;
         aspect = w / h;
         CgTexture texture = picture;
-        // v flipped: a target's origin is bottom-left.
+        // v flipped: a picture's origin is bottom-left.
         if (texture != null) ctx.drawImage(texture, 0f, 0f, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
         paintGizmo(ctx, w - GIZMO_INSET, GIZMO_INSET);
     }
