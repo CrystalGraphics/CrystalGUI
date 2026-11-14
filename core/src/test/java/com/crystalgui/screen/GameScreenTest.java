@@ -2,8 +2,8 @@ package com.crystalgui.screen;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
-import com.crystalgraphics.platform.service.CgContainers;
-import com.crystalgraphics.platform.service.CgItemStack;
+import com.crystalgraphics.mc.container.CgContainers;
+import com.crystalgraphics.mc.item.CgItemStack;
 import com.crystalgui.app.screens.InventoryScreen;
 import com.crystalgui.app.screens.ScreenExample;
 import com.crystalgui.core.data.ReadOnlyVec2f;

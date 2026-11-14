@@ -1,7 +1,7 @@
 package com.crystalgui.screen;
 
 import com.crystalgraphics.job.CgHostThread;
-import com.crystalgraphics.platform.service.CgContainers;
+import com.crystalgraphics.mc.container.CgContainers;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.ui.dom.UIDocument;
 
