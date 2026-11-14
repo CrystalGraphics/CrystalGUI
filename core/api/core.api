@@ -9619,13 +9619,27 @@ com/crystalgui/screen/CgUiScreen$Mode
   method public,static of (ZZZZZ)Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/screen/CgUiScreen$Mode;
   method public,static values ()[Lcom/crystalgui/screen/CgUiScreen$Mode;
+com/crystalgui/screen/ContainerInteraction
+  access public,final
+  extends java/lang/Object
+  field public,static,final NONE I
+  method public <init> (Ljava/util/function/Supplier;Ljava/util/function/IntPredicate;Ljava/util/function/Consumer;Ljava/util/function/LongSupplier;)V
+  method public dragSlots ()Ljava/util/List;
+  method public dragging ()Z
+  method public dropKey (IZ)Z
+  method public hotbarKey (II)Z
+  method public move (I)V
+  method public offhandKey (I)Z
+  method public press (IIZ)V
+  method public release (IIZ)V
 com/crystalgui/screen/ContainerView
   access public,final
   extends java/lang/Object
-  field public,final onChanged Lcom/crystalgui/core/signal/Signal$Value;
-  method public click (IILcom/crystalgraphics/platform/service/CgContainers$Click;)V
+  field public,final onUpdate Lcom/crystalgui/core/signal/Signal$Value;
+  method public act (Lcom/crystalgraphics/mc/container/Action;)V
   method public close ()V
-  method public menu ()Lcom/crystalgraphics/platform/service/CgContainers$Menu;
+  method public interaction ()Lcom/crystalgui/screen/ContainerInteraction;
+  method public menu ()Lcom/crystalgraphics/mc/container/CgContainers$Menu;
   method public,static of (Lcom/crystalgui/screen/ScreenContext;)Lcom/crystalgui/screen/ContainerView;
 com/crystalgui/screen/HitRegions
   access public,final

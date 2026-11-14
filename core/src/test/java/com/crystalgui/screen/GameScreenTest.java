@@ -2,8 +2,13 @@ package com.crystalgui.screen;
 
 import com.crystalgraphics.platform.CgPlatform;
 import com.crystalgraphics.platform.input.CgKeyCodes;
+import com.crystalgraphics.mc.container.Action;
+import com.crystalgraphics.mc.container.Capabilities;
 import com.crystalgraphics.mc.container.CgContainers;
+import com.crystalgraphics.mc.container.ClickType;
+import com.crystalgraphics.mc.container.SlotKind;
 import com.crystalgraphics.mc.item.CgItemStack;
+import com.crystalgraphics.serialization.nbt.CgNbtCompound;
 import com.crystalgui.app.screens.InventoryScreen;
 import com.crystalgui.app.screens.ScreenExample;
 import com.crystalgui.core.data.ReadOnlyVec2f;
@@ -19,7 +24,6 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertArrayEquals;
@@ -185,23 +189,29 @@ public class GameScreenTest {
     /** The player's menu as the game would answer it: 46 slots, a stack of stone in the first of the hotbar, coal carried. */
     private static CgContainers.Host menuHost(int windowId, String type, List<int[]> clicks) {
         return new CgContainers.Host() {
-            @Override
-            public CgContainers.Menu menu() {
-                List<CgContainers.Slot> slots = new ArrayList<>();
-                for (int i = 0; i < 46; i++) {
-                    slots.add(new CgContainers.Slot(i, i == 36 ? CgItemStack.of("minecraft:stone", 16) : CgItemStack.EMPTY));
-                }
-                return new CgContainers.Menu(windowId, type, slots, CgItemStack.of("minecraft:coal", 2), Map.of());
+            @Override public boolean present() { return true; }
+            @Override public int id() { return windowId; }
+            @Override public String type() { return type; }
+            @Override public String title() { return ""; }
+            @Override public int size() { return 46; }
+            @Override public CgContainers.Layout layout(int slot) {
+                return new CgContainers.Layout(0, slot, 0, 0, SlotKind.CONTAINER, 64);
             }
-
-            @Override
-            public void click(int containerId, int slot, int button, CgContainers.Click click) {
-                clicks.add(new int[]{containerId, slot, button, click.ordinal()});
+            @Override public int stamp(int slot) { return stack(slot).hashCode(); }
+            @Override public CgItemStack stack(int slot) {
+                return slot == 36 ? CgItemStack.of("minecraft:stone", 16) : CgItemStack.EMPTY;
             }
-
-            @Override
-            public void close() {
+            @Override public boolean canTake(int slot) { return true; }
+            @Override public int carriedStamp() { return carried().hashCode(); }
+            @Override public CgItemStack carried() { return CgItemStack.of("minecraft:coal", 2); }
+            @Override public boolean mayPlace(int slot, CgItemStack stack) { return true; }
+            @Override public CgNbtCompound state() { return new CgNbtCompound(); }
+            @Override public boolean act(int id, Action action) {
+                Action.Click click = (Action.Click) action;
+                clicks.add(new int[]{id, click.slot(), click.button(), click.type().ordinal()});
+                return true;
             }
+            @Override public Capabilities capabilities() { return Capabilities.NONE; }
         };
     }
 
@@ -220,10 +230,13 @@ public class GameScreenTest {
             assertEquals(0, document.getElementById(InventoryScreen.slotId(37)).childCount());
             assertEquals("coal x2", ((UIText) document.getElementById("carried")).text());
 
-            document.input().send(stone, new MouseEvent.Down(stone, new ReadOnlyVec2f(new Vector2f()), 0, 1));
+            ReadOnlyVec2f at = new ReadOnlyVec2f(new Vector2f());
+            document.input().send(stone, new MouseEvent.Down(stone, at, 0, 1));
+            assertEquals("the cursor carries coal: a press only starts a drag", 0, clicks.size());
+            document.input().send(stone, new MouseEvent.Up(stone, at, 0, 1, true));
 
             assertEquals(1, clicks.size());
-            assertArrayEquals(new int[]{0, 36, 0, CgContainers.Click.PICKUP.ordinal()}, clicks.get(0));
+            assertArrayEquals(new int[]{0, 36, 0, ClickType.PICKUP.ordinal()}, clicks.get(0));
             screen.owner().hidden();
         } finally {
             CgPlatform.provide(CgContainers.HOST, null);

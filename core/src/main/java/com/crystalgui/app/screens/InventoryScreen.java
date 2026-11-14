@@ -3,17 +3,18 @@ package com.crystalgui.app.screens;
 import com.crystalgraphics.platform.input.CgKeyBindings;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgraphics.mc.container.CgContainers;
 import com.crystalgraphics.mc.item.CgItemStack;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.screen.CgUiScreen;
+import com.crystalgui.screen.ContainerInteraction;
 import com.crystalgui.screen.ContainerView;
 import com.crystalgui.screen.ScreenContext;
 import com.crystalgui.screen.ScreenKind;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
+import com.crystalgui.ui.event.EventTarget;
 import com.crystalgui.widget.text.UIText;
 
 /**
@@ -124,26 +125,52 @@ public final class InventoryScreen {
     private static void bind(ScreenContext screen) {
         UIDocument document = screen.document();
         ContainerView view = ContainerView.of(screen);
-        for (int i = 0; i < SLOTS; i++) {
-            int index = i;
-            document.getElementById(slotId(i)).onMouseDown.subscribe((slot, press) -> {
-                int button = press.getButtonId();
-                boolean shift = CgModifiers.hasShift(document.input().modifiers());
-                if (button == CgMouseCodes.MIDDLE_BUTTON) view.click(index, button, CgContainers.Click.CLONE);
-                else view.click(index, button, shift ? CgContainers.Click.QUICK_MOVE : CgContainers.Click.PICKUP);
-            }, false, true);
-        }
+        ContainerInteraction input = view.interaction();
+        UIElement root = screen.root();
+        UIElement panel = (UIElement) document.getElementById(slotId(0)).parent();
+        int[] hovered = {ContainerInteraction.NONE};
+        // one place answers every gesture: the slot under the pointer is found from the event's target
+        root.onMouseDown.subscribe((el, e) -> input.press(slotAt(e.getTarget(), panel), e.getButtonId(), shift(document)), false, true);
+        root.onMouseUp.subscribe((el, e) -> input.release(slotAt(e.getTarget(), panel), e.getButtonId(), shift(document)), false, true);
+        root.onMouseMove.subscribe((el, e) -> {
+            hovered[0] = slotAt(e.getTarget(), panel);
+            input.move(hovered[0]);
+        }, false, true);
+        root.onKeyDown.subscribe((el, e) -> {
+            int key = e.getKeyCode();
+            if (key >= CgKeyCodes.KEY_1 && key <= CgKeyCodes.KEY_9) input.hotbarKey(hovered[0], key - CgKeyCodes.KEY_1);
+            else if (key == CgKeyCodes.KEY_F) input.offhandKey(hovered[0]);
+            else if (key == CgKeyCodes.KEY_Q) input.dropKey(hovered[0], CgModifiers.hasCtrl(document.input().modifiers()));
+        }, false, true);
+
         UIText carried = (UIText) document.getElementById("carried");
-        view.onChanged.connect(menu -> {
-            if (menu == null) return;
+        view.onUpdate.connect(update -> {
+            if (update.closed()) return;
+            CgContainers.Menu menu = update.menu();
             // a container the server opened (a chest, a furnace) is another screen's
             if (!menu.isPlayerInventory()) {
                 screen.close();
                 return;
             }
-            for (int i = 0; i < SLOTS && i < menu.slots().size(); i++) show(document.getElementById(slotId(i)), menu.slot(i).stack());
-            carried.setText(menu.carried().isEmpty() ? "" : name(menu.carried()) + " x" + menu.carried().count());
+            for (int i : update.slots()) {
+                if (i < SLOTS) show(document.getElementById(slotId(i)), menu.slot(i).stack());
+            }
+            if (update.carried()) carried.setText(menu.carried().isEmpty() ? "" : name(menu.carried()) + " x" + menu.carried().count());
         });
+    }
+
+    private static boolean shift(UIDocument document) {
+        return CgModifiers.hasShift(document.input().modifiers());
+    }
+
+    /** The menu slot under {@code target}, {@link ContainerInteraction#NONE} on the panel between slots, {@link CgContainers#OUTSIDE} beyond it. */
+    private static int slotAt(EventTarget target, UIElement panel) {
+        for (UIElement e = target instanceof UIElement ? (UIElement) target : null; e != null;
+             e = e.parent() instanceof UIElement ? (UIElement) e.parent() : null) {
+            if (e.hasClass(SLOT)) return Integer.parseInt(e.getId().substring("slot-".length()));
+            if (e == panel) return ContainerInteraction.NONE;
+        }
+        return CgContainers.OUTSIDE;
     }
 
     /** What a slot shows of {@code stack}: its item's first letters and its count, which items drawn replace. */
