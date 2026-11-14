@@ -1384,8 +1384,8 @@ badge.close();   // and it stops
   play; `CgRehearsal.active()` says when it is one.
 - Everything a stage's canvas draws (images, lines, text, world-following widgets): CrystalGraphics'
   [`docs/CANVAS.md`](../CrystalGraphics/docs/CANVAS.md).
-- A world-space effect belongs on CrystalGraphics' world stages instead (`CgRenderStage.WORLD_OPAQUE`, or
-  `CgWorldRenderer`); CrystalGraphics' [`docs/SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Drawing from your
+- A world-space effect belongs in CrystalGraphics' scene or on its world stages instead (`CgScene.client()`,
+  `CgRenderStage.TRANSLUCENT`); CrystalGraphics' [`docs/SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Drawing from your
   mod*.
 
 ## 12. Cheat sheet

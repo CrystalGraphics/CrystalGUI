@@ -8,7 +8,7 @@ import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgSystemInput;
 import com.crystalgraphics.platform.service.CgScreens;
 import com.crystalgraphics.render.CgFrameClock;
-import com.crystalgraphics.render.graph.CgRehearsal;
+import com.crystalgraphics.lifecycle.rehearsal.CgRehearsal;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgraphics.trace.CgTrace;

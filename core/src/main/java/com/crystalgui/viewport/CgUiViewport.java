@@ -295,7 +295,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
 
     /** {@link #frame(CgStageFrame, Content)} with a delta already read from {@link #advance()}, for a host that ticks with it. */
     public boolean frame(CgStageFrame stage, float deltaSeconds, Content content) {
-        return frame(stage, deltaSeconds, stage.host().width(), stage.host().height(), content);
+        return frame(stage, deltaSeconds, stage.width(), stage.height(), content);
     }
 
     /**

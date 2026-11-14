@@ -3,7 +3,7 @@ package com.crystalgui.render;
 import com.crystalgui.core.trace.FrameLog;
 import com.crystalgui.core.trace.FrameStats;
 import com.crystalgraphics.compute.ops.CgGpuOps;
-import com.crystalgraphics.render.world.CgPipelinePrecache;
+import com.crystalgraphics.render.precache.CgPipelinePrecache;
 import org.jspecify.annotations.Nullable;
 
 import java.util.ArrayList;

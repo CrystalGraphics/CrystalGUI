@@ -233,9 +233,9 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     /** The scene's picture, on the SCREEN stage the harness fires over a 2D scene. */
     private void paint(CgStageFrame stage) {
-        int screenHeight = stage.host().height();
+        int screenHeight = stage.height();
         CgUiPaintContext paint = view.paintContext();
-        paint.recordFrame(stage.host().width(), screenHeight);
+        paint.recordFrame(stage.width(), screenHeight);
 
         drawStudyStrip(paint);
 

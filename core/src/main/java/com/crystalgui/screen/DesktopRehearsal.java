@@ -1,6 +1,8 @@
 package com.crystalgui.screen;
 
-import com.crystalgraphics.render.graph.CgRehearsal;
+import com.crystalgraphics.lifecycle.rehearsal.CgRehearsal;
+import com.crystalgraphics.loading.CgLoadingScreen;
+import com.crystalgraphics.render.host.CgStageHost;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
@@ -15,7 +17,7 @@ import javax.annotation.Nullable;
 
 /**
  * The desktop rehearsed behind the loading screen, as CrystalGraphics rehearses a move: {@link CgRenderStage#SCREEN}
- * fired into the rehearsal's hidden target with a throwaway desktop on it, through the path a real open takes (the
+ * fired into the rehearsal's hidden target, at the window's size, with a throwaway desktop on it, through the path a real open takes (the
  * stage, the presenter, the composite), until the JIT has settled. The first open then finds its pipelines, blur
  * targets, rasters and compiled code in place, where its first paint was a stall of hundreds of ms inside the open
  * animation.
@@ -43,7 +45,7 @@ final class DesktopRehearsal {
     private static final int MIN_PASSES = 5, MAX_PASSES = 120, QUIET_WINDOW = 4;
     private static final float DELTA = 1f / 60f;
 
-    private final CgRehearsal rehearsal = CgRehearsal.of(pass -> CgRenderStage.SCREEN.rehearse())
+    private final CgRehearsal rehearsal = CgRehearsal.of(DesktopRehearsal::fire)
             .minPasses(MIN_PASSES).maxPasses(MAX_PASSES).window(QUIET_WINDOW);
     /** Its own, inline: closed when it settles, so the throwaway desktop's targets and rasters go with it. */
     @Nullable
@@ -79,6 +81,12 @@ final class DesktopRehearsal {
         }
         viewport.frame(stage, DELTA, content);
         passes++;
+    }
+
+    /** SCREEN fired into the pass's own target at the window's size: its every renderer, this one painting the rehearsal. */
+    private static void fire(CgRehearsal.Pass pass) {
+        int w = Math.max(1, CgLoadingScreen.windowWidth()), h = Math.max(1, CgLoadingScreen.windowHeight());
+        CgStageHost.fireOverlay(CgRenderStage.SCREEN, w, h, 1f, pass.hiddenTarget(w, h));
     }
 
     private static Desktop build() {

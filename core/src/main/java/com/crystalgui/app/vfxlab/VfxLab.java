@@ -1,5 +1,8 @@
 package com.crystalgui.app.vfxlab;
 
+import com.crystalgraphics.render.scene.renderer.CgSceneRenderer;
+import com.crystalgraphics.render.view.CgView;
+import com.crystalgraphics.render.scene.CgScene;
 import com.crystalgui.screen.CgUiScreen;
 import com.crystalgraphics.platform.input.CgClipboard;
 import com.crystalgraphics.api.material.CgMaterial;
@@ -14,8 +17,7 @@ import com.crystalgraphics.render.post.CgPostStack;
 import com.crystalgraphics.render.post.bloom.CgBloom;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.scene.sort.CgSortLayer;
-import com.crystalgraphics.render.world.CgPipelinePrecache;
-import com.crystalgraphics.render.world.CgWorldRenderer;
+import com.crystalgraphics.render.precache.CgPipelinePrecache;
 import com.crystalgraphics.vfx.CgVfxEffect;
 import com.crystalgraphics.vfx.CgVfxRegistry;
 import com.crystalgraphics.vfx.CgVfxSystem;
@@ -130,10 +132,12 @@ public class VfxLab extends UIElement {
     /** Seconds a status message stays. */
     private static final double MESSAGE_SECONDS = 3.0;
 
-    private final CgVfxSystem vfx = new CgVfxSystem();
+    /** The lab's scene: its effects, floor and sky, apart from the game's world. */
+    private final CgScene scene = new CgScene();
+    private final CgVfxSystem vfx = new CgVfxSystem().scene(scene);
     private final Queue<Runnable> pending = new ConcurrentLinkedQueue<>();
     private final List<CgVfxEffect<?>> live = new ArrayList<>();
-    private final VfxViewport viewport = new VfxViewport();
+    private final VfxViewport viewport = new VfxViewport(scene);
     private final CgMesh floor = CgMesh.build(CgVertexFormat.SPATIAL, m -> CgMeshShapes.plane(m, 1, 1, FLOOR_FADE * 2.5f, FLOOR_FADE * 2.5f));
     private final CgMesh sky = CgMeshShapes.sphere(24, 32);
     @Nullable
@@ -294,9 +298,8 @@ public class VfxLab extends UIElement {
         double elapsed = Double.isNaN(hostClock) ? 0.0 : seconds - hostClock;
         if (!paused) labClock += elapsed * speed;
         hostClock = seconds;
-        CgWorldRenderer world = CgWorldRenderer.get();
         vfx.update(labClock);
-        vfx.submit(world);
+        vfx.submit();
         playing = live.size();
         if (floorMaterial == null) {
             floorMaterial = CgMaterial.load(FLOOR_SHADER).instance().set1f("_Fade", FLOOR_FADE);
@@ -310,10 +313,10 @@ public class VfxLab extends UIElement {
         if (!stage.ready()) return;
         double x = viewport.eyeX(), z = viewport.eyeZ();
         // Under the eye, so flying never reaches its edge; the grid's lines are absolute and hold still.
-        world.draw(floor, floorMaterial).at(x, LAB_Y, z).layer(CgSortLayer.BACKGROUND).submit();
+        scene.once().mesh(floor, floorMaterial).at(x, LAB_Y, z).layer(CgSortLayer.BACKGROUND).add();
         // Round the eye.
-        world.draw(sky, skyMaterial).at(x, LAB_Y + 1.5 + viewport.eyeY(), z).transform(SKY_SCALE)
-                .layer(CgSortLayer.BACKGROUND).submit();
+        scene.once().mesh(sky, skyMaterial).at(x, LAB_Y + 1.5 + viewport.eyeY(), z).transform(SKY_SCALE)
+                .layer(CgSortLayer.BACKGROUND).add();
     }
 
     /** Moves the sky and floor a step toward day or night: the whole change in about 0.4 s. */
@@ -361,7 +364,7 @@ public class VfxLab extends UIElement {
             }).whilePaused(true);
             // After the world's firing, whose size the viewport renders at; before the desktop paints over it
             viewportDraw = CgRenderStage.HUD.register(CgUiScreen.ORDER - 1,
-                    frame -> lab.drawViewport(frame.host().width(), frame.host().height()));
+                    frame -> lab.drawViewport(frame.width(), frame.height()));
         }
 
         @Override
@@ -498,7 +501,7 @@ public class VfxLab extends UIElement {
     private ConfiguratorPanel renderingPanel() {
         ConfiguratorPanel panel = new ConfiguratorPanel();
         panel.addClass("lab-params");
-        CgWorldRenderer world = CgWorldRenderer.get();
+        CgView lab = viewport.view();
         CgBloom bloom = CgPostStack.get().bloom();
         CgVfxDemoControls controls = CgVfxDemoControls.get();
 
@@ -510,10 +513,10 @@ public class VfxLab extends UIElement {
         ConfigForm post = panel.form().group("Post processing");
         Configurator glow = post.prop(ConfigDescriptor.number("glow", "Glow").range(0f, 20f).decimals(2)
                         .tooltip("How much a glowing layer adds into the HDR scene"),
-                Property.derived(() -> (double) world.sceneEmission(),
-                        v -> pending.add(() -> world.sceneEmission((float) (double) v))));
-        resetTo(glow, () -> world.sceneEmission() != CgWorldRenderer.SCENE_EMISSION,
-                () -> world.sceneEmission(CgWorldRenderer.SCENE_EMISSION));
+                Property.derived(() -> (double) lab.flag(CgSceneRenderer.SCENE_EMISSION),
+                        v -> pending.add(() -> lab.override(CgSceneRenderer.SCENE_EMISSION, (float) (double) v))));
+        resetTo(glow, () -> lab.flag(CgSceneRenderer.SCENE_EMISSION) != CgSceneRenderer.SCENE_EMISSION.get(),
+                () -> lab.clearOverride(CgSceneRenderer.SCENE_EMISSION));
         post.prop(ConfigDescriptor.bool("bloom", "Bloom"), Property.derived(() -> bloom.intensity() > 0f, on -> pending.add(() -> {
             if (!on && bloom.intensity() > 0f) bloomIntensity = bloom.intensity();
             bloom.intensity(on ? bloomIntensity : 0f);

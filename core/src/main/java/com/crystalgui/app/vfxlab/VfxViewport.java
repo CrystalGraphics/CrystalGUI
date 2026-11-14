@@ -1,5 +1,7 @@
 package com.crystalgui.app.vfxlab;
 
+import com.crystalgraphics.render.scene.CgScene;
+import com.crystalgraphics.render.view.CgView;
 import com.crystalgraphics.render.CgRenderer;
 import com.crystalgraphics.platform.rhi.CgExternalTarget;
 import com.crystalgraphics.api.texture.CgTexture;
@@ -9,9 +11,7 @@ import com.crystalgraphics.gpu.resource.CgTextureDesc;
 import com.crystalgraphics.platform.rhi.format.CgFormat;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgraphics.render.stage.CgHostFrame;
 import com.crystalgraphics.camera.CgCamera;
-import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.vfx.CgVfxSystem;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.Box;
@@ -29,7 +29,8 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * The lab's 3D view: a camera of its own, the world stages fired again from it into textures this element paints.
+ * The lab's 3D view: a view of the lab's own scene, drawn whole from a camera of its own into textures this element
+ * paints.
  * It moves as Roblox Studio's and Unity's scene views do: drag looks around, the wheel dollies, and once clicked WASD
  * flies where it looks, Space up and Shift down. {@link VfxLab} owns it.
  */
@@ -37,7 +38,6 @@ final class VfxViewport extends UIElement {
 
     static final Name NAME = Name.of("vfxviewport");
 
-    private static final CgRenderStage[] WORLD = {CgRenderStage.WORLD_OPAQUE, CgRenderStage.WORLD_TRANSPARENT};
     private static final float LOOK_PER_PIXEL = 0.005f;
     private static final float PITCH_LIMIT = 1.55f;
     /** Metres a second. */
@@ -58,7 +58,9 @@ final class VfxViewport extends UIElement {
     private static final int[] GIZMO_COLORS = {0xFFFF3352, 0xFF4F8DFF, 0xFF8CDB00};
 
     private final Matrix4f view = new Matrix4f(), projection = new Matrix4f();
-    private final Matrix4f hostView = new Matrix4f(), hostProjection = new Matrix4f();
+    private final Matrix4f hostProjection = new Matrix4f();
+    /** The lab's scene as this element shows it: its own camera, histories and textures. */
+    private final CgView labView;
     /** Yaw 0 looks along -z; positive pitch looks up. Opens on the point {@link #draw} is given, from 18 m away. */
     private volatile float yaw = START_YAW, pitch = START_PITCH, aspect = 1f;
     /** The eye, from the point {@link #draw} is given. */
@@ -90,7 +92,9 @@ final class VfxViewport extends UIElement {
     private long fpsSince, fpsDraws;
     private volatile int fps, particles;
 
-    VfxViewport() {
+    /** The lab's view of {@code scene}. */
+    VfxViewport(CgScene scene) {
+        labView = CgView.of(scene);
         super(NAME);
         setFocusPolicy(FocusPolicy.CLICK);
         UIText hint = new UIText("Drag to look  ·  click, then WASD to fly, Ctrl to sprint  ·  Space / Shift up and down  ·  wheel to dolly");
@@ -165,10 +169,9 @@ final class VfxViewport extends UIElement {
     }
 
     /**
-     * Draws the world from the eye, relative to ({@code x}, {@code y}, {@code z}), into the viewport's target, on the render
-     * thread after the frame's own world firing, whose camera it puts back. {@code width} x {@code height} is that
-     * firing's size: the world renderer keeps its targets at one size, so the view renders at it and is scaled into
-     * the element.
+     * Draws the lab's scene from the eye, relative to ({@code x}, {@code y}, {@code z}), into the viewport's target, on
+     * the render thread after the frame's own world. {@code width} x {@code height} is the window's: the view renders at
+     * it and is scaled into the element.
      */
     void draw(int width, int height, double x, double y, double z) {
         if (width <= 0 || height <= 0) return;
@@ -199,14 +202,7 @@ final class VfxViewport extends UIElement {
         view.setLookAt(0f, 0f, 0f, (float) -Math.sin(yaw) * cosPitch, (float) Math.sin(pitch),
                 (float) -Math.cos(yaw) * cosPitch, 0f, 1f, 0f);
 
-        CgHostFrame first = WORLD[0].host();
-        CgCamera host = first.camera();
-        float tick = first.partialTick();
-        int hostWidth = first.width(), hostHeight = first.height();
-        CgExternalTarget hostTarget = first.target();
-        double hostX = host.x(), hostY = host.y(), hostZ = host.z();
-        hostView.set(host.view());
-        hostProjection.set(host.projection());
+        hostProjection.set(CgView.main().camera().projection());
         // The host's projection keeps its field of view and depth convention; only the aspect is the element's.
         if (hostProjection.m00() != 0f) {
             projection.set(hostProjection).m00(hostProjection.m00() * width / height / aspect);
@@ -214,16 +210,16 @@ final class VfxViewport extends UIElement {
             projection.setPerspective((float) Math.toRadians(60), aspect, 0.05f, 1000f);
         }
 
-        CgExternalTarget into = target.target();
-        for (CgRenderStage stage : WORLD) {
-            stage.host().set(0f, width, height, into).camera().set(atX, atY, atZ, view, projection);
-            stage.fireInto(into);
-        }
-        for (CgRenderStage stage : WORLD) {
-            stage.host().set(tick, hostWidth, hostHeight, hostTarget).camera().set(hostX, hostY, hostZ, hostView, hostProjection);
-        }
+        labView.camera().set(atX, atY, atZ, view, projection);
+        labView.environment().set(CgView.main().environment());   // the game's clock, settings and sky light
+        labView.renderInto(target.target());
         picture = target.colour();
-        particles = CgVfxSystem.particlesDrawn(into);
+        particles = CgVfxSystem.particlesDrawn(labView);
+    }
+
+    /** The lab's view: its flags and overrides are the lab's own, never the game's. */
+    CgView view() {
+        return labView;
     }
 
     /** Where the eye is, from the point {@link #draw} is given. */

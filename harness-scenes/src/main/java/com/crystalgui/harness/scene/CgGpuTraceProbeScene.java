@@ -1,5 +1,6 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.render.host.CgStageHost;
 import com.crystalgraphics.trace.CgFrameRecord;
 import com.crystalgraphics.trace.CgGpuTrace;
 import com.crystalgraphics.trace.CgTrace;
@@ -123,17 +124,17 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
     /** The load, executed before this returns: fired on a stage of its own, so a wait for the GPU after covers it. */
     private static void paint(HarnessContext ctx, int quads) {
         loadQuads = quads;
-        LOAD.fireOverlay(ctx.getScreenWidth(), ctx.getScreenHeight(), 1f, ctx.getTarget());
+        CgStageHost.fireOverlay(LOAD, ctx.getScreenWidth(), ctx.getScreenHeight(), 1f, ctx.getTarget());
     }
 
     /** Where the load draws: a stage of this scene's, fired from {@link #render}, not the harness's SCREEN. */
-    private static final CgRenderStage LOAD = CgRenderStage.define("crystalgui:gpu_trace_probe");
+    private static final CgRenderStage LOAD = CgStageHost.define("crystalgui:gpu_trace_probe");
     private static final CgUiRenderer.View VIEW = CgUiRenderer.openView();
     private static int loadQuads;
 
     static {
         LOAD.register(stage -> {
-            int w = stage.host().width(), h = stage.host().height();
+            int w = stage.width(), h = stage.height();
             CgUiPaintContext paint = VIEW.paintContext();
             paint.recordFrame(w, h);
             paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with

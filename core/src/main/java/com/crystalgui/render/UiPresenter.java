@@ -120,7 +120,7 @@ public final class UiPresenter {
     }
 
     private static boolean fits(CgStageFrame stage, @Nullable UiFrame frame) {
-        return frame != null && frame.width() == stage.host().width() && frame.height() == stage.host().height();
+        return frame != null && frame.width() == stage.width() && frame.height() == stage.height();
     }
 
     /** The picture over the stage's target, one premultiplied quad in the window's pixels; row 0 of a target is its bottom. */
