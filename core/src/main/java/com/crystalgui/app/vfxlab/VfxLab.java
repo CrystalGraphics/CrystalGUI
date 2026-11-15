@@ -13,7 +13,6 @@ import com.crystalgraphics.demo.CgVfxDemoControls;
 import com.crystalgraphics.frame.CgTickFunction;
 import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
-import com.crystalgraphics.render.post.CgPostStack;
 import com.crystalgraphics.render.post.bloom.CgBloom;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.scene.sort.CgSortLayer;
@@ -504,7 +503,7 @@ public class VfxLab extends UIElement {
         ConfiguratorPanel panel = new ConfiguratorPanel();
         panel.addClass("lab-params");
         CgView lab = viewport.view();
-        CgBloom bloom = CgPostStack.get().bloom();
+        CgBloom bloom = lab.post().bloom();   // the lab's own chain: the game's glow is left alone
         CgVfxDemoControls controls = CgVfxDemoControls.get();
 
         ConfigForm environment = panel.form().group("Environment");
