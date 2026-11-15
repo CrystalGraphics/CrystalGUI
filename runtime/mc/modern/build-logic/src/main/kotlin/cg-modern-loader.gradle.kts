@@ -136,6 +136,8 @@ dependencies {
     "runtimeOnly"(project(":taffy"))
     // CgFiles.YAML's library: the shipped jar carries it relocated, a dev run takes it from here.
     "runtimeOnly"("org.yaml:snakeyaml:2.7")
+    // CgMeshLoader reads glTF through it (compileOnly in core): a dev run loads a kit's .glb files, a shipped mod carries its own.
+    "runtimeOnly"("de.javagl:jgltf-model:2.0.4")
 
     // :language -- the grammars, ECJ and Rhino. ON `lang` AND NOT ON `main` since J8: the language stack
     // ships as its own jar, and this is what stops the host jar naming it.
@@ -429,6 +431,7 @@ afterEvaluate {
         configurations.findByName("additionalRuntimeClasspath")?.let { runtime ->
             dependencies.add(runtime.name, project(":runtime:mc:shared"))
             dependencies.add(runtime.name, "org.yaml:snakeyaml:2.7")
+            dependencies.add(runtime.name, "de.javagl:jgltf-model:2.0.4")
         }
     }
 }
