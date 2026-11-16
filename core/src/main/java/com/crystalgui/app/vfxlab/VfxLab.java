@@ -13,7 +13,7 @@ import com.crystalgraphics.demo.CgVfxDemoControls;
 import com.crystalgraphics.frame.CgTickFunction;
 import com.crystalgraphics.frame.CgTickGroup;
 import com.crystalgraphics.frame.CgWorld;
-import com.crystalgraphics.render.post.bloom.CgBloom;
+import com.crystalgraphics.render.post.settings.CgPostSettings;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.scene.sort.CgSortLayer;
 import com.crystalgraphics.render.precache.CgPipelinePrecache;
@@ -165,7 +165,7 @@ public class VfxLab extends UIElement {
     private volatile boolean night;
     private float nightMix;
     /** Bloom's intensity while switched off, given back when it comes on. */
-    private volatile float bloomIntensity = CgBloom.INTENSITY;
+    private volatile float bloomIntensity = CgPostSettings.DEFAULT_BLOOM_INTENSITY;
     /** The Rendering rows' reset marks and when each shows; checked every frame, since a harness key may move one. */
     private final List<UIElement> renderMarks = new ArrayList<>();
     private final List<BooleanSupplier> renderChanged = new ArrayList<>();
@@ -503,7 +503,7 @@ public class VfxLab extends UIElement {
         ConfiguratorPanel panel = new ConfiguratorPanel();
         panel.addClass("lab-params");
         CgView lab = viewport.view();
-        CgBloom bloom = lab.post().bloom();   // the lab's own chain: the game's glow is left alone
+        CgPostSettings bloom = lab.post().settings();   // the lab's own chain: the game's glow is left alone
         CgVfxDemoControls controls = CgVfxDemoControls.get();
 
         ConfigForm environment = panel.form().group("Environment");
@@ -518,19 +518,19 @@ public class VfxLab extends UIElement {
                         v -> pending.add(() -> lab.override(CgSceneRenderer.SCENE_EMISSION, (float) (double) v))));
         resetTo(glow, () -> lab.flag(CgSceneRenderer.SCENE_EMISSION) != CgSceneRenderer.SCENE_EMISSION.get(),
                 () -> lab.clearOverride(CgSceneRenderer.SCENE_EMISSION));
-        post.prop(ConfigDescriptor.bool("bloom", "Bloom"), Property.derived(() -> bloom.intensity() > 0f, on -> pending.add(() -> {
-            if (!on && bloom.intensity() > 0f) bloomIntensity = bloom.intensity();
-            bloom.intensity(on ? bloomIntensity : 0f);
+        post.prop(ConfigDescriptor.bool("bloom", "Bloom"), Property.derived(() -> bloom.bloomIntensity() > 0f, on -> pending.add(() -> {
+            if (!on && bloom.bloomIntensity() > 0f) bloomIntensity = bloom.bloomIntensity();
+            bloom.bloomIntensity(on ? bloomIntensity : 0f);
         })));
         Configurator intensity = post.prop(ConfigDescriptor.number("bloomIntensity", "Intensity").range(0f, 20f).decimals(2),
-                Property.derived(() -> (double) (bloom.intensity() > 0f ? bloom.intensity() : bloomIntensity), v -> pending.add(() -> {
+                Property.derived(() -> (double) (bloom.bloomIntensity() > 0f ? bloom.bloomIntensity() : bloomIntensity), v -> pending.add(() -> {
                     // Never 0: off is the switch above's.
                     bloomIntensity = (float) Math.max(0.01, v);
-                    if (bloom.intensity() > 0f) bloom.intensity(bloomIntensity);
+                    if (bloom.bloomIntensity() > 0f) bloom.bloomIntensity(bloomIntensity);
                 })));
-        resetTo(intensity, () -> (bloom.intensity() > 0f ? bloom.intensity() : bloomIntensity) != CgBloom.INTENSITY, () -> {
-            bloomIntensity = CgBloom.INTENSITY;
-            if (bloom.intensity() > 0f) bloom.intensity(CgBloom.INTENSITY);
+        resetTo(intensity, () -> (bloom.bloomIntensity() > 0f ? bloom.bloomIntensity() : bloomIntensity) != CgPostSettings.DEFAULT_BLOOM_INTENSITY, () -> {
+            bloomIntensity = CgPostSettings.DEFAULT_BLOOM_INTENSITY;
+            if (bloom.bloomIntensity() > 0f) bloom.bloomIntensity(CgPostSettings.DEFAULT_BLOOM_INTENSITY);
         });
 
         ConfigForm impact = panel.form().group("Impact");
