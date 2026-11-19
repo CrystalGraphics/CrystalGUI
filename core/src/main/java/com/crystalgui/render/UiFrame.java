@@ -3,7 +3,7 @@ package com.crystalgui.render;
 import com.crystalgraphics.render.graph.CgFrame;
 import com.crystalgraphics.render.graph.CgFrameBuilder;
 import com.crystalgraphics.render.graph.CgGraphTexture;
-import com.crystalgraphics.render.property.CgPropertyValues;
+import com.crystalgraphics.render.ui.property.CgPropertyValues;
 
 /**
  * One UI frame, recorded and built: the passes that paint the document into its picture, a texture of the paint
