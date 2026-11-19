@@ -10,6 +10,7 @@ import com.crystalgui.harness.scene.CgUiGalleryScene;
 import com.crystalgui.harness.scene.CgUiNewEngineGalleryScene;
 import com.crystalgui.harness.scene.CgUiSpriteStressScene;
 import com.crystalgui.harness.scene.CgUiStylingScene;
+import com.crystalgui.harness.scene.CgSvgCanvasScene;
 import com.crystalgui.harness.scene.CgUiSvgIconScene;
 import com.crystalgui.harness.scene.CgUiTextGammaScene;
 import com.crystalgui.harness.scene.CgUiTextScene;
@@ -187,6 +188,18 @@ public final class CrystalGuiHarness implements HarnessExtension {
                 .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
                 .build(),
             () -> new CgUiSvgIconScene()
+        );
+
+        reg.register(
+            SceneDescriptor.builder("ui-svg")
+                .description("cgui-svg-icon's study strip and icon grid on CrystalGraphics' canvas: truth.py and the grid's cost")
+                .lifecycleMode(SceneDescriptor.LifecycleMode.INTERACTIVE)
+                .category(SceneDescriptor.Category.SCENE)
+                .needsFbo(false)
+                .needsDepthBuffer(false)
+                .clearColor(0.1f, 0.1f, 0.1f, 1.0f)
+                .build(),
+            () -> new CgSvgCanvasScene()
         );
 
         reg.register(

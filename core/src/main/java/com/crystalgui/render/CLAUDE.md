@@ -237,8 +237,8 @@ things it deliberately does not implement and why none of them matters for icons
 > raster of the file sits. Strokes are cached too (max-blended), so a cached icon is textured quads only.
 > Larger draws take the direct path, where a cell is bigger than a pixel. Measured on the 48-icon grid:
 > 2.1 ms/frame cached against 4.2 ms drawing the cells directly, and no curve instances per frame at all
-> against 6,500. The testbed is the strip at the top of `--mode=cgui-svg-icon`; `plan/svg-fix/truth.py`
-> scores a capture; `-Dcrystalgui.svg.raster=false` draws everything direct for comparison.
+> against 6,500. The testbed is the strip at the top of `--mode=cgui-svg-icon` (`ui-svg` draws it on CrystalGraphics' canvas);
+> `plan/crystalgraphics/renderer/steps/UI7/truth.py` scores a capture against `SvgTruthRasterTest`'s rasters; `-Dcrystalgui.svg.raster=false` draws everything direct for comparison.
 >
 > **A drop shadow is drawn there too, under its group**: an element's `filter` that is a drop shadow resolves to
 > `SvgScene.DropShadow`, shared by the nodes it covers; `drawShadow` blurs their coverage once with the backdrop's
