@@ -1,7 +1,7 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgraphics.api.material.engine.CgPlacement;
 import com.crystalgraphics.render.canvas.CgCanvasGrid;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -120,7 +120,7 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
         // A fully transparent tint or a fully transparent line is a draw call that writes nothing.
         if ((tint >>> 24) == 0 || (argb >>> 24) == 0) return;
 
-        if (gpu == null) gpu = new CgCanvasGrid(CgCanvasMaterials.SCREEN);
+        if (gpu == null) gpu = new CgCanvasGrid(CgPlacement.SCREEN);
         gpu.size(width, height).cell(cellWidth, cellHeight).line(lineWidth).color(argb)
                 .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).apply();
         ctx.quad(gpu.material()).at(x, y).size(width, height).color(tint).submit();

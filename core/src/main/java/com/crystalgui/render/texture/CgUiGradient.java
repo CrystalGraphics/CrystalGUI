@@ -1,7 +1,7 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgraphics.api.material.engine.CgPlacement;
 import com.crystalgraphics.render.canvas.CgCanvasGradient;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 import java.util.ArrayList;
@@ -302,7 +302,7 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
         if (width <= 0f || height <= 0f) return;
         int tint = ctx.getColor();
         if ((tint >>> 24) == 0) return;
-        if (gpu == null) gpu = new CgCanvasGradient(CgCanvasMaterials.SCREEN);
+        if (gpu == null) gpu = new CgCanvasGradient(CgPlacement.SCREEN);
         gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).clearStops();
         if (radial != null) {
             centreInto(width, height, centre);

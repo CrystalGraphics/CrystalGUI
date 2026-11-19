@@ -1,5 +1,6 @@
 package com.crystalgui.gauntlet;
 
+import com.crystalgraphics.api.material.engine.CgEngineMaterials;
 import com.crystalgui.screen.CgUiScreen;
 import java.util.ArrayList;
 import java.util.List;
@@ -8,7 +9,6 @@ import java.util.TreeMap;
 
 import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.gauntlet.CgGauntletCapture;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgraphics.variable.CgVar;
@@ -187,7 +187,7 @@ public final class DesktopTest extends DesktopRun {
 
         private void draw(CgStageFrame frame) {
             // The canvas's image with no texture: its colour alone, the least a mod draws at a stage with.
-            frame.canvas().quad(CgCanvasMaterials.SCREEN.image()).at(4f, 4f).size(12f, 12f).color(MARK).submit();
+            frame.canvas().quad(CgEngineMaterials.IMAGE.screen()).at(4f, 4f).size(12f, 12f).color(MARK).submit();
         }
     }
 }

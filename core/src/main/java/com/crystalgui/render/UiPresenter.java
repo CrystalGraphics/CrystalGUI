@@ -1,6 +1,6 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
+import com.crystalgraphics.render.canvas.CgCanvasPrimitives;
 import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgraphics.trace.CgGpuTrace;
@@ -126,7 +126,7 @@ public final class UiPresenter {
     /** The picture over the stage's target, one premultiplied quad in the window's pixels; row 0 of a target is its bottom. */
     private void composite(CgStageFrame stage, UiFrame frame) {
         if (!composites) return;
-        stage.canvas().quad(CgCanvasMaterials.SCREEN.box()).texture(0, frame.picture())
+        stage.canvas().quad(CgCanvasPrimitives.box()).texture(0, frame.picture())
                 .custom2(CgShapeTable.PREMULTIPLIED).at(0f, 0f).size(frame.width(), frame.height()).uv(0f, 1f, 1f, 0f)
                 .submit();
     }

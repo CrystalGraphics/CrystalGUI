@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgraphics.api.material.engine.CgPlacement;
 import javax.annotation.Nullable;
 
 import lombok.Getter;
@@ -7,7 +8,6 @@ import lombok.Setter;
 import lombok.experimental.Accessors;
 
 import com.crystalgraphics.render.canvas.CgCanvasGlass;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -143,7 +143,7 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         CgCanvasGlass gpu = GLASS.get();
-        if (gpu == null) GLASS.set(gpu = new CgCanvasGlass(CgCanvasMaterials.SCREEN));
+        if (gpu == null) GLASS.set(gpu = new CgCanvasGlass(CgPlacement.SCREEN));
         gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
                 .tint(tintArgb).saturation(saturation).luminosity(luminosity)
                 .lens(bezel, ior).chromatic(chromatic)

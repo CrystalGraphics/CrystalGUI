@@ -1,5 +1,7 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.render.canvas.CgCanvasPrimitives;
+import com.crystalgraphics.api.material.engine.CgPlacement;
 import com.crystalgraphics.material.CgMaterialProxy;
 import com.crystalgraphics.camera.CgCamera;
 import com.crystalgraphics.gpu.resource.CgTextureAbstract;
@@ -15,7 +17,6 @@ import com.crystalgraphics.render.CgFrameClock;
 import com.crystalgraphics.render.canvas.CgCanvas;
 import com.crystalgraphics.render.canvas.CgCanvasBackdrop;
 import com.crystalgraphics.render.canvas.CgCanvasGlass;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgraphics.render.canvas.CgClipTable;
 import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.render.canvas.CgQuadBatch;
@@ -125,9 +126,9 @@ public final class CgUiPaintContext {
      * Every box: fills, textures, shapes, icons, composites. CrystalGraphics' shared instance, taken with the context
      * rather than at class load (precache loads this class before any graphics); no property is ever set on it.
      */
-    private final CgMaterial box = CgCanvasMaterials.SCREEN.box();
+    private final CgMaterial box = CgCanvasPrimitives.box();
     /** Every Bézier stroke, triangle and cell, unless {@link #withCurveMaterial} names another. */
-    private final CgMaterial curve = CgCanvasMaterials.SCREEN.curve();
+    private final CgMaterial curve = CgCanvasPrimitives.curve(CgPlacement.SCREEN);
     /** The curve material in force: {@link #curve}, or what {@link #withCurveMaterial} set. */
     private CgMaterialInterface curveMaterial = curve;
 

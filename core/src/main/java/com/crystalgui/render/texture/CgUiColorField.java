@@ -1,8 +1,8 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgraphics.api.material.engine.CgPlacement;
 import com.crystalgraphics.render.canvas.CgCanvasGradient;
 import com.crystalgraphics.render.canvas.CgCanvasGrid;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgui.render.CgUiPaintContext;
 
 /**
@@ -121,8 +121,8 @@ public final class CgUiColorField implements CgUiDrawable {
                      float x, float y, float width, float height) {
         if (width <= 0f || height <= 0f) return;
         if (gradient == null) {
-            gradient = new CgCanvasGradient(CgCanvasMaterials.SCREEN);
-            checker = new CgCanvasGrid(CgCanvasMaterials.SCREEN);
+            gradient = new CgCanvasGradient(CgPlacement.SCREEN);
+            checker = new CgCanvasGrid(CgPlacement.SCREEN);
         }
         int tint = ctx.getColor();
         switch (mode) {

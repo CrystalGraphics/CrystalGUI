@@ -1,9 +1,9 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.render.canvas.CgCanvasPrimitives;
 import com.crystalgraphics.api.material.CgMaterial;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.compute.ops.CgGpuOps;
-import com.crystalgraphics.render.canvas.CgCanvasMaterials;
 import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.render.graph.CgComputePass;
 import com.crystalgraphics.render.graph.CgExecutor;
@@ -466,15 +466,15 @@ public final class SvgRasterCache {
     }
 
     private static CgMaterial accumulate() {
-        return CgCanvasMaterials.SCREEN.colourCoverage();
+        return CgCanvasPrimitives.colourCoverage();
     }
 
     private static CgMaterial coverage() {
-        return CgCanvasMaterials.SCREEN.coverage();
+        return CgCanvasPrimitives.coverage();
     }
 
     private static CgMaterial coverageMax() {
-        return CgCanvasMaterials.SCREEN.strokeCoverage();
+        return CgCanvasPrimitives.strokeCoverage();
     }
 
     /** This document's view closes: its shadows go, and so does what it left half-built in the shared atlas. */
