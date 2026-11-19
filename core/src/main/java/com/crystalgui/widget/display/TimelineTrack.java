@@ -310,7 +310,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
 
         CgTextDraw draw = ctx.text()
                 .text(shown).family(font).at(x, y)
-                .pose(ctx.getPoseStack());
+                .pose(ctx.getPoseStack().last().pose());
         // currentcolor follows what is drawn, which here is the caller's argb.
         GeneralGroup general = getStyle().getGeneralGroup();
         textStyleFor(argb).applyTo(draw, font, general, computedStyle(), argb);

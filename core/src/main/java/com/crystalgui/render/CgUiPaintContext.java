@@ -465,7 +465,7 @@ public final class CgUiPaintContext {
      */
     public CgTextDraw text() {
         CgTrace.add(UiTrace.FRAME, "text-draws", 1);
-        return recorder.text().pose(poseStack).clip(clipEntry).node(spatialNode, effectNode).gamma(textGamma);
+        return recorder.text().pose(poseStack.last().pose()).clip(clipEntry).node(spatialNode, effectNode).gamma(textGamma);
     }
 
     /**

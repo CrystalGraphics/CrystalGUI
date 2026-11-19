@@ -732,7 +732,7 @@ public final class UIText extends UIElement implements Measurable {
         ComputedStyle computed = computedStyle();
         CgTextDraw draw = ctx.text().layout(layout).family(family)
                 .at(contentX, contentY)
-                .pose(ctx.getPoseStack());
+                .pose(ctx.getPoseStack().last().pose());
         applyTextStyle(draw, family, general, computed, layout, color);
         // OVERFLOW CLIPS THE ELEMENT'S OWN TEXT, as CSS's does -- the painter's scissor covers only its children, and
         // a squeezed tab's label ran on under the next tab. Only when the line is wider than the box: a scissor
