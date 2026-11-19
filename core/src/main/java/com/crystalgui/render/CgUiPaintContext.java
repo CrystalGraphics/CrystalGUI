@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.render.graph.CgPropertyValues;
 import com.crystalgraphics.render.canvas.CgCanvasPrimitives;
 import com.crystalgraphics.api.material.engine.CgPlacement;
 import com.crystalgraphics.material.CgMaterialProxy;
@@ -31,7 +32,6 @@ import com.crystalgraphics.render.graph.CgLoad;
 import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.render.graph.CgReplay;
 import com.crystalgraphics.gpu.resource.CgTextureDesc;
-import com.crystalgraphics.render.ui.property.CgPropertyValues;
 import com.crystalgraphics.render.ui.property.CgSpatialTree;
 import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgraphics.text.render.CgTextGamma;
