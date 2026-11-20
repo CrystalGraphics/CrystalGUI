@@ -805,17 +805,17 @@ public class MarkupView extends UIElement {
          * One straight hairline.
          *
          * <p>A cubic whose control points equal its endpoints degenerates to a segment, which is how
-         * {@code PortDefaultEditor} draws its stub — reusing {@code ctx.curve()} rather than inventing a
+         * {@code PortDefaultEditor} draws its stub — reusing {@code ctx.canvas().spline()} rather than inventing a
          * second draw path. The width is in LOGICAL pixels: the paint context applies the
          * {@code PoseStack} to the stroke, so one pixel stays one pixel at any {@code uiScale}.</p>
          */
         private static void stroke(CgUiPaintContext ctx, float x0, float y0, float x1, float y1,
                                    int color) {
-            ctx.curve()
+            ctx.canvas().spline()
                     .cubic(x0, y0, x0, y0, x1, y1, x1, y1)
-                    .width(LINE)
+                    .width(2f * LINE)
                     .colors(color, color)
-                    .submit();
+                    .draw();
         }
     }
 

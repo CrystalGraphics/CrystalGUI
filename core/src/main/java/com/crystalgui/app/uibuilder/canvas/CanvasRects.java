@@ -173,7 +173,7 @@ public final class CanvasRects {
         float dx = x1 - x0;
         float dy = y1 - y0;
         if (dx * dx + dy * dy < 0.0001f) return;
-        ctx.curve().line(x0, y0, x1, y1).width(halfWidth).color(argb).submit();
+        ctx.canvas().spline().line(x0, y0, x1, y1).width(2f * halfWidth).color(argb).draw();
     }
 
     /**

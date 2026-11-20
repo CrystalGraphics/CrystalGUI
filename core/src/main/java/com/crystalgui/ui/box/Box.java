@@ -5,7 +5,8 @@ import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.render.Surface;
+import com.crystalgraphics.api.canvas.CgKeptLayer;
+import com.crystalgraphics.api.vector.CgCornerRadii;
 import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
@@ -347,7 +348,7 @@ public final class Box {
      * paint made none. Node ids belong to one recording.
      *
      * <pre>{@code
-     * UiFrame frame = ctx.seal();
+     * CgCanvasFrame frame = ctx.seal();
      * int window = box.movedNode(frame.frameId());
      * if (window != 0) frame.values().translate(window, dx, dy);
      * }</pre>
@@ -388,13 +389,17 @@ public final class Box {
     }
 
     /** Where its opacity or mask layer was composited into a surface. @see BoxPainter */
-    Surface.Placement layerPlacement() {
-        if (layerPlacement == null) layerPlacement = new Surface.Placement();
+    CgKeptLayer.Placement layerPlacement() {
+        if (layerPlacement == null) layerPlacement = new CgKeptLayer.Placement();
         return layerPlacement;
     }
 
     @Nullable
-    private Surface.Placement layerPlacement;
+    private CgKeptLayer.Placement layerPlacement;
+
+    /** The corners its {@code overflow} and its {@code clip-path} clip with, as last painted: kept while they hold. */
+    @Nullable
+    CgCornerRadii clipRadii, clipPathRadii;
 
     void noteFadedNode(int node, long frame) {
         if (node == 0) return;

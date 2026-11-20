@@ -20,7 +20,7 @@ import java.util.List;
  * <h3>One layer, not an element per wire — a trade, made deliberately</h3>
  * <p>An element per wire would hand us {@code :hover} and {@code :checked} for free, and would cost a
  * Taffy node, a layout pass and a draw-call boundary <em>per edge</em>. One layer paints the lot in a
- * single {@code ctx.curve()} batch: a thousand-edge graph becomes a thousand instances in one flush
+ * single {@code ctx.canvas().spline()} batch: a thousand-edge graph becomes a thousand instances in one flush
  * rather than a thousand elements. What it gives up is per-wire CSS state, which has to come back as
  * data this class holds. That is the right side of the trade for a graph editor, and it is written down
  * here so the absence reads as a decision rather than an oversight.</p>
@@ -377,13 +377,13 @@ public class NodeWireLayer extends UIElement {
         x0 += radius0;
         x1 -= radius1;
         float pull = pullFor(x1 - x0);
-        ctx.curve()
+        ctx.canvas().spline()
                 .cubic(x0, y0, x0 + pull, y0, x1 - pull, y1, x1, y1)
                 // Exactly double, so hover reads as "the same wire, thicker" — Unity's own pair is a
                 // hairline and twice a hairline.
-                .width(view.getWireWidth() * (emphasised ? 2f : 1f))
+                .width(2f * view.getWireWidth() * (emphasised ? 2f : 1f))
                 .colors(color0, color1)
-                .submit();
+                .draw();
     }
 
     /**

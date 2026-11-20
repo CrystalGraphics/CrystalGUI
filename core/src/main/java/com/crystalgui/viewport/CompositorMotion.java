@@ -1,7 +1,7 @@
 package com.crystalgui.viewport;
 
 import com.crystalgui.core.data.ReadOnlyVec2f;
-import com.crystalgui.render.UiFrame;
+import com.crystalgraphics.api.canvas.CgCanvasFrame;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.UIDocument;
@@ -73,7 +73,7 @@ final class CompositorMotion {
 
     /** What follows the pointer in {@code frame}, if anything and it has a node there to move. */
     @Nullable
-    static UiCommit.Follow follow(UIDocument document, @Nullable UiFrame frame) {
+    static UiCommit.Follow follow(UIDocument document, @Nullable CgCanvasFrame frame) {
         UIElement element = frame == null ? null : document.input().pointerFollower();
         Box box = element == null ? null : element.box();
         int node = box == null ? 0 : box.movedNode(frame.frameId());
@@ -97,7 +97,7 @@ final class CompositorMotion {
     }
 
     /** What the compositor plays in {@code frame}: every animation handed to it, with its box's node if it has one. */
-    static List<UiCommit.Motion> motions(UIDocument document, @Nullable UiFrame frame) {
+    static List<UiCommit.Motion> motions(UIDocument document, @Nullable CgCanvasFrame frame) {
         List<CompositorAnimation> playing = document.animation().onCompositor();
         if (frame == null || playing.isEmpty()) return List.of();
         List<UiCommit.Motion> motions = new ArrayList<>(playing.size());

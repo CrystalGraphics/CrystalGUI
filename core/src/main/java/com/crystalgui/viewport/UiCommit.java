@@ -1,6 +1,6 @@
 package com.crystalgui.viewport;
 
-import com.crystalgui.render.UiFrame;
+import com.crystalgraphics.api.canvas.CgCanvasFrame;
 import com.crystalgui.ui.service.CompositorAnimation;
 import org.joml.Matrix4f;
 
@@ -16,7 +16,7 @@ import java.util.List;
  *   <li>{@code follow} and {@code motions} are filled only where the compositor moves things between frames.</li>
  * </ul>
  */
-record UiCommit(@Nullable UiFrame frame, Readouts readouts, long index, @Nullable Follow follow,
+record UiCommit(@Nullable CgCanvasFrame frame, Readouts readouts, long index, @Nullable Follow follow,
                 List<Motion> motions) {
 
     /**

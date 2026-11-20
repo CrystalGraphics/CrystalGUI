@@ -1,7 +1,13 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.engine.CgPlacement;
-import com.crystalgraphics.render.canvas.CgCanvasGradient;
+import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.api.paint.pattern.CgGrid;
+import com.crystalgraphics.api.paint.gradient.CgGradient;
+import com.crystalgraphics.api.paint.CgPaint;
+import com.crystalgraphics.api.vector.CgStroke;
+import com.crystalgraphics.api.vector.CgVectorPath;
+import com.crystalgraphics.api.vector.CgCornerRadii;
+import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.render.canvas.CgCanvasGrid;
 import com.crystalgui.render.CgUiPaintContext;
 
@@ -60,8 +66,6 @@ public final class CgUiColorField implements CgUiDrawable {
      * Shared by every field, made at the first draw: a server assembles colour pickers and draws none, and a canvas
      * type loaded on construction would fail there. A quad takes its material's values as it is submitted.
      */
-    private static CgCanvasGradient gradient;
-    private static CgCanvasGrid checker;
 
     private Mode mode = Mode.GRADIENT;
     private float hue;
@@ -69,6 +73,34 @@ public final class CgUiColorField implements CgUiDrawable {
     private int fromArgb = 0xFF000000;
     private int toArgb = 0xFFFFFFFF;
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+
+    // The canvas's paints: the fixed ones shared, the rest remade only when what they show changes
+    private static final CgGradient STRIP = hues(CgGradient.linear(90f), false);
+    private static final CgGradient RING = hues(CgGradient.conic(0.5f, 0.5f, 0f), true);
+    private static final CgGradient DARKEN = CgGradient.linear(180f).stop(0f, 0x00000000).stop(1f, 0xFF000000);
+    private static final CgGrid CHECKERS = CgGrid.checker(LIGHT, DARK).cell(CHECKER);
+    @Nullable
+    private CgGradient saturate, ramp;
+    private float saturateHue = Float.NaN;
+    private int rampFrom, rampTo;
+    @Nullable
+    private CgVectorPath ring;
+    @Nullable
+    private CgStroke ringStroke;
+    private float ringWidth = Float.NaN, ringHeight = Float.NaN, ringInner = Float.NaN;
+    @Nullable
+    private CgCornerRadii cornerRadii;
+
+    /** {@code shape} with the six hues and red again, a stop each, or reversed: counter-clockwise from red on a ring. */
+    private static CgGradient hues(CgGradient shape, boolean reversed) {
+        float[] positions = new float[HUES.length];
+        int[] colours = new int[HUES.length];
+        for (int i = 0; i < HUES.length; i++) {
+            positions[i] = i / 6f;
+            colours[i] = HUES[reversed ? HUES.length - 1 - i : i];
+        }
+        return shape.stops(positions, colours);
+    }
 
     public CgUiColorField setMode(Mode value) {
         this.mode = value == null ? Mode.GRADIENT : value;
@@ -113,6 +145,9 @@ public final class CgUiColorField implements CgUiDrawable {
         this.rxTR = rxTR; this.ryTR = ryTR;
         this.rxBR = rxBR; this.ryBR = ryBR;
         this.rxBL = rxBL; this.ryBL = ryBL;
+        boolean square = rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f && rxBR == 0f && ryBR == 0f
+                && rxBL == 0f && ryBL == 0f;
+        cornerRadii = square ? null : new CgCornerRadii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
         return this;
     }
 
@@ -120,52 +155,50 @@ public final class CgUiColorField implements CgUiDrawable {
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
         if (width <= 0f || height <= 0f) return;
-        if (gradient == null) {
-            gradient = new CgCanvasGradient(CgPlacement.SCREEN);
-            checker = new CgCanvasGrid(CgPlacement.SCREEN);
-        }
-        int tint = ctx.getColor();
+        drawOnCanvas(ctx, x, y, width, height, ctx.getColor());
+    }
+
+    private void drawOnCanvas(CgUiPaintContext ctx, float x, float y, float width, float height, int tint) {
         switch (mode) {
             case HUE_RING -> {
-                float rx = width * 0.5f, ry = height * 0.5f;
-                gradient.size(width, height).conic(rx, ry, 0f).radii(rx, ry, rx, ry, rx, ry, rx, ry)
-                        .border((1f - innerRadius) * Math.min(rx, ry)).clearStops();
-                // Counter-clockwise from red: the primaries reversed over a clockwise turn.
-                for (int i = 0; i < HUES.length; i++) gradient.stop(i / 6f, HUES[HUES.length - 1 - i]);
-                submit(ctx, x, y, width, height, tint);
+                float band = (1f - innerRadius) * Math.min(width, height) * 0.5f;
+                if (ring == null || width != ringWidth || height != ringHeight || innerRadius != ringInner) {
+                    // The stroke centred on an ellipse half the band in: the ring fills the box's own ellipse
+                    ring = CgVectorPath.builder().addOval(band * 0.5f, band * 0.5f, width - band, height - band).build();
+                    ringStroke = CgStroke.of(band);
+                    ringWidth = width;
+                    ringHeight = height;
+                    ringInner = innerRadius;
+                }
+                // A path's paint takes no tint: the tint's alpha fades it, as it would the ring's colours
+                ctx.canvas().save().translate(x, y).opacity((tint >>> 24) / 255f).stroke(ring, ringStroke, RING)
+                        .restore();
             }
             case SV_SQUARE -> {
-                // White to the hue across, then black rising from transparent down: value times the saturated colour.
-                shaped(width, height, 90f).stop(0f, 0xFFFFFFFF).stop(1f, ArgbMath.fromHsv(hue, 1f, 1f, 0xFF));
-                submit(ctx, x, y, width, height, tint);
-                shaped(width, height, 180f).stop(0f, 0x00000000).stop(1f, 0xFF000000);
-                submit(ctx, x, y, width, height, tint);
+                if (saturate == null || hue != saturateHue) {
+                    saturate = CgGradient.linear(90f).stop(0f, 0xFFFFFFFF).stop(1f, ArgbMath.fromHsv(hue, 1f, 1f, 0xFF));
+                    saturateHue = hue;
+                }
+                fill(ctx, x, y, width, height, saturate, tint);
+                fill(ctx, x, y, width, height, DARKEN, tint);
             }
             case GRADIENT -> {
-                checker.size(width, height).cell(CHECKER, CHECKER).checker(LIGHT, DARK)
-                        .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).apply();
-                ctx.quad(checker.material()).at(x, y).size(width, height).color(tint).submit();
-                shaped(width, height, 90f).stop(0f, fromArgb).stop(1f, toArgb);
-                submit(ctx, x, y, width, height, tint);
+                if (ramp == null || fromArgb != rampFrom || toArgb != rampTo) {
+                    ramp = CgGradient.linear(90f).stop(0f, fromArgb).stop(1f, toArgb);
+                    rampFrom = fromArgb;
+                    rampTo = toArgb;
+                }
+                fill(ctx, x, y, width, height, CHECKERS, tint);
+                fill(ctx, x, y, width, height, ramp, tint);
             }
-            case HUE_STRIP -> {
-                shaped(width, height, 90f);
-                for (int i = 0; i < HUES.length; i++) gradient.stop(i / 6f, HUES[i]);
-                submit(ctx, x, y, width, height, tint);
-            }
+            case HUE_STRIP -> fill(ctx, x, y, width, height, STRIP, tint);
         }
     }
 
-    /** The shared gradient, linear at {@code degrees} over the box with the field's corners, its stops cleared. */
-    private CgCanvasGradient shaped(float width, float height, float degrees) {
-        return gradient.size(width, height).angle(degrees).border(0f)
-                .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).clearStops();
+    private void fill(CgUiPaintContext ctx, float x, float y, float width, float height, CgPaint paint, int tint) {
+        CgCanvasBox box = ctx.canvas().box(x, y, width, height).fill(paint).tint(tint);
+        if (cornerRadii != null) box.radii(cornerRadii);
+        box.draw();
     }
 
-    private static void submit(CgUiPaintContext ctx, float x, float y, float width, float height, int tint) {
-        for (int i = 0, n = gradient.windows(); i < n; i++) {
-            gradient.window(i);
-            ctx.quad(gradient.material()).at(x, y).size(width, height).color(tint).submit();
-        }
-    }
 }

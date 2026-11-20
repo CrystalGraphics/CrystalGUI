@@ -1,9 +1,9 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgraphics.api.vector.CgStrokeCap;
 import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleEngine;
 import com.crystalgraphics.text.style.CgTextLayer;
-import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.config.HarnessContext;
 import com.crystalgraphics.platform.input.CgMouseCodes;
@@ -208,7 +208,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         listPage(page("list", "100,000 rows. Watch the realised count while you scroll - it does not grow."));
         treePage(page("tree", "Right opens without moving focus; Left closes, or goes to the parent."));
         editorPage(page("editor", "Java and GLSL. Alt+Click for multiple carets; find/replace below."));
-        curvePage(page("curve", "ctx.curve() Bezier strokes - scroll for all 15 rows. The last two are the correctness checks."));
+        curvePage(page("curve", "ctx.canvas().spline() Bezier strokes - scroll for all 15 rows. The last two are the correctness checks."));
         graphPage(page("graph", "Drag a wire onto empty space to add a node. Space opens the menu. Shift/Alt marquee. F frames."));
         shaderGraphPage(page("shadergraph", "P6.3 end to end: wire nodes, watch the .shader compile live. Space adds a node."));
         colorSelectorPage(page("colorselector", "The general colour picker: hue ring, SV square, live channel tracks."));
@@ -2439,7 +2439,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
      *       different instance buffers, so alternating them forces a material switch each way, and
      *       painter's order has to survive it. A switch that failed to flush the outgoing path would
      *       draw geometry in material order instead of submission order, putting every stroke on top.</li>
-     *   <li><b>Layer opacity</b> — stamped on each item, so a curve inside {@code withLayerOpacity} fades as
+     *   <li><b>Opacity</b> — the canvas's, stamped on each item, so a curve under {@code save().opacity(f)} fades as
      *       a quad does; one that stayed opaque would mean curves no longer read {@code CG_CURVE_OPACITY}.</li>
      * </ul>
      */
@@ -2529,20 +2529,19 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 case INTERLEAVED -> paintInterleaved(ctx, x, y);
                 case OPACITY -> paintOpacity(ctx, x, y);
             }
-            ctx.flush();
         }
 
         /** Line, arc, taper, gradient — the four things one stroke can vary. */
         private void paintBasics(CgUiPaintContext ctx, float x, float y) {
-            ctx.curve().line(x + 12, y + 16, x + 96, y + 16).width(1.5f).color(0xFFE0E0E0).submit();
-            ctx.curve().from(x + 12, y + 60).via(x + 54, y + 28).to(x + 96, y + 60)
-                    .width(2.5f).color(0xFF6CC4FF).submit();
-            ctx.curve().from(x + 120, y + 58).via(x + 162, y + 22).to(x + 204, y + 58)
-                    .width(7f, 1f).color(0xFF6CC4FF).submit();
-            ctx.curve().from(x + 228, y + 58).via(x + 270, y + 22).to(x + 312, y + 58)
-                    .width(4f).colors(0xFFFF4D6D, 0xFF4DFFC3).submit();
-            ctx.curve().from(x + 336, y + 20).via(x + 336, y + 62).to(x + 404, y + 50)
-                    .width(3f).colors(0xFFFFC24D, 0xFFB36CFF).submit();
+            ctx.canvas().spline().line(x + 12, y + 16, x + 96, y + 16).width(3f).color(0xFFE0E0E0).draw();
+            ctx.canvas().spline().from(x + 12, y + 60).via(x + 54, y + 28).to(x + 96, y + 60)
+                    .width(5f).color(0xFF6CC4FF).draw();
+            ctx.canvas().spline().from(x + 120, y + 58).via(x + 162, y + 22).to(x + 204, y + 58)
+                    .width(14f, 2f).color(0xFF6CC4FF).draw();
+            ctx.canvas().spline().from(x + 228, y + 58).via(x + 270, y + 22).to(x + 312, y + 58)
+                    .width(8f).colors(0xFFFF4D6D, 0xFF4DFFC3).draw();
+            ctx.canvas().spline().from(x + 336, y + 20).via(x + 336, y + 62).to(x + 404, y + 50)
+                    .width(6f).colors(0xFFFFC24D, 0xFFB36CFF).draw();
         }
 
         /**
@@ -2551,21 +2550,21 @@ public class CgUiGalleryScene extends UiDocumentScene {
          * halfWidth*sqrt(2) along one axis only when the stroke is not axis-aligned.
          */
         private void paintCaps(CgUiPaintContext ctx, float x, float y) {
-            int[] caps = { CgCurveBatch.CAP_BUTT, CgCurveBatch.CAP_ROUND, CgCurveBatch.CAP_SQUARE };
+            CgStrokeCap[] caps = { CgStrokeCap.BUTT, CgStrokeCap.ROUND, CgStrokeCap.SQUARE };
             for (int i = 0; i < caps.length; i++) {
                 float cy = y + 16 + i * 21;
-                ctx.curve().line(x + 40, cy, x + 150, cy).width(7f).cap(caps[i]).color(0xFFFFC24D).submit();
+                ctx.canvas().spline().line(x + 40, cy, x + 150, cy).width(14f).cap(caps[i]).color(0xFFFFC24D).draw();
                 for (int e = 0; e < 2; e++) {
                     float tx = x + 40 + e * 110;
-                    ctx.curve().line(tx, cy - 12, tx, cy + 12).width(0.5f).color(0xFF7A7A7A).submit();
+                    ctx.canvas().spline().line(tx, cy - 12, tx, cy + 12).width(1f).color(0xFF7A7A7A).draw();
                 }
             }
             for (int i = 0; i < caps.length; i++) {
                 float cx = x + 210 + i * 62;
-                ctx.curve().line(cx, y + 16, cx + 34, y + 50)
-                        .width(9f).cap(caps[i]).color(0xFFFFC24D).submit();
+                ctx.canvas().spline().line(cx, y + 16, cx + 34, y + 50)
+                        .width(18f).cap(caps[i]).color(0xFFFFC24D).draw();
             }
-            ctx.curve().line(x + 330, y + 16, x + 330, y + 58).width(0.5f).color(0xFF3A3F48).submit();
+            ctx.canvas().spline().line(x + 330, y + 16, x + 330, y + 58).width(1f).color(0xFF3A3F48).draw();
         }
 
         /** Feather sweep: a hard edge at 0, a soft glow by 12. Same width and colour throughout. */
@@ -2573,9 +2572,9 @@ public class CgUiGalleryScene extends UiDocumentScene {
             for (int i = 0; i < 8; i++) {
                 float cx = x + 26 + i * 50;
                 float feather = i * 1.7f;
-                ctx.curve().line(cx, y + 14, cx, y + 60)
-                        .width(6f).feather(feather).cap(CgCurveBatch.CAP_ROUND)
-                        .color(0xFF6CC4FF).submit();
+                ctx.canvas().spline().line(cx, y + 14, cx, y + 60)
+                        .width(12f).feather(feather).cap(CgStrokeCap.ROUND)
+                        .color(0xFF6CC4FF).draw();
             }
         }
 
@@ -2584,8 +2583,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
             for (int i = 0; i < 9; i++) {
                 float cx = x + 10 + i * 46;
                 float w = 0.4f + i * 1.5f;
-                ctx.curve().from(cx, y + 58).via(cx + 12, y + 18).to(cx + 24, y + 58)
-                        .width(w).cap(CgCurveBatch.CAP_ROUND).color(hue(i / 9f)).submit();
+                ctx.canvas().spline().from(cx, y + 58).via(cx + 12, y + 18).to(cx + 24, y + 58)
+                        .width(2f * w).cap(CgStrokeCap.ROUND).color(hue(i / 9f)).draw();
             }
         }
 
@@ -2594,11 +2593,11 @@ public class CgUiGalleryScene extends UiDocumentScene {
             for (int i = 0; i < 5; i++) {
                 float cy = y + 14 + i * 12;
                 float h0 = i / 5f;
-                ctx.curve().from(x + 16, cy).via(x + 210, cy + (i - 2) * 9).to(x + 404, cy)
-                        .width(1f + i * 1.6f, 1f + (4 - i) * 1.6f)
+                ctx.canvas().spline().from(x + 16, cy).via(x + 210, cy + (i - 2) * 9).to(x + 404, cy)
+                        .width(2f + i * 3.2f, 2f + (4 - i) * 3.2f)
                         .colors(hue(h0), hue(h0 + 0.4f))
-                        .cap(CgCurveBatch.CAP_ROUND)
-                        .submit();
+                        .cap(CgStrokeCap.ROUND)
+                        .draw();
             }
         }
 
@@ -2615,9 +2614,9 @@ public class CgUiGalleryScene extends UiDocumentScene {
             int[] alphas = { 0x30, 0x60, 0xFF };
             for (int pass = 0; pass < 3; pass++) {
                 int argb = (alphas[pass] << 24) | (tint & 0x00FFFFFF);
-                ctx.curve().from(x + 20, y + 52).via(x + 210, y + 52 - bow * 2f).to(x + 400, y + 52)
-                        .width(widths[pass]).feather(feathers[pass])
-                        .cap(CgCurveBatch.CAP_ROUND).color(argb).submit();
+                ctx.canvas().spline().from(x + 20, y + 52).via(x + 210, y + 52 - bow * 2f).to(x + 400, y + 52)
+                        .width(2f * widths[pass]).feather(feathers[pass])
+                        .cap(CgStrokeCap.ROUND).color(argb).draw();
             }
         }
 
@@ -2626,15 +2625,15 @@ public class CgUiGalleryScene extends UiDocumentScene {
             for (int i = 0; i < 3; i++) {
                 float cx = x + 16 + i * 136;
                 float wob = 26f + 16f * (float) Math.sin(t * 0.9f + i * 1.1f);
-                ctx.curve()
+                ctx.canvas().spline()
                         .cubic(cx, y + 38,
                                 cx + 40, y + 38 - wob,
                                 cx + 84, y + 38 + wob,
                                 cx + 124, y + 38)
-                        .width(6f, 2f)
+                        .width(12f, 4f)
                         .colors(hue(i / 3f), hue(i / 3f + 0.35f))
-                        .cap(CgCurveBatch.CAP_ROUND)
-                        .submit();
+                        .cap(CgStrokeCap.ROUND)
+                        .draw();
             }
         }
 
@@ -2656,9 +2655,9 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 // at this segment count, and the same construction the lissajous row uses.
                 float trueMidY = midY + waveAt((t0 + t1) * 0.5f, t);
                 float ym = 2f * trueMidY - (y0 + y1) * 0.5f;
-                ctx.curve().from(x0, y0).via(xm, ym).to(x1, y1)
-                        .width(3.5f).colors(hue(t0 + t * 0.1f), hue(t1 + t * 0.1f))
-                        .cap(CgCurveBatch.CAP_ROUND).submit();
+                ctx.canvas().spline().from(x0, y0).via(xm, ym).to(x1, y1)
+                        .width(7f).colors(hue(t0 + t * 0.1f), hue(t1 + t * 0.1f))
+                        .cap(CgStrokeCap.ROUND).draw();
             }
         }
 
@@ -2673,14 +2672,14 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 float p = i / (float) (strands - 1);
                 double phase = t * 0.7 + p * 2.4;
                 float lift = 34f + 26f * (float) Math.sin(phase);
-                ctx.curve()
+                ctx.canvas().spline()
                         .from(x + 18, y + 84)
                         .via(x + 210, y + 84 - lift * 2f)
                         .to(x + 402, y + 84)
-                        .width(6f * (1f - p) + 0.6f, 0.6f + 6f * p)
+                        .width(12f * (1f - p) + 1.2f, 1.2f + 12f * p)
                         .colors(hue(p * 0.5f + t * 0.05f), hue(p * 0.5f + 0.3f + t * 0.05f))
-                        .cap(CgCurveBatch.CAP_ROUND)
-                        .submit();
+                        .cap(CgStrokeCap.ROUND)
+                        .draw();
             }
         }
 
@@ -2706,18 +2705,17 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 for (int d = 0; d < dstY.length; d++) {
                     if ((s + d) % 2 == 1) continue;   // a subset, so the wires stay readable
                     float sag = 10f * (float) Math.sin(t * 1.1f + s * 0.8f + d);
-                    ctx.curve()
+                    ctx.canvas().spline()
                             .cubic(srcX, srcY[s],
                                     srcX + 96, srcY[s] + sag,
                                     dstX - 96, dstY[d] - sag,
                                     dstX, dstY[d])
-                            .width(2.5f)
+                            .width(5f)
                             .colors(srcColor[s], dstColor[d])
-                            .cap(CgCurveBatch.CAP_ROUND)
-                            .submit();
+                            .cap(CgStrokeCap.ROUND)
+                            .draw();
                 }
             }
-            ctx.flush();
 
             for (int s = 0; s < srcY.length; s++) ctx.fillRect(srcX - 4, srcY[s] - 4, 8, 8, srcColor[s]);
             for (int d = 0; d < dstY.length; d++) ctx.fillRect(dstX - 4, dstY[d] - 4, 8, 8, dstColor[d]);
@@ -2735,11 +2733,11 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 float ey = cy + (float) Math.sin(a) * radius;
                 float bx = cx + (float) Math.cos(a - 0.5) * radius * 0.55f;
                 float by = cy + (float) Math.sin(a - 0.5) * radius * 0.55f;
-                ctx.curve().from(cx, cy).via(bx, by).to(ex, ey)
-                        .width(4.5f, 1f)
+                ctx.canvas().spline().from(cx, cy).via(bx, by).to(ex, ey)
+                        .width(9f, 2f)
                         .colors(0xFFFFFFFF, hue(i / (float) spokes + t * 0.08f))
-                        .cap(CgCurveBatch.CAP_ROUND)
-                        .submit();
+                        .cap(CgStrokeCap.ROUND)
+                        .draw();
             }
         }
 
@@ -2761,14 +2759,14 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 // Radius of the control point pushed out so the quadratic bulges onto the arc rather
                 // than chording it — the same trick the wave row uses, in polar form.
                 float bulge = 1f / (float) Math.cos((a1 - a0) * 0.5);
-                ctx.curve()
+                ctx.canvas().spline()
                         .from(cx + (float) Math.cos(a0) * r0, cy + (float) Math.sin(a0) * r0)
                         .via(cx + (float) Math.cos(am) * rm * bulge, cy + (float) Math.sin(am) * rm * bulge)
                         .to(cx + (float) Math.cos(a1) * r1, cy + (float) Math.sin(a1) * r1)
-                        .width(0.8f + 5f * u0, 0.8f + 5f * u1)
+                        .width(1.6f + 10f * u0, 1.6f + 10f * u1)
                         .colors(hue(u0 + t * 0.1f), hue(u1 + t * 0.1f))
-                        .cap(CgCurveBatch.CAP_ROUND)
-                        .submit();
+                        .cap(CgStrokeCap.ROUND)
+                        .draw();
             }
         }
 
@@ -2788,14 +2786,14 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 float xm = cx + rx * lx(um, phase), ym = cy + ry * ly(um, phase);
                 // Control point that makes the quadratic pass through the true midpoint:
                 // B = 2*M - (P0 + P2)/2.
-                ctx.curve()
+                ctx.canvas().spline()
                         .from(x0, y0)
                         .via(2f * xm - (x0 + x1) * 0.5f, 2f * ym - (y0 + y1) * 0.5f)
                         .to(x1, y1)
-                        .width(2.6f)
+                        .width(5.2f)
                         .colors(hue(u0 * 2f + t * 0.07f), hue(u1 * 2f + t * 0.07f))
-                        .cap(CgCurveBatch.CAP_ROUND)
-                        .submit();
+                        .cap(CgStrokeCap.ROUND)
+                        .draw();
             }
         }
 
@@ -2817,25 +2815,25 @@ public class CgUiGalleryScene extends UiDocumentScene {
             // Both strokes must cross the panel's VERTICAL span, not just its horizontal one — a
             // stroke that merely grazes the panel's edge proves nothing about ordering, because
             // "hidden behind it" and "drawn over it" look identical when they barely touch.
-            ctx.curve().line(x + 12, y + 26, x + 190, y + 26).width(8f).color(0xFFFF4D6D).submit();
+            ctx.canvas().spline().line(x + 12, y + 26, x + 190, y + 26).width(16f).color(0xFFFF4D6D).draw();
             ctx.fillRect(x + 70, y + 14, 70, 40, 0xFF4D8CFF);
-            ctx.curve().line(x + 12, y + 44, x + 190, y + 44).width(6f).color(0xFF4DFFC3).submit();
+            ctx.canvas().spline().line(x + 12, y + 44, x + 190, y + 44).width(12f).color(0xFF4DFFC3).draw();
 
             ctx.fillRect(x + 250, y + 14, 70, 40, 0xFF4D8CFF);
-            ctx.curve().line(x + 220, y + 34, x + 400, y + 34).width(8f).color(0xFFFFC24D).submit();
+            ctx.canvas().spline().line(x + 220, y + 34, x + 400, y + 34).width(16f).color(0xFFFFC24D).draw();
         }
 
         /** The lower stroke and the lower bar must fade by the same amount. */
         private void paintOpacity(CgUiPaintContext ctx, float x, float y) {
-            ctx.curve().line(x + 12, y + 24, x + 180, y + 24).width(6f).color(0xFF6CC4FF).submit();
-            ctx.flush();
-            ctx.withLayerOpacity(0.35f, () -> {
-                ctx.curve().line(x + 12, y + 52, x + 180, y + 52).width(6f).color(0xFF6CC4FF).submit();
-                ctx.flush();
-            });
+            ctx.canvas().spline().line(x + 12, y + 24, x + 180, y + 24).width(12f).color(0xFF6CC4FF).draw();
+            ctx.canvas().save().opacity(0.35f);
+            ctx.canvas().spline().line(x + 12, y + 52, x + 180, y + 52).width(12f).color(0xFF6CC4FF).draw();
+            ctx.canvas().restore();
 
             ctx.fillRect(x + 220, y + 18, 180, 12, 0xFF6CC4FF);
-            ctx.withLayerOpacity(0.35f, () -> ctx.fillRect(x + 220, y + 46, 180, 12, 0xFF6CC4FF));
+            ctx.canvas().save().opacity(0.35f);
+            ctx.fillRect(x + 220, y + 46, 180, 12, 0xFF6CC4FF);
+            ctx.canvas().restore();
         }
 
         /** Opaque ARGB from a hue phase — deterministic, and only ever used for demo colour. */

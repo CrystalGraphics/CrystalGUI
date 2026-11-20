@@ -1,6 +1,9 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.engine.CgPlacement;
+import com.crystalgraphics.api.paint.pattern.CgGrid;
+import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.api.vector.CgCornerRadii;
+import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.render.canvas.CgCanvasGrid;
 import com.crystalgui.render.CgUiPaintContext;
 
@@ -44,8 +47,6 @@ import com.crystalgui.render.CgUiPaintContext;
  */
 public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
 
-    /** Every grid's draw, on the frame thread; made at the first draw, since a server builds grids and draws none. */
-    private static CgCanvasGrid gpu;
 
     private final float cellWidth;
     private final float cellHeight;
@@ -53,6 +54,9 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
     private final int argb;
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+    /** The grid as the canvas paints it, made at the first draw. */
+    @Nullable
+    private CgGrid paint;
 
     /**
      * @param cellWidth  horizontal cell pitch, in logical pixels
@@ -109,7 +113,26 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
         this.rxTR = rxTR; this.ryTR = ryTR;
         this.rxBR = rxBR; this.ryBR = ryBR;
         this.rxBL = rxBL; this.ryBL = ryBL;
+        remakeCornerRadii();
     }
+
+    /** The corners as the canvas takes them, remade only when a value changes; null when square. */
+    @Nullable
+    private CgCornerRadii cornerRadii;
+
+    private void remakeCornerRadii() {
+        boolean square = rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f && rxBR == 0f && ryBR == 0f
+                && rxBL == 0f && ryBL == 0f;
+        CgCornerRadii r = cornerRadii;
+        if (square) {
+            cornerRadii = null;
+        } else if (r == null || r.topLeftX() != rxTL || r.topLeftY() != ryTL || r.topRightX() != rxTR
+                || r.topRightY() != ryTR || r.bottomRightX() != rxBR || r.bottomRightY() != ryBR
+                || r.bottomLeftX() != rxBL || r.bottomLeftY() != ryBL) {
+            cornerRadii = new CgCornerRadii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+        }
+    }
+
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
@@ -120,9 +143,9 @@ public final class CgUiGrid implements CgUiDrawable, CornerRadiusAware {
         // A fully transparent tint or a fully transparent line is a draw call that writes nothing.
         if ((tint >>> 24) == 0 || (argb >>> 24) == 0) return;
 
-        if (gpu == null) gpu = new CgCanvasGrid(CgPlacement.SCREEN);
-        gpu.size(width, height).cell(cellWidth, cellHeight).line(lineWidth).color(argb)
-                .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).apply();
-        ctx.quad(gpu.material()).at(x, y).size(width, height).color(tint).submit();
+        if (paint == null) paint = CgGrid.lines(argb).cell(cellWidth, cellHeight).width(lineWidth);
+        CgCanvasBox box = ctx.canvas().box(x, y, width, height).fill(paint).tint(tint);
+        if (cornerRadii != null) box.radii(cornerRadii);
+        box.draw();
     }
 }

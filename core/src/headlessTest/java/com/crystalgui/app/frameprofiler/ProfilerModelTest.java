@@ -628,7 +628,7 @@ public class ProfilerModelTest {
     public void aRangeListsEachHintOnceWithItsFrameCount() {
         for (int i = 0; i < 4; i++) {
             CgTrace.frameBegin(clock);
-            if (i != 0) CgTrace.counter(CHANNEL, "svg-direct", 2L);
+            if (i != 0) CgTrace.counter(CHANNEL, "rematched", 2_000L);
             clock += 5_000_000L;
             CgTrace.frameEnd(clock);
         }
@@ -640,7 +640,7 @@ public class ProfilerModelTest {
         model.selectRange(0, 3);
 
         List<ProfilerModel.HintRow> rows = model.hintsOfSelection().stream()
-                .filter(row -> row.hint().code().equals("ICONS-DIRECT")).toList();
+                .filter(row -> row.hint().code().equals("CASCADE-CHURN")).toList();
         assertEquals("a rule was listed once per frame rather than once", 1, rows.size());
         assertEquals(3, rows.get(0).frames());
         assertEquals("the first frame it fired in", 1, rows.get(0).firstPosition());

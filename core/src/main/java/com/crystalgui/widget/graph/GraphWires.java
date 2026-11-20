@@ -243,7 +243,7 @@ final class GraphWires {
      */
     private static final float MIN_DEVICE_HALF_WIDTH = 0.5f;
 
-    /** The width handed to {@code ctx.curve().width(...)}, in pre-pose units, floored so the wire
+    /** The width handed to {@code ctx.canvas().spline().width(...)}, in pre-pose units, floored so the wire
      * never goes sub-pixel on screen. The pose (which already carries the plane's zoom and the
      * {@code uiScale}) is what makes it thicker zoomed in and thinner zoomed out, matching a real
      * border's behaviour under scale — until it would stop being a line at all; see

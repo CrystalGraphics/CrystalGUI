@@ -8,8 +8,8 @@ import com.crystalgui.core.async.ApplicationAborted;
 import com.crystalgui.core.async.UiSequence;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.UiFrame;
-import com.crystalgui.render.UiPresenter;
+import com.crystalgraphics.api.canvas.CgCanvasFrame;
+import com.crystalgraphics.api.canvas.CgCanvasPresenter;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.service.Input;
 
@@ -322,7 +322,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
     }
 
     /** What shows this document's frames: the last presented, which a host may move and draw again. Render thread. */
-    public UiPresenter presenter() {
+    public CgCanvasPresenter presenter() {
         return view.presenter();
     }
 
@@ -463,7 +463,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
 
     /** On the document: frames, paints and seals one frame with its readouts. A failed frame commits nothing to draw. */
     UiCommit commit(Content content, float deltaSeconds, int width, int height) {
-        UiFrame frame = null;
+        CgCanvasFrame frame = null;
         Readouts out = new Readouts();
         long started = System.nanoTime();
         try {

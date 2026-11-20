@@ -1,14 +1,15 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgraphics.api.canvas.CgCanvas;
+import com.crystalgraphics.api.canvas.CgKeptLayer;
+import com.crystalgraphics.api.canvas.CgPaintChunk;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.Surface;
-import com.crystalgraphics.render.graph.CgReplay;
 import javax.annotation.Nullable;
 
 /**
- * A box's two own-paint segments -- the draws under its children and the draws over them -- as last recorded: the key
- * they were recorded under, so a frame can tell whether a segment would come out the same, and what they recorded, so
- * one that would is added again instead of painted (render-graph G6). One per box that has painted.
+ * A box's two own-paint segments (the draws under its children and the draws over them) as last recorded: the key
+ * they were recorded under, so a frame can tell whether a segment would come out the same, and the canvas chunk they
+ * drew, so one that would is added again instead of painted. One per box that has painted.
  *
  * <pre>{@code
  * if (box.replay == null) box.replay = new BoxReplay();
@@ -16,33 +17,30 @@ import javax.annotation.Nullable;
  *         && box.replay.replay(BoxReplay.BEFORE, ctx)) return;
  * ctx.beginSegment();
  * ... paint ...
- * box.replay.kept(BoxReplay.BEFORE, ctx.endSegment(box.replay.stretch(BoxReplay.BEFORE)));
+ * box.replay.kept(BoxReplay.BEFORE, ctx.endSegment(box.replay.chunk(BoxReplay.BEFORE)));
  * }</pre>
  */
-final class BoxReplay implements Surface.Tenant {
+final class BoxReplay {
 
     /** The segment under the box's children, and the one over them. */
     static final int BEFORE = 0, AFTER = 1;
     /**
-     * The key's floats: the pose in the box's spatial node (six affine components), the part of the box's own ink
-     * the clip leaves (four), the layer opacity folded into its colours (one), and the target's size (two) -- text
-     * keeps its own projection of the target, where every other draw takes the pass's.
+     * The key's floats: the canvas's transform (six affine components), the part of the box's own ink the clip leaves
+     * (four, in device pixels), and the canvas's opacity, which a chunk's colours carry (one).
      */
-    static final int KEY_FLOATS = 13;
+    static final int KEY_FLOATS = 11;
 
     private final float[] keys = new float[2 * KEY_FLOATS];
     private final long[] revisions = new long[2];
     private final long[] epochs = new long[2];
     private final boolean[] recorded = new boolean[2];
-    private final CgReplay[] stretches = new CgReplay[2];
+    private final CgPaintChunk[] chunks = new CgPaintChunk[2];
     private final boolean[] kept = new boolean[2];
     /** Check mode: a fresh paint to compare against what was kept, and whether a difference was named yet. */
-    private final CgReplay[] fresh = new CgReplay[2];
+    private final CgPaintChunk[] fresh = new CgPaintChunk[2];
     private final boolean[] reported = new boolean[2];
-    /** Per segment, the surface it last drew in, where in it (x0, y0, x1, y1) and when. @see #place */
-    private final Surface[] placedIn = new Surface[2];
-    private final int[] placed = new int[8];
-    private final long[] placedFrame = new long[2];
+    /** Per segment, where it last drew in a surface. @see #place */
+    private final CgKeptLayer.Placement[] placements = new CgKeptLayer.Placement[2];
 
     /**
      * Whether {@code segment} is recorded under this same key; the key is stored either way, and a segment whose key
@@ -64,14 +62,14 @@ final class BoxReplay implements Surface.Tenant {
     void forget(int segment) {
         recorded[segment] = false;
         kept[segment] = false;
-        if (stretches[segment] != null) stretches[segment].clear();
+        if (chunks[segment] != null) chunks[segment].clear();
     }
 
-    /** Where {@code segment}'s recording is kept, made on first use. */
-    CgReplay stretch(int segment) {
-        CgReplay stretch = stretches[segment];
-        if (stretch == null) stretches[segment] = stretch = new CgReplay();
-        return stretch;
+    /** Where {@code segment}'s drawing is kept, made on first use. */
+    CgPaintChunk chunk(int segment) {
+        CgPaintChunk chunk = chunks[segment];
+        if (chunk == null) chunks[segment] = chunk = new CgPaintChunk();
+        return chunk;
     }
 
     /** Whether {@code segment}'s last paint was kept. */
@@ -79,23 +77,23 @@ final class BoxReplay implements Surface.Tenant {
         this.kept[segment] = kept;
     }
 
-    /** Whether {@code segment} kept a recording: what a check compares a fresh paint against. */
+    /** Whether {@code segment} kept a chunk: what a check compares a fresh paint against. */
     boolean kept(int segment) {
         return kept[segment];
     }
 
     /**
      * Check mode: ends {@code segment}'s paint, which its key said would come out as kept, keeps it, and answers how
-     * it came out otherwise -- once per segment, null where it matched or was named before.
+     * it came out otherwise: once per segment, null where it matched or was named before.
      */
     @Nullable
     String check(int segment, CgUiPaintContext ctx) {
-        CgReplay paint = fresh[segment];
-        if (paint == null) fresh[segment] = paint = new CgReplay();
+        CgPaintChunk paint = fresh[segment];
+        if (paint == null) fresh[segment] = paint = new CgPaintChunk();
         boolean keptNow = ctx.endSegment(paint);
-        String differs = keptNow ? stretches[segment].differs(paint) : null;
-        fresh[segment] = stretches[segment];
-        stretches[segment] = paint;
+        String differs = keptNow ? chunks[segment].differs(paint) : null;
+        fresh[segment] = chunks[segment];
+        chunks[segment] = paint;
         kept[segment] = keptNow;
         if (differs == null || reported[segment]) return null;
         reported[segment] = true;
@@ -103,35 +101,20 @@ final class BoxReplay implements Surface.Tenant {
     }
 
     /**
-     * Places {@code segment} at {@code (x0, y0)-(x1, y1)} in {@code surface}, which it drew into this walk: drawn anew
-     * ({@code changed}) or moved, it damages both its places. @see Surface.Tenant
+     * Places {@code segment} at {@code (x0, y0)-(x1, y1)}, the device pixels of the node drawn in, in the surface
+     * {@code walk} draws: drawn anew ({@code changed}) or moved, it damages both its places.
      */
-    void place(Surface surface, int segment, int x0, int y0, int x1, int y1, boolean changed, long frame) {
-        int o = segment * 4;
-        boolean here = placedIn[segment] == surface;
-        if (changed || !here || placed[o] != x0 || placed[o + 1] != y0 || placed[o + 2] != x1 || placed[o + 3] != y1) {
-            surface.damage(x0, y0, x1, y1);
-            if (here) surface.damage(placed[o], placed[o + 1], placed[o + 2], placed[o + 3]);
-        }
-        placed[o] = x0;
-        placed[o + 1] = y0;
-        placed[o + 2] = x1;
-        placed[o + 3] = y1;
-        placedIn[segment] = surface;
-        placedFrame[segment] = frame;
-        surface.visit(this, segment);
+    void place(CgCanvas canvas, CgKeptLayer.Walk walk, int segment, float x0, float y0, float x1, float y1,
+               boolean changed) {
+        CgKeptLayer.Placement placement = placements[segment];
+        if (placement == null) placements[segment] = placement = new CgKeptLayer.Placement();
+        canvas.save().setTransform(1f, 0f, 0f, 1f, 0f, 0f);
+        placement.place(walk, x0, y0, x1 - x0, y1 - y0, changed);
+        canvas.restore();
     }
 
-    @Override
-    public void vacate(Surface surface, int part, long frame) {
-        if (placedIn[part] != surface || placedFrame[part] == frame) return;
-        int o = part * 4;
-        surface.damage(placed[o], placed[o + 1], placed[o + 2], placed[o + 3]);
-        placedIn[part] = null;
-    }
-
-    /** Records {@code segment} again from what it kept, when it kept anything: answers whether it did. */
+    /** Adds {@code segment} again from what it kept, when it kept anything: answers whether it did. */
     boolean replay(int segment, CgUiPaintContext ctx) {
-        return kept[segment] && ctx.replay(stretches[segment]);
+        return kept[segment] && ctx.replay(chunks[segment]);
     }
 }

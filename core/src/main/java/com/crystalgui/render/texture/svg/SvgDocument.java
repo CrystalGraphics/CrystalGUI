@@ -1,6 +1,5 @@
 package com.crystalgui.render.texture.svg;
 
-import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgraphics.job.CgJob;
 import com.crystalgraphics.job.CgJobLane;
 import com.crystalgraphics.util.io.CgIO;
@@ -8,9 +7,6 @@ import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.SvgRasterCache;
-import com.crystalgui.render.texture.ArgbMath;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -57,9 +53,7 @@ import javax.annotation.Nullable;
  * outright — a clipped shape draws unclipped rather than vanishing, on the reasoning that a visible
  * approximation beats a silent hole.</p>
  *
- * <p>A drop shadow ({@link SvgScene.DropShadow}) is drawn at icon sizes, where {@link
- * SvgRasterCache} blurs it once and keeps it. Larger draws skip it, logging once per
- * document, and so does a monochrome draw, which is a silhouette by definition.</p>
+ * <p>A drop shadow ({@link SvgScene.DropShadow}) is parsed; drawing is the canvas's ({@code CgSvg}).</p>
  *
  * <p>Group {@code opacity} multiplies into children instead of compositing the group as a unit; see
  * {@link SvgStyle}. Text is not rendered — an icon with live text is a font problem, not an SVG one.</p>
@@ -199,128 +193,6 @@ public final class SvgDocument {
     }
 
     /**
-     * A cheap reject before any geometry is submitted.
-     *
-     * <p>The saving is not the draw call — one instanced draw of every icon on screen measured 3.8
-     * <b>micro</b>seconds. It is the CPU submission loop that feeds it: {@code drawFill} costs about 90ns
-     * per triangle, so an icon scrolled out of a tree, or the fifty-odd cells of a grid that a zoom has
-     * pushed off screen, are paid for in full every frame for nothing.</p>
-     */
-    /**
-     * The coarsest mesh whose faceting this draw size cannot resolve, or {@code this} when the icon is
-     * large enough to need the reference one.
-     *
-     * <p>Keyed on DEVICE height, so the pose's scale counts: the same icon in the same layout box is a
-     * different number of real pixels at {@code uiScale} 1 and 2, and picking a level from the logical
-     * size alone would facet on a HiDPI display and nowhere else.</p>
-     */
-    private SvgDocument lodFor(CgUiPaintContext ctx, float scale) {
-        if (tags == null) return this;
-        float devicePx = Math.max(width, height) * scale * ctx.deviceScale();
-        for (int i = 0; i < LOD_MAX_DEVICE_PX.length; i++) {
-            if (devicePx > LOD_MAX_DEVICE_PX[i]) continue;
-            SvgDocument cached = lods.get(LOD_STEPS[i]);
-            if (cached != null) return cached;
-
-            LodBudget budget = ctx.svgLodBudget();
-            long frame = ctx.frameId();
-            if (frame != budget.frame) {
-                // Sampled on the way OUT of a frame, which is the only place the per-frame total is known.
-                // An aggregate scope cannot answer "did the budget spread the work" -- 12ms of building
-                // looks identical whether it landed on one frame or twenty. This records the distribution,
-                // so the max IS the worst frame.
-                if (budget.spent > 0L) {
-                    CgTrace.counter(UiTrace.FRAME, "svg.lodMsPerFrame", budget.spent / 1_000_000.0);
-                }
-                budget.frame = frame;
-                budget.spent = 0L;
-            }
-            // Out of budget: draw with whatever coarse mesh already exists and try again next frame.
-            // Deliberately not a queue -- whatever is on screen next frame is what deserves the budget,
-            // and a queue built from this frame's visibility would keep building icons a zoom has already
-            // left behind.
-            //
-            // It used to fall back to `this`, the reference mesh, which was free because parse had already
-            // built it. Now that ops() is lazy that fallback is the single MOST expensive mesh in the
-            // document and drawing it would tessellate at REFERENCE_STEPS mid-frame, outside this very
-            // budget -- so the deferral would cost more than the build it declined. Measured: parse got
-            // 24 ms cheaper and the first frame got 25 ms DEARER, for no net gain.
-            //
-            // So: prefer any tier already built, and if there is none, build the requested one anyway.
-            // Overshooting the budget by one coarse tier is strictly cheaper than the alternative.
-            if (budget.spent >= LOD_BUILD_BUDGET_NANOS) {
-                SvgDocument fallback = coarsestBuilt();
-                if (fallback != null) {
-                    // Counted, so "the budget deferred work" is visible rather than inferred from its absence.
-                    CgTrace.add(UiTrace.FRAME, "svg.lodDeferred.count", 1);
-                    CgTrace.counter(UiTrace.FRAME, "svg.lodDeferred", 1.0);
-                    return fallback;
-                }
-                CgTrace.add(UiTrace.FRAME, "svg.lodOverBudget.count", 1);
-            }
-            long startedAt = System.nanoTime();
-            // Scoped so the COST OF BUILDING one is visible separately from drawing with it: this runs on
-            // the first frame a size is used, so a zoom crossing a threshold rebuilds every visible icon
-            // in a single frame. That is the hitch worth knowing about, and it cannot be seen in a steady
-            // state average.
-            try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.lodBuild")) {
-                CgTrace.add(UiTrace.FRAME, "svg.lodBuild.count", 1);
-                CgTrace.add(UiTrace.FRAME, "svg.lodBuild.steps" + LOD_STEPS[i], 1);
-                CgTrace.counter(UiTrace.FRAME, "svg.lodDevicePx", devicePx);
-                CgTrace.counter(UiTrace.FRAME, "svg.lodDeferred", 0.0);
-                SvgDocument built = lods.computeIfAbsent(LOD_STEPS[i], steps -> {
-                    SvgDocument tier = fromScene(SvgResolver.resolve(tags, steps));
-                    tier.source = source;
-                    // Forced HERE rather than left to the first draw. ops() is lazy now, and the whole
-                    // point of this scope is that the build is charged against LOD_BUILD_BUDGET_NANOS --
-                    // let the tessellation escape it and the budget silently stops spreading the work it
-                    // exists to spread, which shows up as the zoom hitch it was written to remove.
-                    tier.ops();
-                    return tier;
-                });
-                budget.spent += System.nanoTime() - startedAt;
-                return built;
-            }
-        }
-        return this;
-    }
-
-    /**
-     * The cheapest already-built tier, or null when none exists yet.
-     *
-     * <p>What a budget-exhausted frame draws with. Coarsest rather than closest-to-ideal because the
-     * point is to submit <em>something</em> without building, and a tier that is too coarse for one frame
-     * of a zoom is a facet nobody sees at 60fps — whereas the alternative this replaced was a full
-     * reference tessellation on the render thread.</p>
-     */
-    @Nullable
-    private SvgDocument coarsestBuilt() {
-        // Over the MAP, not over LOD_STEPS. The parse tier is keyed by PARSE_STEPS, which is deliberately
-        // not one of the drawn tiers -- parse resolves as cheaply as possible to get something on the
-        // first frame, while the coarsest tier anything actually DRAWS with is set by quality. Walking
-        // LOD_STEPS instead made the one mesh that always exists invisible to this, so the budget-
-        // exhausted path found no fallback and built anyway -- the exact overshoot it exists to avoid.
-        SvgDocument coarsest = null;
-        int coarsestSteps = Integer.MAX_VALUE;
-        for (Map.Entry<Integer, SvgDocument> tier : lods.entrySet()) {
-            if (tier.getKey() < coarsestSteps) {
-                coarsestSteps = tier.getKey();
-                coarsest = tier.getValue();
-            }
-        }
-        return coarsest;
-    }
-
-    private boolean cullable(CgUiPaintContext ctx, float x, float y, float scale, float extra) {
-        if (scene.isEmpty()) return true;
-        float x0 = x + bounds[0] * scale - extra;
-        float y0 = y + bounds[1] * scale - extra;
-        float x1 = x + bounds[2] * scale + extra;
-        float y1 = y + bounds[3] * scale + extra;
-        return !ctx.isVisible(x0, y0, x1 - x0, y1 - y0);
-    }
-
-    /**
      * The shared, parsed document for a path — the call an icon consumer wants.
      *
      * <p>Cached, so drawing the same icon on fifty file-tree rows parses once. Safe to share because a
@@ -372,7 +244,7 @@ public final class SvgDocument {
      * <p>The reload says nothing about WHAT changed, and a path can resolve to other bytes with no file
      * edited -- a resource pack enabled or reordered -- so each path is read again and compared. Reading
      * is the cheap half; the parse is what is kept, and so is the document's IDENTITY, which is what
-     * {@code SvgRasterCache} keys on: an unchanged icon keeps its raster. A dropped one is parsed again on
+     * a raster cache keys on: an unchanged icon keeps its raster. A dropped one is parsed again on
      * its next use, as on a first draw.</p>
      *
      * @return how many were dropped
@@ -580,15 +452,6 @@ public final class SvgDocument {
      */
     private static final long LOD_BUILD_BUDGET_NANOS = 1_000_000L;
 
-    /**
-     * What one paint has spent building tiers this frame, kept by its paint context: one budget across every icon
-     * a document draws, since the stall comes from fifty-seven of them building at once.
-     */
-    public static final class LodBudget {
-        long frame = -1L;
-        long spent;
-    }
-
     private List<SvgScanner.Tag> tags;
     private final Map<Integer, SvgDocument> lods = new ConcurrentHashMap<>();
 
@@ -629,7 +492,7 @@ public final class SvgDocument {
             SvgScene.Stroke stroke = node.stroke();
             if (stroke != null) {
                 // Both ends, because SVG has no per-end linecap: stroke.cap() is the one value
-                // `stroke-linecap` parsed, not the start/end pair CgCurveBatch packs.
+                // `stroke-linecap` parsed, not a start/end pair.
                 SvgGeometry.Segments segments = SvgGeometry.segmentsOf(
                         node.contours(), stroke.cap(), stroke.cap());
                 if (segments.data().length > 0) {
@@ -665,270 +528,13 @@ public final class SvgDocument {
 
     // ── Drawing ─────────────────────────────────────────────────────────────────────────────────────
 
-    /** Draws the icon at {@code (x, y)} in its own colours, with {@code currentColor} left black. */
-    public void render(CgUiPaintContext ctx, float x, float y, float scale) {
-        render(ctx, x, y, scale, 0xFF000000);
-    }
-
-    /**
-     * Draws the icon at {@code (x, y)}, scaled, in its own colours.
-     *
-     * <p>On the document rather than in an {@code SvgRenderer}, because a renderer here would be a class
-     * with no state: the geometry is the document's, the transform is the caller's, and the batching is
-     * {@code CgCurveBatch}'s. A stateless class between two things that already have the data is a
-     * layer, not a seam.</p>
-     *
-     * <p><b>Retained mode was considered and does not help.</b> {@code retainedCurve()} lets a caller keep
-     * a descriptor across frames and re-{@code submit} it — but {@code submit()} is precisely the per-item
-     * cost, since it is what appends the instance record the GPU reads. Retained mode saves rebuilding one
-     * descriptor object, not the N submits, so the only thing it would buy is the chance to set
-     * {@code pose()} instead of transformed coordinates — and {@code AGENTS.md} is explicit that
-     * {@code CgUiPaintContext} is the single place the {@code PoseStack} is applied, so writing a pose
-     * ourselves would silently drop {@code uiScale} and any element transform.</p>
-     *
-     * @param tint what {@code currentColor} resolves to — the hook a monochrome icon set is themed through
-     */
-    public void render(CgUiPaintContext ctx, float x, float y, float scale, int tint) {
-        if (cullable(ctx, x, y, scale, 0f)) return;
-        if (ctx.svgRaster().accepts(this, x, y, scale)) {
-            renderCached(ctx, x, y, scale, tint, false, 0f);
-            return;
-        }
-        SvgDocument lod = lodFor(ctx, scale);
-        if (lod != this) {
-            lod.render(ctx, x, y, scale, tint);
-            return;
-        }
-        warnShadowSkipped();
-        // The cascade's overlay-tint, multiplying the colours the file names; currentColor takes `tint`
-        int picture = ctx.getPictureTint();
-        for (DrawOp op : ops()) {
-            int argb = op.currentColor() ? tint : ArgbMath.multiply(op.argb(), picture);
-            if (op.fill()) {
-                drawFill(ctx, op, x, y, scale, argb, false, false, picture);
-            } else {
-                drawStroke(ctx, op, x, y, scale, argb, op.halfWidth() * scale);
-            }
-        }
-    }
-
-    /**
-     * Draws the icon flat, in one colour and one stroke width, ignoring the file's own paint.
-     *
-     * <p>What a themed icon set wants: Feather and Lucide are authored as {@code currentColor} strokes and
-     * the consumer decides both the colour and the weight, so honouring the file's {@code stroke-width}
-     * would make an icon look progressively thinner as it grew.</p>
-     *
-     * @param halfWidth stroke half-width in <em>screen</em> pixels; pass {@code <= 0} to keep the file's
-     *                  own widths scaled with the icon
-     */
-    public void renderMonochrome(CgUiPaintContext ctx, float x, float y, float scale,
-                                 int argb, float halfWidth) {
-        // The override can be WIDER than the stroke the bounds were measured from, so it has to expand
-        // the box -- otherwise a thick monochrome stroke gets culled at the viewport edge while still
-        // partly on screen.
-        if (cullable(ctx, x, y, scale, Math.max(0f, halfWidth))) return;
-        if (ctx.svgRaster().accepts(this, x, y, scale)) {
-            renderCached(ctx, x, y, scale, argb, true, halfWidth);
-            return;
-        }
-        SvgDocument lod = lodFor(ctx, scale);
-        if (lod != this) {
-            lod.renderMonochrome(ctx, x, y, scale, argb, halfWidth);
-            return;
-        }
-        for (DrawOp op : ops()) {
-            if (op.fill()) {
-                drawFill(ctx, op, x, y, scale, argb, true);
-            } else {
-                drawStroke(ctx, op, x, y, scale, argb,
-                        halfWidth > 0f ? halfWidth : op.halfWidth() * scale);
-            }
-        }
-    }
-
-    /**
-     * An icon-sized draw: fills from the raster cache, strokes direct, in the file's own order.
-     *
-     * <p>Rasterised from the tier a draw this size would have used, built now rather than under the
-     * frame budget: the raster is kept, so an interim coarse tier would be kept with it.</p>
-     */
-    private void renderCached(CgUiPaintContext ctx, float x, float y, float scale, int argb,
-                              boolean flat, float halfWidth) {
-        SvgDocument tier = rasterTier(Math.max(width, height) * scale * ctx.deviceScale());
-        List<DrawOp> ops = tier.ops();
-        // Applied as each raster's draw colour, so animating it rasterises nothing again
-        int picture = flat ? 0xFFFFFFFF : ctx.getPictureTint();
-        for (int i = 0; i < ops.size(); i++) {
-            DrawOp op = ops.get(i);
-            // Under the whole group, before its first op: SVG paints a filtered element's result as a unit
-            if (!flat && op.shadow() != null && (i == 0 || ops.get(i - 1).shadow() != op.shadow())) {
-                ctx.svgRaster().drawShadow(tier, i, x, y, scale);
-            }
-            int colour = flat || op.currentColor() ? argb : ArgbMath.multiply(op.argb(), picture);
-            // A fill with colours of its own -- a gradient, a per-slice ramp -- bakes them into the
-            // raster and is drawn untinted; everything else is white coverage under the tint.
-            boolean baked = op.fill() && !flat && op.colours() != null;
-            ctx.svgRaster().draw(tier, i, x, y, scale, baked ? picture : colour, flat, halfWidth);
-        }
-    }
-
     /** The path {@link #load} read this from, for a log line; null for parsed text. */
     @Nullable
     private String source;
 
-    /** Set once a draw too large to cache has skipped this document's shadow, so the log says it once. */
-    private volatile boolean shadowSkipLogged;
-
-    private void warnShadowSkipped() {
-        if (shadowSkipLogged) return;
-        for (DrawOp op : ops()) {
-            if (op.shadow() == null) continue;
-            shadowSkipLogged = true;
-            CrystalGuiCore.LOGGER.warn("Icon {} drawn above {} device px: its drop shadow is drawn only at icon sizes",
-                    source == null ? "(parsed text)" : source, SvgRasterCache.MAX_DEVICE_PX);
-            return;
-        }
-    }
-
-    /**
-     * Ops {@code first} up to the end of its shadow group: the consecutive ops sharing {@code first}'s shadow.
-     * What {@link SvgRasterCache#drawShadow} rasterises the shadow of.
-     */
-    public int shadowGroupEnd(int first) {
-        List<DrawOp> ops = ops();
-        SvgScene.DropShadow shadow = ops.get(first).shadow();
-        int end = first + 1;
-        while (end < ops.size() && ops.get(end).shadow() == shadow) end++;
-        return end;
-    }
-
-    /** The mesh tier for a draw {@code devicePx} tall, built synchronously. */
-    private SvgDocument rasterTier(float devicePx) {
-        if (tags == null) return this;
-        for (int i = 0; i < LOD_MAX_DEVICE_PX.length; i++) {
-            if (devicePx > LOD_MAX_DEVICE_PX[i]) continue;
-            return lods.computeIfAbsent(LOD_STEPS[i], steps -> {
-                SvgDocument built = fromScene(SvgResolver.resolve(tags, steps));
-                built.source = source;
-                built.ops();
-                return built;
-            });
-        }
-        return this;
-    }
-
-    /**
-     * Submits fill op {@code op}'s cells for accumulation: every edge an exact area, the document origin
-     * at {@code (x, y)} in the target's own pixels. What {@link SvgRasterCache}
-     * rasterises through, under its additive material.
-     *
-     * @param flat every cell white; otherwise a fill with colours of its own keeps them and a plain
-     *             one is white either way, since a flat colour is applied when the raster is drawn
-     */
-    public void accumulateFill(CgUiPaintContext ctx, int op, float x, float y, float scale, boolean flat) {
-        DrawOp fill = ops().get(op);
-        drawFill(ctx, fill, x, y, scale, 0xFFFFFFFF, flat || fill.colours() == null, true, 0xFFFFFFFF);
-    }
-
-    /**
-     * Submits stroke op {@code op}'s segments with the document origin at {@code (x, y)} in the target's
-     * own pixels, under an identity pose — so widths and the feather are device pixels as given.
-     *
-     * @param halfWidth in device pixels; {@code <= 0} for the file's own, scaled
-     */
-    public void accumulateStroke(CgUiPaintContext ctx, int op, float x, float y, float scale, float halfWidth) {
-        DrawOp stroke = ops().get(op);
-        drawStroke(ctx, stroke, x, y, scale, 0xFFFFFFFF,
-                halfWidth > 0f ? halfWidth : stroke.halfWidth() * scale);
-    }
-
     /** {@code minX, minY, maxX, maxY} of everything the document draws, in its own units. */
     public float[] bounds() {
         return bounds.clone();
-    }
-
-    /**
-     * @param flat ignore any per-cell gradient colours and paint the whole op in {@code argb} — what
-     *             {@link #renderMonochrome} means, and the reason the choice is a parameter rather than the
-     *             presence of the array
-     */
-    private static void drawFill(CgUiPaintContext ctx, DrawOp op,
-                                 float x, float y, float scale, int argb, boolean flat) {
-        drawFill(ctx, op, x, y, scale, argb, flat, false, 0xFFFFFFFF);
-    }
-
-    /**
-     * @param accumulate every edge is an exact area rather than only the outline ones, for cells that
-     *                   are being summed into a coverage target instead of composited one by one
-     */
-    /** @param picture multiplies the file's own per-cell colours; white for none */
-    private static void drawFill(CgUiPaintContext ctx, DrawOp op,
-                                 float x, float y, float scale, int argb, boolean flat, boolean accumulate,
-                                 int picture) {
-        // Scoped per OP, never per cell: a scope costs a nanoTime pair, and a fill is hundreds of cells,
-        // so per-cell instrumentation would measure itself. The cell count rides along as a counter
-        // instead, which is what turns "drawFill is slow" into "drawFill is slow per cell" or "there are
-        // simply a lot of cells".
-        CgTrace.Zone scope = CgTrace.zone(UiTrace.FRAME, "svg.drawFill");
-        CgTrace.add(UiTrace.FRAME, "svg.fillCells", op.data().length / 8);
-        try (CgTrace.Zone ignored = scope) {
-        float[] q = op.data();
-        int[] edges = op.edges();
-        int[] start = op.colours();
-        int[] end = op.coloursEnd();
-        float[] axes = op.gradients();
-        boolean ramp = !flat && start != null && end != null && axes != null;
-
-        for (int i = 0; i < q.length; i += 8) {
-            int cell = i / 8;
-            // Every edge the tessellator marked as outline is antialiased by exact area, every seam is a
-            // half-open step; the quad reading owes nothing to a feather, an offset or the sample count.
-            CgCurveBatch.Cell out = ctx.filledCell()
-                                           .points(x + q[i] * scale, y + q[i + 1] * scale,
-                            x + q[i + 2] * scale, y + q[i + 3] * scale,
-                            x + q[i + 4] * scale, y + q[i + 5] * scale,
-                            x + q[i + 6] * scale, y + q[i + 7] * scale)
-                                           .softEdges(accumulate ? 15 : edges[cell]);
-
-            if (ramp) {
-                // The axis is stored in the document's own units, so it moves and scales with the draw:
-                // the origin like a point, and the direction by 1/scale because it already carries the
-                // reciprocal length. Getting that inverse backwards makes the ramp shrink as the icon
-                // grows, which reads as a gradient that is nearly flat at small sizes.
-                int at = cell * 4;
-                out.gradient(ArgbMath.multiply(start[cell], picture), ArgbMath.multiply(end[cell], picture),
-                        x + axes[at] * scale, y + axes[at + 1] * scale,
-                        axes[at + 2] / scale, axes[at + 3] / scale);
-            } else {
-                out.color(start == null || flat ? argb : ArgbMath.multiply(start[cell], picture));
-            }
-            out.submit();
-        }
-        }
-    }
-
-    private static void drawStroke(CgUiPaintContext ctx, DrawOp op,
-                                   float x, float y, float scale, int argb, float halfWidth) {
-        CgTrace.add(UiTrace.FRAME, "svg.strokeSegments", op.data().length / 4);
-        try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "svg.drawStroke")) {
-        float[] s = op.data();
-        for (int i = 0; i < s.length; i += 4) {
-            // Per SEGMENT, not per op: the caps were decided where the contour structure was still known,
-            // so an interior joint gets one round cap and the stroke's real ends keep what the file asked
-            // for. See SvgGeometry.segmentsOf.
-            int[] caps = op.segmentCaps();
-            // op.cap() is one linecap, so it goes to both ends -- see segmentsOf above.
-            int packed = caps == null ? (op.cap() & 3) | ((op.cap() & 3) << 2) : caps[i / 4];
-            ctx.curve()
-                    .line(x + s[i] * scale, y + s[i + 1] * scale,
-                            x + s[i + 2] * scale, y + s[i + 3] * scale)
-                    .width(halfWidth)
-                    .color(argb)
-                    .cap(packed & 3, (packed >> 2) & 3)
-                    .submit();
-        }
-        }
     }
 
     // ── Queries ─────────────────────────────────────────────────────────────────────────────────────

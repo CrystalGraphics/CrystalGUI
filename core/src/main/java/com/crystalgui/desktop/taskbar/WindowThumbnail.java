@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.taskbar;
 
+import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgraphics.easing.CgEasings;
 import com.crystalgui.core.window.WindowState;
 import com.crystalgui.desktop.window.WindowFrame;
@@ -10,7 +11,6 @@ import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
-import org.joml.Matrix4f;
 
 import javax.annotation.Nullable;
 
@@ -325,22 +325,25 @@ public class WindowThumbnail extends UIElement {
 
     /** Notes whether the panel moved since the last paint; a moving one is painted again next frame, to settle. */
     private void notePose(CgUiPaintContext ctx) {
-        Matrix4f m = ctx.targetPose();
-        moving = !Float.isNaN(poseX) && (Math.abs(m.m30() - poseX) > 1e-3f || Math.abs(m.m31() - poseY) > 1e-3f);
-        poseX = m.m30();
-        poseY = m.m31();
+        float[] m = ctx.canvas().transform(affine);
+        moving = !Float.isNaN(poseX) && (Math.abs(m[4] - poseX) > 1e-3f || Math.abs(m[5] - poseY) > 1e-3f);
+        poseX = m[4];
+        poseY = m[5];
         // THE FRAME AFTER THE LAST MOVE paints once more, on the grid, or a picture that stopped mid-pixel stays there.
         if (moving) repaint();
     }
 
+    /** The canvas's transform, read at once. */
+    private final float[] affine = new float[6];
+
     /** {@code width x height} centred in the box, into {@code out}: its origin on whole device pixels if {@code snap}. */
-    private static void place(CgUiPaintContext ctx, Box box, float width, float height, float[] out, boolean snap) {
+    private void place(CgUiPaintContext ctx, Box box, float width, float height, float[] out, boolean snap) {
         float x = (box.width() - width) / 2f, y = (box.height() - height) / 2f;
         if (ctx.isPoseAxisAligned()) {
             // The origin snapped and the size rounded once, in device pixels: snapping both edges instead lets
             // the width flip a pixel as the box slides, which changes the scale and the texels sampled.
-            Matrix4f m = ctx.targetPose();
-            float sx = Math.abs(m.m00()), sy = Math.abs(m.m11());
+            float[] m = ctx.canvas().transform(affine);
+            float sx = Math.abs(m[0]), sy = Math.abs(m[3]);
             if (sx > 1e-6f && sy > 1e-6f) {
                 if (snap) {
                     x = ctx.snapXToDevicePixel(x);
@@ -354,11 +357,6 @@ public class WindowThumbnail extends UIElement {
         out[1] = y;
         out[2] = width;
         out[3] = height;
-        // The size in device pixels, for the filtered copy; 0 where the pose is not axis-aligned.
-        Matrix4f pose = ctx.targetPose();
-        boolean flat = ctx.isPoseAxisAligned();
-        out[4] = flat ? Math.max(1f, Math.round(width * Math.abs(pose.m00()))) : 0f;
-        out[5] = flat ? Math.max(1f, Math.round(height * Math.abs(pose.m11()))) : 0f;
     }
 
     /** {@code picture} into {@code rect} at {@code opacity}, clipped to {@code (x0, y0)-(x1, y1)} and the box. */
@@ -369,15 +367,14 @@ public class WindowThumbnail extends UIElement {
         x1 = Math.min(x1, box.width());
         y1 = Math.min(y1, box.height());
         if (x1 <= x0 || y1 <= y0 || opacity <= 0f) return;
-        // Layer opacity, never the tint's alpha: the surface is premultiplied, so an alpha-only tint keeps the
+        // The canvas's opacity, never the tint's alpha: the surface is premultiplied, so an alpha-only tint keeps the
         // full colour while covering less, and a cross-fade's overlap comes out brighter than either picture.
-        float previous = ctx.pushLayerOpacity(opacity);
-        ctx.pushScissor(x0, y0, x1 - x0, y1 - y0);
+        CgCanvas canvas = ctx.canvas();
+        canvas.save().opacity(opacity).clip(x0, y0, x1 - x0, y1 - y0);
         try {
-            picture.drawThumbnail(ctx, rect[0], rect[1], rect[2], rect[3], (int) rect[4], (int) rect[5]);
+            picture.drawThumbnail(ctx, rect[0], rect[1], rect[2], rect[3]);
         } finally {
-            ctx.popScissor();
-            ctx.popLayerOpacity(previous);
+            canvas.restore();
         }
     }
 }

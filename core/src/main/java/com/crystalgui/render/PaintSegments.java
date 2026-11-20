@@ -1,119 +1,87 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.render.canvas.CgCanvas;
-import com.crystalgraphics.render.draw.CgDrawChunk;
-import com.crystalgraphics.render.graph.CgRecording;
-import com.crystalgraphics.render.graph.CgReplay;
+import com.crystalgraphics.api.canvas.CgCanvas;
+import com.crystalgraphics.api.canvas.CgPaintChunk;
 import com.crystalgraphics.text.atlas.CgGlyphAtlas;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import org.joml.Matrix4f;
 import org.jspecify.annotations.Nullable;
 
 import java.util.Arrays;
 
 /**
- * A paint context's segments (Blink's paint chunks, render-graph's replay): what one box drew, bracketed so it can be
- * kept and recorded again unchanged rather than painted. {@link CgUiPaintContext}'s {@code beginSegment},
- * {@code endSegment}, {@code replay} and {@code replayEpoch} are its doors.
+ * A paint context's segments: what one box drew, taken as a canvas {@link CgPaintChunk} so it can be kept and added
+ * again unchanged rather than painted. {@link CgUiPaintContext}'s {@code beginSegment}, {@code endSegment},
+ * {@code replay} and {@code replayEpoch} are its doors.
  */
 final class PaintSegments {
 
-    /** Off with {@code -Dcrystalgui.paint.segments=false}: a box's paint shares chunks with its neighbours'. */
+    /** Off with {@code -Dcrystalgui.paint.segments=false}: no box's paint is taken apart from its neighbours'. */
     static final boolean SEGMENTS = !"false".equals(System.getProperty("crystalgui.paint.segments"));
 
-    private static final int MARKS = 5;
+    private final CgPaintChunk scratch = new CgPaintChunk();
 
-    private final CgUiPaintContext ctx;
-    private final CgCanvas recorder;
-    private final CgRecording recording;
-
-    /** Per open segment: where it started in the recorder's chunks, its state changes and degraded text draws. */
-    private long[] starts = new long[8], states = new long[8], degraded = new long[8];
-    /** Per open segment: the recording's operations and clip entries, then the clip entry and nodes it began under. */
-    private int[] marks = new int[8 * MARKS];
+    /** Per open segment: whether it took a chunk. Chunks do not nest: one opened inside another's takes none. */
+    private boolean[] chunked = new boolean[8];
     private int depth;
 
     private long epoch, seenFontGeneration, seenEvictions;
-    private int seenIconResets;
 
-    /** What the last segment drew, x0, y0, x1, y1 in the target's pixels, and whether that is known. */
+    /** What the last segment drew, x0, y0, x1, y1 in the device pixels of the node drawn in, and whether that is known. */
     private final float[] drawn = new float[4];
     private boolean drawnKnown;
 
-    PaintSegments(CgUiPaintContext ctx, CgCanvas recorder, CgRecording recording) {
-        this.ctx = ctx;
-        this.recorder = recorder;
-        this.recording = recording;
-    }
-
-    /** At a frame's start: an evicted glyph page ends every kept segment. */
+    /** At a frame's start: an evicted glyph page ends every kept surface. */
     void beginFrame() {
-        // A page evicted names a layer another page now holds. New glyphs move nothing: a segment whose text drew
-        // without its glyphs is not kept, and growth keeps the atlas's texture.
         long evicted = CgFontRegistry.get().getAtlasEvictionGeneration();
         if (evicted != seenFontGeneration) {
             seenFontGeneration = evicted;
             invalidate("replay-epoch-evicted");
         }
+        depth = 0;
     }
 
-    /** Ends every kept segment: what they recorded no longer draws as it did. */
+    /** Ends every kept surface: what they hold no longer draws as it did. */
     void invalidate(String why) {
         CgTrace.add(UiTrace.FRAME, why, 1);
         epoch++;
     }
 
-    void begin() {
+    void begin(CgCanvas canvas) {
         if (!SEGMENTS) return;
-        ctx.flush();
-        if (depth == starts.length) {
-            starts = Arrays.copyOf(starts, depth * 2);
-            states = Arrays.copyOf(states, depth * 2);
-            degraded = Arrays.copyOf(degraded, depth * 2);
-            marks = Arrays.copyOf(marks, depth * 2 * MARKS);
-        }
-        int s = depth++, m = s * MARKS;
-        starts[s] = recorder.chunksTaken();
-        states[s] = recorder.stateChanges();
-        degraded[s] = recorder.textDegradedDraws();
-        marks[m] = recording.operations();
-        marks[m + 1] = recording.clips().count();
-        marks[m + 2] = ctx.clipEntry();
-        marks[m + 3] = ctx.spatialNode();
-        marks[m + 4] = ctx.effectNode();
+        if (depth == chunked.length) chunked = Arrays.copyOf(chunked, depth * 2);
+        boolean take = !canvas.chunking();
+        chunked[depth++] = take;
+        if (take) canvas.beginChunk();
     }
 
-    boolean end(@Nullable CgReplay keep) {
+    boolean end(CgCanvas canvas, @Nullable CgPaintChunk keep) {
         if (!SEGMENTS) return false;
-        ctx.flush();
-        int s = --depth, m = s * MARKS;
-        drawnSince(starts[s]);
+        drawnKnown = false;
         CgTrace.add(UiTrace.FRAME, "segments", 1);
-        CgTrace.add(UiTrace.FRAME, "segment-chunks", recorder.chunksTaken() - starts[s]);
-        if (keep == null || !CgUiPaintContext.REPLAY) return false;
-        if (recorder.textDegradedDraws() != degraded[s]) {
-            keep.clear();
-            CgTrace.add(UiTrace.FRAME, "segments-unkept-degraded", 1);
+        if (!chunked[--depth]) {
+            if (keep != null) keep.clear();
             return false;
         }
-        boolean kept = recorder.stateChanges() == states[s] && recording.operations() == marks[m]
-                && keep.capture(recorder, starts[s], recording, marks[m + 1], marks[m + 2], marks[m + 3],
-                        marks[m + 4]);
-        if (!kept) keep.clear();
-        CgTrace.add(UiTrace.FRAME, kept ? "segments-kept" : "segments-unkept", 1);
-        return kept;
+        CgPaintChunk into = keep != null && CgUiPaintContext.REPLAY ? keep : scratch;
+        CgPaintChunk.Refusal why = canvas.endChunk(into);
+        if (into.kept()) drawn(into);
+        if (into == scratch) {
+            scratch.clear();
+            return false;
+        }
+        CgTrace.add(UiTrace.FRAME, why == CgPaintChunk.Refusal.NONE ? "segments-kept" : "segments-unkept", 1);
+        if (why != CgPaintChunk.Refusal.NONE) CgTrace.add(UiTrace.FRAME, "segments-unkept-" + why.name(), 1);
+        return why == CgPaintChunk.Refusal.NONE;
     }
 
-    boolean replay(CgReplay kept) {
-        if (!CgUiPaintContext.REPLAY) return false;
-        ctx.flush();
-        long before = recorder.chunksTaken();
-        if (!kept.replay(recorder, recording, ctx.clipEntry(), ctx.spatialNode(), ctx.effectNode())) return false;
-        drawnSince(before);
+    boolean replay(CgCanvas canvas, CgPaintChunk kept) {
+        drawnKnown = false;
+        // Inside another's chunk a replay would be taken twice: the box paints
+        if (!CgUiPaintContext.REPLAY || canvas.chunking() || !canvas.replay(kept)) return false;
+        drawn(kept);
         CgTrace.add(UiTrace.FRAME, "segments-replayed", 1);
-        CgTrace.add(UiTrace.FRAME, "chunks-replayed", recorder.chunksTaken() - before);
         return true;
     }
 
@@ -123,52 +91,21 @@ final class PaintSegments {
         return true;
     }
 
-    /** Evictions and icon resets are read live: they move a placement in the middle of a frame. */
-    long epoch(int iconResets) {
-        long evictions = CgGlyphAtlas.evictions();
-        if (evictions != seenEvictions || iconResets != seenIconResets) {
-            invalidate(iconResets != seenIconResets ? "replay-epoch-icons" : "replay-epoch-evicted");
-            seenEvictions = evictions;
-            seenIconResets = iconResets;
-        }
-        return epoch;
+    private void drawn(CgPaintChunk chunk) {
+        drawnKnown = true;
+        drawn[0] = chunk.x0();
+        drawn[1] = chunk.y0();
+        drawn[2] = chunk.x1();
+        drawn[3] = chunk.y1();
     }
 
-    /** The union of the bounds of every draw taken since chunk {@code from}, carried into the target's pixels. */
-    private void drawnSince(long from) {
-        float x0 = Float.MAX_VALUE, y0 = Float.MAX_VALUE, x1 = -Float.MAX_VALUE, y1 = -Float.MAX_VALUE;
-        drawnKnown = true;
-        int spatial = ctx.spatialNode();
-        for (long at = from, to = recorder.chunksTaken(); at < to; at++) {
-            CgDrawChunk chunk = recorder.taken(at);
-            if (chunk == null || chunk.spatial() != spatial) {
-                drawnKnown = false;
-                return;
-            }
-            for (int d = 0; d < chunk.draws(); d++) {
-                float a = chunk.x0(d), b = chunk.y0(d), c = chunk.x1(d), e = chunk.y1(d);
-                if (Float.isInfinite(a) || Float.isInfinite(b) || Float.isInfinite(c) || Float.isInfinite(e)) {
-                    drawnKnown = false;   // a draw covering everything: its box's ink speaks for it
-                    return;
-                }
-                x0 = Math.min(x0, a);
-                y0 = Math.min(y0, b);
-                x1 = Math.max(x1, c);
-                y1 = Math.max(y1, e);
-            }
+    /** Evictions are read live: they move a kept picture in the middle of a frame. */
+    long epoch() {
+        long evictions = CgGlyphAtlas.evictions();
+        if (evictions != seenEvictions) {
+            invalidate("replay-epoch-evicted");
+            seenEvictions = evictions;
         }
-        if (x1 <= x0 || y1 <= y0) {
-            Arrays.fill(drawn, 0f);
-            return;
-        }
-        Matrix4f m = ctx.drawToTarget();
-        float ax = m.m00() * x0 + m.m10() * y0 + m.m30(), ay = m.m01() * x0 + m.m11() * y0 + m.m31();
-        float bx = m.m00() * x1 + m.m10() * y0 + m.m30(), by = m.m01() * x1 + m.m11() * y0 + m.m31();
-        float cx = m.m00() * x1 + m.m10() * y1 + m.m30(), cy = m.m01() * x1 + m.m11() * y1 + m.m31();
-        float dx = m.m00() * x0 + m.m10() * y1 + m.m30(), dy = m.m01() * x0 + m.m11() * y1 + m.m31();
-        drawn[0] = Math.min(Math.min(ax, bx), Math.min(cx, dx));
-        drawn[1] = Math.min(Math.min(ay, by), Math.min(cy, dy));
-        drawn[2] = Math.max(Math.max(ax, bx), Math.max(cx, dx));
-        drawn[3] = Math.max(Math.max(ay, by), Math.max(cy, dy));
+        return epoch;
     }
 }

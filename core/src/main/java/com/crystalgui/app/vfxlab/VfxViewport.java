@@ -5,7 +5,6 @@ import com.crystalgraphics.render.view.CgView;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgraphics.platform.input.CgModifiers;
-import com.crystalgraphics.camera.CgCamera;
 import com.crystalgraphics.vfx.CgVfxSystem;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.box.Box;
@@ -220,7 +219,7 @@ final class VfxViewport extends UIElement {
         float[] up = {sinYaw * sinPitch, cosPitch, cosYaw * sinPitch};
         for (int axis = 0; axis < 3; axis++) {
             float x = cx + right[axis] * GIZMO_ARM, y = cy - up[axis] * GIZMO_ARM;
-            ctx.curve().line(cx, cy, x, y).width(1f).color(GIZMO_COLORS[axis]).submit();
+            ctx.canvas().spline().line(cx, cy, x, y).width(2f).color(GIZMO_COLORS[axis]).draw();
             ctx.fillRect(x - 2f, y - 2f, 4f, 4f, GIZMO_COLORS[axis]);
         }
     }

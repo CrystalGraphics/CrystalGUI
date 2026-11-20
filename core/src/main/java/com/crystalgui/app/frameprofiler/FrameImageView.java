@@ -78,7 +78,7 @@ public class FrameImageView extends UIElement {
         int iw = image.width(), ih = image.height();
         if (texture == null || owner != ctx || texture.getWidth() != iw || texture.getHeight() != ih) {
             release();
-            texture = ctx.requestLayer("cgui_frame_image", iw, ih);
+            texture = ctx.requestTexture("cgui_frame_image", iw, ih);
             owner = ctx;
             if (pending == null) pending = rgba(image);
         }

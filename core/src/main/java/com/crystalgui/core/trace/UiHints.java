@@ -22,7 +22,7 @@ import java.util.Map;
  * }</pre>
  *
  * <p>Here rather than in the engine because a hint is a rule over counter NAMES, and
- * {@code surface-miss-dynamic} and {@code layer-clear-kpx} mean something to whoever wrote the painter and
+ * {@code surface-miss-revision} and {@code segments-unkept} mean something to whoever wrote the painter and
  * nothing to a capture engine.</p>
  *
  * <p><b>Every hint links somewhere</b>, to a zone or a counter wherever there is one, so the window can
@@ -32,12 +32,6 @@ public final class UiHints {
 
     private UiHints() {
     }
-
-    /** Megapixels of layer traffic past which a frame is worth accusing. */
-    private static final long LAYER_KPX_FLOOR = 8_000L;
-
-    /** Draw calls below which that traffic cannot be explained by the amount being drawn. */
-    private static final long DRAWCALLS_CEILING = 150L;
 
     /** Re-matched elements past which the cascade is churning rather than working. */
     private static final long REMATCH_FLOOR = 500L;
@@ -58,31 +52,25 @@ public final class UiHints {
         if (installed) return;
         installed = true;
 
-        // LAYER-BOUND. The finding the whole trace engine was built to make sayable: megapixels of
-        // clear and blit against a two-digit draw count is an FBO layer pass, not geometry.
+        // RETENTION-MISSED. A window walked every frame reads as a broken cache; its miss reason says which key
+        // moved: its revision (something in it changed), its region, the epoch (gamma, a glyph eviction).
         CgTraceHints.register((frame, zones, counters, out) -> {
-            long kpx = counters.getOrDefault("layer-clear-kpx", 0L)
-                    + counters.getOrDefault("layer-blit-kpx", 0L);
-            long draws = counters.getOrDefault("drawcalls", 0L);
-            if (kpx >= LAYER_KPX_FLOOR && draws > 0L && draws <= DRAWCALLS_CEILING) {
-                out.add(new CgTraceHints.Hint("LAYER-BOUND",
-                        String.format("%.1fMpx of layer clear and blit for %d draw calls "
-                                + "(docs/CGUI_STYLE_RENDER_PIPELINE.md §8)", kpx / 1000d, draws),
-                        CgTraceHints.Hint.counter("layer-clear-kpx")));
-            }
-        });
-
-        // RETENTION-REFUSED. A window walked every frame reads as a broken cache; most of the time something in
-        // it repaints itself, and a surface may not be kept while anything in it does.
-        CgTraceHints.register((frame, zones, counters, out) -> {
-            long dynamic = counters.getOrDefault("surface-miss-dynamic", 0L);
             long painted = counters.getOrDefault("surfaces-painted", 0L);
-            if (painted > 0L && dynamic * 2L >= painted) {
-                out.add(new CgTraceHints.Hint("RETENTION-REFUSED",
-                        dynamic + " of " + painted + " surfaces were walked because something in them paints"
-                                + " dynamically (paintsDynamically, or a backdrop-filter)",
-                        CgTraceHints.Hint.counter("surface-miss-dynamic")));
+            long kept = counters.getOrDefault("surfaces-kept", 0L);
+            if (painted == 0L || painted < kept) return;
+            String reason = null;
+            long most = 0L;
+            for (Map.Entry<String, Long> e : counters.entrySet()) {
+                if (e.getKey().startsWith("surface-miss-") && e.getValue() > most) {
+                    most = e.getValue();
+                    reason = e.getKey();
+                }
             }
+            if (reason == null) return;
+            out.add(new CgTraceHints.Hint("RETENTION-MISSED",
+                    painted + " of " + (painted + kept) + " surfaces were walked, " + most + " for "
+                            + reason.substring("surface-miss-".length()),
+                    CgTraceHints.Hint.counter(reason)));
         });
 
         // CASCADE-CHURN. "Style is slow" is not actionable; a count with a call site is.
@@ -108,17 +96,6 @@ public final class UiHints {
                             + " may be wearing it"
                             : ": the phase breakdown is not trustworthy"),
                     heaviest != null ? CgTraceHints.Hint.zone(heaviest.name()) : "the GC tick on the strip"));
-        });
-
-        // ICONS-DIRECT. An icon is meant to rasterise once and draw as a tinted quad; the direct path
-        // is a draw per scanline cell.
-        CgTraceHints.register((frame, zones, counters, out) -> {
-            long direct = counters.getOrDefault("svg-direct", 0L);
-            if (direct > 0L) {
-                out.add(new CgTraceHints.Hint("ICONS-DIRECT",
-                        direct + " icon draws bypassed the raster cache (SvgRasterCache.accepts)",
-                        CgTraceHints.Hint.counter("svg-direct")));
-            }
         });
 
         // FIRST-DRAW. A shader compiled, an atlas built, a font loaded -- the frame is slow ONCE, and

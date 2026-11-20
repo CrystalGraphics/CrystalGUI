@@ -1,6 +1,7 @@
 package com.crystalgui.harness.scene;
 
-import com.crystalgraphics.api.PoseStack;
+import com.crystalgraphics.api.vector.svg.CgSvg;
+import com.crystalgraphics.api.paint.brush.CgBrush;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
 import com.crystalgraphics.render.stage.CgRenderStage;
@@ -10,7 +11,6 @@ import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
-import com.crystalgui.render.texture.svg.SvgPath;
 
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
@@ -114,6 +114,11 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     private static final int WARMUP_FRAMES = 30;
 
     private record Entry(String name, String path, SvgDocument document) {
+        /** The icon as the canvas draws it, in the light grey the sheet shows. */
+        CgBrush brush() {
+            return CgBrush.svg(CgSvg.of(path)).color(0xFFE0E0E0);
+        }
+
         boolean missing() {
             return document == null;
         }
@@ -271,11 +276,11 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
             // by one constant would draw one of them at two thirds the other's size.
             float scale = Math.min(iconPx / document.width(), iconPx / document.height());
             float left = cellX(i, cellW) + (cellW - GAP * zoom - document.width() * scale) * 0.5f;
-            document.render(paint, left, cellY(i, cellH), scale, 0xFFE0E0E0);
+            paint.canvas().image(entry.brush(), left, cellY(i, cellH), document.width() * scale,
+                    document.height() * scale);
             cells += document.cellCount();
             segments += document.segmentCount();
         }
-        paint.flush();
 
         // Pass 3 -- labels. One switch to the text path for all of them.
         float labelPx = Math.max(7f, Math.min(48f, 9f * zoom));
@@ -339,16 +344,13 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
      */
     private void drawStudyStrip(CgUiPaintContext paint) {
         if (study == null) return;
-        PoseStack pose = paint.getPoseStack();
-        pose.pushPose();
-        pose.scale(studyScale, studyScale, 1f);
+        paint.canvas().save().scale(studyScale, studyScale);
         float x = MARGIN;
         for (int size : studySizes) {
             study.draw(paint, 0f, 0f, x, MARGIN, size, size);
             x += size + STUDY_GAP;
         }
-        pose.popPose();
-        paint.flush();
+        paint.canvas().restore();
 
         StringBuilder label = new StringBuilder(STUDY_ICON).append("  (dark)  uiScale=")
                 .append(studyScale).append("   logical");

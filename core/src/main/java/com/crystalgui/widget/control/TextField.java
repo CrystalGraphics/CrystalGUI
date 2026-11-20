@@ -1439,8 +1439,7 @@ public class TextField extends UIElement implements Measurable {
         // field's sides; clipping vertically to the content box would slice the glyphs, because that
         // box is routinely shorter than the line height (a 14px field with 3px padding leaves 8px for
         // 10px text). The full element height is used instead.
-        // Unrounded — pushScissor quantises once, in physical space. See its javadoc.
-        ctx.pushScissor(textOriginX(), 0f,
+        ctx.canvas().save().clip(textOriginX(), 0f,
                 Math.max(0f, layout.contentBoxWidth()),
                 Math.max(0f, box.height()));
 
@@ -1507,6 +1506,6 @@ public class TextField extends UIElement implements Measurable {
                     caretColor == 0 ? styleGen.color() : caretColor);
         }
 
-        ctx.popScissor();
+        ctx.canvas().restore();
     }
 }

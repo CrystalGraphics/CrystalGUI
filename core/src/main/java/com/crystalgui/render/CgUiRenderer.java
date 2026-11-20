@@ -1,5 +1,7 @@
 package com.crystalgui.render;
 
+import com.crystalgui.core.trace.UiTrace;
+import com.crystalgraphics.api.canvas.CgCanvasPresenter;
 import com.crystalgraphics.render.precache.CgPipelinePrecache;
 import com.crystalgui.core.trace.FrameLog;
 import com.crystalgui.core.trace.FrameStats;
@@ -72,12 +74,11 @@ public final class CgUiRenderer {
             views = new ArrayList<>(PAINTING);
         }
         for (View view : views) view.releaseGpu();
-        SvgAtlas.SHARED.destroy();
     }
 
     /**
      * One place a document is drawn: the {@link CgUiPaintContext} its frames are recorded with, and the
-     * {@link UiPresenter} that shows them at a GUI stage. The two live and die together, since a presented frame shows
+     * {@link CgCanvasPresenter} that shows them at a GUI stage. The two live and die together, since a presented frame shows
      * the context's target. A {@code CgUiViewport} owns its document's; anything drawing a document without one opens
      * its own.
      *
@@ -87,7 +88,7 @@ public final class CgUiRenderer {
      * CgUiPaintContext ctx = view.paintContext();   // the thread the document is framed on
      * ctx.recordFrame(w, h);
      * document.paint(ctx);
-     * UiFrame frame = ctx.seal();
+     * CgCanvasFrame frame = ctx.seal();
      *
      * view.presenter().present(stage, frame);       // render thread, at CgRenderStage.SCREEN or HUD
      * view.close();                                 // render thread, when the document goes
@@ -103,7 +104,7 @@ public final class CgUiRenderer {
      */
     public static final class View {
 
-        private final UiPresenter presenter = new UiPresenter();
+        private final CgCanvasPresenter presenter = new CgCanvasPresenter().onExecuted(UiTrace::frameEnd);
         private final FrameLog frames = new FrameLog();
         private final FrameStats frameStats = new FrameStats(frames);
         @Nullable
@@ -140,7 +141,7 @@ public final class CgUiRenderer {
         }
 
         /** What shows this view's frames at a stage, and keeps the last. Render thread. */
-        public UiPresenter presenter() {
+        public CgCanvasPresenter presenter() {
             return presenter;
         }
 

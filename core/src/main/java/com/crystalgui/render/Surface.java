@@ -1,60 +1,33 @@
 package com.crystalgui.render;
 
-import com.crystalgraphics.compute.ops.CgGpuOps;
-import com.crystalgraphics.render.graph.CgComputePass;
-import com.crystalgraphics.render.graph.CgGraphTexture;
-
-import java.util.Arrays;
-
-import javax.annotation.Nullable;
+import com.crystalgraphics.api.canvas.CgKeptLayer;
+import com.crystalgraphics.trace.CgTrace;
+import com.crystalgui.core.trace.UiTrace;
 
 /**
- * A box the compositor moves, drawn into a texture of its own -- DWM's redirection surface (render-graph G7). The
- * frame draws the texture under the box's node, so a move or a fade is the node's value and leaves the texture as it
- * is. A window is the box it is for.
+ * A box the compositor moves, drawn into a picture kept across frames: a {@link CgKeptLayer} walked when the box's
+ * key changes and composited as it is otherwise, so a move or a fade is the node's value. DWM's redirection surface; a
+ * window is the box it is for.
  *
  * <pre>{@code
- * Surface surface = ctx.surface(window, region);                 // keyed by what it is for
- * if (surface == null) { ... paint into the target as any box ... }
- * if (!surface.holds(box, box.innerRevision(), x, y, region, epoch, stacking)) {   // x, y: the region in the node
- *     ctx.beginSurface(surface, region, !surface.drewAt(box, x, y, region));
- *     ... paint the box and its subtree at rest, at opacity 1 ...
- *     ctx.endSurface();
- *     surface.drew(box, box.innerRevision(), x, y, region, epoch, stacking);
- * }
- * ctx.blitLayer(surface.target(), opacity, region, fades);
+ * Surface surface = ctx.surface(window, x0, y0, x1, y1);        // null: paint into the target as any box
+ * try (CgKeptLayer.Walk walk = surface.walk(ctx, box, box.innerRevision(), epoch, stacking, x0, y0, x1, y1)) {
+ *     if (walk.draws()) ... paint the box and its subtree at rest ...
+ * }                                                              // composited here
  * }</pre>
  *
- * <p>Owned by the paint context that made it, which frees it when nothing asks for it for a while -- unless what it is
- * for is an {@link Owner} that keeps it. Null is the answer inside a copy drawn elsewhere
- * ({@link CgUiPaintContext#withoutRetention}), where the box draws as any other.</p>
+ * <p>Held by the paint context that made it, which forgets it when nothing asks for it for a while, unless what it
+ * is for is an {@link Owner} that keeps it. Null is the answer inside a copy drawn elsewhere
+ * ({@link CgUiPaintContext#withoutRetention}).</p>
  *
- * <p><b>Its picture</b> is what a thumbnail, a preview or the switcher draws ({@link #drawPicture}): the window as it
- * last painted, at rest, a minimised one included.</p>
- *
- * <p><b>Damage</b> (render-graph G7.3): a surface walked again executes only what changed in it. Each piece of drawing
- * in it is a {@link Tenant} that {@link #damage}s its old and new place when it drew anew or moved, and one the walk no
- * longer reaches is told to {@link Tenant#vacate}; the paint context cuts the surface's passes to the union.</p>
+ * <p><b>Its picture</b> is what a thumbnail, a preview or the switcher draws ({@link #drawPicture}): the window's border
+ * box as it last painted, a minimised one included.</p>
  */
 public final class Surface {
 
-    private final CgGraphTexture target;
-
-    /** The frame it was last asked for, for freeing. */
-    long lastFrame;
-
-    /** Check mode: where the box is painted again whole, to compare with this. @see CgUiPaintContext#DAMAGE_CHECK */
-    CgGraphTexture checkTarget;
-
-    /** Freed by its context: it holds nothing any more. */
-    boolean released;
-
-    /** Its last walk drew text below the glyph tier it asked for: walked again until the glyphs land. */
-    private boolean walkAgain;
-
     /**
      * What a surface is keyed by, told of it each time it is drawn, and asked whether to keep it while nothing paints
-     * it -- a minimised window, whose preview still shows its picture.
+     * it: a minimised window, whose preview still shows its picture.
      *
      * <pre>{@code
      * class WindowFrame extends UIElement implements Surface.Owner {
@@ -80,7 +53,7 @@ public final class Surface {
 
         /**
          * The largest width in device pixels its surface will need, or 0 for no promise. A new surface is made this
-         * wide at once, so growing toward it never reallocates the texture mid-animation.
+         * wide at once, so growing toward it never remakes the texture mid-animation.
          */
         default int reserveWidth() {
             return 0;
@@ -92,90 +65,81 @@ public final class Surface {
         }
     }
 
-    /** The box's border box in the texture's pixels, top-down, and its size in the box's own units. */
-    private float pictureX0, pictureY0, pictureX1, pictureY1, pictureWidth, pictureHeight;
+    final CgKeptLayer layer = new CgKeptLayer();
 
-    /** A piece of drawing kept in a surface, told when a walk no longer reaches it so it can damage where it was. */
-    public interface Tenant {
-        /** The walk at {@code frame} did not reach {@code part}: damage its old place in {@code surface}, if it was here. */
-        void vacate(Surface surface, int part, long frame);
-    }
+    /** The frame it was last asked for, for forgetting. */
+    long lastFrame;
 
-    /** This walk's damage in the surface's pixels, top-down, and whether all of it is damaged. */
-    private float damageX0, damageY0, damageX1, damageY1;
-    private boolean full;
-    private long walkFrame;
-    /** Who the walk reached, and who the last one did. */
-    private Tenant[] visited = new Tenant[64], held = new Tenant[64];
-    private int[] visitedParts = new int[64], heldParts = new int[64];
-    private int visitedCount, heldCount;
-
-    /** What its picture was drawn for: the box, its inner revision, its region in its node, the epochs. */
+    /** What its picture was drawn for: the box, its inner revision, its place in its node, the epochs. */
     private Object box;
     private long revision = -1L, epoch, stacking;
-    private int nodeX, nodeY, width, height;
+    private float x0, y0, x1, y1;
+    /** Where the last walk's picture landed, in the node's device pixels. */
+    private int pictureX, pictureY;
+    /** Its last walk drew text below the glyph tier it asked for: walked again until the glyphs land. */
+    private boolean walkAgain;
+    /** What the kept layer is walked at: moved whenever the key above changes. */
+    private long walked;
 
-    Surface(CgGraphTexture target) {
-        this.target = target;
-    }
+    /** The box's border box in the picture's pixels, top-down, and its size in the box's own units. */
+    private float pictureX0, pictureY0, pictureX1, pictureY1, pictureWidth, pictureHeight;
 
-    /** The texture the box is drawn into, kept across frames. */
-    public CgGraphTexture target() {
-        return target;
+    Surface() {
     }
 
     /**
-     * Whether it already holds {@code box}'s picture: drawn at {@code revision} (the box's inner revision), over
-     * {@code region} placed at {@code (nodeX, nodeY)} in the box's node, under the replay and stacking epochs given.
-     * Where it does, composite it and draw nothing. A window shown again is a new box over the same surface.
+     * Walks it over {@code (x0, y0)-(x1, y1)} in the canvas's units now, composited when the walk closes: drawn when
+     * anything of its key changed (the box, its inner revision, its place, the replay and stacking epochs), held
+     * otherwise. A box tree passes its subtree's ink in the node's device pixels, under the identity transform.
      */
-    public boolean holds(Object box, long revision, int nodeX, int nodeY, LayerRegion region, long epoch,
-                         long stacking) {
-        return !walkAgain && this.box == box && this.revision == revision && this.nodeX == nodeX && this.nodeY == nodeY
-                && width == region.width() && height == region.height() && this.epoch == epoch
-                && this.stacking == stacking;
+    public CgKeptLayer.Walk walk(CgUiPaintContext ctx, Object box, long revision, long epoch, long stacking, float x0,
+                                 float y0, float x1, float y1) {
+        boolean holds = !walkAgain && this.box == box && this.revision == revision && this.epoch == epoch
+                && this.stacking == stacking && this.x0 == x0 && this.y0 == y0 && this.x1 == x1 && this.y1 == y1;
+        if (!holds) {
+            CgTrace.add(UiTrace.FRAME, missed(box, revision, epoch, stacking, x0, y0, x1, y1), 1);
+            walked++;
+            walkAgain = false;
+            this.box = box;
+            this.revision = revision;
+            this.epoch = epoch;
+            this.stacking = stacking;
+            this.x0 = x0;
+            this.y0 = y0;
+            this.x1 = x1;
+            this.y1 = y1;
+        }
+        CgKeptLayer.Walk walk = ctx.canvas().kept(layer, x0, y0, x1 - x0, y1 - y0, walked);
+        pictureX = walk.x();
+        pictureY = walk.y();
+        CgTrace.add(UiTrace.FRAME, walk.draws() ? "surfaces-painted" : "surfaces-kept", 1);
+        if (walk.draws() && !CgUiPaintContext.DAMAGE) walk.damage(x0, y0, x1 - x0, y1 - y0);
+        return walk;
     }
 
-    /** Why {@link #holds} answers false, as a trace counter's name: what keeps a surface from being kept. */
-    public String missed(Object box, long revision, int nodeX, int nodeY, LayerRegion region, long epoch,
-                         long stacking) {
+    /**
+     * Its whole picture where its last walk put it, under the canvas's transform now: a turned box's composite, its
+     * walk composited nowhere.
+     */
+    public void composite(CgUiPaintContext ctx) {
+        if (!layer.hasPicture()) return;
+        ctx.canvas().picture(layer, pictureX, pictureY, layer.pictureWidth(), layer.pictureHeight());
+    }
+
+    /** Why a walk could not hold the picture, as a trace counter's name. */
+    private String missed(Object box, long revision, long epoch, long stacking, float x0, float y0, float x1, float y1) {
         if (this.revision == -1L) return "surface-miss-new";
         if (this.box != box) return "surface-miss-box";
         if (walkAgain) return "surface-miss-degraded";
         if (this.revision != revision) return "surface-miss-revision";
-        if (this.nodeX != nodeX || this.nodeY != nodeY || width != region.width() || height != region.height()) {
-            return "surface-miss-region";
-        }
+        if (this.x0 != x0 || this.y0 != y0 || this.x1 != x1 || this.y1 != y1) return "surface-miss-region";
         if (this.epoch != epoch) return "surface-miss-epoch";
         return "surface-miss-stacking";
     }
 
-    /** Records that the box was just drawn into it, as {@link #holds} names. */
-    public void drew(Object box, long revision, int nodeX, int nodeY, LayerRegion region, long epoch, long stacking) {
-        walkAgain = false;
-        drawCount++;
-        this.box = box;
-        this.revision = revision;
-        this.nodeX = nodeX;
-        this.nodeY = nodeY;
-        width = region.width();
-        height = region.height();
-        this.epoch = epoch;
-        this.stacking = stacking;
-    }
-
     /**
-     * Whether its picture was drawn for {@code box} over this same region of the node: a moved region moves everything
-     * in it, and another box's pieces are not this one's.
-     */
-    public boolean drewAt(Object box, int nodeX, int nodeY, LayerRegion region) {
-        return revision != -1L && this.box == box && this.nodeX == nodeX && this.nodeY == nodeY
-                && width == region.width() && height == region.height();
-    }
-
-    /**
-     * Where the box's border box lies in the texture, {@code x0, y0, x1, y1} top-down, and its size in the box's own
-     * units: what {@link #drawPicture} draws. Set with each walk.
+     * Where the box's border box lies in the picture, {@code x0, y0, x1, y1} in its device pixels from its top-left,
+     * and its size in the box's own units: what {@link #drawPicture} draws. Set with each walk that draws.
      */
     public void pictured(float x0, float y0, float x1, float y1, float width, float height) {
         pictureX0 = x0;
@@ -188,7 +152,7 @@ public final class Surface {
 
     /** Whether it holds a picture to draw: drawn at least once, and not freed. */
     public boolean hasPicture() {
-        return !released && revision != -1L && pictureX1 > pictureX0 && pictureY1 > pictureY0;
+        return layer.hasPicture() && pictureX1 > pictureX0 && pictureY1 > pictureY0;
     }
 
     /** The box's width when its picture was drawn, in its own units: what a thumbnail fits to. */
@@ -202,8 +166,8 @@ public final class Surface {
     }
 
     /**
-     * Draws the box's picture -- its border box, without what it paints past it -- into {@code (x, y, width, height)}
-     * through the context's pose, tinted by its colour. Nothing when it has none.
+     * Draws the box's picture (its border box, without what it paints past it) into {@code (x, y, width, height)} on
+     * the context's canvas. Nothing when it has none.
      *
      * <pre>{@code
      * Surface surface = window.surface();
@@ -212,214 +176,47 @@ public final class Surface {
      */
     public void drawPicture(CgUiPaintContext ctx, float x, float y, float width, float height) {
         if (!hasPicture()) return;
-        float w = target.getWidth(), h = target.getHeight();
-        ctx.drawLayer(target, x, y, width, height, pictureX0 / w, 1f - pictureY0 / h, pictureX1 / w,
-                1f - pictureY1 / h);
+        ctx.canvas().picture(layer, pictureX0, pictureY0, pictureX1 - pictureX0, pictureY1 - pictureY0, x, y, width,
+                height);
     }
 
-    /** How often a kept thumbnail is rebuilt while its picture changes: a preview needs no more than this. */
-    private static final long THUMBNAIL_REFRESH_NANOS = 100L * 1_000_000L;
-
-    /** Walks that drew into it, so a kept thumbnail knows whether it trails the picture. */
-    private long drawCount;
-    @Nullable
-    private CgGraphTexture thumbnail;
-    private int thumbnailWidth, thumbnailHeight;
-    private long thumbnailDrawn = -1L, thumbnailAt;
-    private float thumbnailX0, thumbnailY0, thumbnailX1, thumbnailY1;
-    private boolean thumbnailStale;
-
     /**
-     * Draws the box's picture into {@code (x, y, width, height)} as {@link #drawPicture} does, filtered down to
-     * {@code deviceWidth x deviceHeight} device pixels first: every output pixel the average of the texels it covers,
-     * where one bilinear tap of a picture four or five times larger flickers, text above all, as it moves.
+     * Draws the box's picture as {@link #drawPicture} does, filtered down to the rect's device size first: each pixel
+     * the average of the texels it covers, where one bilinear tap of a picture four or five times larger flickers.
      *
      * <pre>{@code
-     * surface.drawThumbnail(ctx, x, y, w, h, Math.round(w * scaleX), Math.round(h * scaleY));
+     * surface.drawThumbnail(ctx, x, y, w, h);
      * if (surface.thumbnailStale()) element.repaint();   // it trails the picture: asked again soon
      * }</pre>
      *
      * <ul>
-     *   <li>The filtered copy is kept and rebuilt about every 100 ms while the picture changes, not each frame.</li>
-     *   <li>A picture under one and a half times the size asked for, or smaller on either axis, is drawn as
+     *   <li>The filtered copy is kept and filtered again about every 100 ms while the picture changes.</li>
+     *   <li>A picture under one and a half times the size asked for, or smaller on either axis, draws as
      *       {@link #drawPicture} does.</li>
      * </ul>
      */
-    public void drawThumbnail(CgUiPaintContext ctx, float x, float y, float width, float height, int deviceWidth,
-                              int deviceHeight) {
+    public void drawThumbnail(CgUiPaintContext ctx, float x, float y, float width, float height) {
         if (!hasPicture()) return;
-        CgGraphTexture kept = deviceWidth > 0 && deviceHeight > 0 ? filtered(ctx, deviceWidth, deviceHeight) : null;
-        if (kept == null) {
-            drawPicture(ctx, x, y, width, height);
-            return;
-        }
-        ctx.drawLayer(kept, x, y, width, height);
+        ctx.canvas().thumbnail(layer, pictureX0, pictureY0, pictureX1 - pictureX0, pictureY1 - pictureY0, x, y, width,
+                height);
     }
 
     /** Whether the kept thumbnail trails the picture, so its owner asks to be painted again. */
     public boolean thumbnailStale() {
-        return thumbnailStale;
-    }
-
-    /** Frees the kept thumbnail. */
-    void releaseThumbnail(CgUiPaintContext ctx) {
-        if (thumbnail != null) ctx.releaseTexture(thumbnail);
-        thumbnail = null;
-        thumbnailDrawn = -1L;
-    }
-
-    @Nullable
-    private CgGraphTexture filtered(CgUiPaintContext ctx, int deviceWidth, int deviceHeight) {
-        float sourceWidth = pictureX1 - pictureX0, sourceHeight = pictureY1 - pictureY0;
-        if (sourceWidth < deviceWidth || sourceHeight < deviceHeight
-                || sourceWidth < deviceWidth * 1.5f && sourceHeight < deviceHeight * 1.5f) {
-            return null;
-        }
-        if (thumbnail == null || thumbnailWidth != deviceWidth || thumbnailHeight != deviceHeight) {
-            releaseThumbnail(ctx);
-            thumbnail = ctx.requestLayer("cgui_thumbnail", deviceWidth, deviceHeight);
-            thumbnailWidth = deviceWidth;
-            thumbnailHeight = deviceHeight;
-        }
-        boolean moved = thumbnailX0 != pictureX0 || thumbnailY0 != pictureY0 || thumbnailX1 != pictureX1
-                || thumbnailY1 != pictureY1;
-        thumbnailStale = thumbnailDrawn != drawCount || moved;
-        long now = System.nanoTime();
-        if (thumbnailStale && (thumbnailDrawn == -1L || now - thumbnailAt >= THUMBNAIL_REFRESH_NANOS)) {
-            filterInto(ctx, thumbnail, sourceWidth, sourceHeight);
-            thumbnailDrawn = drawCount;
-            thumbnailX0 = pictureX0;
-            thumbnailY0 = pictureY0;
-            thumbnailX1 = pictureX1;
-            thumbnailY1 = pictureY1;
-            thumbnailAt = now;
-            thumbnailStale = false;
-        }
-        return thumbnailDrawn == -1L ? null : thumbnail;
-    }
-
-    /** The picture shrunk into {@code into}, each texel the average of the picture's area it covers. */
-    private void filterInto(CgUiPaintContext ctx, CgGraphTexture into, float sourceWidth, float sourceHeight) {
-        CgComputePass pass = ctx.compute("cgui.thumbnail");
-        CgGpuOps.shrink(pass, target, pictureX0, target.getHeight() - pictureY1, sourceWidth, sourceHeight, into, 0, 0,
-                into.getWidth(), into.getHeight());
-        pass.end();
-    }
-
-    /** Starts a walk at {@code frame}, damaged everywhere with {@code full}. */
-    void beginWalk(long frame, boolean full) {
-        walkFrame = frame;
-        this.full = full;
-        damageX0 = damageY0 = Float.MAX_VALUE;
-        damageX1 = damageY1 = -Float.MAX_VALUE;
-        visitedCount = 0;
-    }
-
-    /** Marks {@code (x0, y0)-(x1, y1)}, the surface's pixels top-down, as drawn again this walk. */
-    public void damage(float x0, float y0, float x1, float y1) {
-        if (x1 <= x0 || y1 <= y0) return;
-        damageX0 = Math.min(damageX0, x0);
-        damageY0 = Math.min(damageY0, y0);
-        damageX1 = Math.max(damageX1, x1);
-        damageY1 = Math.max(damageY1, y1);
-    }
-
-    /** Where this surface is composited into another. */
-    private final Placement placement = new Placement();
-
-    /** @see Placement#place */
-    void placeIn(Surface parent, float x0, float y0, float x1, float y1, long frame) {
-        placement.place(parent, x0, y0, x1, y1, frame);
+        return layer.thumbnailStale();
     }
 
     /**
-     * A picture composited into a surface — a surface nested in it, a layer — that repaints where it was once it moves
-     * or is no longer composited there, so no ghost of it stays. One per picture, kept across frames.
-     *
-     * <pre>{@code
-     * placement.place(walking, x0, y0, x1, y1, frameId);   // each walk that composites it
-     * // a walk that does not: its old place is damaged when that walk ends
-     * }</pre>
-     */
-    public static final class Placement implements Tenant {
-        @Nullable
-        private Surface in;
-        private float x0, y0, x1, y1;
-        private long frame;
-
-        /**
-         * Composites into {@code parent} at {@code (x0, y0)-(x1, y1)}, its pixels top-down, on the walk at {@code frame}:
-         * that place is damaged now, the last one too if it moved, and this one on the first walk that does not reach it.
-         */
-        public void place(Surface parent, float x0, float y0, float x1, float y1, long frame) {
-            parent.damage(x0, y0, x1, y1);
-            if (in == parent) parent.damage(this.x0, this.y0, this.x1, this.y1);
-            in = parent;
-            this.x0 = x0;
-            this.y0 = y0;
-            this.x1 = x1;
-            this.y1 = y1;
-            this.frame = frame;
-            parent.visit(this, 0);
-        }
-
-        @Override
-        public void vacate(Surface surface, int part, long frame) {
-            if (in != surface || this.frame == frame) return;
-            surface.damage(x0, y0, x1, y1);
-            in = null;
-        }
-    }
-
-    /** Records that this walk reached {@code tenant}'s {@code part}. */
-    public void visit(Tenant tenant, int part) {
-        if (visitedCount == visited.length) {
-            visited = Arrays.copyOf(visited, visitedCount * 2);
-            visitedParts = Arrays.copyOf(visitedParts, visitedCount * 2);
-        }
-        visited[visitedCount] = tenant;
-        visitedParts[visitedCount++] = part;
-    }
-
-    /** Ends the walk: everything the last one reached and this one did not vacates. */
-    void endWalk() {
-        for (int i = 0; i < heldCount; i++) held[i].vacate(this, heldParts[i], walkFrame);
-        Arrays.fill(held, 0, heldCount, null);
-        Tenant[] tenants = held;
-        int[] parts = heldParts;
-        held = visited;
-        heldParts = visitedParts;
-        heldCount = visitedCount;
-        visited = tenants;
-        visitedParts = parts;
-        visitedCount = 0;
-    }
-
-    /** Whether the walk damaged all of it. */
-    boolean fullyDamaged() {
-        return full;
-    }
-
-    /** This walk's damage, {@code x0, y0, x1, y1} top-down, into {@code out}; false when nothing was damaged. */
-    boolean damage(float[] out) {
-        if (damageX1 <= damageX0 || damageY1 <= damageY0) return false;
-        out[0] = damageX0;
-        out[1] = damageY0;
-        out[2] = damageX1;
-        out[3] = damageY1;
-        return true;
-    }
-
-    /**
-     * Walks it again next frame whatever {@link #holds} would answer, its picture standing: what was drawn below the
-     * glyph tier it asked for is painted again there, and the rest replays.
+     * Walks it again next frame whatever its key says, its picture standing: what was drawn below the glyph tier it
+     * asked for is painted again there, and the rest replays.
      */
     public void walkAgain() {
         walkAgain = true;
     }
 
-    /** Forgets what it holds: the next {@link #holds} answers false. */
+    /** Forgets what it holds: the next walk draws it whole. */
     public void invalidate() {
         revision = -1L;
+        layer.invalidate();
     }
 }

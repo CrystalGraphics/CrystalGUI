@@ -64,6 +64,6 @@ public final class PivotMark {
         float dx = x1 - x0;
         float dy = y1 - y0;
         if (dx * dx + dy * dy < 0.0001f) return;
-        paint.curve().line(x0, y0, x1, y1).width(width).color(colour).submit();
+        paint.canvas().spline().line(x0, y0, x1, y1).width(2f * width).color(colour).draw();
     }
 }

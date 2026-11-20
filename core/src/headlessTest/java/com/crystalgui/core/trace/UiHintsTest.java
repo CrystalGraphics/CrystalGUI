@@ -83,22 +83,18 @@ public class UiHintsTest {
         return find(code, frame, tree(frame), counters(frame));
     }
 
+    /** Most surfaces walked: the miss reason most of them gave is named. */
     @Test
-    public void layerBound() {
+    public void retentionMissedNamesTheTopReason() {
         CgFrameRecord frame = frame(() -> {
-            CgTrace.counter(CHANNEL, "layer-clear-kpx", 20_000L);
-            CgTrace.counter(CHANNEL, "drawcalls", 31L);
+            CgTrace.counter(CHANNEL, "surfaces-painted", 5L);
+            CgTrace.counter(CHANNEL, "surfaces-kept", 2L);
+            CgTrace.counter(CHANNEL, "surface-miss-revision", 4L);
+            CgTrace.counter(CHANNEL, "surface-miss-region", 1L);
         });
-        assertEquals("layer-clear-kpx", find("LAYER-BOUND", frame).linkedCounter());
-    }
-
-    @Test
-    public void retentionRefused() {
-        CgFrameRecord frame = frame(() -> {
-            CgTrace.counter(CHANNEL, "layers", 17L);
-            CgTrace.counter(CHANNEL, "retain-dynamic", 12L);
-        });
-        assertEquals("retain-dynamic", find("RETENTION-REFUSED", frame).linkedCounter());
+        CgTraceHints.Hint hint = find("RETENTION-MISSED", frame);
+        assertEquals("surface-miss-revision", hint.linkedCounter());
+        assertTrue(hint.text(), hint.text().contains("4 for revision"));
     }
 
     /** With blame on, the heaviest call site is named — the probe's best output, finally shown. */
@@ -125,12 +121,6 @@ public class UiHintsTest {
         CgFrameRecord collected = new CgFrameRecord(recorded.index(), recorded.beginNanos(), recorded.endNanos(),
                 recorded.cpuNanos(), CgFrameRecord.ABSENT, 5L, 1, 0, 0L);
         assertEquals("hint:paint", find("COLLECTED", collected, tree(recorded), counters(recorded)).linkedZone());
-    }
-
-    @Test
-    public void iconsDirect() {
-        CgFrameRecord frame = frame(() -> CgTrace.counter(CHANNEL, "svg-direct", 3L));
-        assertEquals("svg-direct", find("ICONS-DIRECT", frame).linkedCounter());
     }
 
     /** A zone's first run is named; the same zone in a later frame is not first any more. */

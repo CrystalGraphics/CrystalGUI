@@ -407,7 +407,7 @@ final class PortDefaultEditor {
      * <p>A plain segment, not a real wire's bezier: the gap this spans is {@link #GAP}, a handful of
      * pixels, and a bezier with {@code NodeWireLayer}'s own 24-unit minimum tangent pull over a span
      * that short would bulge into a visible loop rather than read as a nub. A cubic whose control points
-     * equal its endpoints degenerates to a straight line, so this reuses {@code ctx.curve()} rather than
+     * equal its endpoints degenerates to a straight line, so this reuses {@code ctx.canvas().spline()} rather than
      * inventing a second draw path.</p>
      *
      * <p>Both ends trim inward by their own dot's live radius ({@link NodePort#dotRadius()}, and this
@@ -432,10 +432,10 @@ final class PortDefaultEditor {
         Vector2f target = port.dotCenterIn(space, scratchB);
         float x1 = target.x() - port.dotRadius();
         int color = port.typeColor();
-        ctx.curve()
+        ctx.canvas().spline()
                 .cubic(x0, y0, x0, y0, x1, target.y(), x1, target.y())
-                .width(view.getWireWidth())
+                .width(2f * view.getWireWidth())
                 .colors(color, color)
-                .submit();
+                .draw();
     }
 }

@@ -1,6 +1,8 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.engine.CgPlacement;
+import com.crystalgraphics.api.vector.CgCornerRadii;
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
+import com.crystalgraphics.api.canvas.CgCanvasBox;
 import javax.annotation.Nullable;
 
 import lombok.Getter;
@@ -20,19 +22,12 @@ import com.crystalgui.render.CgUiPaintContext;
  * }</pre>
  *
  * <p>A property, not a {@code background}: it filters what shows through the element, so it draws under the
- * element's own background. {@code BackdropFilterValue} is the grammar; {@link CgUiBackdrop} captures and blurs; the
- * draw is CrystalGraphics' {@link CgCanvasGlass} (Acrylic's recipe with a lens). With nothing to capture it paints
+ * element's own background. {@code BackdropFilterValue} is the grammar; the canvas's glass captures, blurs
+ * and draws it ({@link CgCanvasGlass} (Acrylic's recipe with a lens). With nothing to capture it paints
  * {@link #getFallbackColorArgb}, Acrylic's {@code FallbackColor}.</p>
  */
 @Accessors(chain = true)
 public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware {
-
-    /**
-     * The glass's draw, one a recording thread: documents record at once and a draw sets its material's values then
-     * submits. Made at a thread's first draw, since a server builds filters and draws none.
-     */
-    // Threads: thread-local, each document's recording thread has its own.
-    private static final ThreadLocal<CgCanvasGlass> GLASS = new ThreadLocal<>();
 
     /** What {@code backdrop-filter: none} computes to: present so the declaration parses and overrides a lower one, filtering nothing. */
     public static final CgUiBackdropFilter NONE = new CgUiBackdropFilter();
@@ -41,8 +36,6 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     public static boolean isActive(@Nullable CgUiBackdropFilter filter) {
         return filter != null && filter != NONE;
     }
-
-    private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
 
     /** Radius of the Gaussian, in logical px. */
     @Getter @Setter
@@ -133,33 +126,44 @@ public final class CgUiBackdropFilter implements CgUiDrawable, CornerRadiusAware
     @Override
     public void setCornerRadii(float rxTL, float ryTL, float rxTR, float ryTR,
                                float rxBR, float ryBR, float rxBL, float ryBL) {
-        this.rxTL = rxTL; this.ryTL = ryTL;
-        this.rxTR = rxTR; this.ryTR = ryTR;
-        this.rxBR = rxBR; this.ryBR = ryBR;
-        this.rxBL = rxBL; this.ryBL = ryBL;
+        boolean square = rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f && rxBR == 0f && ryBR == 0f
+                && rxBL == 0f && ryBL == 0f;
+        CgCornerRadii r = cornerRadii;
+        if (square) {
+            cornerRadii = null;
+        } else if (r == null || r.topLeftX() != rxTL || r.topLeftY() != ryTL || r.topRightX() != rxTR
+                || r.topRightY() != ryTR || r.bottomRightX() != rxBR || r.bottomRightY() != ryBR
+                || r.bottomLeftX() != rxBL || r.bottomLeftY() != ryBL) {
+            cornerRadii = new CgCornerRadii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+        }
+    }
+
+    /** The glass as the canvas draws it, made again at a draw after any knob changed. */
+    @Nullable
+    private CgBackdropFilter filter;
+    /** The corners as the canvas takes them, remade only when one changes; null when square. */
+    @Nullable
+    private CgCornerRadii cornerRadii;
+
+    private CgBackdropFilter filter() {
+        CgBackdropFilter f = filter;
+        if (f == null || f.blur() != blurRadius || f.tint() != tintArgb || f.saturation() != saturation
+                || f.luminosity() != luminosity || f.bezel() != bezel || f.ior() != ior || f.chromatic() != chromatic
+                || f.specular() != specular || f.glow() != glow || f.rim() != edgeHighlight || f.rimWidth() != edgeWidth
+                || f.rimAmbient() != rimAmbient || f.noise() != noise || f.fallback() != fallbackColorArgb) {
+            filter = f = CgBackdropFilter.DEFAULT.blur(blurRadius).tint(tintArgb).color(saturation, luminosity)
+                    .lens(bezel, ior).chromatic(chromatic).highlight(specular, glow, edgeHighlight, edgeWidth, rimAmbient)
+                    .noise(noise).fallback(fallbackColorArgb);
+        }
+        return f;
     }
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        CgCanvasGlass gpu = GLASS.get();
-        if (gpu == null) GLASS.set(gpu = new CgCanvasGlass(CgPlacement.SCREEN));
-        gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
-                .tint(tintArgb).saturation(saturation).luminosity(luminosity)
-                .lens(bezel, ior).chromatic(chromatic)
-                .specular(specular).highlight(glow, edgeHighlight, edgeWidth, rimAmbient)
-                .noise(noise);
-        CgUiPaintContext.Backdrop backdrop = ctx.backdropFor(x, y, width, height, blurRadius, gpu.reach());
-        if (backdrop == null) {
-            ctx.rect().at(x, y).size(width, height)
-                    .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL)
-                    .fillColor(fallbackColorArgb)
-                    .submit();
-            return;
-        }
-        gpu.backdrop(backdrop.source(), backdrop.offsetX(), backdrop.offsetY(), backdrop.x0(), backdrop.y0(),
-                        backdrop.x1(), backdrop.y1())
-                .apply();   // before the quad, which takes the material's values as it is submitted
-        ctx.quad(gpu.material()).at(x, y).size(width, height).color(ctx.getColor()).submit();
+        // The canvas's glass: it captures what is behind the pane when it draws
+        CgCanvasBox pane = ctx.canvas().box(x, y, width, height).backdropFilter(filter());
+        if (cornerRadii != null) pane.radii(cornerRadii);
+        pane.draw();
     }
 }

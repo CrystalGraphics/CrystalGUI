@@ -593,111 +593,66 @@ through to `CgUiCrossFade` now, since `background` holds a `CgUiRect` or one of 
 
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
-`opacity < 1` and a masked `overflow: hidden` route through an offscreen "visual layer"
-(`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`,
-`core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`). Ordinary elements (opacity 1, no
-mask) skip this entirely — same direct-draw path as always, zero overhead — and so does most rounded
-`overflow: hidden`, which is a clip rather than a mask (below).
+`opacity < 1` over children that can overlap, and a `mask`, paint into a **group layer**: the canvas's
+`layer(x, y, w, h)` (CrystalGraphics `api.canvas`, `CrystalGraphics/docs/CANVAS.md`), opened by `BoxPainter`. Ordinary
+elements (opacity 1, no mask) skip this entirely, and so does a rounded `overflow: hidden`, which is a clip (below).
 
-**A layer is the size of what goes in it**, not the size of the display. `BoxPainter` takes the
-subtree's [ink bounds](#ink-bounds) through the pose, intersects them with the live clip, and opens a
-`LayerRegion`; the allocation, the clear and the composite are all sized from it, and the target is a
-transient texture the executor lends for the frame from its pool, bucketed by size. **The layer's pixel `(0,0)` is the region's
-corner**, so the painter shifts its base matrix by the region's negated origin and the clip stack is
-shifted with it — a caller opening a layer by hand has to do the same.
+```java
+try (CgCanvasLayer layer = canvas.layer(box.inkX0(), box.inkY0(), inkW, inkH)) {
+    layer.opacity(0.6f);                 // the subtree composited as one picture
+    paintChildren(...);
+}
+```
 
-**Ink bounds** are Blink's visual overflow: `Box.inkX0..inkY1`, composed bottom-up in `BoxTree`
-alongside the world matrices, from each box's border box grown by its outline, by whatever
-`UIElement.inkOverflow()` declares, and by its children's — truncated to the padding box wherever
-`overflow` clips. **A widget that paints outside its own box and does not declare it is clipped, and
-only inside a layer**, which is the one failure worth knowing about here.
+**A layer is the size of what goes in it**: the subtree's [ink bounds](#ink-bounds), cut to the clip and grown by a
+filter's reach. Its picture is a transient texture for the frame.
 
-**Two layers are never opened at all.** A mask over a childless box did nothing — the multiply only
-ever applied to the children's layer — and an `opacity` whose box paints at most one primitive folds
-into the draw through the layer opacity each item carries instead of flattening anything. The fold is refused for
-any node that overrides a paint hook, because text takes no layer opacity and a folded label would ignore the fade.
+**Ink bounds** are Blink's visual overflow: `Box.inkX0..inkY1`, composed bottom-up in `BoxTree` alongside the world
+matrices, from each box's border box grown by its outline, by whatever `UIElement.inkOverflow()` declares, and by its
+children's, truncated to the padding box wherever `overflow` clips. **A widget that paints outside its own box and
+does not declare it is clipped, and only inside a layer**, which is the one failure worth knowing about here.
 
-**A layer lives for one frame; what is kept is a surface.** A layer is drawn again every frame it is
-open, and what did not change inside it is replayed from its kept chunks rather than painted (render-graph
-G6). A picture kept across frames belongs to a box the compositor moves -- a window, a pointer follower, a
-compositor animation -- whose surface is composited again while nothing in it changed and repainted only
-where something did (G7, `core/src/main/java/com/crystalgui/render/CLAUDE.md`). Neither is kept for a subtree containing a node whose
-`paintsDynamically()` is true (the default for anything overriding a paint hook) or a `backdrop-filter`,
-whose subject is not in this tree at all. `UIElement.repaint()` is the door for a widget whose picture
-changes without moving a box.
+**Two layers are never opened at all.** A mask over a childless box does nothing (`masks-elided`), and an `opacity`
+whose box paints at most one primitive folds into the draw (`canvas.opacity`, `layers-elided`): group opacity differs
+from per-primitive opacity only where two primitives cover the same pixel (Skia's rule). The fold is refused for any
+node that overrides a paint hook.
 
-**`clip-path: inset()` is the same clip over the box itself.** `BoxPainter.pushClipPath` pushes one
-`pushRoundedClip` entry in the box's own space, its corners `round <radius>` (one radius for all four, so a
-rounded panel cut short keeps its corners at the cut), before anything of the box paints, so it cuts
-the box's background, backdrop and children alike; an inset that leaves nothing draws nothing. It eases
-between two insets (`ClipPathProperty`), which is what a flyout's slide-out-of-an-edge open is: a
-`translate(0, 50%)` with `inset(0 0 50% 0)`, both easing to zero, keeps the visible edge fixed while the box
-moves (the taskbar previews and jump list, `desktop.css`). It clips paint only; hit testing sees the whole box.
+**A layer lives for one frame; what is kept is a surface.** What did not change inside a layer is replayed from its
+segments' kept chunks rather than painted. A picture kept across frames belongs to a box the compositor moves -- a
+window, a pointer follower, a compositor animation -- a canvas `CgKeptLayer` composited again while nothing in it
+changed and repainted only where something did (`core/src/main/java/com/crystalgui/render/CLAUDE.md`). A layer inside
+a surface places its composite there every walk (`Box.layerPlacement`), since its opacity is not in its segments'
+keys. `UIElement.repaint()` is the door for a widget whose picture changes without moving a box.
 
-**A rounded `overflow: hidden` is a clip, not a layer.** It clips to the box's shape less its border,
-**whatever the background** — CSS's rule; a translucent panel does not fade its own children, and alpha
-masking is the `mask` property's job. `pushRoundedClip` adds a `CgClipTable` entry — the box's rect,
-radii and border's inner edge in the box's own space, and the inverse of the pose that put it on screen —
-and every quad, curve and glyph drawn until the pop carries its index; each material maps the pixel into
-the box's space and multiplies by the coverage there, from the SDF and ramp a canvas box shape draws its own edge
-with, so a rotated or skewed box clips exactly. An entry names the one it was pushed inside, and a draw
-is clipped by the whole chain, up to `CgClipTable.MAX_DEPTH` (4) deep. The children cost no target, no
-clear and no composite; an axis-aligned box still pushes its padding-box scissor, which culls what lies
-outside. Only a `mask` drawable, a fifth nested clip or a pose that collapses the box take the mask
-layers below, and a layer opened inside a clip draws unclipped and is clipped as it composites back.
-`-Dcrystalgui.paint.roundedClip=false` takes the layers everywhere, for comparison. The `edges` page
-of `cgui-gallery` ends with a rotated and a skewed rounded clip, each holding a second that straddles its
-edge.
-Measured on `cgui-desktop`: 18 layers a frame fell to none, and the UI's GPU time from 1.03 ms to 0.83;
-the picture differs only in corner fringes (at most 35 levels, a handful of pixels) and by one level
-where the 8-bit children layer used to round.
+**`clip-path: inset()` is a clip over the box itself.** `BoxPainter.clipPath` clips the canvas to the inset rect in
+the box's own space, its corners `round <radius>` (grown by the box's outline, which rings the clip), before anything
+of the box paints, so it cuts the box's background, backdrop and children alike; an inset that leaves nothing draws
+nothing. It eases between two insets (`ClipPathProperty`), which is what a flyout's slide-out-of-an-edge open is: a
+`translate(0, 50%)` with `inset(0 0 50% 0)`, both easing to zero, keeps the visible edge fixed while the box moves
+(the taskbar previews and jump list, `desktop.css`). It clips paint only; hit testing sees the whole box.
 
-**A subtree drawn wholly outside the clip is not walked.** `BoxPainter` carries each box's ink bounds
-through the pose and asks `CgUiPaintContext.outsideClip` before painting it — Blink's cull rect, against
-the live scissor or the enclosing layer's region. It is what lets a list keep rows realised past its
-viewport for free. `-Dcrystalgui.paint.cull=false` paints everything, to rule it out. The same undeclared
-paint outside a box's ink that a layer clips is, here, not drawn at all once the box leaves the clip.
+**A rounded `overflow: hidden` is a clip, not a layer.** It clips the children to the padding box with the inner
+corners, **whatever the background** — CSS's rule; a translucent panel does not fade its own children, and alpha
+masking is the `mask` property's job. It is the canvas's `clip(x, y, w, h, radii)`, the radii cached on the `Box`:
+geometric, under any transform, so a rotated or skewed box clips exactly. Clips nest to `CgClipTable.MAX_DEPTH` (4);
+past that the canvas clips by a path mask. The children cost no target, no clear and no composite.
 
-**Why an offscreen layer at all**: without one, overlapping translucent children blend against
-whatever's already drawn one at a time, then each gets faded independently — the classic
-double-blend seam at the overlap. Isolating the whole subtree in its own buffer first, then fading
-the *result* as one unit, avoids that (the same reason real browsers isolate `opacity`-bearing
-stacking contexts).
+**A subtree drawn wholly outside the clip is not walked.** `BoxPainter` carries each box's ink bounds through the
+transform and asks `CgUiPaintContext.outsideClip` before painting it (Blink's cull rect). It is what lets a list keep
+rows realised past its viewport for free. `-Dcrystalgui.paint.cull=false` paints everything, to rule it out.
 
-> **The layer used to be screen-sized**, on the reasoning that every draw then used the same absolute
-> coordinates and nothing needed translating. It cost a full-screen clear and a full-screen composite
-> for a 20×20 element at `opacity: 0.9`, which is what `LayerRegion` replaced; the translation it
-> avoided is one matrix multiply in `BoxPainter`. Skia's `saveLayer` takes bounds for the same reason.
+**Why a layer at all**: without one, overlapping translucent children blend against whatever is already drawn one at
+a time, then each gets faded independently — the double-blend seam at the overlap. Isolating the subtree, then fading
+the *result* as one unit, avoids that (the same reason browsers isolate `opacity`-bearing stacking contexts).
 
-**`OverflowClip.MASK`** (`UINode.the paint walk` — reached via `overflow: hidden` auto-detecting
-to mask, not an author-chosen `clip:` value anymore; see `UINode.resolveOverflowClip()`)
-composites a mask onto the subtree's own layer via
-`CgBlendState.MASK_ALPHA_MULTIPLY` (`(ZERO, SRC_ALPHA)` blend func for both RGB and alpha) — **not**
-a stencil test. The mask is rendered into its *own* offscreen layer first, then blended onto the
-subtree layer, multiplying the subtree's existing color+alpha by the mask's alpha; wherever the
-mask's alpha is 0, the subtree's output is zeroed too. This mirrors LDLib2's `VisualLayerPipRenderer`
-exactly (`renderMaskAndComposite`) — no `CgStencilState`/stencil buffer involved anywhere.
+**`mask`** clips the children to the box's shape and then through a layer masked by the drawable: a colour by its
+alpha (`layer.opacity`), a texture or a sprite by its texels' alpha (`layer.mask(CgBrush.texture(...))`). A mask
+that would reveal nothing (`mask: none`, a clear colour) reveals the whole shape; a cross-fading mask uses the side it
+is nearer. It masks **only the children**: the background, overlay and outline draw unmasked, as a 9-slice frame
+sits on whatever it frames.
 
-**Default mask shape** (`BoxPainter.paintMask`, when no `mask` is set) is the element's own
-shape filled white — never its background, so the layer path clips exactly as the rounded clip does — with
-the border band's *color* forced to `#00000000` — since the shader already computes
-`color = mix(borderColor, fillColor, innerCoverage)` then multiplies the whole shape by the outer
-`coverage`, a transparent border color alone already zeroes alpha across the border band while
-staying opaque across the inner region. No shader changes needed for this — the exact "border color
-to `#00000000`" framing the feature was originally specified with.
-
-**Ordering** (background → children → mask composite → overlay → outline → blit-with-opacity): the
-mask composites *after* children but *before* overlay. It clips **only the children** — `paintContent`
-draws the background straight into `subtreeFbo` while the mask multiplies a separate nested
-`childrenFbo`, so the background is never masked (see the explicit comment on `paintContent`'s call in
-`UINode.the paint walk`). Overlay and outline likewise draw over full, unclipped content — matching
-how a 9-slice frame graphic typically sits on top of whatever it frames.
-
-**Not built**: masking with a *custom* (non-self) drawable — today the mask is always the element's
-own shape; a `mask-source:` (or similar) property to point at an arbitrary drawable is a natural
-follow-up but wasn't requested for this round. Per-element FBO pooling is currently unbounded (grows
-to the deepest nesting ever seen, never shrinks) — fine for typical UI depths, a real concern only if
-something creates very deep transient nesting.
+**Ordering** (background → children → overlay → outline, all inside the group layer when there is one): CSS puts the
+outline in the opacity group, so it fades with the box.
 
 ---
 
@@ -963,8 +918,7 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
   the main motivation, avoiding a clipped final tile.
 - **No `outline-clip`/`background-clip`** — the outline is clipped by neither the element's own
   `border-radius` nor its `overflow: hidden`. It *is* clipped by an **ancestor's** scissor/mask
-  (`pushScissor` is a clip entry on every draw, or a scissor where it cannot be, and reaches nested layers when
-  they are composited), so a positive
+  (the canvas's clip applies to every draw under it, layers included), so a positive
   `outline-offset` inside a scroll view gets cut — real CSS behaves the same way.
 - **No `overlay-color`** — `paintDecoration`/`paintOutline` reset the ambient tint to white, so those
   layers can only be tinted via a tint baked into the value (`image(path, #tint)`), unlike
@@ -1028,10 +982,10 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | Frame lifecycle | `core/src/main/java/com/crystalgui/ui/UIDocument.java` |
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UINode.java` (`paintContent`/`paintDecoration`/`paintOutline`/`the paint walk`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
-| Visual layers (opacity isolation + masking) | `CgUiPaintContext` (`beginLayerFbo`/`endLayerFbo`/`blitLayer`/`compositeMask`), `UINode.the paint walk`/`buildDefaultMask`, `CrystalGraphics/.../api/state/CgBlendState.java` (`MASK_ALPHA_MULTIPLY`) |
+| Visual layers (opacity isolation + masking) | `core/src/main/java/com/crystalgui/ui/box/BoxPainter.java` over CrystalGraphics' `CgCanvas.layer` and `CgCanvasLayer` |
 | Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
 | `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
-| SDF material | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/canvas/box.shader`, a shape in `CgShapeTable` |
+| Rounded and bordered rects | CrystalGraphics' `CgCanvas.box` (`api.canvas`) |
 | Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
 | Demo scenes | `harness-scenes/src/main/java/com/crystalgui/harness/scene/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiGalleryScene` (every widget, a page each, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |

@@ -1,6 +1,9 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.api.material.engine.CgPlacement;
+import com.crystalgraphics.api.paint.gradient.CgGradient;
+import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.api.vector.CgCornerRadii;
+import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.render.canvas.CgCanvasGradient;
 import com.crystalgui.render.CgUiPaintContext;
 
@@ -56,8 +59,6 @@ import java.util.List;
  */
 public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
 
-    /** Every gradient's draw, on the frame thread; made at the first draw, since a server builds gradients and draws none. */
-    private static CgCanvasGradient gpu;
 
     /** One colour at a fraction of the gradient's length; {@code NaN} means "spread me evenly". */
     public record Stop(float position, int argb) {}
@@ -101,6 +102,14 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
     private final List<Stop> stops;
 
     private float rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL;
+
+    /**
+     * The gradient as the canvas paints it, and the box it was made for: a declared angle fits every box, a corner or
+     * a radial is remade when the box's size changes. Not part of the value.
+     */
+    @Nullable
+    private CgGradient paint;
+    private float paintWidth = Float.NaN, paintHeight = Float.NaN;
 
     /** Per-draw scratch, so a draw allocates nothing. Not part of the value. */
     private final float[] centre = new float[2];
@@ -288,6 +297,32 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
         return stops.get(stops.size() - 1).argb();
     }
 
+    /** {@link #paint} for a {@code width x height} box, remade only when the box changes what it is. */
+    private CgGradient paintFor(float width, float height) {
+        boolean anyBox = radial == null && corner == null;
+        if (paint != null && (anyBox || width == paintWidth && height == paintHeight)) return paint;
+        CgGradient shape;
+        if (radial != null) {
+            centreInto(width, height, centre);
+            radiiInto(width, height, radii);
+            // A zero radius draws the last colour everywhere, as CSS does; the paint takes only positive radii
+            shape = CgGradient.radial(centre[0] / width, centre[1] / height, Math.max(radii[0], 1e-3f) / width,
+                    Math.max(radii[1], 1e-3f) / height);
+        } else {
+            shape = CgGradient.linear(angleFor(width, height));
+        }
+        float[] positions = new float[stops.size()];
+        int[] colours = new int[stops.size()];
+        for (int i = 0; i < positions.length; i++) {
+            positions[i] = stops.get(i).position();
+            colours[i] = stops.get(i).argb();
+        }
+        paint = shape.stops(positions, colours);
+        paintWidth = width;
+        paintHeight = height;
+        return paint;
+    }
+
     @Override
     public void setCornerRadii(float rxTL, float ryTL, float rxTR, float ryTR,
                                float rxBR, float ryBR, float rxBL, float ryBL) {
@@ -295,27 +330,34 @@ public final class CgUiGradient implements CgUiDrawable, CornerRadiusAware {
         this.rxTR = rxTR; this.ryTR = ryTR;
         this.rxBR = rxBR; this.ryBR = ryBR;
         this.rxBL = rxBL; this.ryBL = ryBL;
+        remakeCornerRadii();
     }
+
+    /** The corners as the canvas takes them, remade only when a value changes; null when square. */
+    @Nullable
+    private CgCornerRadii cornerRadii;
+
+    private void remakeCornerRadii() {
+        boolean square = rxTL == 0f && ryTL == 0f && rxTR == 0f && ryTR == 0f && rxBR == 0f && ryBR == 0f
+                && rxBL == 0f && ryBL == 0f;
+        CgCornerRadii r = cornerRadii;
+        if (square) {
+            cornerRadii = null;
+        } else if (r == null || r.topLeftX() != rxTL || r.topLeftY() != ryTL || r.topRightX() != rxTR
+                || r.topRightY() != ryTR || r.bottomRightX() != rxBR || r.bottomRightY() != ryBR
+                || r.bottomLeftX() != rxBL || r.bottomLeftY() != ryBL) {
+            cornerRadii = new CgCornerRadii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+        }
+    }
+
 
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY, float x, float y, float width, float height) {
         if (width <= 0f || height <= 0f) return;
         int tint = ctx.getColor();
         if ((tint >>> 24) == 0) return;
-        if (gpu == null) gpu = new CgCanvasGradient(CgPlacement.SCREEN);
-        gpu.size(width, height).radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL).clearStops();
-        if (radial != null) {
-            centreInto(width, height, centre);
-            radiiInto(width, height, radii);
-            gpu.radial(centre[0], centre[1], radii[0], radii[1]);
-        } else {
-            gpu.angle(angleFor(width, height));
-        }
-        for (int i = 0; i < stops.size(); i++) gpu.stop(stops.get(i).position(), stops.get(i).argb());
-        // Each window writes its stops into the material, which its quad takes as it is submitted.
-        for (int i = 0, n = gpu.windows(); i < n; i++) {
-            gpu.window(i);
-            ctx.quad(gpu.material()).at(x, y).size(width, height).color(tint).submit();
-        }
+        CgCanvasBox box = ctx.canvas().box(x, y, width, height).fill(paintFor(width, height)).tint(tint);
+        if (cornerRadii != null) box.radii(cornerRadii);
+        box.draw();
     }
 }

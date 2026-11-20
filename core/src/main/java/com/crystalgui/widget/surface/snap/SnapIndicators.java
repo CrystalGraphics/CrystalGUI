@@ -101,6 +101,6 @@ public final class SnapIndicators {
     private static void line(CgUiPaintContext paint, float x0, float y0, float x1, float y1,
                              int colour, float width) {
         if (Math.abs(x1 - x0) < 0.01f && Math.abs(y1 - y0) < 0.01f) return;
-        paint.curve().line(x0, y0, x1, y1).width(width).color(colour).submit();
+        paint.canvas().spline().line(x0, y0, x1, y1).width(2f * width).color(colour).draw();
     }
 }

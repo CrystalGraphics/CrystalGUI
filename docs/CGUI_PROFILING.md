@@ -48,7 +48,7 @@ A `UIDocument` frame, and what each part records. Use this as the skeleton of th
 | After layout | `frame:afterLayout` | — | every `afterLayout` hook |
 | Input | `frame:input` | — | the hover diff and every listener the frame's pointer events reach |
 | Hover | `frame:hover` | — | the re-style, layout and settle when the hover moved |
-| Paint | `paint:tree`; `glbegin:*`, `glend:flush`, `glend:image:*`; `layer:clear`, `layer:blit`, `layer:mask`; `backdrop:capture`, `backdrop:blur`; `svg.*`, `svg-raster:build` | `drawcalls` (after batching), `backdrop-consumers`/`-captures`/`-blur-reused`, `layers`, `layers-d`, `layers-elided`, `masks-elided`, `clips-rounded`, `clips-square`, `segments`, `segment-chunks`, `segments-unchanged`/`-changed`/`-dynamic`/`-unkeyed` (whether a box's own paint would come out as last frame's: replay's measure), `segments-replayed` and `chunks-replayed` (recorded from what was kept, not painted), `segments-kept`/`-unkept` (a painted segment kept for replay, or refused), `segments-unkept-degraded` (refused because its text drew while its glyphs were still generating), `replay-epoch-evicted`/`-gamma`/`-icons` (why every kept segment was voided that frame), `replay-kept-resets`, `replay-check-differs` (check mode: a box drew otherwise under an unchanged key), `surfaces-painted`/`-kept`/`-new`/`-resized`, `surfaces-damaged`/`-undamaged` and `surface-damage-kpx` (what a walked surface executes again), `surface-checks`, `surface-check-differs` and `surface-check-kept-damaged` (damage check mode) and `surface-miss-dynamic`/`-box`/`-degraded`/`-revision`/`-region`/`-epoch`/`-stacking` (why a window's surface was drawn again; `-box` is a window shown again, `-degraded` text in it still waiting for its glyphs), `culled`, `layer-*-kpx`, `backdrop-capture-kpx`, `scissors`, `*-switches`, `svg-*` | **each widget's `paintContent`/`paintDecoration`** — a slow widget shows as a `GAP` in `paint:tree` |
+| Paint | `paint:tree`; `glend:build`; `svg.loadSource`, `svg.parse` | `drawcalls` (after batching), `text-draws`, `culled`, `layers-opacity`/`-mask`/`-elided`, `masks-elided`, `clips-rounded`, `segments`, `segments-unchanged`/`-changed`/`-dynamic` (whether a box's own paint would come out as last frame's), `segments-replayed` (recorded from what was kept), `segments-kept`/`-unkept` and `segments-unkept-<reason>` (a painted segment kept, or refused and why), `replay-check-differs`, `surfaces-kept`/`-painted`/`-new` and `surface-miss-<reason>` | every box's paint, the canvas's recording and the seal |
 | Editor | `ed:*`, `ln:*`, `part:<name>` | — | already zoned per phase; `ed:*` spans on `flow` for edits |
 | GPU | `gpu:ui` (the whole paint, composite included) | — | — |
 
@@ -69,8 +69,8 @@ call wherever a count tells you *how much* churn and you need to know *from wher
 
 ### Hints
 
-Rules over counter names, run on every slow frame — in the report and the window: `LAYER-BOUND`,
-`RETENTION-REFUSED`, `CASCADE-CHURN`, `COLLECTED`, `ICONS-DIRECT`, `FIRST-DRAW`, `GPU-BOUND`,
+Rules over counter names, run on every slow frame — in the report and the window:
+`RETENTION-MISSED`, `CASCADE-CHURN`, `COLLECTED`, `FIRST-DRAW`, `GPU-BOUND`,
 `BLOCKED-ON-WORKER` (`core.trace.UiHints`). **A hint reads a counter by its name**: renaming a counter
 silently disarms the hint that reads it — change both together.
 
@@ -173,8 +173,8 @@ opens that frame in the profiler.
 
 ## Adding zones in CrystalGUI
 
-- **Names**: zones `area:phase` (`paint:tree`, `layer:clear`, `ed:rebind`); counters kebab-case with the
-  unit in the name (`layer-clear-kpx`, `surface-miss-dynamic`); spans read as the action (`open:file`,
+- **Names**: zones `area:phase` (`paint:tree`, `layout:compute`, `ed:rebind`); counters kebab-case, a
+  unit in the name where there is one (`surface-miss-revision`, `graph.pool-kb`); spans read as the action (`open:file`,
   `close.layout.closePanel`). Constants, always (`PROFILING.md` § *Conventions*).
 - **Channel**: a phase inside a frame → `UiTrace.FRAME`; a chain → `UiTrace.FLOW`; worker work that no frame
   owns → a span on `FLOW`, or `crystalgraphics.async` when it is CrystalGraphics'.
@@ -196,8 +196,8 @@ opens that frame in the profiler.
 | Area | Channel | Where |
 |---|---|---|
 | The frame's phases | frame | `ui/dom/UIDocument`, `style/StyleEngine`, `ui/box/BoxTree`, `BoxPainter` |
-| Paint, layers, backdrop, images | frame, gpu | `render/CgUiPaintContext`, `LayerPool`, `CgUiBackdrop` |
-| SVG | frame | `render/texture/svg/SvgDocument`, `render/SvgRasterCache` |
+| Paint, segments, surfaces | frame, gpu | `render/CgUiPaintContext`, `PaintSegments`, `Surface`, `ui/box/BoxPainter` |
+| SVG | frame | `render/texture/svg/SvgDocument` (parse); drawing is CrystalGraphics' canvas |
 | Jobs | `crystalgraphics.async` | CrystalGraphics' `CgJob`: `job.then` (a job's listeners at the drain), `job.task` (an `executor` task); `frame:jobs` is the drain itself |
 | The editor | frame, flow | `widget/texteditor/TextEditor`, its `part/`, `fold/`, `lang/`, `doc/` |
 | Text model | flow | `text/TextBuffer`, `text/wrap/ProjectedLines` |

@@ -1,5 +1,6 @@
 package com.crystalgui.widget.composite;
 
+import com.crystalgraphics.api.canvas.CgCanvasTriangle;
 import com.crystalgraphics.render.canvas.CgCurveBatch;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.ArgbMath;
@@ -680,7 +681,7 @@ public class RadarChart extends UIElement {
                 continue;
             }
 
-            CgCurveBatch.Triangle wedge = ctx.triangle().points(cx, cy, x1, y1, x2, y2);
+            CgCanvasTriangle wedge = ctx.canvas().triangle(cx, cy, x1, y1, x2, y2);
             if (axisGradient == AxisGradient.TOWARD_CENTRE) {
                 // The far end is the midpoint of the RIM, which is where this wedge's bisector actually
                 // leaves it -- the rim is a chord rather than an arc, so its own two ends are nearer the
@@ -688,15 +689,24 @@ public class RadarChart extends UIElement {
                 // direction, so dividing by the squared length reaches 1 at the rim.
                 float mx = (x1 + x2) / 2f - cx, my = (y1 + y2) / 2f - cy;
                 float lenSq = mx * mx + my * my;
-                if (lenSq > 0f) wedge.gradient(rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
+                if (lenSq > 0f) ramp(wedge, rim & 0x00FFFFFF, rim, cx, cy, mx / lenSq, my / lenSq);
                 else wedge.color(rim);
             } else {
                 wedge.color(rim);
             }
             // The RIM is the outline; the two spokes are seams against the neighbouring wedges.
             // Feathering those would draw a soft crack down every one of them.
-            wedge.silhouetteEdge(CgCurveBatch.EDGE_P1_P2).submit();
+            wedge.antialias(CgCanvasTriangle.Edge.P1_P2).draw();
         }
+    }
+
+    /**
+     * {@code wedge} ramped from {@code start} to {@code end} along {@code (dx, dy)} from {@code (ox, oy)}: a vector whose
+     * length is the inverse of the ramp's, so the end is where {@code (p - o) . d} reaches 1.
+     */
+    private static void ramp(CgCanvasTriangle wedge, int start, int end, float ox, float oy, float dx, float dy) {
+        float lenSq = dx * dx + dy * dy;
+        wedge.ramp(start, ox, oy, end, ox + dx / lenSq, oy + dy / lenSq);
     }
 
     /**
@@ -727,7 +737,7 @@ public class RadarChart extends UIElement {
             float qy = ay + (by - ay) * m;
             int qc = ArgbMath.lerp(from, to, m);
 
-            CgCurveBatch.Triangle wedge = ctx.triangle().points(cx, cy, px, py, qx, qy);
+            CgCanvasTriangle wedge = ctx.canvas().triangle(cx, cy, px, py, qx, qy);
             if (fade) {
                 // ONE ramp is one axis of variation, and the fade needs it -- so the hue is flat across
                 // the slice and steps at its edges. Iso-lines parallel to the outer edge put t = 0 at
@@ -738,21 +748,21 @@ public class RadarChart extends UIElement {
                 float ex = qx - px, ey = qy - py;
                 float nx = -ey, ny = ex;
                 float d = (px - cx) * nx + (py - cy) * ny;
-                if (Math.abs(d) > 1e-4f) wedge.gradient(mid & 0x00FFFFFF, mid, cx, cy, nx / d, ny / d);
+                if (Math.abs(d) > 1e-4f) ramp(wedge, mid & 0x00FFFFFF, mid, cx, cy, nx / d, ny / d);
                 else wedge.color(mid);
             } else {
                 // Zero when the two edges are collinear, which includes either value being 0: a sliver
                 // with no width to ramp across, so it takes one colour.
                 float cross = (px - cx) * (qy - cy) - (py - cy) * (qx - cx);
                 if (Math.abs(cross) > 1e-4f) {
-                    wedge.gradient(pc, qc, cx, cy, -(py - cy) / cross, (px - cx) / cross);
+                    ramp(wedge, pc, qc, cx, cy, -(py - cy) / cross, (px - cx) / cross);
                 } else {
                     wedge.color(pc);
                 }
             }
             // Only the rim is an outline. Every other edge here is a seam -- against the next slice or
             // the next wedge -- and feathering those draws a soft crack down each one.
-            wedge.silhouetteEdge(CgCurveBatch.EDGE_P1_P2).submit();
+            wedge.antialias(CgCanvasTriangle.Edge.P1_P2).draw();
 
             px = qx;
             py = qy;
@@ -783,13 +793,12 @@ public class RadarChart extends UIElement {
             for (int i = 0; i < count; i++) {
                 double here = angleOf(i);
                 double there = angleOf((i + 1) % count);
-                ctx.curve()
+                ctx.canvas().spline()
                         .line(cx + (float) Math.cos(here) * r, cy + (float) Math.sin(here) * r,
                                 cx + (float) Math.cos(there) * r, cy + (float) Math.sin(there) * r)
-                        // A HALF width, which is this primitive's convention.
-                        .width(line / 2f)
+                        .width(line)
                         .color(ringArgb)
-                        .submit();
+                        .draw();
             }
         }
 
@@ -799,12 +808,12 @@ public class RadarChart extends UIElement {
         int spokeArgb = scaleAlpha(argb, 0.5f);
         for (int i = 0; i < count; i++) {
             double angle = angleOf(i);
-            ctx.curve()
+            ctx.canvas().spline()
                     .line(cx, cy,
                             cx + (float) Math.cos(angle) * radius, cy + (float) Math.sin(angle) * radius)
-                    .width(line / 2f)
+                    .width(line)
                     .color(spokeArgb)
-                    .submit();
+                    .draw();
         }
     }
 
@@ -835,12 +844,12 @@ public class RadarChart extends UIElement {
             // point -- the one place the eye is looking to read that axis off.
             int from = axes.get(i).argb() | 0xFF000000;
             int to = blendsAcrossWedge() ? axes.get(next).argb() | 0xFF000000 : from;
-            ctx.curve()
+            ctx.canvas().spline()
                     .line(cx + (float) Math.cos(here) * rHere, cy + (float) Math.sin(here) * rHere,
                             cx + (float) Math.cos(there) * rThere, cy + (float) Math.sin(there) * rThere)
-                    .width(line / 2f)
+                    .width(line)
                     .colors(from, to)
-                    .submit();
+                    .draw();
         }
     }
 

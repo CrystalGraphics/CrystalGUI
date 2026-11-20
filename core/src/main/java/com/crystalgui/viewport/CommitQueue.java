@@ -3,7 +3,7 @@ package com.crystalgui.viewport;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.UiSequence;
-import com.crystalgui.render.UiPresenter;
+import com.crystalgraphics.api.canvas.CgCanvasPresenter;
 
 import javax.annotation.Nullable;
 import java.util.ArrayDeque;
@@ -22,7 +22,7 @@ import java.util.function.Supplier;
  *
  * <ul>
  *   <li>A frame committed is presented exactly once; a host frame with nothing new re-presents the last
- *       ({@link UiPresenter#presentAgain}), so a busy document shows its previous picture rather than nothing.</li>
+ *       ({@link CgCanvasPresenter#presentAgain}), so a busy document shows its previous picture rather than nothing.</li>
  *   <li>{@link #requestFrame} refuses while a frame is in flight or one waits to be presented.</li>
  *   <li>A recording longer than a host frame chains the next at once, on the sequence, rather than waiting a host
  *       frame to be asked: a document at 9 ms a frame then shows 110 frames a second where it showed 60. At most two
@@ -54,11 +54,11 @@ final class CommitQueue {
      * Shows the newest commit at {@code stage} through {@code presenter}, or the last one again when nothing new
      * arrived, and answers the commit shown; null until the first. {@code move} writes a commit's property values first:
      * given the commit about to be drawn, it answers whether it changed them. A fresh commit is presented with them; an
-     * older one is executed again ({@link UiPresenter#redraw}) when they changed, and composited again as it was
+     * older one is executed again ({@link CgCanvasPresenter#redraw}) when they changed, and composited again as it was
      * otherwise. With no stage nothing is drawn. Render thread.
      */
     @Nullable
-    UiCommit present(@Nullable CgStageFrame stage, UiPresenter presenter, Predicate<UiCommit> move) {
+    UiCommit present(@Nullable CgStageFrame stage, CgCanvasPresenter presenter, Predicate<UiCommit> move) {
         long now = System.nanoTime();
         long gap = now - lastPresentNanos;
         if (lastPresentNanos != 0L && gap > 0L && gap < 100_000_000L) hostFrameNanos = (hostFrameNanos * 7L + gap) / 8L;
@@ -77,7 +77,7 @@ final class CommitQueue {
         } else if (shown != null && shown.frame() != null) {
             // What moves is a window's node or a drag's: what the layers under it drew holds still, so not again.
             boolean moved = move.test(shown);
-            if (stage != null && !(moved && presenter.redraw(stage, true))) presenter.presentAgain(stage);
+            if (stage != null && !(moved && presenter.redraw(stage))) presenter.presentAgain(stage);
         }
         return shown;
     }

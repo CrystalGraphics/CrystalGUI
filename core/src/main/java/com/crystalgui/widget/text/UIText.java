@@ -730,23 +730,20 @@ public final class UIText extends UIElement implements Measurable {
 
         int color = general.color();
         ComputedStyle computed = computedStyle();
-        CgTextDraw draw = ctx.text().layout(layout).family(family)
-                .at(contentX, contentY)
-                .pose(ctx.getPoseStack().last().pose());
+        CgTextDraw draw = ctx.text().layout(layout).family(family).at(contentX, contentY);
         applyTextStyle(draw, family, general, computed, layout, color);
-        // OVERFLOW CLIPS THE ELEMENT'S OWN TEXT, as CSS's does -- the painter's scissor covers only its children, and
-        // a squeezed tab's label ran on under the next tab. Only when the line is wider than the box: a scissor
-        // breaks the batch, and every button's label is `overflow: hidden`.
+        // OVERFLOW CLIPS THE ELEMENT'S OWN TEXT, as CSS's does -- the painter's clip covers only its children, and a
+        // squeezed tab's label ran on under the next tab. Only when the line is wider than the box.
         boolean clip = box.clips() && layout.totalWidth() > contentWidth + 0.5f;
         if (clip) {
             var edge = box.border();
-            ctx.pushScissor(edge.left, edge.top, Math.max(0f, box.width() - edge.left - edge.right),
+            ctx.canvas().save().clip(edge.left, edge.top, Math.max(0f, box.width() - edge.left - edge.right),
                     Math.max(0f, box.height() - edge.top - edge.bottom));
         }
         try {
             draw.submit();
         } finally {
-            if (clip) ctx.popScissor();
+            if (clip) ctx.canvas().restore();
         }
 
         if (ctx.textDegradedDrawCount() != degradedBefore) repaint();

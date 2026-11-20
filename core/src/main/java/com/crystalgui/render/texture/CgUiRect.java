@@ -1,6 +1,8 @@
 package com.crystalgui.render.texture;
 
-import com.crystalgraphics.render.canvas.CgQuadBatch;
+import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.api.vector.CgCornerRadii;
+import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.render.canvas.CgShapeTable;
 import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgui.render.CgUiPaintContext;
@@ -397,13 +399,27 @@ public final class CgUiRect implements CgUiDrawable {
                 case TEXTURE -> {
                     if (texture == null) return;
                     if (isPlain()) {
-                        ctx.quad().texture(0, texture).at(x, y).size(width, height).color(ctx.getColor()).submit();
+                        ctx.drawImage(texture, x, y, width, height, 0f, 0f, 1f, 1f, ctx.getColor());
                     } else {
                         drawShaped(ctx.getColor(), 0);
                     }
                 }
                 case SPRITE -> drawSprite();
             }
+        }
+
+        /** The last radii drawn, kept while the eight values hold: a run of rows shares one. */
+        @Nullable
+        private CgCornerRadii radii;
+
+        private CgCornerRadii radii() {
+            CgCornerRadii r = radii;
+            if (r == null || r.topLeftX() != rxTL || r.topLeftY() != ryTL || r.topRightX() != rxTR
+                    || r.topRightY() != ryTR || r.bottomRightX() != rxBR || r.bottomRightY() != ryBR
+                    || r.bottomLeftX() != rxBL || r.bottomLeftY() != ryBL) {
+                radii = r = new CgCornerRadii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+            }
+            return r;
         }
 
         /** Whether the frame's own batch can express this rect: no radius, no border. */
@@ -426,9 +442,9 @@ public final class CgUiRect implements CgUiDrawable {
             // the whole checkerboard says "missing" at any size. CgUiPaintContext.drawImage is the only
             // other site that can be handed a fallback.
             if (missing || (!sprite.hasBorder() && isPlain())) {
-                CgQuadBatch.Quad q = ctx.quad().texture(0, resolved).at(x, y).size(width, height).color(tint);
-                if (!missing) q.uv(sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3());
-                q.submit();
+                // drawImage draws a missing texture whole
+                ctx.drawImage(resolved, x, y, width, height, sprite.getU0(), sprite.getV0(), sprite.getU3(),
+                        sprite.getV3(), tint);
                 return;
             }
             // EVERY SHAPED SPRITE GOES DOWN THE SLICED PATH, bordered or not. With zero borders the nine
@@ -439,30 +455,19 @@ public final class CgUiRect implements CgUiDrawable {
             drawShaped(tint, 0);
         }
 
-        /** A radius, a border or a 9-slice: a quad naming its shape, on the box material. */
+        /** A radius, a border or a 9-slice: the canvas's box. */
         private void drawShaped(int quadTint, int shaderFillArgb) {
-            int kind = sprite != null ? CgShapeTable.NINE_SLICE : texture != null ? CgShapeTable.TEXTURE : CgShapeTable.FLAT;
-            CgShapeTable.Shape shape = ctx.shapes().begin(kind, width, height)
-                    .radii(rxTL, ryTL, rxTR, ryTR, rxBR, ryBR, rxBL, ryBL);
+            CgTexture2D sliced = sprite != null ? sprite.getTexture() : null;
+            CgCanvasBox box = ctx.canvas().box(x, y, width, height).tint(quadTint);
+            if (sliced != null) box.fill(sprite.brush(sliced));
+            else if (texture != null) box.fill(texture);
+            else box.fill(shaderFillArgb);
+            box.radii(radii());
             if (bordered()) {
-                shape.border(borderLeft, borderTop, borderRight, borderBottom, borderColorArgb,
-                        borderTopColorArgb, borderRightColorArgb, borderBottomColorArgb, borderLeftColorArgb);
+                box.border(borderTop, borderRight, borderBottom, borderLeft, borderTopColorArgb,
+                        borderRightColorArgb, borderBottomColorArgb, borderLeftColorArgb);
             }
-            if (sprite != null) {
-                float scale = sprite.getBorderScale();
-                shape.slices(sprite.getBorderLeft() * scale, sprite.getBorderTop() * scale,
-                        sprite.getBorderRight() * scale, sprite.getBorderBottom() * scale,
-                        sprite.getU0(), sprite.getV0(), sprite.getU3(), sprite.getV3(),
-                        sprite.getU1(), sprite.getV1(), sprite.getU2(), sprite.getV2(),
-                        sprite.centerSourceWidth(), sprite.centerSourceHeight(),
-                        sprite.getRepeatX().ordinal(), sprite.getRepeatY().ordinal(), sprite.isFillCenter());
-            } else if (texture == null) {
-                shape.fill(shaderFillArgb);
-            }
-            int index = shape.end();
-            CgQuadBatch.Quad quad = ctx.quad().at(x, y).size(width, height).custom2(index).color(quadTint);
-            CgTexture2D sampled = sprite != null ? sprite.getTexture() : texture;
-            (sampled != null ? quad.texture(0, sampled) : quad).submit();
+            box.draw();
         }
     }
 

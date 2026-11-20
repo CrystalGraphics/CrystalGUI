@@ -9,7 +9,7 @@ import com.crystalgui.render.CgUiPaintContext;
  * is one picture and a loader caches one native per picture — so art that has to follow an angle can
  * only be quantised into a fixed set of pictures. Photoshop's rotate cursor is eight of them, wrong by
  * up to 22.5 degrees at exactly the moment you are watching the angle change. Drawing it instead is
- * smooth at every angle and every zoom, because it goes through {@code ctx.curve()} like the rest of
+ * smooth at every angle and every zoom, because it goes through {@code ctx.canvas().spline()} like the rest of
  * the design-time chrome.</p>
  *
  * <p><b>Answer for the point; do not put art in a slot.</b> A widget implements {@link CursorSource} and

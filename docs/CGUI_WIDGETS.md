@@ -1480,7 +1480,7 @@ it, and it lives where every other one does — a documented key and the command
 1% low 29 fps   over 16.7ms: 6/348   GC 4ms      <- the stutter, the misses, the collector
 ▁▁▂▁▁█▁▂▁▁▁▃▁▁▁▂▁▁▁▁▁▁▂▁▁▁▁▁▁▂▁▁▁▁▁▁▁▂▁▁▁▁▁▁    <- the shape: oldest left, one bar per column
 paint:tree 6.31ms  frame:layout 1.01ms           <- where it went; expands to a row each
-jobs-busy=0 drawcalls=31 svg-raster-draws=153
+jobs-busy=0 drawcalls=31 segments-replayed=153
 ```
 
 Expanded (`toggleDetail`), the phase line becomes a column — the question after the summary has said
@@ -1562,10 +1562,8 @@ raises — *why are there seventeen layers?* — and they account for every one:
 | `segments-replayed` · `segments-changed` | A box's own paint recorded again from what it kept, against painted anew |
 | `segments-dynamic` | Never kept, because the node repaints itself (`backdrop-filter`, or a node overriding a paint hook without `paintsDynamically()` false). A readout with many of these and few replayed usually means this, not a broken cache |
 | `surfaces-kept` · `surfaces-painted` | A window composited from its picture, against walked again |
-| `surface-miss-dynamic` · `surface-miss-revision` | Why a window was walked: something in it paints dynamically, or something in it changed |
-| `surface-damage-kpx` | What a walked window executed again, in kilopixels: a caret's blink is a few, a scrolled list most of it |
-| `svg-raster-draws` · `svg-direct` | An icon drawn as one tinted quad from the atlas, against one drawn cell-by-cell. A frame full of the second is a finding |
-| `layer-clear-kpx` · `layer-blit-kpx` | Kilopixels cleared and composited. Megapixels here beside a two-digit `drawcalls` is the shape of a frame that is layer-bound, not draw-bound |
+| `surface-miss-revision` · `-region` · `-epoch` · `-degraded` | Why a window was walked: something in it changed, it moved within its node or was resized, the text gamma or a glyph page moved, or its text drew before its glyphs landed |
+| `segments-unkept-<reason>` | A painted segment the canvas would not keep, by `CgPaintChunk.Refusal`: `DEGRADED` is text drawn before its glyphs landed, `FRAME_TEXTURE` a draw of a texture that lives one frame |
 
 ---
 

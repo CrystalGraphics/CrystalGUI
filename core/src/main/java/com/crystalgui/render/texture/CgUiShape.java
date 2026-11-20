@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgraphics.api.vector.CgStrokeCap;
 import java.util.Locale;
 
 import com.crystalgraphics.render.canvas.CgCurveBatch;
@@ -7,7 +8,7 @@ import com.crystalgui.render.CgUiPaintContext;
 
 /**
  * A named vector mark — chevron, triangle, checkmark, cross, plus/minus, arrow — drawn directly by
- * {@code ctx.curve()}/{@code ctx.triangle()}, with no texture asset and no glyph.
+ * the canvas's spline and triangle, with no texture asset and no glyph.
  *
  * <p>This is what replaces {@code UIText("v")}/{@code UIText(">")} as a foldout/dropdown indicator:
  * those were font glyphs standing in for shapes the font never actually draws consistently across
@@ -185,8 +186,8 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
         float lx = x + w * 0.24f, ly = y + h * leftY;
         float mx = x + w * 0.50f, my = y + h * midY;
         float rx = x + w * 0.76f, ry = y + h * rightY;
-        ctx.curve().line(lx, ly, mx, my).width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
-        ctx.curve().line(mx, my, rx, ry).width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
+        ctx.canvas().spline().line(lx, ly, mx, my).width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
+        ctx.canvas().spline().line(mx, my, rx, ry).width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
     }
 
     /** Vertical-opening chevron (left/right pointing) — same shape, transposed. Round at every end,
@@ -196,16 +197,16 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
         float tx = x + w * topX, ty = y + h * 0.24f;
         float mx = x + w * midX, my = y + h * 0.50f;
         float bx = x + w * bottomX, by = y + h * 0.76f;
-        ctx.curve().line(tx, ty, mx, my).width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
-        ctx.curve().line(mx, my, bx, by).width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
+        ctx.canvas().spline().line(tx, ty, mx, my).width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
+        ctx.canvas().spline().line(mx, my, bx, by).width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
     }
 
     private static void triangle(CgUiPaintContext ctx, float x, float y, float w, float h, int argb,
                                  float fx0, float fy0, float fx1, float fy1, float fx2, float fy2) {
-        ctx.triangle()
-           .points(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1, x + w * fx2, y + h * fy2)
+        ctx.canvas()
+           .triangle(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1, x + w * fx2, y + h * fy2)
            .color(argb)
-           .submit();
+           .draw();
     }
 
     /** Short leg then long leg, sharing the low point — round at every end, including the joint,
@@ -214,35 +215,35 @@ public record CgUiShape(Kind kind) implements CgUiDrawable {
         float x1 = x + w * 0.22f, y1 = y + h * 0.52f;
         float x2 = x + w * 0.42f, y2 = y + h * 0.72f;
         float x3 = x + w * 0.80f, y3 = y + h * 0.26f;
-        ctx.curve().line(x1, y1, x2, y2).width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
-        ctx.curve().line(x2, y2, x3, y3).width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
+        ctx.canvas().spline().line(x1, y1, x2, y2).width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
+        ctx.canvas().spline().line(x2, y2, x3, y3).width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
     }
 
     /** Two independent diagonals — no shared endpoint, so both can round-cap freely. */
     private static void cross(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb) {
-        ctx.curve().line(x + w * 0.26f, y + h * 0.26f, x + w * 0.74f, y + h * 0.74f)
-           .width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
-        ctx.curve().line(x + w * 0.74f, y + h * 0.26f, x + w * 0.26f, y + h * 0.74f)
-           .width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
+        ctx.canvas().spline().line(x + w * 0.26f, y + h * 0.26f, x + w * 0.74f, y + h * 0.74f)
+           .width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
+        ctx.canvas().spline().line(x + w * 0.74f, y + h * 0.26f, x + w * 0.26f, y + h * 0.74f)
+           .width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
     }
 
     /** Horizontal bar, plus an optional vertical one — neither shares an endpoint with the other. */
     private static void plus(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
                              boolean withVertical) {
-        ctx.curve().line(x + w * 0.22f, y + h * 0.5f, x + w * 0.78f, y + h * 0.5f)
-           .width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
+        ctx.canvas().spline().line(x + w * 0.22f, y + h * 0.5f, x + w * 0.78f, y + h * 0.5f)
+           .width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
         if (withVertical) {
-            ctx.curve().line(x + w * 0.5f, y + h * 0.22f, x + w * 0.5f, y + h * 0.78f)
-               .width(hw).color(argb).cap(CgCurveBatch.CAP_ROUND).submit();
+            ctx.canvas().spline().line(x + w * 0.5f, y + h * 0.22f, x + w * 0.5f, y + h * 0.78f)
+               .width(2f * hw).color(argb).cap(CgStrokeCap.ROUND).draw();
         }
     }
 
     /** Shaft with a round start and an arrowhead end — one curve, CAP_ARROW does the rest. */
     private static void arrow(CgUiPaintContext ctx, float x, float y, float w, float h, float hw, int argb,
                               float fx0, float fy0, float fx1, float fy1) {
-        ctx.curve().line(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1)
-           .width(hw).color(argb)
-           .cap(CgCurveBatch.CAP_ROUND, CgCurveBatch.CAP_ARROW)
-           .submit();
+        ctx.canvas().spline().line(x + w * fx0, y + h * fy0, x + w * fx1, y + h * fy1)
+           .width(2f * hw).color(argb)
+           .cap(CgStrokeCap.ROUND, CgStrokeCap.BUTT).arrowAtEnd()
+           .draw();
     }
 }

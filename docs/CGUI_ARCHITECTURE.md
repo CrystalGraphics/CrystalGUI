@@ -228,16 +228,11 @@ com.crystalgui.lifecycle       CrystalGUI's two CgLifecycleListeners, one a side
                                desktop, loading tasks, reloads, paint teardown), CgUiCommonLifecycle (protocols,
                                the server workspace, the server smoke)
 
-com.crystalgui.render          CgUiRenderer (the global part), CgUiRenderer.View (one per document: a CgUiPaintContext that records and a UiPresenter that shows), UiFrame
-                               (a sealed frame), Surface (a moved box's kept texture), PaintSegments, PaintSurfaces, CgUiBackdrop,
-                               ScissorStack,
-                               SvgRasterCache — icon fills rasterised once by additive accumulation into an
-                               RGBA16F atlas and drawn as a tinted quad; sits beside the paint context and
-                               reaches it through package-private members, as the backdrop does.
-                               CgUiBackdrop — the backdrop primitive under backdrop-filter: capture the region
-                               behind an element, blur it (separable Gaussian at 1/4 res), hand back the
-                               sharp and blurred textures with UVs. Sits BESIDE the paint context and
-                               reaches it through package-private members, as TextEditor's view parts do
+com.crystalgui.render          CgUiRenderer (the global part), CgUiRenderer.View (one per document: a CgUiPaintContext
+                               recording on CrystalGraphics' CgCanvasRecorder, and the CgCanvasPresenter that shows its
+                               CgCanvasFrame), Surface (a moved box's kept picture, a CgKeptLayer), PaintSegments (a
+                               box's own paint as a CgPaintChunk), InkOverflow, UiPaintWarmup. Clips, layers, glass and
+                               icons are the canvas's
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
   .texture                     CgUiDrawable (SPI), CgUiRect (a Fill + radii + border: the one
                                drawable a background resolves to), CgUiSprite (a 9-slice FILL,

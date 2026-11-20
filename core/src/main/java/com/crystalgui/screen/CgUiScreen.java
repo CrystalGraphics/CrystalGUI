@@ -25,7 +25,7 @@ import com.crystalgui.net.window.WindowMount;
 import com.crystalgui.desktop.motion.WindowAnimator;
 import com.crystalgui.desktop.window.WindowFrame;
 import com.crystalgui.fs.client.WorkspaceClient;
-import com.crystalgui.render.UiPresenter;
+import com.crystalgraphics.api.canvas.CgCanvasPresenter;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.theme.ThemeRegistry;
 import com.crystalgui.core.settings.Preferences;
@@ -150,7 +150,7 @@ public final class CgUiScreen {
     private static long paintedFrame = -1L;
     /** A probe's one-shot paint in place of the next. Render thread. */
     @Nullable
-    private static BiConsumer<CgStageFrame, UiPresenter> replacement;
+    private static BiConsumer<CgStageFrame, CgCanvasPresenter> replacement;
 
     @Nullable
     private static volatile GameState game;
@@ -757,7 +757,7 @@ public final class CgUiScreen {
      * CgUiScreen.replaceNextPaint((stage, presenter) -> presenter.presentAgain(stage));
      * }</pre>
      */
-    public static void replaceNextPaint(BiConsumer<CgStageFrame, UiPresenter> paint) {
+    public static void replaceNextPaint(BiConsumer<CgStageFrame, CgCanvasPresenter> paint) {
         requireInstalled();
         replacement = paint;
     }
@@ -793,7 +793,7 @@ public final class CgUiScreen {
         if (now == Mode.NONE || paintedFrame == frameIndex || !screenStage && now != Mode.HUD) return;
         paintedFrame = frameIndex;
         INPUT.returnUnhandledKeys();
-        BiConsumer<CgStageFrame, UiPresenter> replaced = replacement;
+        BiConsumer<CgStageFrame, CgCanvasPresenter> replaced = replacement;
         if (replaced != null) {
             replacement = null;
             replaced.accept(stage, shown.presenter());

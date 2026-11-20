@@ -1,5 +1,9 @@
 package com.crystalgui.render.texture;
 
+import org.jspecify.annotations.Nullable;
+import com.crystalgraphics.api.paint.brush.CgTiling;
+import com.crystalgraphics.api.paint.brush.CgNineSlice;
+import com.crystalgraphics.api.paint.brush.CgBrush;
 import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgraphics.gpu.resource.CgTextureManager;
 import com.crystalgraphics.gpu.resource.CgTextureSettings;
@@ -70,6 +74,11 @@ public final class CgUiSprite {
     private float u0, u1, u2, u3;
     private float v0, v1, v2, v3;
     private float borderSumX = 0f;
+    /** {@link #brush}'s answer and the texture it was made for; dropped by every setter that changes its shape. */
+    @Nullable
+    private CgBrush brush;
+    @Nullable
+    private CgTexture2D brushTexture;
     private float borderSumY = 0f;
 
     /** Resolves the pending texture path if one is outstanding. Requires a live GL context, so it's
@@ -81,6 +90,44 @@ public final class CgUiSprite {
             setTexture(CgTextureManager.get().getOrCreate(path, PIXELS));
         }
         return texture;
+    }
+
+    /**
+     * The sprite as a nine-slice canvas brush over {@code drawn}, its region, slices, repeats and centre fill. Made
+     * once per texture, then kept.
+     */
+    public CgBrush brush(CgTexture2D drawn) {
+        if (brushTexture == drawn) return brush;
+        brushTexture = drawn;
+        CgTiling tiling = tiling(repeatX, repeatY);
+        // The rect and borders are in the reference size's pixels; the brush is in the texture's own
+        float kx = textureSize.width > 0f ? drawn.getWidth() / textureSize.width : 1f;
+        float ky = textureSize.height > 0f ? drawn.getHeight() / textureSize.height : 1f;
+        CgNineSlice slice = new CgNineSlice(Math.round(borderLeftTop.x * kx), Math.round(borderLeftTop.y * ky),
+                Math.round(borderRightBottom.x * kx), Math.round(borderRightBottom.y * ky), fillCenter,
+                borderScale / kx);
+        return brush = CgBrush.texture(drawn)
+                .region(Math.round(spritePosition.x * kx), Math.round(spritePosition.y * ky),
+                        Math.max(1, Math.round(spriteSize.width * kx)), Math.max(1, Math.round(spriteSize.height * ky)))
+                .nineSlice(slice).tiling(tiling).edges(tiling).sampler(drawn.sampler());
+    }
+
+    /**
+     * The one tiling naming both axes' repeats; for a pair none names (round across, repeat down), the horizontal
+     * mode both ways.
+     */
+    private static CgTiling tiling(CgUiRepeat x, CgUiRepeat y) {
+        if (x == y) {
+            return switch (x) {
+                case STRETCH -> CgTiling.STRETCH;
+                case REPEAT -> CgTiling.REPEAT;
+                case ROUND -> CgTiling.ROUND;
+                case SPACE -> CgTiling.SPACE;
+            };
+        }
+        if (x == CgUiRepeat.REPEAT && y == CgUiRepeat.STRETCH) return CgTiling.REPEAT_X;
+        if (x == CgUiRepeat.STRETCH && y == CgUiRepeat.REPEAT) return CgTiling.REPEAT_Y;
+        return tiling(x, x);
     }
 
     public CgUiSprite copy() {
@@ -111,17 +158,20 @@ public final class CgUiSprite {
     public CgUiSprite setRepeat(CgUiRepeat x, CgUiRepeat y) {
         this.repeatX = x == null ? CgUiRepeat.STRETCH : x;
         this.repeatY = y == null ? CgUiRepeat.STRETCH : y;
+        brushTexture = null;
         return this;
     }
 
     public CgUiSprite setFillCenter(boolean fillCenter) {
         this.fillCenter = fillCenter;
+        brushTexture = null;
         return this;
     }
 
     /** @param borderScale multiplier on border widths and tile sizes; clamped to a sane positive range. */
     public CgUiSprite setBorderScale(float borderScale) {
         this.borderScale = borderScale > 0f ? Math.min(borderScale, 64f) : 1f;
+        brushTexture = null;
         return this;
     }
 
@@ -177,6 +227,7 @@ public final class CgUiSprite {
             this.spriteSize = Size.of(width, height);
         }
         uvDirty = true;
+        brushTexture = null;
         return this;
     }
 
@@ -185,6 +236,7 @@ public final class CgUiSprite {
         this.spritePosition = Position.of(x, y);
         this.spriteSize = Size.of(width, height);
         uvDirty = true;
+        brushTexture = null;
         return this;
     }
 
@@ -192,6 +244,7 @@ public final class CgUiSprite {
         this.borderLeftTop = Position.of(left, top);
         this.borderRightBottom = Position.of(right, bottom);
         uvDirty = true;
+        brushTexture = null;
         return this;
     }
 

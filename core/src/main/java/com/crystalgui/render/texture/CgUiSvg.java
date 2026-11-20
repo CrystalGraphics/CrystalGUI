@@ -1,5 +1,9 @@
 package com.crystalgui.render.texture;
 
+import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgraphics.api.vector.svg.CgSvg;
+import com.crystalgraphics.api.paint.brush.CgBrush;
+import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.render.texture.svg.SvgDocument;
@@ -141,7 +145,7 @@ public final class CgUiSvg implements CgUiDrawable {
 
     private float strokeHalfWidth;
 
-    public CgUiSvg(SvgDocument document) {
+    private CgUiSvg(SvgDocument document) {
         this.document = document;
         this.iconName = null;
     }
@@ -240,29 +244,79 @@ public final class CgUiSvg implements CgUiDrawable {
         return this;
     }
 
+    // ── On the canvas ───────────────────────────────────────────────────────────────────────────────
+
+    /** The engine's document for {@link #resourcePath()}, the path it was read from, and the generation it saw. */
+    @Nullable
+    private CgSvg vector;
+    @Nullable
+    private String vectorPath;
+    private int vectorGeneration = -1;
+    /** The path the engine could not read: drawn as nothing, and said once. */
+    @Nullable
+    private String unreadable;
+    /** The brush last drawn, and what it was made of: remade only when one of them changes. */
+    @Nullable
+    private CgBrush brush;
+    @Nullable
+    private CgSvg brushSvg;
+    private int brushArgb;
+    private boolean brushFlat;
+    private float brushStroke;
+
+    /** Where this drawable's document is read from now; null for one built from a document alone. */
+    @Nullable
+    private String resourcePath() {
+        if (iconName == null) return path;
+        FileIconTheme.Variant current = variantOverride != null ? variantOverride : FileIconTheme.getVariant();
+        return FileIconTheme.toResourcePath(FileIconTheme.withVariant(iconName, current));
+    }
+
+    /** The engine's document to draw, null where it has none (no path, or one it cannot read). */
+    @Nullable
+    private CgSvg vector() {
+        String at = resourcePath();
+        if (at == null || at.equals(unreadable)) return null;
+        if (vector == null || !at.equals(vectorPath) || vectorGeneration != CgSvg.generation()) {
+            vectorGeneration = CgSvg.generation();
+            vectorPath = at;
+            try {
+                vector = CgSvg.of(at);
+            } catch (IllegalArgumentException refused) {
+                unreadable = at;
+                vector = null;
+                CrystalGuiCore.LOGGER.warn("[svg] {} cannot be drawn: {}", at, refused.getMessage());
+            }
+        }
+        return vector;
+    }
+
+    /** {@code svg} as a brush in {@code argb}, kept while nothing it is made of changes. */
+    private CgBrush brushOf(CgSvg svg, int argb, float deviceScale) {
+        // The half-width is in screen pixels; the brush's width in canvas units
+        float stroke = monochrome && strokeHalfWidth > 0f ? strokeHalfWidth * 2f / Math.max(deviceScale, 1e-4f) : 0f;
+        if (brush == null || brushSvg != svg || brushArgb != argb || brushFlat != monochrome || brushStroke != stroke) {
+            CgBrush b = CgBrush.svg(svg).color(argb);
+            brush = monochrome ? b.flat(stroke) : b;
+            brushSvg = svg;
+            brushArgb = argb;
+            brushFlat = monochrome;
+            brushStroke = stroke;
+        }
+        return brush;
+    }
+
     @Override
     public void draw(CgUiPaintContext ctx, float mouseX, float mouseY,
                      float x, float y, float width, float height) {
-        SvgDocument document = document();
-        if (document == null || document.isEmpty()) return;
-        float boxWidth = document.width(), boxHeight = document.height();
-        if (boxWidth <= 0f || boxHeight <= 0f || width <= 0f || height <= 0f) return;
-
-        float scale = Math.min(width / boxWidth, height / boxHeight);
-        float left = x + (width - boxWidth * scale) * 0.5f;
-        float top = y + (height - boxHeight * scale) * 0.5f;
-        if (snappable(ctx, Math.max(boxWidth, boxHeight) * scale)) {
-            left = ctx.snapXToDevicePixel(left);
-            top = ctx.snapYToDevicePixel(top);
-        }
-
+        if (width <= 0f || height <= 0f) return;
+        CgSvg svg = vector();
+        if (svg == null || svg.isEmpty() || svg.width() <= 0f || svg.height() <= 0f) return;
         int argb = ArgbMath.multiply(tintArgb, ctx.getColor());
-
-        if (monochrome) {
-            document.renderMonochrome(ctx, left, top, scale, argb, strokeHalfWidth);
-        } else {
-            document.render(ctx, left, top, scale, argb);
-        }
+        float shown = Math.max(svg.width(), svg.height()) * Math.min(width / svg.width(), height / svg.height());
+        // Snapped where a hinted icon is: and a snapped icon's raster is cached, an unsnapped one not
+        CgCanvas canvas = ctx.canvas().save().pixelSnap(snappable(ctx, shown));
+        canvas.image(brushOf(svg, argb, ctx.deviceScale()), x, y, width, height).restore();
     }
 
     // ── Pixel-grid fitting ──────────────────────────────────────────────────────────────────────────

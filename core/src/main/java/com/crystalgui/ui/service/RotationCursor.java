@@ -94,8 +94,8 @@ public final class RotationCursor {
         float endX = x + cos * OFFSET - sin * REACH;
         float endY = y + sin * OFFSET + cos * REACH;
 
-        ctx.curve().from(startX, startY).via(viaX, viaY).to(endX, endY)
-                .width(width).color(colour).submit();
+        ctx.canvas().spline().from(startX, startY).via(viaX, viaY).to(endX, endY)
+                .width(2f * width).color(colour).draw();
 
         // THE ARC'S OWN TANGENT AT EACH END, which for a quadratic is the run to the control point. Both
         // curl inward, because the arc bows out between them.
@@ -130,7 +130,7 @@ public final class RotationCursor {
             float barbTangential = -HEAD * (side * ux * sinBarb + uy * cosBarb);
             float endX = x + cos * (OFFSET + barbRadial) - sin * (tangential + barbTangential);
             float endY = y + sin * (OFFSET + barbRadial) + cos * (tangential + barbTangential);
-            ctx.curve().line(tipX, tipY, endX, endY).width(width).color(colour).submit();
+            ctx.canvas().spline().line(tipX, tipY, endX, endY).width(2f * width).color(colour).draw();
         }
     }
 }
