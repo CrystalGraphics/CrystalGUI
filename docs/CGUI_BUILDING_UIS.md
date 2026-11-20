@@ -1374,7 +1374,7 @@ badge.close();   // and it stops
 - **Once a frame each**, on the render thread, from the game's own screen and HUD hooks. `SCREEN` fires once whoever's
   screen is up; neither fires on a server, and Fabric below 1.16 has no `SCREEN`.
 - **Below `COMPOSITOR` is under the pinned windows**, above it over them; ties draw in registration order.
-  `COMPOSITOR` is CrystalGraphics' `CgRenderStage.VIEWPORT_WIDGETS`. Anything that follows a point in the world (a
+  `COMPOSITOR` is CrystalGraphics' `CgRenderStage.SCREEN_WIDGETS`. Anything that follows a point in the world (a
   damage number, a name plate) registers at `CgRenderStage.WORLD_WIDGETS`, under every window. CrystalGUI's own
   screen draws nothing itself: its desktop is the same renderer on `SCREEN`, so the same order holds over it.
 - **What you record executes at once**, onto the game's target, after the renderers before you. Nothing is kept:

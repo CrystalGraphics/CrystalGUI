@@ -32,7 +32,7 @@ import java.util.function.Supplier;
  * CgUiViewport.Content content = CgUiViewport.Content.whole(document);
  *
  * // every host frame: a renderer at a GUI stage, which gives it the size, the target and the clock
- * CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> viewport.frame(stage, content));
+ * CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, stage -> viewport.frame(stage, content));
  *
  * // input, and anything else that touches the tree
  * viewport.consumeMouseEvent(event);
@@ -284,7 +284,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
      * and shows the newest frame there. Its delta is {@link #advance()}'s.
      *
      * <pre>{@code
-     * CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> viewport.frame(stage, content));
+     * CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, stage -> viewport.frame(stage, content));
      * }</pre>
      *
      * @return whether anything was shown: sequenced, false until the first frame has been recorded

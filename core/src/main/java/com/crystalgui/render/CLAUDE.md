@@ -30,7 +30,7 @@ ctx.recordFrame(w, h);                            // no GPU from here: any threa
 document.paint(ctx);
 CgCanvasFrame frame = ctx.seal();                 // ...to here
 
-CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage ->
+CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, stage ->
         view.presenter().present(stage, frame));  // render thread: included in the firing, composited
 view.close();                                     // render thread, with the document
 ```

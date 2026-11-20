@@ -111,7 +111,7 @@ public final class CgUiClientSurfaceProbeScene implements InteractiveSceneLifecy
             shellDocument.append(shell);
         });
         // The client first, so its surface has executed when the shell draws it.
-        screen = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> {
+        screen = CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, stage -> {
             clientViewport.frame(stage, clientContent);
             shellViewport.frame(stage, shellContent);
         });

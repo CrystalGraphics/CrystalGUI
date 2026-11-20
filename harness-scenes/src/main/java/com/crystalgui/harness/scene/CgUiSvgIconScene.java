@@ -183,7 +183,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (study != null) study = study.variant(FileIconTheme.Variant.DARK);
         applyStartupOverrides(ctx.getScreenWidth(), ctx.getScreenHeight());
         panY += stripHeight();
-        screen = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, this::paint);
+        screen = CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, this::paint);
         // Enabled BEFORE the first frame: the profiler is a no-op behind a volatile flag, so turning it on
         // mid-run would leave the warm-up frames uninstrumented and the totals unattributable.
         profileFrames = Integer.getInteger("crystalgui.svgicon.profile", 0);

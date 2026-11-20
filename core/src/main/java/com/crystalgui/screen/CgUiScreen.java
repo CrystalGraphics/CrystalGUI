@@ -76,7 +76,7 @@ import java.util.function.Predicate;
 public final class CgUiScreen {
 
     /** The order the desktop paints and takes input at, on {@code HUD} and {@code SCREEN}: the game's own interface. */
-    public static final int ORDER = CgRenderStage.VIEWPORT_WIDGETS;
+    public static final int ORDER = CgRenderStage.SCREEN_WIDGETS;
 
     /** The class the desktop's document carries: a theming hook. */
     public static final String ROOT_CLASS = "__host-root__";

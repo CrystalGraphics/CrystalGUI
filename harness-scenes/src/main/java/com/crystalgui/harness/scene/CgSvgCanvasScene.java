@@ -54,7 +54,7 @@ public final class CgSvgCanvasScene implements InteractiveSceneLifecycle {
         for (String name : FILETYPES) add("crystalgui:ui/icons/filetypes/" + name + ".svg");
         for (String name : CHROME) add("crystalgui:ui/icons/" + name + ".svg");
         // The SCREEN stage, as cgui-svg-icon draws on: a 2D scene has no camera readout over the strip
-        hud = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, frame -> {
+        hud = CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, frame -> {
             turns++;
             draw(frame.canvas());
         });

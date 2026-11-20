@@ -95,7 +95,7 @@ public final class CgUiConcurrencyScene implements InteractiveSceneLifecycle {
             cells.add(cell);
             cell.viewport.run(() -> build(cell));
         }
-        screen = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, stage -> {
+        screen = CgRenderStage.SCREEN.register(CgRenderStage.SCREEN_WIDGETS, stage -> {
             for (Cell cell : cells) cell.viewport.frame(stage, cell.content);
         });
         started = System.nanoTime();
