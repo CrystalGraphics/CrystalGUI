@@ -130,7 +130,7 @@ Prefer an existing **specialized subclass** — it presets those flags correctly
 | `DimensionProperty`, `LPAProperty`, `LPSizeProperty`, `LPARectProperty` | Taffy-shaped length/percent/auto types. `DimensionValue`/`LPAValue` also accept **`em`** — see `FontRelative` |
 | `LengthPercentProperty` | `LengthPercent` (used by offsets, radii, transform origin) |
 | `GridProperty`, `GridTemplateProperty`, `GridAutoProperty`, `GridTemplateAreasProperty` | grid types |
-| `TextureProperty`, `TransformProperty` | drawable / `Transform` |
+| `ImageProperty`, `TransformProperty` | `CgUiImage` / `Transform` |
 
 **3. Register it** as a `public static final` in `StylePropertyRegistry`, via `create(...)`:
 

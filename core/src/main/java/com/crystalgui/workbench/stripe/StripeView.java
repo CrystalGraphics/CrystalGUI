@@ -1,12 +1,12 @@
 package com.crystalgui.workbench.stripe;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.service.Animation;
 import dev.vfyjxf.taffy.style.TaffyDisplay;
 import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.signal.Connection;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
@@ -708,7 +708,7 @@ public class StripeView extends UIElement {
         // of eight buttons is one Tab press to skip past, not eight -- and every one of them is reachable
         // from the command palette anyway, which is the accessible path that matters.
         button.setFocusPolicy(FocusPolicy.CLICK_NOT_TABBABLE);
-        button.glyph = applyIcon(button, descriptor.icon());
+        applyIcon(button, descriptor.icon());
         // The label is the tooltip, because the button is icon-only. Without it the rail is a column of
         // glyphs with no way to learn what they are -- the one complaint the New UI's icon-only stripe
         // reliably attracts.
@@ -1419,9 +1419,11 @@ public class StripeView extends UIElement {
             return false;
         }
 
-        /** Retained so the focused state can flip its variant. @see #revalidate */
+        /** Its icon and the element it is drawn on, retained so the focused state can flip its variant. */
         @Nullable
-        CgUiSvg glyph;
+        CgUiImage.Icon glyph;
+        @Nullable
+        UIElement glyphSlot;
 
         void revalidate() {
             boolean open = workbench.isPanelOpen(typeId);
@@ -1443,24 +1445,26 @@ public class StripeView extends UIElement {
             // .__panel-focused__ rule already sets to white, so it needs nothing from here. Calling this
             // for both kinds is harmless -- an icon with no dark variant on disk falls back to its base
             // file, which is how a variant-neutral icon ships once.
-            if (glyph != null) {
-                glyph.setVariantOverride(focused ? FileIconTheme.Variant.DARK : null);
+            if (glyph != null && glyphSlot != null) {
+                CgUiImage shown = glyph.variant(focused ? FileIconTheme.Variant.DARK : null);
+                StyleGroup.defaultPipeline(glyphSlot.getStyle().getGeneralGroup(), g -> g.overlay(shown));
             }
             invalidateStyleMatch();
         }
     }
 
-    @Nullable
-    private static CgUiSvg applyIcon(Button button, @Nullable String iconName) {
-        if (iconName == null) return null;
-        CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
-        if (glyph == null) return null;
+    private static void applyIcon(Button button, @Nullable String iconName) {
+        CgUiImage.Icon glyph = CgUiImage.findIcon(iconName);
+        if (glyph == null) return;
         UIElement slot = new UIElement();
         // Unhittable, so the press lands on the button rather than on its own icon -- click-focus targets
         // the exact element hit, never the nearest focusable ancestor.
         slot.setHitTest(false);
         StyleGroup.defaultPipeline(slot.getStyle().getGeneralGroup(), g -> g.overlay(glyph));
         button.setPreIcon(slot);
-        return glyph;
+        if (button instanceof ItemButton item) {
+            item.glyph = glyph;
+            item.glyphSlot = slot;
+        }
     }
 }

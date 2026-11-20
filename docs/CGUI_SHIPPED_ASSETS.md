@@ -32,3 +32,73 @@
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
 | `ui/fonts/IBMPlexSans-Regular.ttf`, `JetBrainsMono-Regular.ttf` | The UI face and the code face, SIL OFL 1.1, each with its licence beside it (`IBMPlexSans-OFL.txt`, `OFL.txt`). IBM Plex moved here from CrystalGraphics on 2026-09-11, which now ships no fonts: anything neither face covers comes from the installed fonts (`CgSystemFonts`). |
 | (boxes, curves, gradients, grids, glass, coverage, the blur) | **Not shipped here: CrystalGraphics' canvas** (`CgEngineMaterials`, `CgCanvasPrimitives`, `crystalgraphics:shaders/canvas/`, `CANVAS.md` § 3) and its blur (`CgGpuOps.blurScaled`, compute). The paint context draws every box through `SCREEN.box()`, every stroke and cell through `SCREEN.curve()`, gradients, grids and glass through `CgCanvasGradient`, `CgCanvasGrid` and `CgCanvasGlass`, and an icon's coverage through `SCREEN.coverage()`; a thumbnail is `CgGpuOps.shrink`, on compute. A composite of a layer is a box quad stamped `CgShapeTable.PREMULTIPLIED`, its texture on the quad. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `canvas/primitives/quad.glsl`; the `edges` page of `cgui-gallery` shows every material rotated and skewed. |
+
+## Icons
+
+**A UI names an icon; CrystalGraphics draws it.** An icon is `"namespace:name"`, a file at
+`assets/{ns}/ui/icons/{name}.svg`; `CgUiImage.icon(name)` holds the name, and its file is chosen when it draws
+(`Icon.path()`), so a light/dark theme swap reaches every icon with no restyle. Drawing is CrystalGraphics' `CgSvg`
+(`CrystalGraphics/docs/UI_CANVAS.md` § *SVG*: snapping, tiers, the shared atlas, reload).
+
+```css
+.save { overlay: icon("crystalgui:save"); }                     /* follows `color` (currentColor) */
+.warn { overlay: icon("crystalgui:warning", #E0A040); }          /* a fixed tint */
+.flat { overlay: icon("crystalgui:filetypes/java", monochrome); } /* every fill forced to the tint */
+```
+
+```java
+CgUiImage.Icon save = CgUiImage.findIcon("crystalgui:save");     // null when the file will not draw: say so
+element.generalStyle(g -> g.overlay(save == null ? CgUiImage.NONE : save));
+CgUiImage dark = save.variant(FileIconTheme.Variant.DARK);       // one element pinned to the dark drawing
+CgUiImage.Icon fileIcon = FileIconTheme.getDefault().imageFor("Main.java", false, false);
+```
+
+- `FileIconTheme` ports VS Code's file-icon-theme JSON (`ui/icons/default.json`): extension and exact name to icon,
+  longest extension first, the colour left to the `.filetype-*` class it hands back.
+- `overlay-tint` multiplies an icon's own colours; the Start button's mark goes blue on hover through it.
+- `CgSvg.usesCurrentColor()` tells a chrome mark (drawn in `color`) from artwork (its own palette):
+  `WindowIcon` puts a tile under a mark and none under artwork.
+
+### The file-type set: IntelliJ Platform
+
+Fifty **IntelliJ Platform** icons (Apache 2.0, JetBrains) back the file tree — 47 from
+`platform/icons/src/fileTypes/` plus `folder`, `package` and `moduleGroup` from `nodes/`. Verbatim; see
+`ui/icons/ATTRIBUTION.md` and `THIRD-PARTY.md`. Chosen over Material Icon Theme because this workbench ports
+IntelliJ's, because they are drawn for 16 px (a tree row) rather than 32 seen at 16, and for their muted palette.
+VS Code's own default (Seti) is a font, not SVG.
+
+- **Kotlin, Python, TypeScript, Rust, Go, C/C++, Ruby, PHP, shell, SQL, Markdown and GLSL have no icon in the
+  Platform set**: they resolve to the plain text document, still listed in `default.json` so each keeps its own
+  `.filetype-*` class.
+- **`filetypes.css` does not tint the file icon**: the set carries its own fills, so those rules colour the row's
+  label and any monochrome mark. A theme wanting one colour says `icon("...", monochrome)`.
+
+### The brand mark: `crystalgui:logo`
+
+`ui/icons/logo.svg` is the CrystalGraphics / CrystalGUI mark, original artwork. **A crystal cluster**: three
+hexagonal prisms fanning from one base, each drawn as its three visible faces — a cyan→blue main shard, a
+fuchsia→violet one leaning left, a small pink one at the right. Flat and hard-edged, no tile: the silhouette is the
+icon. Authored under four rules:
+
+1. **Filled polygons and gradients only**: every face a `<polygon>` with its own `linearGradient`, no strokes.
+2. **No `currentColor` anywhere**: it is what tells `WindowIcon` this is artwork that *is* a tile.
+3. **One shard placed three times** through `<g transform="translate() rotate() scale()">`, composed rightmost
+   first as the spec says (`CgSvgTransformOrderTest`).
+4. **Judged by the renderer's own tessellation**, never a browser's: `SvgTruthRasterTest` rasterises `CgSvg`'s ops
+   at the tier drawn at each size.
+
+### Application icons: `crystalgui:frame-profiler`, `crystalgui:vfx-lab`, `harness:cues`
+
+Declared on each `ApplicationKind` with `.icon(...)`; a window with no icon of its own is drawn with its
+application's (`WindowFrame.iconName`), so the taskbar, the previews, the switcher and the caption agree. One
+recipe, so the three read as a set beside the logo: a 64-unit tile, `rx` 14, on a `#33373F` to `#0E1013` gradient
+with one soft light at the top-left, and on it a picture of what the tool does in saturated colour.
+
+| Icon | What it draws |
+|---|---|
+| `frame-profiler` | Frame times as eleven bars over faint vertical rules and a dashed budget line |
+| `vfx-lab` | An energy orb: a white-cyan core in a blue halo, ringed by two tilted ellipses |
+| `harness:cues` | A hit spark: a white-hot core, twenty tapered streaks and a faint shock ring. Ships with the harness |
+
+**Dashes are drawn as separate lines**: no `stroke-dasharray` is read, so the profiler's budget line is twelve
+short segments.

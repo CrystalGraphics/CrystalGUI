@@ -1,5 +1,7 @@
 package com.crystalgui.widget.config;
 
+import com.crystalgui.render.image.CgUiMark;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.text.UIText;
 import com.crystalgui.widget.control.Checkbox;
@@ -15,7 +17,6 @@ import java.util.List;
 import java.util.Set;
 
 import static org.junit.Assert.*;
-import com.crystalgui.render.texture.CgUiRect;
 
 /**
  * The kit's guard rail — <b>every control kind, measured, in one pass.</b>
@@ -538,9 +539,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
 
         var overlay = mark.getStyle().getGeneralGroup().overlay();
         assertTrue("the on/off distinction must be the vector checkmark, not a colour swap",
-                overlay instanceof com.crystalgui.render.texture.CgUiShape
-                        && ((com.crystalgui.render.texture.CgUiShape) overlay).kind()
-                        == com.crystalgui.render.texture.CgUiShape.Kind.CHECKMARK);
+                overlay instanceof CgUiImage.Mark m && m.mark() == CgUiMark.CHECKMARK);
 
         // A mask panel's checkboxes are NOT `.__config-control__.__boolean__ checkbox` — MaskControl
         // adds `.__mask-row__` straight onto the Checkbox itself, so the boolean row's fix does not
@@ -560,9 +559,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
                 0xFF1E1E1E, backgroundOf(maskMark));
         var maskOverlay = maskMark.getStyle().getGeneralGroup().overlay();
         assertTrue("a mask row's on/off distinction must also be the vector checkmark",
-                maskOverlay instanceof com.crystalgui.render.texture.CgUiShape
-                        && ((com.crystalgui.render.texture.CgUiShape) maskOverlay).kind()
-                        == com.crystalgui.render.texture.CgUiShape.Kind.CHECKMARK);
+                maskOverlay instanceof CgUiImage.Mark m && m.mark() == CgUiMark.CHECKMARK);
     }
 
     /**
@@ -595,9 +592,8 @@ public class ConfigKitTest extends UiDocumentTestBase {
     /** The resolved {@code background} of an element, as ARGB, when it is a flat fill. */
     private static int backgroundOf(UIElement e) {
         var drawable = e.getStyle().getGeneralGroup().background();
-        assertTrue("expected a flat fill, got " + drawable,
-                drawable instanceof CgUiRect);
-        return ((CgUiRect.Fill.Color) ((CgUiRect) drawable).getFill()).argb();
+        assertTrue("expected a flat fill, got " + drawable, drawable instanceof CgUiImage.Color);
+        return ((CgUiImage.Color) drawable).argb();
     }
 
     /** The checkbox's own size — the kit's one deliberate exception, so it needs its own assertion. */

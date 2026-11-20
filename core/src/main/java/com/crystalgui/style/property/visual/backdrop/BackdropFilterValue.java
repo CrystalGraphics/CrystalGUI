@@ -8,7 +8,7 @@ import javax.annotation.Nullable;
 
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.texture.ArgbMath;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleValue;
 import com.crystalgui.style.property.visual.color.ColorValue;
@@ -34,78 +34,100 @@ import com.crystalgui.style.property.visual.color.ColorValue;
  * ignored, the rule every {@link StyleValue} follows — but a list with nothing recognisable in it is a
  * parse failure, since {@code none} already spells "no filter".</p>
  */
-public class BackdropFilterValue extends StyleValue<CgUiBackdropFilter> {
+public class BackdropFilterValue extends StyleValue<CgBackdropFilter> {
 
-    /** What an unstated function is compared against, both to parse and to write. */
-    private static final CgUiBackdropFilter DEFAULTS = new CgUiBackdropFilter();
+    private static final CgBackdropFilter DEFAULTS = CgBackdropFilter.DEFAULT;
 
     public BackdropFilterValue(String rawValue) {
         super(rawValue);
     }
 
     @Override
-    protected @Nullable CgUiBackdropFilter doCompute(String rawValue) {
+    protected @Nullable CgBackdropFilter doCompute(String rawValue) {
         return parse(rawValue);
     }
 
+    /** The filter {@code raw} declares over {@link CgBackdropFilter#DEFAULT}, {@code NONE} for none, null when unreadable. */
     @Nullable
-    public static CgUiBackdropFilter parse(String raw) {
+    public static CgBackdropFilter parse(String raw) {
         String value = raw == null ? "" : raw.trim();
         if (value.isEmpty()) return null;
-        if (value.equalsIgnoreCase("none")) return CgUiBackdropFilter.NONE;
-
-        CgUiBackdropFilter filter = new CgUiBackdropFilter();
+        if (value.equalsIgnoreCase("none")) return CgBackdropFilter.NONE;
+        Builder b = new Builder(DEFAULTS);
         boolean anyRecognised = false;
         for (String function : CssParsingUtil.splitFunctionList(value)) {
             int open = function.indexOf('(');
             if (open < 0 || !function.endsWith(")")) continue;
             String name = function.substring(0, open).trim().toLowerCase(Locale.ROOT);
             String argument = function.substring(open + 1, function.length() - 1).trim();
-            if (apply(filter, name, argument)) anyRecognised = true;
+            if (b.apply(name, argument)) anyRecognised = true;
         }
-        return anyRecognised ? filter : null;
+        return anyRecognised ? b.build() : null;
     }
 
-    /**
-     * One function onto the filter, <b>bounded here</b>.
-     *
-     * <p>A negative blur, an {@code ior} under 1 or a {@code luminosity} over 1 are not values the
-     * shader has an answer for, and this is the only place they can arrive from outside — a slider
-     * carries its own range and a scene writes a literal. The setters are Lombok's and assign what they
-     * are given, so the bound lives at the boundary rather than fourteen times over.</p>
-     */
-    private static boolean apply(CgUiBackdropFilter filter, String name, String argument) {
-        Float number = number(argument);
-        switch (name) {
-            case "blur" -> { if (number != null) { filter.setBlurRadius(atLeast(0f, number)); return true; } }
-            case "saturate" -> { if (number != null) { filter.setSaturation(atLeast(0f, number)); return true; } }
-            case "luminosity" -> { if (number != null) { filter.setLuminosity(clamp01(number)); return true; } }
-            case "bezel" -> { if (number != null) { filter.setBezel(atLeast(0f, number)); return true; } }
-            case "ior" -> { if (number != null) { filter.setIor(atLeast(1f, number)); return true; } }
-            case "specular" -> { if (number != null) { filter.setSpecular(atLeast(0f, number)); return true; } }
-            case "glow" -> { if (number != null) { filter.setGlow(atLeast(0f, number)); return true; } }
-            case "edge" -> { if (number != null) { filter.setEdgeHighlight(atLeast(0f, number)); return true; } }
-            case "edge-width" -> { if (number != null) { filter.setEdgeWidth(atLeast(0f, number)); return true; } }
-            case "rim-ambient" -> { if (number != null) { filter.setRimAmbient(clamp01(number)); return true; } }
-            case "chromatic" -> { if (number != null) { filter.setChromatic(atLeast(0f, number)); return true; } }
-            case "noise" -> { if (number != null) { filter.setNoise(atLeast(0f, number)); return true; } }
-            case "tint" -> {
-                Integer colour = ColorValue.parseColor(argument);
-                if (colour != null) {
-                    filter.setTintArgb(colour);
-                    return true;
-                }
-            }
-            case "fallback" -> {
-                Integer colour = ColorValue.parseColor(argument);
-                if (colour != null) {
-                    filter.setFallbackColorArgb(colour);
-                    return true;
-                }
-            }
-            default -> CrystalGuiCore.LOGGER.warn("Unknown backdrop-filter function {}() — ignored", name);
+    /** The record's fields while a declaration is read; its withers group them, a declaration sets them one by one. */
+    private static final class Builder {
+        float blur, saturation, luminosity, bezel, ior, chromatic, specular, glow, rim, rimWidth, rimAmbient, noise;
+        int tint, fallback;
+        final float lightX, lightY;
+
+        Builder(CgBackdropFilter f) {
+            blur = f.blur();
+            saturation = f.saturation();
+            tint = f.tint();
+            luminosity = f.luminosity();
+            bezel = f.bezel();
+            ior = f.ior();
+            chromatic = f.chromatic();
+            specular = f.specular();
+            glow = f.glow();
+            rim = f.rim();
+            rimWidth = f.rimWidth();
+            rimAmbient = f.rimAmbient();
+            noise = f.noise();
+            lightX = f.lightX();
+            lightY = f.lightY();
+            fallback = f.fallback();
         }
-        return false;
+
+        CgBackdropFilter build() {
+            return new CgBackdropFilter(blur, saturation, tint, luminosity, bezel, ior, chromatic, specular, glow, rim,
+                    rimWidth, rimAmbient, noise, lightX, lightY, fallback);
+        }
+
+        boolean apply(String name, String argument) {
+            Float number = number(argument);
+            switch (name) {
+                case "blur" -> { if (number != null) { blur = atLeast(0f, number); return true; } }
+                case "saturate" -> { if (number != null) { saturation = atLeast(0f, number); return true; } }
+                case "luminosity" -> { if (number != null) { luminosity = clamp01(number); return true; } }
+                case "bezel" -> { if (number != null) { bezel = atLeast(0f, number); return true; } }
+                case "ior" -> { if (number != null) { ior = atLeast(1f, number); return true; } }
+                case "specular" -> { if (number != null) { specular = atLeast(0f, number); return true; } }
+                case "glow" -> { if (number != null) { glow = atLeast(0f, number); return true; } }
+                case "edge" -> { if (number != null) { rim = atLeast(0f, number); return true; } }
+                case "edge-width" -> { if (number != null) { rimWidth = atLeast(0f, number); return true; } }
+                case "rim-ambient" -> { if (number != null) { rimAmbient = clamp01(number); return true; } }
+                case "chromatic" -> { if (number != null) { chromatic = atLeast(0f, number); return true; } }
+                case "noise" -> { if (number != null) { noise = atLeast(0f, number); return true; } }
+                case "tint" -> {
+                    Integer colour = ColorValue.parseColor(argument);
+                    if (colour != null) {
+                        tint = colour;
+                        return true;
+                    }
+                }
+                case "fallback" -> {
+                    Integer colour = ColorValue.parseColor(argument);
+                    if (colour != null) {
+                        fallback = colour;
+                        return true;
+                    }
+                }
+                default -> CrystalGuiCore.LOGGER.warn("Unknown backdrop-filter function {}() — ignored", name);
+            }
+            return false;
+        }
     }
 
     private static float atLeast(float floor, float value) {
@@ -116,7 +138,6 @@ public class BackdropFilterValue extends StyleValue<CgUiBackdropFilter> {
         return Math.max(0f, Math.min(1f, value));
     }
 
-    /** A length or a ratio: {@code 24px}, {@code 24}, {@code 1.8} or {@code 180%}. */
     @Nullable
     private static Float number(String argument) {
         String text = argument.trim().toLowerCase(Locale.ROOT);
@@ -131,34 +152,24 @@ public class BackdropFilterValue extends StyleValue<CgUiBackdropFilter> {
         }
     }
 
-    /**
-     * The declaration that would produce {@code filter} — <b>only what differs from the defaults</b>.
-     *
-     * <p>Fourteen functions written out every time would be unreadable on a clipboard and in a saved
-     * document, and would say nothing a reader wants: what matters is where this one differs.
-     * {@code blur()} is always written, so the value is never an empty declaration.</p>
-     */
-    public static String write(@Nullable CgUiBackdropFilter filter) {
-        if (!CgUiBackdropFilter.isActive(filter)) return "none";
+    /** The declaration that reads back as {@code filter}: what differs from the default, {@code none} for none. */
+    public static String write(@Nullable CgBackdropFilter filter) {
+        if (filter == null || filter == CgBackdropFilter.NONE) return "none";
         List<String> out = new ArrayList<>();
-        out.add("blur(" + trim(filter.getBlurRadius()) + "px)");
-        addRatio(out, "saturate", filter.getSaturation(), DEFAULTS.getSaturation());
-        if (filter.getTintArgb() != DEFAULTS.getTintArgb()) {
-            out.add("tint(" + ArgbMath.toCss(filter.getTintArgb()) + ")");
-        }
-        addLength(out, "bezel", filter.getBezel(), DEFAULTS.getBezel());
-        addRatio(out, "ior", filter.getIor(), DEFAULTS.getIor());
-        addRatio(out, "specular", filter.getSpecular(), DEFAULTS.getSpecular());
-        addRatio(out, "glow", filter.getGlow(), DEFAULTS.getGlow());
-        addRatio(out, "edge", filter.getEdgeHighlight(), DEFAULTS.getEdgeHighlight());
-        addLength(out, "edge-width", filter.getEdgeWidth(), DEFAULTS.getEdgeWidth());
-        addRatio(out, "rim-ambient", filter.getRimAmbient(), DEFAULTS.getRimAmbient());
-        addRatio(out, "chromatic", filter.getChromatic(), DEFAULTS.getChromatic());
-        addRatio(out, "noise", filter.getNoise(), DEFAULTS.getNoise());
-        addRatio(out, "luminosity", filter.getLuminosity(), DEFAULTS.getLuminosity());
-        if (filter.getFallbackColorArgb() != DEFAULTS.getFallbackColorArgb()) {
-            out.add("fallback(" + ArgbMath.toCss(filter.getFallbackColorArgb()) + ")");
-        }
+        out.add("blur(" + trim(filter.blur()) + "px)");
+        addRatio(out, "saturate", filter.saturation(), DEFAULTS.saturation());
+        if (filter.tint() != DEFAULTS.tint()) out.add("tint(" + ArgbMath.toCss(filter.tint()) + ")");
+        addLength(out, "bezel", filter.bezel(), DEFAULTS.bezel());
+        addRatio(out, "ior", filter.ior(), DEFAULTS.ior());
+        addRatio(out, "specular", filter.specular(), DEFAULTS.specular());
+        addRatio(out, "glow", filter.glow(), DEFAULTS.glow());
+        addRatio(out, "edge", filter.rim(), DEFAULTS.rim());
+        addLength(out, "edge-width", filter.rimWidth(), DEFAULTS.rimWidth());
+        addRatio(out, "rim-ambient", filter.rimAmbient(), DEFAULTS.rimAmbient());
+        addRatio(out, "chromatic", filter.chromatic(), DEFAULTS.chromatic());
+        addRatio(out, "noise", filter.noise(), DEFAULTS.noise());
+        addRatio(out, "luminosity", filter.luminosity(), DEFAULTS.luminosity());
+        if (filter.fallback() != DEFAULTS.fallback()) out.add("fallback(" + ArgbMath.toCss(filter.fallback()) + ")");
         return String.join(" ", out);
     }
 
@@ -170,7 +181,6 @@ public class BackdropFilterValue extends StyleValue<CgUiBackdropFilter> {
         if (value != initial) out.add(name + "(" + trim(value) + ")");
     }
 
-    /** {@code 24} rather than {@code 24.0}, which is what a person writes. */
     private static String trim(float value) {
         return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
     }

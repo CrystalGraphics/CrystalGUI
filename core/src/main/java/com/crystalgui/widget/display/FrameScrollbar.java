@@ -185,7 +185,7 @@ public class FrameScrollbar extends UIElement implements Measurable {
         float height = box.height();
         boolean active = grab != Grab.NONE || hover != Grab.NONE;
         int body = active ? (thumbColor & 0x00FFFFFF) | 0xE0000000 : (thumbColor & 0x00FFFFFF) | 0xA0000000;
-        ctx.rect().at(thumb[0], 2f).size(thumb[1], height - 4f).fillColor(body).submit();
+        ctx.canvas().box(thumb[0], 2f, thumb[1], height - 4f).fill(body).draw();
         // THE GRIPS say the ends can be taken hold of; lit in the accent while one is under the pointer.
         paintGrip(ctx, thumb[0] + 3f, height, hover == Grab.START || grab == Grab.START ? accent : 0xFF000000);
         paintGrip(ctx, thumb[0] + thumb[1] - 5f, height, hover == Grab.END || grab == Grab.END ? accent : 0xFF000000);
@@ -193,7 +193,7 @@ public class FrameScrollbar extends UIElement implements Measurable {
 
     private static void paintGrip(CgUiPaintContext ctx, float x, float height, int argb) {
         int color = (argb & 0x00FFFFFF) | 0x90000000;
-        ctx.rect().at(x, 4f).size(1f, height - 8f).fillColor(color).submit();
-        ctx.rect().at(x + 2f, 4f).size(1f, height - 8f).fillColor(color).submit();
+        ctx.canvas().box(x, 4f, 1f, height - 8f).fill(color).draw();
+        ctx.canvas().box(x + 2f, 4f, 1f, height - 8f).fill(color).draw();
     }
 }

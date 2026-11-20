@@ -494,7 +494,7 @@ public class MainPreviewPanel extends UIElement implements Disposable {
             // reads as the shader being broken rather than as a frame.
             //
             // v1 and v0 swapped: GL's framebuffer origin is bottom-left and the UI's is top-left.
-            ctx.drawImage(texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.canvas().box(x, y, w, h).fill(texture).region(0f, 1f, 1f, 0f).draw();
         }
     }
 

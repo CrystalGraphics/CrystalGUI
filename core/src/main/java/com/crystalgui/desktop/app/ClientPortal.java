@@ -213,7 +213,7 @@ public final class ClientPortal extends UIElement implements CursorSource, Minim
         veil = veilFrom + (veilTarget - veilFrom) * t;
         if (veil > 0f) {
             int alpha = Math.round(GHOST_VEIL_ALPHA * veil);
-            ctx.fillRect(0f, 0f, width, height, (alpha << 24) | GHOST_VEIL_RGB);
+            ctx.canvas().fill(0f, 0f, width, height, (alpha << 24) | GHOST_VEIL_RGB);
         }
         if (veil != veilTarget) repaint();
     }

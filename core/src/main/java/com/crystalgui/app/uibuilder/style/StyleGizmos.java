@@ -116,7 +116,7 @@ public final class StyleGizmos {
         float dx = localX - width / 2f;
         float dy = localY - height / 2f;
         // atan2 measured from UP and growing clockwise: y grows downward here, so the sign works out
-        // without a flip -- the same convention CgUiGradient reads an angle in.
+        // without a flip -- the same convention CgUiImage.Gradient reads an angle in.
         float degrees = (float) Math.toDegrees(Math.atan2(dx, -dy));
         return degrees < 0f ? degrees + 360f : degrees;
     }

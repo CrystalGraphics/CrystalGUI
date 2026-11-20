@@ -18,7 +18,7 @@ import com.crystalgui.style.property.visual.color.ColorValue;
  * gradient.set(gradient.get().withDirection("90deg"));                                  // linear again
  * }</pre>
  *
- * <p>The grammar is the engine's own ({@code TextureValue.parseLinearGradient} and {@code parseRadialGradient}). A
+ * <p>The grammar is the engine's own ({@code ImageValue.parseLinearGradient} and {@code parseRadialGradient}). A
  * value it cannot read parses as {@link #DEFAULT}, so a lab opened on something else starts from a workable ramp.
  * A radial gradient keeps the {@link #direction} it had, so switching back to linear restores it.</p>
  *

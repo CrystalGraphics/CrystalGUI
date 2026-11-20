@@ -263,65 +263,53 @@ cost, since per-element material binds at draw time can dwarf everything else.
 
 ---
 
-## 5. Drawable System & Compositing Channels
+## 5. Images & Compositing Channels
 
-`core/src/main/java/com/crystalgui/render/texture/`, `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java`
+`core/src/main/java/com/crystalgui/render/image/`, `core/src/main/java/com/crystalgui/ui/box/BoxPainter.java`
 
-`CgUiDrawable` is the "paint yourself into a rect" interface — `CgUiRect` (a fill plus radii and border, which is what every `background` resolves to), `CgUiSprite`
-(textured, optional 9-slice border), `CgUiRect` (SDF), `CgUiCrossFade` (generic two-drawable
-blend). Each `draw(ctx, mouseX, mouseY, x, y, w, h)` call issues its own GPU draw(s) immediately —
-no batching, no deferred submission.
+`background`, `overlay`, `mask` and `outline` hold a **`CgUiImage`**: CSS's `<image>`, an immutable value equal by
+value — a colour, a gradient, a grid, a picture (`image`/`sprite`), a sprite-sheet entry (`asset`), an icon, a mark
+(`shape`), a painter (`paint(name)`), a cross-fade, or a stack of them. **`CgUiImagePainter` turns one into canvas
+draws**; nothing else draws an image. `render/CLAUDE.md` § *Images* has the kinds and how each draws.
 
-### `CgUiLayers` — a declaration can hold several of them
+### A declaration can hold several images
 
-A value is a comma-separated **list of layers**, exactly as CSS writes a background, and
-`TextureValue` builds a `CgUiLayers` whenever a declaration holds more than one:
+A value is a comma-separated **list of layers**, exactly as CSS writes a background:
 
 ```css
 background: grid(16, #6EDCD024), shape("checkmark"), linear-gradient(to bottom, #3574F0FF, #2E436EFF);
 ```
 
-**The first layer is the TOP one** — CSS's order, so `draw` walks the list from the end. Writing it the
-other way round still renders: every layer is present and the picture is inside out, which reads as a
-z-order bug in whatever supplied the drawables rather than as a reversed loop.
+**The first layer is the TOP one** — CSS's order, so the painter walks the list from the end. Every image property
+takes a stack. The split is paren-aware, so `linear-gradient(to bottom, a, b)` is one layer and not three; one
+unreadable layer fails the whole declaration rather than being dropped, since a stack quietly missing a layer
+renders something nobody wrote.
 
-Because the split happens in the value parser, **every drawable-valued property takes a stack** —
-`background`, `overlay` and `mask` alike. The split is paren-aware, so `linear-gradient(to bottom, a, b)`
-is one layer and not three; one unreadable layer fails the whole declaration rather than being dropped,
-since a stack quietly missing a layer renders something nobody wrote.
-
-A stack clips itself: the radii are forwarded to every layer that is `CornerRadiusAware`, because the
-painter's alternative — wrapping the background in a `CgUiRect` — can only round one fill.
-Per-layer clipping, and per-layer `background-size`/`-position`/`-origin`, are stage 2; see
+**Every layer is clipped to the element's corners, and the element's border is drawn once over them**, as CSS
+paints a background. Per-layer `background-size`/`-position`/`-origin` are not there yet; see
 `plan/crystalgui/style-overhaul/css-background-layers.md`.
 
-Copy Attributes offers **one part per layer**, each filed under its own kind, so a three-layer background
-is three tickable rows under Grid, Shape and Gradient. Two layers of the same kind land in one section as
-two identically-named rows, which is the one thing that arrangement cannot yet tell apart.
+Copy Attributes (`ImageParts`) offers **one part per layer**, each filed under its own kind, so a three-layer
+background is three tickable rows under Grid, Shape and Gradient. An image built in Java with no CSS spelling is
+copied whole.
 
 **Two distinct compositing channels exist, deliberately kept separate:**
 
-| Channel | Set via | Meaning | Consumed by |
-|---|---|---|---|
-| **Tint** | `ctx.setColor(argb)` | Per-drawable multiplicative color, baked per-vertex | `CgUiRect`'s own fragment output `*= i.color` |
-| **Layer opacity** | `ctx.pushLayerOpacity(t)` / `withLayerOpacity(t, drawBody)` | Whole-draw compositing weight | Stamped on every quad and curve (`opacity(f)`), read as `CG_QUAD_OPACITY`/`CG_CURVE_OPACITY`: no material is written and no batch breaks. Text takes none |
+| Channel | Set via | Meaning |
+|---|---|---|
+| **Tint** | the painter's `color` (`background-color`, or `color` for a mark or a `currentColor` icon) | Multiplies the image's own colours: the canvas box's `tint`, an icon brush's `color` |
+| **Layer opacity** | `canvas.save().opacity(a)` or `canvas.layer(...).opacity(a)` | Whole-draw compositing weight, a flat multiply for a lone draw and a group layer over overlapping ones |
 
-They're separate because conflating them was an earlier bug: an initial `CgUiCrossFade` draft scaled
-the ambient tint's alpha channel to blend `from`/`to`, which corrupted the RGB tint channel used for
-things like `background-color`. Layer opacity was added specifically so cross-fades (and any future
-whole-subtree opacity feature) have a dedicated, tint-independent channel — see `CgUiPaintContext.withLayerOpacity`.
+They're separate because conflating them was an earlier bug: a cross-fade that scaled the tint's alpha to blend its
+two sides corrupted the tint itself. A cross-fade draws each side under its own opacity.
 
-**`background` vs `background-color` vs `color`** — three separate, independently-cascading
-properties, matching real CSS's separation:
-- `background` (`TextureProperty`) — the drawable itself (color/texture/9-slice/SDF).
-- `background-color` (`ColorProperty`, default `0xFFFFFFFF` — opaque white, i.e. a no-op tint) — set as
-  the ambient tint (`ctx.setColor`) before the `background` drawable paints, so it visibly recolors
-  whatever's there rather than being invisibly hidden behind an opaque drawable the way a literal
-  underlay-fill layer would be. If `background` is `CgUiDrawable.EMPTY` (nothing to tint), it instead
-  paints as a flat fill directly — gated on **candidate existence**
-  (`ElementStyle.containsCandidate`), not on the resolved value, since the resolved value defaults to
-  opaque white either way.
-- `color` — inheritable, used for text glyph color; must never tint `background`.
+**`background` vs `background-color` vs `color`** — three separate, independently-cascading properties:
+- `background` (`ImageProperty`) — the image.
+- `background-color` (`ColorProperty`, default `0xFFFFFFFF` — opaque white, i.e. a no-op tint) — tints the
+  `background` image. With no image it paints as a flat fill — gated on **candidate existence**
+  (`ElementStyle.containsCandidate`), not on the resolved value, since that defaults to opaque white either way.
+  (CSS paints `background-color` under the image instead; UI15 decides the move.)
+- `color` — inheritable, the text's colour and a mark's; never tints `background`.
 
 ### 9-slice tiling
 
@@ -352,26 +340,15 @@ Sprite-pack JSON additionally supports two Unity-derived options that have no `s
 - **`borderScale`** (number, default `1`) — Unity's *Pixels Per Unit Multiplier*; scales the slice
   widths *and* tile sizes, so a 4px source border can render chunky at 8px.
 
-**Both renderers implement this**, and must stay in agreement: `CgUiSprite`'s CPU quad loop, and the
-`WITH_9SLICE_FILL` shader branch used whenever the element has a `border-radius`/`border-width`.
-Since routing depends on an unrelated style property, a divergence would show up as "adding a
-border-radius changed my tiling". They agree by construction — `CgUiRepeat.tileCount` runs **once in
-Java** and the count is handed to the shader as a uniform rather than recomputed there.
+**One renderer implements this**: the picture's `CgBrush` carries a `CgNineSlice` and a `CgTiling`, and
+CrystalGraphics' canvas lays the nine regions out per pixel, with or without a `border-radius`. `space` with no room
+for a whole tile falls back to `stretch` (CSS draws nothing).
 
-Two deliberate deviations, both verified: `space` with no room for a whole tile falls back to
-`stretch` (CSS draws nothing), and tile *positions* can differ between the two paths by up to 1
-logical px under `round`, because the CPU path snaps vertex positions to integers while the shader
-is continuous. `repeat` matches exactly, since its tile size is the integer source size.
+**Texture resolution is lazy.** A `sprite(...)` value holds its path; the painter loads the texture the first time
+it draws, nearest-sampled, and keeps it with the value's brush. A style value is computed whenever a stylesheet is
+parsed — before a GPU device exists, and always without one under unit test — so it never touches one.
 
-**Texture resolution is lazy.** `CgUiSprite.setTexture(String)` records the path and only resolves it
-to a real GL texture on first `getTexture()`/`draw()`. Creating a texture is a GL operation, but
-style values are computed whenever a stylesheet is parsed — potentially before a GL context exists,
-and always without one under unit test. Eager resolution made a `sprite(...)` value silently compute
-to `null` in those cases, because `StyleValue.compute()` catches and swallows the failure. An
-author-supplied `"refW refH"` survives the later resolution (tracked separately), since overriding
-the real texture's dimensions is exactly what that argument is for.
-
-**Three drawable layers**, all `TextureProperty` and all costing zero layout nodes — decoration is a
+**Three image layers**, all `ImageProperty` and all costing zero layout nodes — decoration is a
 paint concern here, not a tree concern (contrast LDLib2, which nests a real child element per
 decorative visual because its style system lacks background geometry controls):
 
@@ -384,13 +361,13 @@ decorative visual because its style system lacks background geometry controls):
 - **`overlay-origin`** (`border-box`\|`padding-box`\|`content-box`, default `border-box`) — CSS
   `background-origin`. Which box the layer is laid into.
 - **`overlay-size`** (`fill`\|`contain`\|`cover`\|`none`, default `fill`) — CSS `object-fit`, the
-  honest analogue since this engine fits *one* drawable into a box rather than tiling. `contain`/
-  `cover`/`none` need the drawable's natural size (`CgUiDrawable.intrinsicWidth()/intrinsicHeight()`,
-  `-1` when it has none); every mode degrades to `fill` when unknown, so solid colours and SDF shapes
-  keep filling as before. `CgUiSprite` reports its source-rect size, interpreted 1:1 as logical px.
+  honest analogue since this engine fits *one* image into a box rather than tiling. `contain`/
+  `cover`/`none` need the image's natural size (`CgUiImagePainter.intrinsicWidth/intrinsicHeight`,
+  `-1` when it has none); every mode degrades to `fill` when unknown, so colours, gradients and marks
+  keep filling. A picture reports its region's size, an icon its document's, as logical px.
 - **`overlay-position`** (9 keywords, default `center`) — CSS `object-position`, keyword subset.
-- **`overlay-tint`** (a colour, default white) — multiplies the colours an SVG overlay names itself, as `color`
-  resolves its `currentColor`; transitions as a colour, and costs no re-raster at icon size. The start button's
+- **`overlay-tint`** (a colour, default white) — multiplies the colours an icon or picture overlay names itself,
+  as `color` resolves an icon's `currentColor`; transitions as a colour, and costs no re-raster at icon size. The start button's
   mark goes blue on hover through it:
 
   ```css
@@ -416,24 +393,24 @@ decorative visual because its style system lacks background geometry controls):
   edges has no single correct radius, and the 9-slice case that motivates per-edge never reaches that
   branch.
 
-  It comes in **two forms**, with the drawable winning when both are set (the precedence CSS gives
+  It comes in **two forms**, with the image winning when both are set (the precedence CSS gives
   `border-image` over `border`):
 
-  1. **Drawable** — `outline: asset("crystalgui:ore", "focus-ring")`. A 9-slice ring texture.
-  2. **SDF stroke** — `outline: 2px #4488ff`, i.e. `outline-width` + `outline-color`. Rendered as a
-     `CgUiRect` with a transparent fill, so it **follows `border-radius` for free** and needs
+  1. **Image** — `outline: asset("crystalgui:ore", "focus-ring")`. A 9-slice ring texture.
+  2. **Stroke** — `outline: 2px #4488ff`, i.e. `outline-width` + `outline-color`. Drawn as a canvas
+     box with a transparent fill and a border, so it **follows `border-radius` for free** and needs
      no texture. The fill is `outlineColor & 0x00FFFFFF` (same RGB, zero alpha) rather than
      `0x00000000`: the shader mixes border→fill on straight alpha, so a black-transparent fill
      drags the inner AA edge toward black and leaves a visible dark fringe.
 
   `outline` is therefore **polymorphic at parse time** (`OutlineShorthand`), dispatching on the
-  value's shape: a non-color function call (`asset(…)`/`image(…)`/`sprite(…)`) → the drawable slot;
+  value's shape: a non-color function call (`asset(…)`/`image(…)`/`sprite(…)`) → the image slot;
   `none` → `outline-width: 0`; otherwise `<length>` and/or `<color>` tokens, order-independent, →
-  the two longhands. A **bare color means `outline-color`**, not a solid-fill drawable — a solid
-  drawable outline would just cover the element. `rgb()`/`rgba()` are recognised as colors, not
-  drawable functions, despite having parens.
+  the two longhands. A **bare color means `outline-color`**, not a solid-fill image — a solid
+  image outline would just cover the element. `rgb()`/`rgba()` are recognised as colors, not
+  image functions, despite having parens.
 
-  Geometry note: the SDF shader strokes *inward* from a shape's outer edge, while a CSS outline
+  Geometry note: the canvas box strokes *inward* from a shape's outer edge, while a CSS outline
   grows *outward*, so `paintOutline` inflates by `offset + width` and lets the inward stroke land in
   the band between them. Corner radii are resolved against the element's **own** box and then
   expanded (`CornerRadii.expand`) — re-resolving them against the inflated box would re-scale
@@ -442,9 +419,8 @@ decorative visual because its style system lacks background geometry controls):
   gives the slider root a radius it has nothing to fill.
 
 Defaults across all three reproduce pre-longhand behaviour exactly (stretch to the full border box,
-no outline), so none of this changes rendering until a stylesheet opts in. The fit math lives in the
-reusable `CgUiLayerBox.resolve(...)`, deliberately standalone so `background` can adopt it if the
-`border-radius` coupling above is ever resolved.
+no outline), so none of this changes rendering until a stylesheet opts in. The fit math is
+`CgUiImagePainter.fit(...)`, ready for `background` if the `border-radius` coupling above is ever resolved.
 
 ---
 
@@ -455,17 +431,22 @@ returns `null`, same as any malformed CSS value).
 
 | Form | Produces | Notes |
 |---|---|---|
-| `#RRGGBB` / `#RGB` / `#RRGGBBAA` / `rgb(...)` / `rgba(...)` | `CgUiRect.ofColor` | 8-hex form is CSS-standard `#RRGGBBAA` (alpha last), not the engine's internal `0xAARRGGBB` int packing |
-| `image("path")` | `CgUiSprite`, unsliced | Optional trailing args, type-sniffed, order-independent: quoted `"x y w h"` crop rect, quoted `"refW refH"` texture-size-reference override, or a color literal (tint) |
-| `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiSprite`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
-| `asset("ns:path", "element")` | `CgUiSprite`, fresh instance per lookup | Named 9-slice element from a pack at `assets/{ns}/ui/sprites/{path}.json`, via `CgUiSpriteRegistry`. The parsed pack JSON is cached, but each `get()` call rebuilds a new `CgUiSprite` from it (not a `.copy()` of a cached template) — safer against cross-call mutation. One pack file holds multiple named elements; each may override the pack's own `texture`/`textureSize`. On a missing pack/element, returns a visible fallback drawable rather than silently rendering nothing |
-| `linear-gradient(direction?, stop, stop, …)` | `CgUiGradient` | CSS's: an `<angle>` in any unit, `to <side>` or `to <corner>` (resolved per box); a stop is a colour with an optional `%` position, and missing positions spread evenly. One draw per eight stops, **premultiplied** interpolation, dithered, and it masks itself under `border-radius` (`CornerRadiusAware`, so no `border-width` stroke). No colour hints, no `repeating-` |
-| `radial-gradient(shape? size? (at position)?, stop, stop, …)` | `CgUiGradient` | CSS's: `circle` or `ellipse` (the default), an extent (`closest-side` … `farthest-corner`, the default) or one or two lengths (one alone is a circle; a circle's radius is never a `%`), and a position of keywords, `%` or `px`, centred by default. The shape is sized per box; stops, drawing and masking are the linear gradient's |
+| `#RRGGBB` / `#RGB` / `#RRGGBBAA` / `rgb(...)` / `rgba(...)` | `CgUiImage.Color` | 8-hex form is CSS-standard `#RRGGBBAA` (alpha last), not the engine's internal `0xAARRGGBB` int packing |
+| `image("path")` | `CgUiImage.Picture`, unsliced | Optional trailing args, type-sniffed, order-independent: quoted `"x y w h"` crop rect, quoted `"refW refH"` texture-size-reference override, or a color literal (tint) |
+| `sprite("path", "sx sy sw sh", "bl bt br bb")` | `CgUiImage.Picture`, 9-slice | Optional 4th `"refW refH"` arg, same override as `image(...)` |
+| `asset("ns:path", "element")` | `CgUiImage.Sheet` | Named 9-slice element from a sheet at `assets/{ns}/ui/sprites/{path}.json`, drawn with CrystalGraphics' `CgSpriteSheet` brush (nearest-sampled). One sheet holds many named elements; each may name its own `texture`. A missing sheet or element is logged and draws nothing. F3+T re-reads the sheets |
+| `linear-gradient(direction?, stop, stop, …)` | `CgUiImage.Gradient` | CSS's: an `<angle>` in any unit, `to <side>` or `to <corner>` (resolved per box); a stop is a colour with an optional `%` position, and missing positions spread evenly. One canvas box filled with a `CgGradient`: **premultiplied** interpolation, dithered, clipped to the element's corners and under its border. No colour hints, no `repeating-` |
+| `radial-gradient(shape? size? (at position)?, stop, stop, …)` | `CgUiImage.Gradient` | CSS's: `circle` or `ellipse` (the default), an extent (`closest-side` … `farthest-corner`, the default) or one or two lengths (one alone is a circle; a circle's radius is never a `%`), and a position of keywords, `%` or `px`, centred by default. The shape is sized per box; stops, drawing and masking are the linear gradient's |
+| `icon("ns:name", #tint?, monochrome?)` | `CgUiImage.Icon` | A named icon; its light or dark drawing chosen as it draws, so a theme swap needs no restyle. Untinted, it follows `color` |
+| `shape("checkmark")` | `CgUiImage.Mark` | One of `CgUiMark`'s sixteen marks, in `color` |
+| `grid(cell, #colour, width?)` | `CgUiImage.Grid` | Lines every `cell` px (`cell` or `cellX cellY`) |
+| `paint(ns:name)` | `CgUiImage.Painted` | A painter a mod registered with `CgUiPainter.register`, looked up as it draws (CSS Paint API's spelling) |
+| `cross-fade(a p%, b)` | `CgUiImage.CrossFade` | What a transition between unlike images writes |
 
 > **`glass()` is gone, and what it did is `backdrop-filter`.** It was a `background` value, which meant
 > an element could have the material or a colour and never both — and CSS already has a name for
 > filtering what shows through. `backdrop-filter: blur(24px) saturate(1.2) tint(#1C1D21CC)` is the same
-> effect as a property, painted UNDER the element's own background, over `CgUiBackdropFilter`. `blur()`
+> effect as a property, painted UNDER the element's own background: a `CgBackdropFilter`, `NONE` when unset. `blur()`
 > and `saturate()` are CSS's; the other twelve functions are ours. @see `BackdropFilterValue`
 >
 > **An opaque `background` hides it completely**, which is the one thing to know before it looks like a
@@ -476,9 +457,8 @@ returns `null`, same as any malformed CSS value).
 
 `CssParsingUtil.splitTopLevelCommas` (paren-aware comma split) backs every multi-arg form here.
 
-There is no `roundedrect(...)` background function — rounding/border is a separate, universal
-wrapping layer (§7 below), applied on top of whatever `background:` resolves to, not a background
-value type of its own.
+There is no `roundedrect(...)` background function — rounding and the border apply to whatever `background:`
+resolves to (§7), not a background value of its own.
 
 ---
 
@@ -486,32 +466,18 @@ value type of its own.
 
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl`,
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/canvas/box.shader`,
-`core/src/main/java/com/crystalgui/render/texture/CgUiRect.java`,
-`core/src/main/java/com/crystalgui/style/property/visual/border/`, `UINode.paintContent`
+`core/src/main/java/com/crystalgui/ui/box/BoxPainter.java`, `core/src/main/java/com/crystalgui/render/image/`,
+`core/src/main/java/com/crystalgui/style/property/visual/border/`
 
-`border-radius`/`border-width`/`border-color` apply on top of *whatever* `background:` produces —
-matching real CSS (rounding/border is orthogonal to what the background *is*, not tied to one special
-drawable). `UINode.paintContent` resolves all three once per paint; if any are set, it branches on the
-resolved `background` drawable's concrete type: a flat color or a non-9-slice `CgUiSprite` gets wrapped
-in a freshly-built `CgUiRect` (clipped + stroked by the shared SDF shader); a 9-slice sprite
-falls through to the plain unclipped path (border-radius/border-width still resolve for hit-testing and
-layout growth, just without visual clipping of the sprite — see the known gap in §9).
+`border-radius`/`border-width`/`border-color` apply to *whatever* `background:` produces, as in CSS. `BoxPainter`
+resolves the corners (kept on the `Box` while they hold) and the four borders, and hands both to
+`CgUiImagePainter`: a fill, a gradient, a grid or a picture (nine-slice included) is one canvas box with the corners
+and border on it; an icon, a mark or a painter draws, then the border alone goes over it; a stack draws each layer
+clipped to the corners, then the border once.
 
-**An absent background is not a colour.** When `background` is `CgUiDrawable.EMPTY` the rounded layer
-has nothing to fill with, and `resolveRoundedFill` returns `null` rather than inventing a fill.
-`paintRoundedBackground` then makes the same three-way distinction the plain path makes: an explicit
-`background-color` becomes the fill (with a white vertex tint, since the shader multiplies
-`fillColor *= i.color` and tinting by the colour again would square it); a border with no fill gets a
-transparent interior carrying the *border's* rgb at zero alpha (a mismatched rgb fringes along
-`mix(_BorderColor, fillColor, innerCoverage)`); and an element with neither falls through and paints
-nothing.
-
-That `EMPTY → null` used to be `EMPTY → opaque white`, which was the bug behind "any `border-radius`
-turns the whole UI white": most containers set no `background:` at all, so a single universal radius
-painted a white slab over the root and everything structural under it. The correct guard already existed
-in `paintContent` but sat *after* the rounded branch's early return, so the rounded path never reached it.
-Note `paintDefaultMaskShape` still falls back to opaque white on a `null` fill, and must — it builds a
-**mask**, where white means "fully reveal".
+**An absent background is not a colour.** With no image and no `background-color`, a border draws alone, its middle
+transparent in the *border's* rgb at zero alpha (a black-transparent middle would fringe the inner edge dark), and
+an element with neither paints nothing.
 
 ### Theme anti-bleed
 
@@ -579,15 +545,12 @@ The shader is a genuine "canvas": interior filled by `_FillColor` or a sampled `
 (`WITH_TEXTURE_FILL` keyword), an optional `_BorderColor` stroke band (`WITH_BORDER` keyword) along the
 outer edge, both masked by the same distance field so corners clip fill and border consistently.
 
-**A drawable with a shader of its own draws `ctx.quad(material)`**, having set its properties first: the quad takes the material's values as it is submitted, so a property set after it reaches only the quads after (`docs/CGUI_INVARIANTS.md`).
+**A painter with a shader of its own draws `ctx.quad(material)`**, having set its properties first: the quad takes the material's values as it is submitted, so a property set after it reaches only the quads after (`docs/CGUI_INVARIANTS.md`).
 
-**Transitions, not morphing**: `CgUiRect` is built fresh every frame by `paintContent` from
-whatever the currently-interpolated style values are — it is never itself held inside the `background`
-cascade (there's no `roundedrect(...)` background value anymore), so `TransitionEngine` never
-interpolates between two `CgUiRect` instances directly. Instead, each of the 8 radius longhands,
-the border-width longhands, and border-color animate independently as ordinary scalar/color
-`StyleProperty` transitions — `TextureProperty.interpolate` (for `background` itself) always falls
-through to `CgUiCrossFade` now, since `background` holds a `CgUiRect` or one of the self-drawing kinds.
+**Transitions, not morphing**: the box's shape is never part of the `background` value, so each of the 8 radius
+longhands, the border-width longhands and border-color animate independently as ordinary scalar/colour
+`StyleProperty` transitions. `background` itself interpolates through `CgUiImage.interpolate`: two colours mix, two
+gradients of one shape slide, anything else cross-fades.
 
 ---
 
@@ -645,8 +608,8 @@ rows realised past its viewport for free. `-Dcrystalgui.paint.cull=false` paints
 a time, then each gets faded independently — the double-blend seam at the overlap. Isolating the subtree, then fading
 the *result* as one unit, avoids that (the same reason browsers isolate `opacity`-bearing stacking contexts).
 
-**`mask`** clips the children to the box's shape and then through a layer masked by the drawable: a colour by its
-alpha (`layer.opacity`), a texture or a sprite by its texels' alpha (`layer.mask(CgBrush.texture(...))`). A mask
+**`mask`** clips the children to the box's shape and then through a layer masked by the image: a colour by its
+alpha (`layer.opacity`), a picture or a sheet entry by its texels' alpha (`layer.mask(CgBrush.texture(...))`). A mask
 that would reveal nothing (`mask: none`, a clear colour) reveals the whole shape; a cross-fading mask uses the side it
 is nearer. It masks **only the children**: the background, overlay and outline draw unmasked, as a 9-slice frame
 sits on whatever it frames.
@@ -907,7 +870,7 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
   baked-in crop rects on `image()`/`sprite()` at parse time. **`overlay` and `outline` are not
   subject to this** (see §5): `overlay` has real `-origin`/`-fit`/`-position` longhands, and
   `outline` has `-offset`. `background` can't get equivalents without design work, because its rect
-  doubles as `CgUiRect`'s `_BoxSize` *and* as the basis percentage `border-radius` resolves
+  doubles as the painted box *and* as the basis percentage `border-radius` resolves
   against — re-boxing it would silently redefine what `border-radius` means.
 - **Tiling is a property of the sprite value, not the element.** CSS `border-image-repeat`'s four
   modes exist as a trailing `sprite(…)` keyword / JSON field (see §5), not as a cascading
@@ -947,17 +910,11 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
   `normal` as the default the two now agree unless a sheet says otherwise.
   Note `font-size` takes a bare number: `10`, not `10px` — its parser is `Float.parseFloat` and
   *throws* on a unit suffix, unlike `width`/`height`/`outline-offset`, which do accept `px`.
-- **9-slice backgrounds can't be visually rounded/bordered** — `border-radius`/`border-width` still
-  resolve for hit-testing and Taffy box growth when `background` is a 9-slice `CgUiSprite`, but
-  `UINode.paintContent` falls through to the plain unclipped draw for that case rather than clipping
-  the sprite's pixels to the SDF shape. 9-slice textures are typically pre-baked with their own rounded
-  corners already, so this is a lower-priority gap than it might first appear.
 - **SDF border stroke width is a single scalar**, even though real `border-width` is independently
   per-edge — a stylesheet with 4 different edge widths still grows the layout box correctly per edge,
   but the visual SDF stroke uses one representative value. True asymmetric per-edge SDF stroke
   rendering is deliberately deferred (not requested; orthogonal to the box-growth fix).
-- **No true per-pixel texture blending** for texture↔texture `CgUiCrossFade`s — a dedicated 2-sampler
-  pixel-blend shader, restricted to matching-geometry drawables, is deliberately deferred.
+- **A cross-fade between two pictures is two draws at crossing opacities**, not one per-pixel blend.
 
 ---
 
@@ -983,9 +940,9 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | Paint entry points | `core/src/main/java/com/crystalgui/ui/UINode.java` (`paintContent`/`paintDecoration`/`paintOutline`/`the paint walk`) |
 | Paint context | `core/src/main/java/com/crystalgui/render/CgUiPaintContext.java` |
 | Visual layers (opacity isolation + masking) | `core/src/main/java/com/crystalgui/ui/box/BoxPainter.java` over CrystalGraphics' `CgCanvas.layer` and `CgCanvasLayer` |
-| Drawables | `core/src/main/java/com/crystalgui/render/texture/` |
-| `background:` parsing | `core/src/main/java/com/crystalgui/style/property/visual/texture/TextureValue.java` |
+| Images and their painter | `core/src/main/java/com/crystalgui/render/image/` (`CgUiImage`, `CgUiImagePainter`, `CgUiMark`, `CgUiPainter`) |
+| Image parsing | `core/src/main/java/com/crystalgui/style/property/visual/image/` (`ImageValue`, `ImageKinds`, `ImageProperty`) |
 | SDF shader lib | `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl` |
 | Rounded and bordered rects | CrystalGraphics' `CgCanvas.box` (`api.canvas`) |
-| Named 9-slice assets | `core/src/main/java/com/crystalgui/render/texture/asset/CgUiSpriteRegistry.java` |
+| Named 9-slice assets | CrystalGraphics' `CgSpriteSheet` (`api.paint.brush`), sheets at `assets/{ns}/ui/sprites/` |
 | Demo scenes | `harness-scenes/src/main/java/com/crystalgui/harness/scene/` — `CgUiStylingScene` (selectors/cascade/transitions), `CgUiVisualLayersScene` (opacity isolation + masking), `CgUiGalleryScene` (every widget, a page each, with a live theme toggle). Full list in `CGUI_WIDGETS.md`. |

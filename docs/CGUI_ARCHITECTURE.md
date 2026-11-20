@@ -234,23 +234,14 @@ com.crystalgui.render          CgUiRenderer (the global part), CgUiRenderer.View
                                box's own paint as a CgPaintChunk), InkOverflow, UiPaintWarmup. Clips, layers, glass and
                                icons are the canvas's
   .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
-  .texture                     CgUiDrawable (SPI), CgUiRect (a Fill + radii + border: the one
-                               drawable a background resolves to), CgUiSprite (a 9-slice FILL,
-                               not a drawable — see toRect()),
-                               CgUiCrossFade, CgUiLayers (a comma-separated STACK, first on
-                               top -- every drawable property takes one), CgUiLayerBox (the
-                               rect ONE layer paints into, not a stack), CgUiRepeat,
-                               ArgbMath, CgUiSvg,
-                               CgUiBackdropFilter (liquid glass — blur, luminosity blend, refraction, specular, noise, over a live
-                               backdrop), CornerRadiusAware (the seam that stops a self-clipping drawable
-                               being wrapped in a CgUiRect it cannot survive),
-                               CgUiTransformDrawable (stub)
-    .svg                       A full SVG renderer, parse to cached draw ops: SvgScanner (nested tags),
-                               SvgPath (the d grammar), SvgTransform, SvgColor, SvgStyle (inheritance),
-                               SvgGradient, SvgTriangulator (scanline fills, holes cut), SvgDocument
-    .asset                     CgUiSpriteRegistry — lazy "ns:name" -> sprite from ui/sprites/*.json;
-                               FileIconTheme — VS Code's file-icon-theme model, ui/icons/*.json
-    .geometry                  Position, Size
+  .image                       CgUiImage (what background/overlay/mask/outline hold: CSS's <image>,
+                               sealed records equal by value, each writing its CSS), CgUiImagePainter
+                               (the one place an image becomes canvas draws; resolved textures, sheet
+                               brushes and icon documents cached by value), CgUiMark (the sixteen
+                               marks), CgUiPainter (hand-drawn images; paint(name) in CSS)
+  .texture                     ArgbMath (colour maths)
+    .asset                     FileIconTheme — VS Code's file-icon-theme model, ui/icons/*.json.
+                               Sprite sheets and SVG are CrystalGraphics' (CgSpriteSheet, CgSvg)
 
 com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGroup, StyleOrigin,
                                Styleable (what the cascade MATCHES) and StyleScope (what a sheet
@@ -272,7 +263,7 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
     .visual.border             BorderRadiusProperties, BorderRadiusShorthand, LengthPercent(+Property/Value)
     .visual.color              ColorProperty, ColorValue
     .visual.text               FontFamilyValue
-    .visual.texture            TextureProperty, TextureValue
+    .visual.image              ImageProperty, ImageValue, ImageKinds (the CSS image functions, extensible)
     .visual.transform          Transform (the ORDERED LIST of ops -- not translate/scale/rotate
                                fields, because CSS composes left-to-right as matrix multiplication;
                                was `ui.Transform`, and the prefix went with the move: `style` is

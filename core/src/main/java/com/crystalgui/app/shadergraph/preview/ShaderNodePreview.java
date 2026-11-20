@@ -92,9 +92,9 @@ public class ShaderNodePreview extends UIElement {
             float ox = x + (w - side) * 0.5f;
             float oy = y + (h - side) * 0.5f;
             // v1 and v0 swapped: the flip described in the class docs.
-            ctx.drawImage(texture, ox, oy, side, side, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.canvas().box(ox, oy, side, side).fill(texture).region(0f, 1f, 1f, 0f).draw();
         } else {
-            ctx.drawImage(texture, x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+            ctx.canvas().box(x, y, w, h).fill(texture).region(0f, 1f, 1f, 0f).draw();
         }
     }
 }

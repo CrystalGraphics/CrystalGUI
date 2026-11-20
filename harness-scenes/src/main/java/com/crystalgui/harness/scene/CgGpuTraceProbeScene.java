@@ -137,9 +137,9 @@ public class CgGpuTraceProbeScene implements InteractiveSceneLifecycle {
             int w = stage.width(), h = stage.height();
             CgUiPaintContext paint = VIEW.paintContext();
             paint.recordFrame(w, h);
-            paint.fillRect(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
+            paint.canvas().fill(0, 0, w, h, 0x08FF8040); // binds the white pixel the batch below draws with
             for (int i = loadQuads; i > 1; i--) {
-                paint.fillRect(0, 0, w, h, (i & 1) == 0 ? 0x08FF8040 : 0x084080FF);
+                paint.canvas().fill(0, 0, w, h, (i & 1) == 0 ? 0x08FF8040 : 0x084080FF);
             }
             VIEW.presenter().present(stage, paint.seal());
         });

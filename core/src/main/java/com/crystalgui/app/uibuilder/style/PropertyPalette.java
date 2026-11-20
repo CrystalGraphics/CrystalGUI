@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.style.property.visual.image.ImageProperty;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
@@ -27,7 +28,6 @@ import com.crystalgui.style.property.layout.length.LPARectProperty;
 import com.crystalgui.style.property.layout.length.LPSizeProperty;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.visual.color.ColorProperty;
-import com.crystalgui.style.property.visual.texture.TextureProperty;
 import com.crystalgui.style.property.visual.transform.TransformProperty;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIDocument;
@@ -278,7 +278,7 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
                 || property instanceof LPARectProperty || property instanceof LengthPercentProperty) {
             return "length";
         }
-        if (property instanceof TextureProperty) return "paint";
+        if (property instanceof ImageProperty) return "paint";
         if (property instanceof TransformProperty) return "transform";
         if (property instanceof GridProperty || property instanceof GridTemplateProperty
                 || property instanceof GridAutoProperty || property instanceof GridTemplateAreasProperty) {

@@ -90,7 +90,7 @@ public class FrameImageView extends UIElement {
         float scale = Math.min(box.width() / iw, box.height() / ih);
         float w = iw * scale;
         float h = ih * scale;
-        ctx.drawImage(texture, (box.width() - w) * 0.5f, (box.height() - h) * 0.5f, w, h, 0f, 0f, 1f, 1f, 0xFFFFFFFF);
+        ctx.canvas().box((box.width() - w) * 0.5f, (box.height() - h) * 0.5f, w, h).fill(texture).draw();
     }
 
     /** The picture is kept and only its texture goes: a paused window re-shows nothing on its own. */

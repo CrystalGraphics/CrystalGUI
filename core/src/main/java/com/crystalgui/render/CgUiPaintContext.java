@@ -16,9 +16,7 @@ import com.crystalgraphics.text.render.CgTextDraw;
 import com.crystalgraphics.text.render.CgTextGamma;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import com.crystalgui.render.texture.CgUiRect;
 import lombok.Getter;
-import lombok.Setter;
 import org.jspecify.annotations.Nullable;
 
 import java.nio.ByteBuffer;
@@ -42,11 +40,11 @@ import java.util.Map;
  *
  * <p>Everything drawn lands on {@link #canvas()} under its state: its transform, clip, opacity, nodes and layers, each
  * pushed with {@code save()} and popped with {@code restore()}. The context adds what a painter of CrystalGUI's draws
- * with: the tint ({@link #getColor()}), the facades below, segments and surfaces for the box tree.</p>
+ * with: text, segments and surfaces for the box tree.</p>
  *
  * <pre>{@code
- * ctx.fillRect(x, y, w, h, argb);                                                          // a flat box
- * ctx.rect().at(x, y).size(w, h).radius(6f, 6f).border(1f, edge).fillColor(bg).submit();   // a shaped box
+ * ctx.canvas().fill(x, y, w, h, argb);                                                     // a flat box
+ * ctx.canvas().box(x, y, w, h).radius(6f).border(1f, edge).fill(bg).draw();                // a shaped box
  * ctx.canvas().spline().line(x0, y0, x1, y1).width(2f).color(argb).draw();
  * ctx.text().text("Hello").font(font).at(x, y).submit();
  * ctx.canvas().save().clip(0, 0, w, h);                                                    // the canvas's own state
@@ -54,8 +52,8 @@ import java.util.Map;
  * }</pre>
  *
  * <ul>
- *   <li>Build and submit an item in one expression: {@code curve()}, {@code rect()} and {@code text()} hand out scratch
- *       builders the next call resets.</li>
+ *   <li>Build and submit an item in one expression: {@code text()} hands out a scratch builder the next call
+ *       resets.</li>
  *   <li>Never call {@code .pose}, {@code .clip} or {@code .node} on what {@link #text()} answers: each replaces the
  *       canvas's.</li>
  *   <li>Every {@code save()} on the canvas needs its {@code restore()} before the painter returns.</li>
@@ -65,18 +63,6 @@ public final class CgUiPaintContext {
 
     @Getter
     private final CgFont font = UiPaintWarmup.defaultFont();
-
-    /** The tint a drawable multiplies its own colours by: set around its draw by whoever paints it. */
-    @Getter @Setter
-    private int color = 0xFFFFFFFF;
-
-    /**
-     * Multiplies the colours a picture names itself, as {@link #getColor()} resolves a mark's {@code currentColor}: the
-     * cascade's {@code overlay-tint}, set around an overlay's draw. White draws a picture as authored; anything else
-     * must be set back to white after.
-     */
-    @Getter @Setter
-    private int pictureTint = 0xFFFFFFFF;
 
     /** Where the pointer is, in the document's pixels: for a drawable that answers hover itself. */
     public int mouseX, mouseY;
@@ -198,38 +184,6 @@ public final class CgUiPaintContext {
     public CgCanvas canvas() {
         requireFrame();
         return canvas;
-    }
-
-    /** A flat box in {@code argb}, which already includes any tint. */
-    public void fillRect(float x, float y, float width, float height, int argb) {
-        canvas().fill(x, y, width, height, argb);
-    }
-
-    /**
-     * {@code texture}'s {@code (u0, v0)-(u1, v1)} drawn over a box, tinted by {@code argb}. A texture that failed to
-     * load draws its whole checkerboard: a crop of it would read as a flat colour rather than as missing.
-     */
-    public void drawImage(CgTexture texture, float x, float y, float width, float height,
-                          float u0, float v0, float u1, float v1, int argb) {
-        boolean missing = texture instanceof CgTextureAbstract file && file.isMissing();
-        CgCanvasBox image = canvas().box(x, y, width, height).fill(texture).tint(argb);
-        (missing ? image : image.region(u0, v0, u1, v1)).draw();
-    }
-
-    private final CgUiRect.Draw rectScratch = new CgUiRect.Draw();
-
-    /**
-     * A rounded and/or bordered rect. The fill tint is {@link #getColor()} at submit time.
-     *
-     * <pre>{@code
-     * ctx.rect().at(x, y).size(w, h).fillColor(argb).submit();
-     * ctx.rect().at(x, y).size(w, h).radius(6f, 6f).border(1f, edge).fillColor(bg).submit();
-     * }</pre>
-     *
-     * <p>Build and submit in one expression: it is this context's one scratch, reset by the next {@code rect()}.</p>
-     */
-    public CgUiRect.Draw rect() {
-        return rectScratch.begin(this);
     }
 
     /**
@@ -504,7 +458,7 @@ public final class CgUiPaintContext {
      * <pre>{@code
      * CgGraphTexture picture = ctx.requestTexture("my_picture", w, h);   // in paint, once
      * ctx.update(picture, 0, 0, w, h, rgba);
-     * ctx.drawImage(picture, x, y, w, h, 0f, 0f, 1f, 1f, 0xFFFFFFFF);    // this frame or any later one
+     * ctx.canvas().box(x, y, w, h).fill(picture).draw();                  // this frame or any later one
      * ctx.releaseTexture(picture);                                       // in a frame or between frames
      * }</pre>
      */
@@ -536,7 +490,7 @@ public final class CgUiPaintContext {
      * CgRecording recording = ctx.beginPasses();
      * renderer.renderPending(graph, recording);
      * ctx.endPasses();
-     * ctx.drawImage(renderer.textureOf(nodeId), x, y, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+     * ctx.canvas().box(x, y, w, h).fill(renderer.textureOf(nodeId)).region(0f, 1f, 1f, 0f).draw();
      * }</pre>
      */
     public CgRecording beginPasses() {

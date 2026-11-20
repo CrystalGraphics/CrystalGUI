@@ -1,11 +1,11 @@
 package com.crystalgui.workbench.dock;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgraphics.serialization.CgPlainOps;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
 import com.crystalgui.core.notify.Notification;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
@@ -600,7 +600,7 @@ public class DockGroup extends UIElement {
 
     private static void applyIcon(Tab tab, @Nullable String iconName) {
         if (iconName == null) return;
-        CgUiSvg glyph = CgUiSvg.ofIcon(iconName);
+        CgUiImage glyph = CgUiImage.findIcon(iconName);
         if (glyph == null) return;
         UIElement slot = new UIElement();
         // Unhittable, like every other composite part: click-focus targets the exact element hit rather

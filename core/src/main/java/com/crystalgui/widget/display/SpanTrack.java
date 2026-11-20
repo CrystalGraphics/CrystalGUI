@@ -225,8 +225,8 @@ public class SpanTrack extends TimelineTrack {
             if (GAP_NAME.equals(span.name())) {
                 // A GAP TAKES THE TEXT COLOUR at a whisper, not a palette hue: it is absence, and a
                 // colour of its own would put it in the legend beside real zones.
-                ctx.rect().at(left, top).size(width, height).radius(RADIUS, RADIUS)
-                        .fillColor((textColor & 0x00FFFFFF) | 0x10000000).submit();
+                ctx.canvas().box(left, top, width, height).radius(RADIUS)
+                        .fill((textColor & 0x00FFFFFF) | 0x10000000).draw();
                 continue;
             }
 
@@ -248,15 +248,15 @@ public class SpanTrack extends TimelineTrack {
                 if (depth >= lastSliverPixel.length) lastSliverPixel = growPixels(lastSliverPixel, depth);
                 if (lastSliverPixel[depth] == pixel) continue;
                 lastSliverPixel[depth] = pixel;
-                ctx.rect().at(left, top).size(drawn, height).fillColor(fill).submit();
+                ctx.canvas().box(left, top, drawn, height).fill(fill).draw();
                 continue;
             }
             if (isSelected) {
-                ctx.rect().at(left, top).size(drawn, height).radius(RADIUS, RADIUS)
-                        .border(1.5f, ring).fillColor(fill).submit();
+                ctx.canvas().box(left, top, drawn, height).radius(RADIUS)
+                        .border(1.5f, ring).fill(fill).draw();
             } else {
-                ctx.rect().at(left, top).size(drawn, height).radius(RADIUS, RADIUS)
-                        .fillColor(fill).submit();
+                ctx.canvas().box(left, top, drawn, height).radius(RADIUS)
+                        .fill(fill).draw();
             }
 
             if (drawn >= MIN_LABEL_SPAN) {
@@ -277,8 +277,8 @@ public class SpanTrack extends TimelineTrack {
         for (long at : boundaries) {
             float x = axis.xOf(at);
             if (x < 0f || x > trackWidth) continue;
-            ctx.rect().at(x - 0.5f, 0f).size(1f, box.height())
-                    .fillColor((textColor & 0x00FFFFFF) | 0x66000000).submit();
+            ctx.canvas().box(x - 0.5f, 0f, 1f, box.height())
+                    .fill((textColor & 0x00FFFFFF) | 0x66000000).draw();
         }
     }
 

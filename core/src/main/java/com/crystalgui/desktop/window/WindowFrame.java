@@ -1,5 +1,6 @@
 package com.crystalgui.desktop.window;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgui.desktop.manager.WindowRecord;
 import com.crystalgui.widget.layout.LayoutMinimum;
@@ -25,7 +26,6 @@ import com.crystalgui.core.dispose.Disposable;
 import com.crystalgui.core.dispose.Disposer;
 import com.crystalgui.render.Surface;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.service.Drag;
 import com.crystalgui.ui.dom.Name;
@@ -883,7 +883,7 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      */
     private void refreshIcon() {
         String name = iconName();
-        boolean declared = name != null && CgUiSvg.ofIcon(name) != null;
+        boolean declared = CgUiImage.findIcon(name) != null;
         if (!declared && record.toolWindow()) {
             icon.setDisplayed(false);
             return;
@@ -899,9 +899,8 @@ public class WindowFrame extends UIElement implements Disposable, DataProvider, 
      * the window rather than an element a caller builds: an icon set in one place and not the other is
      * how a window comes to look like two different windows.</p>
      *
-     * <p>Resolved through {@link CgUiSvg#ofIcon}, never {@code of(path)} — that is what binds the
-     * light/dark variant at draw time. The one time a caller reached past it, every {@code icon()} in
-     * every stylesheet drew the light file forever and a theme swap changed nothing.</p>
+     * <p>Resolved through {@link CgUiImage#findIcon}, never a path: a named icon picks its light or dark drawing
+     * when it draws, so a theme swap reaches it.</p>
      */
     public WindowFrame setIcon(@Nullable String namespacedIcon) {
         record.iconName(namespacedIcon);

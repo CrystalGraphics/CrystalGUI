@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -9,7 +10,6 @@ import com.crystalgraphics.render.canvas.CgCanvasGlass;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
@@ -47,7 +47,7 @@ public final class GlassLab {
     static final String DEFAULT = "blur(12px) saturate(1.2)";
 
     /** The engine's own filter, which is what an unwritten function means. */
-    private static final CgUiBackdropFilter DEFAULTS = new CgUiBackdropFilter();
+    private static final CgBackdropFilter DEFAULTS = CgBackdropFilter.DEFAULT;
 
     /** How a knob's number is shown and written. */
     private enum Scale {
@@ -65,8 +65,8 @@ public final class GlassLab {
 
     /** One of CrystalGraphics' glass presets, written as a declaration: only what differs from the default. */
     private record Preset(String label, String css) {
-        Preset(String label, CgCanvasGlass.Look look) {
-            this(label, BackdropFilterValue.write(new CgUiBackdropFilter().look(look)));
+        Preset(String label, CgBackdropFilter look) {
+            this(label, BackdropFilterValue.write(look));
         }
     }
 
@@ -90,12 +90,12 @@ public final class GlassLab {
 
     /** Each a different material rather than a different amount; the looks are the engine's (CgCanvasGlass). */
     private static final Preset[] PRESETS = {
-            new Preset("Clear", CgCanvasGlass.CLEAR),
-            new Preset("Frosted", CgCanvasGlass.FROSTED),
-            new Preset("Liquid", CgCanvasGlass.LIQUID),
-            new Preset("Acrylic", CgCanvasGlass.ACRYLIC),
-            new Preset("Mica", CgCanvasGlass.MICA),
-            new Preset("Prism", CgCanvasGlass.PRISM)};
+            new Preset("Clear", CgBackdropFilter.CLEAR),
+            new Preset("Frosted", CgBackdropFilter.FROSTED),
+            new Preset("Liquid", CgBackdropFilter.LIQUID),
+            new Preset("Acrylic", CgBackdropFilter.ACRYLIC),
+            new Preset("Mica", CgBackdropFilter.MICA),
+            new Preset("Prism", CgBackdropFilter.PRISM)};
 
     /** The order a value is written in, the grammar's own; anything else follows as written. */
     private static final String[] ORDER = {"blur", "saturate", "tint", "bezel", "ior", "specular", "glow", "edge",
@@ -127,11 +127,11 @@ public final class GlassLab {
 
         PanelForm frost = lab.form().group("Frost", false);
         knobs(frost, FROST, functions);
-        frost.prop(ConfigDescriptor.color("lab.tint", "Tint"), color(functions, "tint", DEFAULTS.getTintArgb()));
+        frost.prop(ConfigDescriptor.color("lab.tint", "Tint"), color(functions, "tint", DEFAULTS.tint()));
         knobs(lab.form().group("Lens", false), LENS, functions);
         knobs(lab.form().group("Light", false), LIGHT, functions);
         lab.form().group("Fallback", true).prop(ConfigDescriptor.color("lab.fallback", "Color"),
-                color(functions, "fallback", DEFAULTS.getFallbackColorArgb()));
+                color(functions, "fallback", DEFAULTS.fallback()));
 
         lab.readout(property.name, css);
         lab.open();
@@ -214,13 +214,13 @@ public final class GlassLab {
         for (Map.Entry<String, String> entry : parts.entrySet()) {
             if (defaultOf(entry.getKey()) == null && !isColor(entry.getKey())) out.add(entry.getValue());
         }
-        if (out.isEmpty()) out.add(CssValues.function("blur", CssValues.px(DEFAULTS.getBlurRadius())));
+        if (out.isEmpty()) out.add(CssValues.function("blur", CssValues.px(DEFAULTS.blur())));
         return CssValues.joinFunctions(out);
     }
 
     private static boolean isDefault(Map<String, String> parts, String name) {
         if (isColor(name)) {
-            int fallback = "tint".equals(name) ? DEFAULTS.getTintArgb() : DEFAULTS.getFallbackColorArgb();
+            int fallback = "tint".equals(name) ? DEFAULTS.tint() : DEFAULTS.fallback();
             Integer parsed = ColorValue.parseCssColor(CssValues.arguments(parts.get(name)));
             return parsed != null && parsed == fallback;
         }
@@ -234,18 +234,18 @@ public final class GlassLab {
     /** What the engine draws for an unwritten numeric function, or null for a name it has no number for. */
     private static Float defaultOf(String name) {
         return switch (name) {
-            case "blur" -> DEFAULTS.getBlurRadius();
-            case "saturate" -> DEFAULTS.getSaturation();
-            case "luminosity" -> DEFAULTS.getLuminosity();
-            case "bezel" -> DEFAULTS.getBezel();
-            case "ior" -> DEFAULTS.getIor();
-            case "specular" -> DEFAULTS.getSpecular();
-            case "glow" -> DEFAULTS.getGlow();
-            case "edge" -> DEFAULTS.getEdgeHighlight();
-            case "edge-width" -> DEFAULTS.getEdgeWidth();
-            case "rim-ambient" -> DEFAULTS.getRimAmbient();
-            case "chromatic" -> DEFAULTS.getChromatic();
-            case "noise" -> DEFAULTS.getNoise();
+            case "blur" -> DEFAULTS.blur();
+            case "saturate" -> DEFAULTS.saturation();
+            case "luminosity" -> DEFAULTS.luminosity();
+            case "bezel" -> DEFAULTS.bezel();
+            case "ior" -> DEFAULTS.ior();
+            case "specular" -> DEFAULTS.specular();
+            case "glow" -> DEFAULTS.glow();
+            case "edge" -> DEFAULTS.rim();
+            case "edge-width" -> DEFAULTS.rimWidth();
+            case "rim-ambient" -> DEFAULTS.rimAmbient();
+            case "chromatic" -> DEFAULTS.chromatic();
+            case "noise" -> DEFAULTS.noise();
             default -> null;
         };
     }

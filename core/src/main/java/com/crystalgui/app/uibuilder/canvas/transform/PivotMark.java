@@ -47,13 +47,12 @@ public final class PivotMark {
     private static void pass(CgUiPaintContext paint, float x, float y, int colour, float width) {
         float arm = SIZE * 0.5f;
         float radius = SIZE * 0.28f;
-        paint.rect()
-                .at(x - radius, y - radius)
-                .size(radius * 2f, radius * 2f)
-                .radius(radius, radius)
+        paint.canvas()
+                .box(x - radius, y - radius, radius * 2f, radius * 2f)
+                .radius(radius)
                 .border(width * 2f, colour)
-                .fillColor(0)
-                .submit();
+                .fill(0)
+                .draw();
         line(paint, x - arm, y, x - radius, y, colour, width);
         line(paint, x + radius, y, x + arm, y, colour, width);
         line(paint, x, y - arm, x, y - radius, colour, width);

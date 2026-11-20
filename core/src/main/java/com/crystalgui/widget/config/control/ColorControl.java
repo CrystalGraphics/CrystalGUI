@@ -1,5 +1,6 @@
 package com.crystalgui.widget.config.control;
 
+import com.crystalgui.widget.composite.ColorField;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.widget.config.ConfigControlContracts;
 import com.crystalgui.ui.contract.WidgetContract;
@@ -10,7 +11,6 @@ import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.widget.composite.ColorSelector;
 import com.crystalgui.ui.service.AnchoredPlacement;
 import com.crystalgui.widget.overlay.Dialog;
-import com.crystalgui.render.texture.CgUiColorField;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.widget.text.UIText;
@@ -167,9 +167,7 @@ public class ColorControl extends ValueControl<Integer> {
             // THE OPAQUE FILL REMOVED, not zeroed: a background-colour that is SET at all is drawn instead of the
             // background, so a zero drew nothing where the checkerboard should be.
             colorBar.getStyle().removeCandidates(StylePropertyRegistry.BACKGROUND_COLOR, slot -> true);
-            StyleGroup.inlinePipeline(colorBar.getStyle().getGeneralGroup(), g -> g.background(new CgUiColorField()
-                    .setMode(CgUiColorField.Mode.GRADIENT)
-                    .setGradient(argb, argb)));
+            StyleGroup.inlinePipeline(colorBar.getStyle().getGeneralGroup(), g -> g.background(ColorField.ramp(argb, argb).image()));
         } else {
             // background-COLOR, not a drawable, off screen: building one reaches a CrystalGraphics texture type,
             // which a dedicated server has no class for.

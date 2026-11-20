@@ -27,8 +27,8 @@ import com.crystalgui.style.StyleEngine;
  * {@code button { background: asset("crystalgui:ore", "button") }} over 5x7 pixels of art with a
  * {@code [2,2,2,4]} border, so every button here is nine quads or one, whichever the engine picks.</p>
  *
- * <p>{@code rotate=true} transforms each button off-axis, which is what sends {@code CgUiSprite} down
- * the one-quad {@code WITH_9SLICE_FILL} path; leave it off to measure the ordinary nine-quad path.
+ * <p>{@code rotate=true} transforms each button off-axis; leave it off to measure the axis-aligned
+ * path.
  * The two together are the A and the B.</p>
  */
 public class CgUiSpriteStressScene extends UiDocumentScene {
@@ -36,7 +36,7 @@ public class CgUiSpriteStressScene extends UiDocumentScene {
     /** How many sprite-backed buttons to draw. 500 is enough to dominate a frame; 2000 still runs. */
     private static final int COUNT = Integer.getInteger("crystalgui.spritestress.count", 500);
 
-    /** Transform every cell off-axis, so each takes the one-quad path. @see com.crystalgui.render.texture.CgUiSprite */
+    /** Transform every cell off-axis, the off-axis A of the pair. */
     private static final boolean ROTATE = Boolean.getBoolean("crystalgui.spritestress.rotate");
 
     /**

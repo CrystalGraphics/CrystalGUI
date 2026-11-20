@@ -206,7 +206,7 @@ final class VfxViewport extends UIElement {
         aspect = w / h;
         CgTexture texture = picture;
         // v flipped: a picture's origin is bottom-left.
-        if (texture != null) ctx.drawImage(texture, 0f, 0f, w, h, 0f, 1f, 1f, 0f, 0xFFFFFFFF);
+        if (texture != null) ctx.canvas().box(0f, 0f, w, h).fill(texture).region(0f, 1f, 1f, 0f).draw();
         paintGizmo(ctx, w - GIZMO_INSET, GIZMO_INSET);
     }
 
@@ -220,7 +220,7 @@ final class VfxViewport extends UIElement {
         for (int axis = 0; axis < 3; axis++) {
             float x = cx + right[axis] * GIZMO_ARM, y = cy - up[axis] * GIZMO_ARM;
             ctx.canvas().spline().line(cx, cy, x, y).width(2f).color(GIZMO_COLORS[axis]).draw();
-            ctx.fillRect(x - 2f, y - 2f, 4f, 4f, GIZMO_COLORS[axis]);
+            ctx.canvas().fill(x - 2f, y - 2f, 4f, 4f, GIZMO_COLORS[axis]);
         }
     }
 }

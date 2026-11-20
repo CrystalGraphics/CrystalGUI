@@ -116,7 +116,7 @@ public final class ShaderPropertyNodes {
      * <p>And the <b>exposed dot</b> is added to the title bar. Unity draws it there, left of the name,
      * and it is the same green dot the Blackboard pill shows for the same reason: whether a property is
      * exposed is otherwise invisible on the graph. A plain element with a full corner radius, exactly as
-     * {@code NodePort} draws its own dots — there is no circle in {@code CgUiShape} and none is needed.</p>
+     * {@code NodePort} draws its own dots — there is no circle in {@code CgUiMark} and none is needed.</p>
      */
     public static void decorate(GraphNode node, GraphProperty property) {
         node.addClass(NODE_CLASS);

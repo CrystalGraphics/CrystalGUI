@@ -1,5 +1,6 @@
 package com.crystalgui.render.texture.asset;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.StyleContext;
 import com.crystalgraphics.serialization.CgCodec;
 import com.crystalgraphics.serialization.CgCodecs;
@@ -7,7 +8,6 @@ import com.crystalgraphics.serialization.format.CgFiles;
 import com.crystalgraphics.util.io.CgIO;
 
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.render.texture.CgUiSvg;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -21,7 +21,7 @@ import javax.annotation.Nullable;
  *
  * <h3>A theme is JSON, so a resource pack ships one by shipping a file</h3>
  *
- * <p>Same contract {@link CgUiSpriteRegistry} already establishes: one JSON per theme at
+ * <p>Same contract CrystalGraphics' {@code CgSpriteSheet} establishes: one JSON per theme at
  * {@code assets/{namespace}/ui/icons/{path}.json}, no registration call, and an override is a pack
  * shipping the same path. The values are icon names resolved through the same
  * {@code assets/{ns}/ui/icons/{name}.svg} rule {@code icon()} uses in CSS.</p>
@@ -163,7 +163,7 @@ public final class FileIconTheme {
     /**
      * The same, against an explicitly supplied variant rather than the global one.
      *
-     * <p>Exists for {@code CgUiSvg.setVariantOverride}, and its absence was a real bug: the drawable
+     * <p>Exists for {@code CgUiImage.Icon.variant}, and its absence was a real bug: the drawable
      * worked out which variant it wanted and then called the no-argument form, which reads the static.
      * In a light theme that returns the base name unconditionally, so an override asking for the dark
      * drawing got the light one and the focused rail button stayed muddy — the override resolved, was
@@ -237,11 +237,9 @@ public final class FileIconTheme {
      * one, which is why the variant needs no plumbing through {@code ProjectFileTree}.</p>
      */
     @Nullable
-    public CgUiSvg drawableFor(String name, boolean directory, boolean expanded) {
-        // THE UN-SUFFIXED NAME goes to the drawable, which resolves the variant itself and keeps
-        // resolving it. Applying withVariant here instead baked the current variant in at the moment the
-        // row was bound, so anything not rebound after a theme swap kept the old drawing.
-        return CgUiSvg.ofIcon(iconFor(name, directory, expanded));
+    public CgUiImage.Icon imageFor(String name, boolean directory, boolean expanded) {
+        // The un-suffixed name: the icon resolves the variant when it draws, so a theme swap needs no rebind
+        return CgUiImage.findIcon(iconFor(name, directory, expanded));
     }
 
     /**
@@ -307,9 +305,9 @@ public final class FileIconTheme {
     /**
      * {@code "ns:name"} to {@code "ns:ui/icons/name.svg"} — the one definition of where an icon lives.
      *
-     * <p>Shared with {@code TextureValue}'s {@code icon()} keyword rather than duplicated, so a stylesheet
+     * <p>Shared with {@code ImageValue}'s {@code icon()} keyword rather than duplicated, so a stylesheet
      * and a theme can never disagree about the path a name resolves to. Namespace defaults to
-     * {@code crystalgui}, matching {@link CgUiSpriteRegistry}.</p>
+     * {@code crystalgui}, matching {@code CgSpriteSheet}.</p>
      */
     public static String toResourcePath(String iconName) {
         int colon = iconName.indexOf(':');

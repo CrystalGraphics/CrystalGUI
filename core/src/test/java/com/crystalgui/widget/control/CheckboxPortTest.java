@@ -9,7 +9,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import com.crystalgraphics.platform.input.CgMouseCodes;
-import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -68,17 +68,16 @@ public class CheckboxPortTest extends UiDocumentTestBase {
                                     .filter(n -> "mark".equals(n.get(Attribute.PART))).findFirst().orElseThrow();
 
         // The OVERLAY, not the background: `checkbox:checked ::part(mark)` sets `overlay:
-        // shape("checkmark")` and the unchecked rule sets none, so the two are distinguishable
-        // without comparing two drawables for equality. And `background` is a DIFFERENT PROPERTY
+        // shape("checkmark")` and the unchecked rule sets none. And `background` is a DIFFERENT PROPERTY
         // from `background-color` -- the sheet writes the former, so reading the latter here found
         // the same value in both states and failed against a cascade that was working.
-        assertSame("nothing draws a mark while it is unchecked", CgUiDrawable.EMPTY,
+        assertSame("nothing draws a mark while it is unchecked", CgUiImage.NONE,
                 mark.computedStyle().get(StylePropertyRegistry.OVERLAY));
 
         c.setChecked(true);
         frame();
 
-        assertNotSame("the :checked rule reached the mark through ::part(mark)", CgUiDrawable.EMPTY,
+        assertNotSame("the :checked rule reached the mark through ::part(mark)", CgUiImage.NONE,
                 mark.computedStyle().get(StylePropertyRegistry.OVERLAY));
     }
 

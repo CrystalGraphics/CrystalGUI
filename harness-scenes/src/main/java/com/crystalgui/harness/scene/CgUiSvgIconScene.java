@@ -1,6 +1,7 @@
 package com.crystalgui.harness.scene;
 
 import com.crystalgraphics.api.vector.svg.CgSvg;
+import javax.annotation.Nullable;
 import com.crystalgraphics.api.paint.brush.CgBrush;
 import com.crystalgraphics.platform.input.CgSystemInput;
 
@@ -8,9 +9,9 @@ import com.crystalgraphics.render.stage.CgRenderStage;
 import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.CgUiRenderer;
-import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.render.image.CgUiImage;
+import com.crystalgui.render.image.CgUiImagePainter;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.render.texture.svg.SvgDocument;
 
 import com.crystalgraphics.harness.FrameInfo;
 import com.crystalgraphics.harness.InteractiveSceneLifecycle;
@@ -53,9 +54,9 @@ import java.util.List;
  * <h3>The study strip</h3>
  *
  * <p>Above the grid, one icon at the sizes the workbench actually draws it — 16, 14, 12, 10 and 8 logical px,
- * under the workbench's own {@code uiScale} — through {@link CgUiSvg}, so the origin snap and every other
- * thing the drawable does on the way to the screen is exercised exactly as a file-tree row exercises it.
- * The grid draws {@link SvgDocument} raw and at no device scale, which is a different picture: it cannot
+ * under the workbench's own {@code uiScale} — through {@link CgUiImagePainter}, so the origin snap and every other
+ * thing the painter does on the way to the screen is exercised exactly as a file-tree row exercises it.
+ * The grid draws each {@link CgSvg} raw and at no device scale, which is a different picture: it cannot
  * show a small-size defect that the drawable or the pose introduces. {@code plan/svg-fix/} holds the
  * true-pixel crops this strip is judged against; {@code -Dcrystalgui.svgicon.uiScale} sets the scale.</p>
  *
@@ -113,10 +114,10 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     /** Frames discarded before profiling starts — lazy material compiles and first-touch allocations. */
     private static final int WARMUP_FRAMES = 30;
 
-    private record Entry(String name, String path, SvgDocument document) {
+    private record Entry(String name, String path, CgSvg document) {
         /** The icon as the canvas draws it, in the light grey the sheet shows. */
         CgBrush brush() {
-            return CgBrush.svg(CgSvg.of(path)).color(0xFFE0E0E0);
+            return CgBrush.svg(document).color(0xFFE0E0E0);
         }
 
         boolean missing() {
@@ -130,7 +131,18 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     private final List<Entry> entries = new ArrayList<>();
 
-    private CgUiSvg study;
+    /** The file parsed, or null when it is missing or outside what CrystalGraphics reads: the grid shows it as missing. */
+    @Nullable
+    private static CgSvg loadOrNull(String resource) {
+        try {
+            return CgSvg.load(resource);
+        } catch (IllegalArgumentException unsupported) {
+            return null;
+        }
+    }
+
+    private CgUiImage.Icon study;
+    private final CgUiImagePainter studyPainter = new CgUiImagePainter();
     /** Logical sizes on the strip; {@code -Dcrystalgui.svgicon.sizes=24,20} overrides. */
     private int[] studySizes = DEFAULT_STUDY_SIZES;
     /** Logical-to-device scale the strip draws under — the workbench's {@code uiScale}. */
@@ -167,8 +179,8 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         String sizes = System.getProperty("crystalgui.svgicon.sizes");
         if (sizes != null) studySizes = java.util.Arrays.stream(sizes.split(",")).mapToInt(Integer::parseInt).toArray();
         // The dark drawing, pinned: the workbench shows that one and the crops in plan/svg-fix are of it.
-        study = CgUiSvg.ofIcon(System.getProperty("crystalgui.svgicon.study", STUDY_ICON));
-        if (study != null) study.setVariantOverride(FileIconTheme.Variant.DARK);
+        study = CgUiImage.findIcon(System.getProperty("crystalgui.svgicon.study", STUDY_ICON));
+        if (study != null) study = study.variant(FileIconTheme.Variant.DARK);
         applyStartupOverrides(ctx.getScreenWidth(), ctx.getScreenHeight());
         panY += stripHeight();
         screen = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, this::paint);
@@ -228,7 +240,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
 
     private void load(String path, String label) {
         String resource = "crystalgui:ui/icons/" + path + ".svg";
-        entries.add(new Entry(label, resource, SvgDocument.load(resource)));
+        entries.add(new Entry(label, resource, loadOrNull(resource)));
     }
 
     @Override
@@ -252,7 +264,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         for (int i = 0; i < entries.size(); i++) {
             Entry entry = entries.get(i);
             if (!entry.missing() && !entry.blank()) continue;
-            paint.fillRect(cellX(i, cellW), cellY(i, cellH), cellW - GAP * zoom, cellH - GAP * zoom,
+            paint.canvas().fill(cellX(i, cellW), cellY(i, cellH), cellW - GAP * zoom, cellH - GAP * zoom,
                     entry.missing() ? 0x60FF0000 : 0x60FFAA00);
         }
 
@@ -271,7 +283,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
                 blank++;
                 continue;
             }
-            SvgDocument document = entry.document();
+            CgSvg document = entry.document();
             // Fitted from the icon's OWN viewBox: this set is 16px and Feather's is 24, and scaling both
             // by one constant would draw one of them at two thirds the other's size.
             float scale = Math.min(iconPx / document.width(), iconPx / document.height());
@@ -338,7 +350,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
     }
 
     /**
-     * The icon under study at each size, drawn as the workbench draws it: through the drawable, under a
+     * The icon under study at each size, drawn as the workbench draws it: through the painter, under a
      * uniform {@code uiScale} pose, at integer logical coordinates. Not panned or zoomed — the whole
      * question is what the device pixels look like at the size the stylesheet chose.
      */
@@ -347,7 +359,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         paint.canvas().save().scale(studyScale, studyScale);
         float x = MARGIN;
         for (int size : studySizes) {
-            study.draw(paint, 0f, 0f, x, MARGIN, size, size);
+            studyPainter.paint(paint, study, x, MARGIN, size, size, 0xFFFFFFFF, 0xFFFFFFFF, null, null);
             x += size + STUDY_GAP;
         }
         paint.canvas().restore();

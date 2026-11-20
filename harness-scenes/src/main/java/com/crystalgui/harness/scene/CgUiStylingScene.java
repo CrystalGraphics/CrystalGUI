@@ -1,8 +1,8 @@
 package com.crystalgui.harness.scene;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleEngine;
-import com.crystalgui.render.texture.CgUiSprite;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.input.FocusPolicy;
@@ -17,7 +17,7 @@ import com.crystalgraphics.harness.config.HarnessContext;
  * class/id/pseudo-class selectors, combinators, {@code !important}, and CSS-{@code transition}
  * state animations (both a paint-only property and a layout property, to prove interpolated
  * values actually reach Taffy, not just {@code getComputed()}) — plus {@code background}
- * cross-fades ({@code CgUiCrossFade}, via {@code TextureProperty}'s interpolator) between
+ * cross-fades ({@code CgUiImage.CrossFade}, via {@code ImageProperty}'s interpolator) between
  * color/texture/9-slice drawable pairs, triggered by hovering the {@code .fade-*} swatches.
  *
  * <p>Built on the real {@code UIDocument}/input plumbing, so
@@ -27,15 +27,14 @@ import com.crystalgraphics.harness.config.HarnessContext;
  */
 public class CgUiStylingScene extends UiDocumentScene {
 
-    private final CgUiSprite panelSprite = new CgUiSprite()
-            .setTexture("crystalgui:textures/gui/gdp_styles.png")
-            .setTextureSizeReference(256, 256)
-            .setSprite(29, 1, 13, 13)
-            .setBorder(1, 1, 11, 11);
+    private final CgUiImage.Picture panelSprite = CgUiImage.Picture.of("crystalgui:textures/gui/gdp_styles.png")
+            .reference(256, 256)
+            .region(29, 1, 13, 13)
+            .slices(1, 1, 11, 11);
 
-    private final CgUiSprite buttonSprite = panelSprite.copy()
-            .setSprite(154, 165, 16, 16)
-            .setBorder(5, 6, 9, 10);
+    private final CgUiImage.Picture buttonSprite = panelSprite
+            .region(154, 165, 16, 16)
+            .slices(5, 6, 9, 10);
 
     /**
      * Deliberately mirrors the documented CSS subset end to end: universal, class, compound
@@ -94,8 +93,8 @@ public class CgUiStylingScene extends UiDocumentScene {
                 background: image("crystalgui:textures/gui/gdp_styles.png", "154 165 16 16");
             }
 
-            /* Background cross-fade demo (hover each swatch) — one entry per CgUiDrawable type
-             * pairing, proving CgUiCrossFade works uniformly regardless of the concrete drawable
+            /* Background cross-fade demo (hover each swatch) — one entry per CgUiImage type
+             * pairing, proving a cross-fade works uniformly regardless of the concrete image
              * types on either side of the transition. */
             .fade-color-color {
                 background: #3355AA;
@@ -114,7 +113,7 @@ public class CgUiStylingScene extends UiDocumentScene {
             }
 
             /* 9-slice <-> 9-slice with DIFFERENT border thicknesses (1,1,11,11 vs 5,6,9,10) —
-             * CgUiCrossFade's draw-A-then-draw-B-on-top compositing has no per-pixel correspondence
+             * A cross-fade's draw-A-then-draw-B-on-top compositing has no per-pixel correspondence
              * to blend against when the two sides don't even share the same quad geometry, so this
              * looks rough by construction, not by bug. A real fix needs a dedicated 2-sampler
              * pixel-blend shader restricted to matching-geometry drawables — deliberately deferred,
@@ -189,7 +188,7 @@ public class CgUiStylingScene extends UiDocumentScene {
 
     private UIElement createStylingDemo() {
         UIElement root = new UIElement()
-                .generalStyle(s -> s.background(panelSprite.toRect()))
+                .generalStyle(s -> s.background(panelSprite))
                 .layout(l -> l
                         .width(420)
                         .height(320)
@@ -222,7 +221,7 @@ public class CgUiStylingScene extends UiDocumentScene {
         // width, and the property would never appear to update or transition at all.
         for (int i = 0; i < 3; i++) {
             UIElement button = new UIElement()
-                    .generalStyle(s -> s.background(buttonSprite.toRect()));
+                    .generalStyle(s -> s.background(buttonSprite));
             button.addClass("button");
 
             if (i == 0) {
@@ -241,7 +240,7 @@ public class CgUiStylingScene extends UiDocumentScene {
         // (set via .borderAll below) now grows the layout box for real — it's the same
         // border-width-* longhand Taffy resolves, not a bespoke SDF-only number.
         UIElement roundedButton = new UIElement()
-                .generalStyle(s -> s.background(com.crystalgui.render.texture.CgUiRect.ofColor(0xFFEE8822))
+                .generalStyle(s -> s.background(CgUiImage.color(0xFFEE8822))
                         .borderRadius(10f)
                         .borderColor(0xFF224488))
                 .layout(l -> l.width(48).height(48).borderAll(3));
@@ -263,7 +262,7 @@ public class CgUiStylingScene extends UiDocumentScene {
         root.append(croppedSwatch);
 
         // Background cross-fade demo — move the mouse over each swatch to trigger the
-        // `background 700ms ease-in-out` transition. Each pairs a different CgUiDrawable
+        // `background 700ms ease-in-out` transition. Each pairs a different CgUiImage
         // combination on either side of the fade:
         UIElement fadeColorColor = new UIElement().layout(l -> l.width(48).height(48)); // flat color -> flat color
         fadeColorColor.addClass("fade-color-color");

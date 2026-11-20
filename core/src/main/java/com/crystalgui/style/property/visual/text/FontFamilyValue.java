@@ -14,7 +14,7 @@ import java.util.List;
  * {@code FontFamilyCache} turns the list into a {@code CgFontFamily}; this class only splits and unquotes.
  *
  * <p>Uses {@link CssParsingUtil#splitTopLevelCommas} — the same comma-splitting helper
- * {@code sprite()}/{@code asset()} already use in {@code TextureValue} — even though there's no
+ * {@code sprite()}/{@code asset()} already use in {@code ImageValue} — even though there's no
  * function-call wrapper here (unlike {@code image(...)}/{@code sprite(...)}), since a bare
  * comma-separated value list is real CSS's own actual {@code font-family:} grammar.</p>
  */

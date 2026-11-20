@@ -159,8 +159,8 @@ public class CounterTrack extends FrameSeriesTrack {
             int colour = isComparable(at) ? fill : washed(fill);
             float[] bar = barOf(column);
             if (bar == null) continue;
-            ctx.rect().at(bar[0], bottom - barHeight).size(bar[1], barHeight)
-                    .fillColor(colour).submit();
+            ctx.canvas().box(bar[0], bottom - barHeight, bar[1], barHeight)
+                    .fill(colour).draw();
         }
 
         CgFontFamily font = labelFont();

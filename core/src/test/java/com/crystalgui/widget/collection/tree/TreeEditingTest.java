@@ -1,5 +1,6 @@
 package com.crystalgui.widget.collection.tree;
 
+import com.crystalgui.render.image.CgUiImage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -21,7 +22,6 @@ import com.crystalgui.core.collection.tree.TreeRow;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
-import com.crystalgui.render.texture.CgUiGradient;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -399,8 +399,8 @@ public class TreeEditingTest extends UiDocumentTestBase {
         rowElement(c).addClass(TreeDragAndDrop.DROP_AFTER_CLASS);
         rowElement(a1).addClass(TreeEditing.CUT_CLASS);
         settle();
-        assertTrue(rowElement(b).getStyle().computed().get(StylePropertyRegistry.OUTLINE) instanceof CgUiGradient);
-        assertTrue(rowElement(c).getStyle().computed().get(StylePropertyRegistry.OUTLINE) instanceof CgUiGradient);
+        assertTrue(rowElement(b).getStyle().computed().get(StylePropertyRegistry.OUTLINE) instanceof CgUiImage.Gradient);
+        assertTrue(rowElement(c).getStyle().computed().get(StylePropertyRegistry.OUTLINE) instanceof CgUiImage.Gradient);
         assertEquals(0.5f, rowElement(a1).getStyle().computed().get(StylePropertyRegistry.OPACITY), 0.001f);
     }
 

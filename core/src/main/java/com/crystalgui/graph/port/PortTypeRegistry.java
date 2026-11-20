@@ -12,7 +12,7 @@ import java.util.Set;
  * id → {@link PortType}, so a graph loaded from disk or off the wire can resolve the types it names.
  *
  * <p>Registration is explicit and manual, matching every other registry here ({@code ElementRegistry},
- * {@code CgUiSpriteRegistry}, {@code CgMaterialRegistry}). {@code ElementRegistry}'s own javadoc
+ * {@code CgSpriteSheet}, {@code CgMaterialRegistry}). {@code ElementRegistry}'s own javadoc
  * records why: a registry populated as a class-loading side effect decodes differently depending on
  * which classes a given JVM happened to touch, which is harmless locally and silently wrong for
  * anything serialized.</p>

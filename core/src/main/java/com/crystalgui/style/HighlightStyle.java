@@ -184,10 +184,10 @@ public final class HighlightStyle {
     }
 
     /**
-     * The band's corner radii in pixels, in {@code CgUiRect}'s order — TL, TR, BR, BL, each an
+     * The band's corner radii in pixels, in {@code CgCornerRadii}'s order — TL, TR, BR, BL, each an
      * {@code (rx, ry)} pair — or {@code null} when every corner is square.
      *
-     * <p>Null rather than an array of zeroes so the painter keeps its {@code fillRect} fast path: a
+     * <p>Null rather than an array of zeroes so the painter keeps the canvas's flat fill: a
      * rounded band is a separate material and therefore a separate draw call, which is the right cost for
      * a few words of inline code and the wrong one for an editor's selection.</p>
      */

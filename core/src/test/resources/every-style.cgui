@@ -107,6 +107,8 @@
           "width": "150px",
           "height": "90px",
           "backdrop-filter": "blur(12px) tint(#2B2D3088) bezel(8px) ior(1.5) specular(0.35) noise(0.04) saturate(1.35) luminosity(0.96) fallback(#2B2D30FF)",
+          "background": "cross-fade(#3574F0FF 40%, #2E436EFF)",
+          "outline": "paint(test:stripes)",
           "overlay": "grid(16 24, #6EDCD024, 2)",
           "mask": "linear-gradient(45deg, #FF0000FF 0%, #00FF00FF 33%, #0000FFFF 66%, #FFFFFF00 100%)"
         }

@@ -1,5 +1,8 @@
 package com.crystalgui.harness.scene;
 
+import java.util.function.BiFunction;
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgraphics.api.vector.CgStrokeCap;
 import com.crystalgraphics.harness.ui.UiDocumentScene;
 import com.crystalgui.style.StyleEngine;
@@ -21,7 +24,6 @@ import com.crystalgui.graph.NodeType;
 import com.crystalgui.graph.NodeTypeRegistry;
 import com.crystalgui.graph.port.PortType;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.Resize;
@@ -223,7 +225,12 @@ public class CgUiGalleryScene extends UiDocumentScene {
     // ── glass page ──────────────────────────────────────────────────────────────
 
     /** Every specimen on the page, so one slider retunes all of them at once. */
-    private final List<CgUiBackdropFilter> glassSpecimens = new ArrayList<>();
+    private final List<UIElement> glassSpecimens = new ArrayList<>();
+    /** What every specimen shows; a slider replaces it. */
+    private CgBackdropFilter glassLook = CgBackdropFilter.DEFAULT.blur(12f).lens(10f, 1.5f)
+            .highlight(0.3f, CgBackdropFilter.DEFAULT.glow(), CgBackdropFilter.DEFAULT.rim(),
+                    CgBackdropFilter.DEFAULT.rimWidth(), CgBackdropFilter.DEFAULT.rimAmbient())
+            .noise(0.035f).color(1.4f, CgBackdropFilter.DEFAULT.luminosity()).tint(0x40FFFFFF).fallback(0x66202430);
 
     private float glassPhase;
 
@@ -301,12 +308,13 @@ public class CgUiGalleryScene extends UiDocumentScene {
         UIElement right = new UIElement();
         right.addClass("gl-col");
 
-        left.append(glassControl("blur", 0f, 30f, 12f, "%.0f", CgUiBackdropFilter::setBlurRadius));
-        left.append(glassControl("bezel", 0f, 30f, 10f, "%.0f", CgUiBackdropFilter::setBezel));
-        left.append(glassControl("ior", 1f, 2.5f, 1.5f, "%.2f", CgUiBackdropFilter::setIor));
-        right.append(glassControl("specular", 0f, 1.5f, 0.3f, "%.2f", CgUiBackdropFilter::setSpecular));
-        right.append(glassControl("noise", 0f, 0.25f, 0.035f, "%.3f", CgUiBackdropFilter::setNoise));
-        right.append(glassControl("saturation", 0f, 3f, 1.4f, "%.2f", CgUiBackdropFilter::setSaturation));
+        left.append(glassControl("blur", 0f, 30f, 12f, "%.0f", (g, v) -> g.blur(v)));
+        left.append(glassControl("bezel", 0f, 30f, 10f, "%.0f", (g, v) -> g.lens(v, g.ior())));
+        left.append(glassControl("ior", 1f, 2.5f, 1.5f, "%.2f", (g, v) -> g.lens(g.bezel(), v)));
+        right.append(glassControl("specular", 0f, 1.5f, 0.3f, "%.2f",
+                (g, v) -> g.highlight(v, g.glow(), g.rim(), g.rimWidth(), g.rimAmbient())));
+        right.append(glassControl("noise", 0f, 0.25f, 0.035f, "%.3f", (g, v) -> g.noise(v)));
+        right.append(glassControl("saturation", 0f, 3f, 1.4f, "%.2f", (g, v) -> g.color(v, g.luminosity())));
 
         controls.append(left);
         controls.append(right);
@@ -315,28 +323,20 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
     /** A specimen: an element whose background IS a glass material, registered for the sliders. */
     private UIElement glassPanel(String styleClass) {
-        CgUiBackdropFilter glass = new CgUiBackdropFilter()
-                .setBlurRadius(12f).setBezel(10f).setIor(1.5f)
-                .setSpecular(0.3f).setNoise(0.035f).setSaturation(1.4f)
-                .setTintArgb(0x40FFFFFF).setFallbackColorArgb(0x66202430);
-        glassSpecimens.add(glass);
-
         UIElement panel = new UIElement();
         panel.addClass(styleClass);
-        StyleGroup.inlinePipeline(panel.getStyle().getGeneralGroup(), g -> g.backdropFilter(glass));
+        CgBackdropFilter look = glassLook;
+        StyleGroup.inlinePipeline(panel.getStyle().getGeneralGroup(), g -> g.backdropFilter(look));
+        glassSpecimens.add(panel);
         return panel;
     }
 
     /**
      * One labelled slider that retunes every specimen live.
      *
-     * <p>Mutating the drawable in place rather than rebuilding it is deliberate and is why this is
-     * immediate: the same {@link CgUiBackdropFilter} instance is what the cascade holds and what gets drawn each
-     * frame, so a setter IS the update. Re-parsing a {@code glass(...)} declaration per drag frame would
-     * churn the cascade for a value the shader reads directly.</p>
      */
     private UIElement glassControl(String name, float min, float max, float initial,
-                                   String format, BiConsumer<CgUiBackdropFilter, Float> apply) {
+                                   String format, BiFunction<CgBackdropFilter, Float, CgBackdropFilter> apply) {
         UIElement row = new UIElement();
         row.addClass("gl-ctl");
 
@@ -349,7 +349,11 @@ public class CgUiGalleryScene extends UiDocumentScene {
         slider.addClass("gl-slider");
         slider.setRange(min, max).setValue(initial);
         slider.onValueChanged.connect(v -> {
-            for (CgUiBackdropFilter glass : glassSpecimens) apply.accept(glass, v);
+            glassLook = apply.apply(glassLook, v);
+            CgBackdropFilter look = glassLook;
+            for (UIElement panel : glassSpecimens) {
+                StyleGroup.inlinePipeline(panel.getStyle().getGeneralGroup(), g -> g.backdropFilter(look));
+            }
             valueLabel.setText(String.format(Locale.ROOT, format, v));
         });
 
@@ -814,7 +818,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
             UIElement chip = new UIElement();
             chip.addClass("tl-chip");
             StyleGroup.inlinePipeline(chip.getStyle().getGeneralGroup(),
-                    g -> g.background(com.crystalgui.render.texture.CgUiRect.ofColor(argb)));
+                    g -> g.background(CgUiImage.color(argb)));
             chip.onMouseDown.attachListener((el, event) -> {
                 pick.accept(argb);
                 applyTextLab();
@@ -2426,7 +2430,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
     /**
      * {@code CgUiPaintContext.curve()} — Bézier strokes as an ordinary painting capability, available
-     * to any element's {@code paintSelf} exactly as {@code fillRect} is.
+     * to any element's {@code paintSelf} exactly as a canvas fill is.
      *
      * <p>The renderer itself is covered against a raw GL surface by the harness's
      * {@code curve-renderer-test} scene. What this page covers is what the UI layer adds:</p>
@@ -2698,8 +2702,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
             float dstX = x + 342;
 
             // Node bodies first, so the wires cross over them — submission order is the z-order.
-            ctx.fillRect(x + 16, y + 14, 62, 78, 0xFF2E333D);
-            ctx.fillRect(x + 342, y + 22, 62, 60, 0xFF2E333D);
+            ctx.canvas().fill(x + 16, y + 14, 62, 78, 0xFF2E333D);
+            ctx.canvas().fill(x + 342, y + 22, 62, 60, 0xFF2E333D);
 
             for (int s = 0; s < srcY.length; s++) {
                 for (int d = 0; d < dstY.length; d++) {
@@ -2717,8 +2721,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 }
             }
 
-            for (int s = 0; s < srcY.length; s++) ctx.fillRect(srcX - 4, srcY[s] - 4, 8, 8, srcColor[s]);
-            for (int d = 0; d < dstY.length; d++) ctx.fillRect(dstX - 4, dstY[d] - 4, 8, 8, dstColor[d]);
+            for (int s = 0; s < srcY.length; s++) ctx.canvas().fill(srcX - 4, srcY[s] - 4, 8, 8, srcColor[s]);
+            for (int d = 0; d < dstY.length; d++) ctx.canvas().fill(dstX - 4, dstY[d] - 4, 8, 8, dstColor[d]);
         }
 
         /** Rotating spokes, each a tapered gradient arc. The harness scene's crowd-pleaser. */
@@ -2816,10 +2820,10 @@ public class CgUiGalleryScene extends UiDocumentScene {
             // stroke that merely grazes the panel's edge proves nothing about ordering, because
             // "hidden behind it" and "drawn over it" look identical when they barely touch.
             ctx.canvas().spline().line(x + 12, y + 26, x + 190, y + 26).width(16f).color(0xFFFF4D6D).draw();
-            ctx.fillRect(x + 70, y + 14, 70, 40, 0xFF4D8CFF);
+            ctx.canvas().fill(x + 70, y + 14, 70, 40, 0xFF4D8CFF);
             ctx.canvas().spline().line(x + 12, y + 44, x + 190, y + 44).width(12f).color(0xFF4DFFC3).draw();
 
-            ctx.fillRect(x + 250, y + 14, 70, 40, 0xFF4D8CFF);
+            ctx.canvas().fill(x + 250, y + 14, 70, 40, 0xFF4D8CFF);
             ctx.canvas().spline().line(x + 220, y + 34, x + 400, y + 34).width(16f).color(0xFFFFC24D).draw();
         }
 
@@ -2830,9 +2834,9 @@ public class CgUiGalleryScene extends UiDocumentScene {
             ctx.canvas().spline().line(x + 12, y + 52, x + 180, y + 52).width(12f).color(0xFF6CC4FF).draw();
             ctx.canvas().restore();
 
-            ctx.fillRect(x + 220, y + 18, 180, 12, 0xFF6CC4FF);
+            ctx.canvas().fill(x + 220, y + 18, 180, 12, 0xFF6CC4FF);
             ctx.canvas().save().opacity(0.35f);
-            ctx.fillRect(x + 220, y + 46, 180, 12, 0xFF6CC4FF);
+            ctx.canvas().fill(x + 220, y + 46, 180, 12, 0xFF6CC4FF);
             ctx.canvas().restore();
         }
 
@@ -3033,7 +3037,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
         Runnable show = () -> {
             int argb = picker.getColor();
-            swatch.generalStyle(g -> g.background(com.crystalgui.render.texture.CgUiRect.ofColor(argb)));
+            swatch.generalStyle(g -> g.background(CgUiImage.color(argb)));
             readout.setText(String.format("#%08X   alpha %d", argb, (argb >>> 24) & 0xFF));
         };
         picker.onColorChanged.connect(c -> show.run());

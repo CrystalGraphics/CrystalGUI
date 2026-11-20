@@ -13,9 +13,7 @@ import com.crystalgui.gauntlet.DesktopTest;
 import com.crystalgui.gauntlet.OpenCloseTest;
 import com.crystalgui.render.CgUiRenderer;
 import com.crystalgui.render.UiPaintWarmup;
-import com.crystalgui.render.texture.asset.CgUiSpriteRegistry;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.StyleEngine;
 
 /**
@@ -82,17 +80,12 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
         CgUiScreen.tick();
     }
 
-    /** F3+T and a resource pack change: re-reads the icons and stylesheets. Font families are CrystalGraphics'. */
+    /** F3+T and a resource pack change: re-reads the stylesheets. Icons, sprite sheets and fonts are CrystalGraphics'. */
     @Override
     public void onReload() {
-        // Caches before the sheets: the restyle re-resolves every asset(...) and icon(...) against them.
-        CgUiSpriteRegistry.clearCache();
-        // Revalidated, not cleared: re-parsing every icon takes seconds to pick up the one that changed.
-        int icons = SvgDocument.revalidate();
         FileIconTheme.invalidateCache();
         int sheets = StyleEngine.reloadStylesheets();
-        CrystalGuiCore.LOGGER.info("CrystalGUI resource reload: {} stylesheet(s) re-read, {} icon(s) changed",
-                sheets, icons);
+        CrystalGuiCore.LOGGER.info("CrystalGUI resource reload: {} stylesheet(s) re-read", sheets);
     }
     
     /**

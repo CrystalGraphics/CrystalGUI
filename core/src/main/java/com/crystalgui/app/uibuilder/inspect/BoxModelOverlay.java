@@ -160,6 +160,6 @@ public final class BoxModelOverlay extends UIElement {
 
     private static void fill(CgUiPaintContext ctx, @Nullable WorldRect rect, int argb, Box own) {
         if (rect == null || rect.width() <= 0f || rect.height() <= 0f) return;
-        ctx.fillRect(rect.x() - own.x(), rect.y() - own.y(), rect.width(), rect.height(), argb);
+        ctx.canvas().fill(rect.x() - own.x(), rect.y() - own.y(), rect.width(), rect.height(), argb);
     }
 }

@@ -1,9 +1,8 @@
 package com.crystalgui.app.uibuilder.glyph;
 
+import com.crystalgui.render.image.CgUiImage;
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.ui.dom.UIElement;
@@ -81,8 +80,8 @@ public final class GlyphView {
     private boolean draw(KindGlyphs.Glyph glyph) {
         if (glyph.equals(shown)) return false;
         if (shown == null || !glyph.icon().equals(shown.icon())) {
-            CgUiSvg drawn = CgUiSvg.ofIcon(glyph.icon());
-            CgUiDrawable painted = drawn == null ? CgUiDrawable.EMPTY : drawn;
+            CgUiImage drawn = CgUiImage.findIcon(glyph.icon());
+            CgUiImage painted = drawn == null ? CgUiImage.NONE : drawn;
             StyleGroup.defaultPipeline(slot.getStyle().getGeneralGroup(), g -> g.overlay(painted));
         }
         if (shown == null || glyph.role() != shown.role()) {

@@ -1014,12 +1014,11 @@ public final class TransformBox extends UIElement {
         for (Spot spot : Spot.values()) {
             Vector2f at = handleAt(spot);
             if (at == null) continue;
-            paint.rect()
-                    .at(at.x - HANDLE_SIZE * 0.5f, at.y - HANDLE_SIZE * 0.5f)
-                    .size(HANDLE_SIZE, HANDLE_SIZE)
-                    .radius(HANDLE_SIZE * 0.5f, HANDLE_SIZE * 0.5f)
-                    .fillColor(colour)
-                    .submit();
+            paint.canvas()
+                    .box(at.x - HANDLE_SIZE * 0.5f, at.y - HANDLE_SIZE * 0.5f, HANDLE_SIZE, HANDLE_SIZE)
+                    .radius(HANDLE_SIZE * 0.5f)
+                    .fill(colour)
+                    .draw();
         }
 
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());

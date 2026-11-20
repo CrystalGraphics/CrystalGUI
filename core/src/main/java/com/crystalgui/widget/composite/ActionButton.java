@@ -1,5 +1,6 @@
 package com.crystalgui.widget.composite;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.service.Animation;
 import java.util.ArrayList;
 import java.util.List;
@@ -13,8 +14,6 @@ import com.crystalgui.core.command.Command;
 import com.crystalgui.core.command.CommandContext;
 import com.crystalgui.core.command.Commands;
 import com.crystalgui.core.command.MenuId;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.ui.dom.UIElement;
@@ -153,8 +152,8 @@ public class ActionButton extends Button {
     private void drawIcon() {
         String shown = showingToggled ? toggledIconName : iconName;
         if (shown == null) return;
-        CgUiSvg glyph = CgUiSvg.ofIcon(shown);
-        CgUiDrawable drawn = glyph == null ? CgUiDrawable.EMPTY : glyph;
+        CgUiImage glyph = CgUiImage.findIcon(shown);
+        CgUiImage drawn = glyph == null ? CgUiImage.NONE : glyph;
         StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(drawn));
     }
 

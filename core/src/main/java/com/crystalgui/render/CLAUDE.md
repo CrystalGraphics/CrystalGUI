@@ -42,7 +42,7 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
 |---|---|
 | Frame | `recordFrame(w, h)` / `seal()`, `abortFrame()` for a paint that threw, `frameId()` |
 | Canvas | `canvas()`: the frame's `CgCanvas`. Placing, clipping and fading are its `save`/`setTransform`/`translate`/`clip`/`opacity`/`restore`; a group is `layer(...)` |
-| Draw | `fillRect`, `drawImage`, `rect()` (a rounded or bordered rect), `text()` (`canvas().textDraw()`); everything else draws on the canvas |
+| Draw | `text()` (`canvas().textDraw()`); everything else draws on the canvas: `fill`, `box(...)`, `image`, `spline()` |
 | Pixels | `deviceScale`, `isPoseAxisAligned`, `snapXToDevicePixel`/`snapYToDevicePixel`, `isVisible`, `outsideClip`, `targetWidth`/`targetHeight`, all read from the canvas's transform and clip |
 | Retention | `beginSegment`/`endSegment`/`replay`, `segmentDrawn`, `replayEpoch`; `surface(key, x0, y0, x1, y1)`, `withoutRetention(body)` |
 | Textures | `requestTexture(name, w, h)` / `releaseTexture`, `update(texture, x, y, w, h, rgba)`, `beginPasses`/`endPasses` for a caller's own passes |
@@ -51,11 +51,9 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
 > `ctx.canvas().save().opacity(a).clip(x, y, w, h)` ... `restore()`. Nothing in the context pushes or pops.
 > `BoxPainter` sets each box's transform as `base × localToWorld` under a save, so a box's pose is never a stack.
 
-> **`rect()` is the only place a rounded or bordered rect is drawn.**
-> `ctx.rect().at(x,y).size(w,h).radius(6f,6f).border(1f,edge).fillColor(bg).submit()`: build and `submit()` in one
-> expression, never hold it. **`CgUiRect` is a VALUE and drawing one must not build one**: its `with` methods answer
-> copies, right for what the cascade shares and ruinous per element per frame. `BoxPainter` composes the element's
-> radii, border and fill straight into this scratch, so a shaped element allocates nothing.
+> **A rounded or bordered rect is a canvas box**: `ctx.canvas().box(x, y, w, h).radius(6f).border(1f, edge).fill(bg)
+> .draw()`, built and drawn in one expression. A `CgCornerRadii` a painter draws every frame is kept while it holds
+> (`BoxPainter` keeps a box's on the `Box`), so a shaped element allocates nothing.
 
 > **A view's textures are freed by its `close()`, and by `CgUiRenderer.contextDestroyed()` for one left open**
 > (`CgUiClientLifecycle.onContextDestroy` calls it): the recorder's picture, kept surfaces and requested textures.
@@ -101,11 +99,11 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
 
 > **A rounded `overflow: hidden` is a canvas clip, not a layer** (`clip(rrect)`, the box's radii cached on the
 > `Box`): geometric, as in CSS, so the background never masks the children. Past the canvas's clip depth it falls
-> back to a path mask. **Opacity over overlapping children and a `mask` drawable are a group layer**
+> back to a path mask. **Opacity over overlapping children and a `mask` image are a group layer**
 > (`layer(ink).opacity(a)`, `maskWith`); a lone draw's opacity is a flat multiply. The tint-vs-layer-opacity
 > distinction is the thing most likely to be got wrong here: `docs/CGUI_STYLE_RENDER_PIPELINE.md` §5 and §8.
 
-> **Glass captures once a turn.** `CgUiBackdropFilter` draws through the canvas's glass, whose capture serves every
+> **Glass captures once a turn.** `backdrop-filter` is a `CgBackdropFilter` on a canvas box, whose capture serves every
 > pane after it until something is painted over what a pane samples or a layer opens (CrystalGraphics' retake rule),
 > captured over the host's frame (`CgCanvasRecorder` sets it as the canvas's `behind`).
 
@@ -126,46 +124,52 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
   character takes the language its own text shows (kana → Japanese, Hangul → Korean), else the
   player's: `CgI18n.locale()`, pushed into `FontFamilyCache.useLocale` by the desktop's screen when it changes.
 
-### Drawables — `render/texture/`
+### Images — `render/image/`
 
-`CgUiDrawable` is the pluggable "paint yourself into a rect" SPI:
-`draw(ctx, mouseX, mouseY, x, y, w, h)`, plus `intrinsicWidth()`/`intrinsicHeight()` returning `-1`
-when the drawable has no inherent size (solid colours, SDF shapes). One `draw` call is expected to
-issue exactly one GPU draw call, or zero for a fully transparent tint.
+**`CgUiImage` is what `background`, `overlay`, `mask` and `outline` hold**: CSS's `<image>`, a sealed set of
+records, immutable and equal by value, each writing its own CSS (`css()`). **`CgUiImagePainter` is the one place an
+image becomes draws**; `BoxPainter` owns one.
 
-| Class | Role |
-|---|---|
-| `CgUiRect` | **The one drawable behind every `background`** — a rectangle with a `Fill` (flat colour, one stretched texture, or a 9-slice sprite), optional per-corner elliptical radii and an optional border, drawn as one canvas `box` with that fill as its brush. `CgUiDrawable.EMPTY` is one, filled with colour 0. **Equality is by value for a flat fill and by identity otherwise**: the cascade discards a pushed candidate equal to the one present (so a repeated `background` write cannot retarget a live transition), while `TextureValue.sourceOf` is a weak map keyed by equality, where a value-equal drawable that cannot describe itself loses its CSS |
-| `CgUiSprite` | **A FILL, not a drawable** — `sprite.toRect()` is what a caller owing a `CgUiDrawable` wants. A 9-slice textured sprite (`setTexture`/`setSprite`/`setBorder`) whose `brush()` is a `CgBrush` with a `CgNineSlice`: **one draw, not nine**, the nine-region remap done per pixel, so no interior seam can staircase or soften. A borderless sprite is the same brush with zero borders, its atlas sub-rect kept; an unnamed repeat pair takes the horizontal mode |
-| `CgUiCrossFade` | Blends two drawables, for `background` transitions |
-| `CgUiLayerBox` | Composites a stack; resolves `overlay-size` via `intrinsicWidth()` |
-| `CgUiRepeat` | Tiling modes |
-| `ArgbMath` | Shared colour maths |
-| `CgUiSvg` | Draws an SVG into a rect — fitted and centred, never stretched. See below |
-| `CgUiGradient` | `linear-gradient(direction, stops…)` and `radial-gradient(shape at position, stops…)` (the `RADIAL` keyword; circle or ellipse, CSS's extents resolved per box by `radiiFor`) — CSS's, at **any angle** (`deg`/`turn`/`rad`, `to <side>`, `to <corner>` resolved per box): ONE draw through `canvas/gradient.shader` evaluating up to eight stops per fragment along CSS's gradient line (Skia's unrolled shape; more stops are more draws, each owning a window of *t*), interpolated **premultiplied** (CSS Images 3 — `transparent` is transparent black, and a straight lerp toward it passes through a dark half-colour), **dithered** ±0.5/255 (per-fragment mixing removes the strip edges the first version had, not the level edges), and `CornerRadiusAware`, so it masks itself under a `border-radius` (the self-clipping gap applies: no `border-width` stroke). Measured on `cgui-gradient-probe`: a 16-level ramp's column means step 0.23 levels at most; the fade to transparent matches the premultiplied prediction to 0.1 level. First consumer: the taskbar's accent glow |
-| `CgUiTransformDrawable` | Empty marker class — not implemented |
+```java
+CgUiImage.color(0xFF2B2D30);                         // a flat colour
+CgUiImage.icon("crystalgui:folder");                  // a named icon: its light or dark drawing chosen as it draws
+CgUiImage.findIcon(name);                             // the same, or null when the file will not draw
+CgUiImage.Picture.of("mymod:textures/gui/panel.png").reference(256, 256).region(29, 1, 13, 13).slices(1, 1, 11, 11);
+CgUiImage.mark(CgUiMark.CHEVRON_DOWN);                // a mark, in the element's `color`
+ColorField.ramp(from, to).corners(2f).image();        // a hand-drawn painter: CgUiPainter
+element.generalStyle(g -> g.overlay(CgUiImage.findIcon("crystalgui:save")));
 
-`render/texture/asset/CgUiSpriteRegistry` resolves `"namespace:name"` → sprite lazily from
-`assets/{ns}/ui/sprites/{file}.json`. **A resource pack ships a theme by shipping JSON + PNG** — no
-registration call. This is what `background: asset("crystalgui:ore", "button")` goes through.
+images.paint(ctx, image, x, y, w, h, color, pictureTint, radii, border);   // what BoxPainter does
+images.fit(image, x, y, w, h, DrawableFit.CONTAIN, align, out);            // where a sized image lands
+```
 
-`CgUiSvg` draws through the canvas: `CgBrush.svg(CgSvg.of(path))`, its colour the tint times the context's (its
-`currentColor`), a monochrome icon as `flat(width)`. CrystalGraphics rasterises an icon at most 128 device px across
-into the shared path atlas (`CgPathCache`) and draws it as textured quads; a drop shadow on the pixel grid is filtered
-once into a cell there too. Larger, turned or between-pixel draws are rasterised that frame.
-`render/texture/svg/` still parses `.svg` for CrystalGUI's own users; its drawing moved to CrystalGraphics (`ICONS.md`).
+| Kind | CSS | Draws as |
+|---|---|---|
+| `Color`, `Paint`, `Gradient`, `Grid` | a colour, `linear-`/`radial-gradient(...)`, `grid(...)` | one canvas box filled with the paint, the element's radii and border on it |
+| `Picture` | `image(...)`, `sprite(...)` | a box filled with its `CgBrush` (region, `CgNineSlice`, `CgTiling`); its texture loaded nearest |
+| `Sheet` | `asset("sheet", "element")` | `CgSpriteSheet`'s brush, re-read when a reload moves `CgSpriteSheet.generation()` |
+| `Icon` | `icon("name", ...)` | `canvas.image(CgBrush.svg(...))`, its document re-read on a variant or `CgSvg.generation()` change; snapped where a hinted icon is |
+| `Mark` | `shape("checkmark")` | `CgUiMark`'s path, in `color` |
+| `Painted` | `paint(name)` | `CgUiPainter.paint(canvas, w, h, color)`; `CgUiPainter.register` names one for CSS |
+| `CrossFade`, `Layers` | `cross-fade(...)`, a comma list | both at crossing opacities; each layer, the first on top |
+
+- **Everything resolved is cached by value, shared by every painter**: a picture's texture and brush, a sheet's
+  brush, an icon's document. A frame allocates nothing.
+- **Transitions interpolate**: two colours mix premultiplied, two gradients of one shape slide; anything else is a
+  `CrossFade`. Equal values never retarget a transition.
+- **A colour with no image is `background-color`**; with an image it tints it. `overlay-tint` multiplies an icon's or
+  a picture's own colours.
+- **Every layer is clipped to the element's corners and the border is drawn once over them**, as in CSS.
+- An image built in Java with no CSS spelling (a painter, a `Paint`) throws from `css()`; the builder's copy
+  (`ImageParts`) copies it whole.
+- CSS functions are `ImageKinds`, which a mod extends (`ImageKinds.register`); the value is `ImageValue`, the property
+  `ImageProperty`. `ArgbMath` is the colour maths; `render/texture/asset/FileIconTheme` the file-icon theme.
 
 > **Every static collection in `core` or `language` names its thread rule** (`// Threads:`, or is concurrent/synchronized):
 > `SharedStateTest` fails the build otherwise. Several documents run style, layout and paint at once.
 
-> **Two seams here are easy to get backwards, and both exist for the same reason: a document is shared.**
-> `currentColor` is left unresolved in the cached ops and bound at draw time, so one parsed icon backs a
-> selected row and an unselected one in the same frame. And `CgUiSvg` is a separate class rather than
-> `SvgDocument implements CgUiDrawable`, because `draw()` has no tint parameter — a document implementing
-> it would need a mutable tint field, and the two rows above would be writing to the same one.
-
-`render/texture/geometry/` holds `Position` and `Size`, small Lombok `@Data(staticConstructor="of")`
-int value types.
+> **`currentColor` is bound when an icon draws, never in its document**: one parsed icon backs a selected row and an
+> unselected one in the same frame, each passing its own colour to `CgBrush.svg(...).color(argb)`.
 
 ---
 

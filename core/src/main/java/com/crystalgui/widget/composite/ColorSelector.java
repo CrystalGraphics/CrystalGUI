@@ -1,10 +1,11 @@
 package com.crystalgui.widget.composite;
 
+import com.crystalgraphics.api.vector.CgCornerRadii;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.render.texture.ArgbMath;
-import com.crystalgui.render.texture.CgUiColorField;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgraphics.net.rate.CgRatePolicy;
@@ -316,7 +317,7 @@ public class ColorSelector extends UIElement {
     /**
      * The hue at an offset from the ring's centre — <b>the exact inverse of what the ring draws</b>.
      *
-     * <p>{@code CgUiColorField}'s ring is red at the top, counter-clockwise: {@code fract(atan2(x, y) / 2π + 0.5)}
+     * <p>{@code ColorField}'s ring is red at the top, counter-clockwise: {@code fract(atan2(x, y) / 2π + 0.5)}
      * with y pointing DOWN, and this has to be the same function or the ring lies about itself. Three conventions were
      * in play before: the shader's, a handle placement missing the half-turn, and a click path that
      * negated y — so hue 300 drew upper-left while the colour under it was upper-right, and clicking
@@ -597,7 +598,7 @@ public class ColorSelector extends UIElement {
 
     /** Matches {@code colorselector .__swatches__ .__swatch-original__}/{@code -new__}'s CSS radius —
      * kept here rather than read back out of the cascade because there is nothing to read: see
-     * {@link CgUiColorField#setCornerRadius(float, float, float, float, float, float, float, float)}'s
+     * {@link ColorField#corners(CgCornerRadii)}'s
      * own doc for why this specific shape can't go through {@code border-radius} at all. */
     private static final float SWATCH_CORNER_RADIUS = 3f;
 
@@ -611,26 +612,20 @@ public class ColorSelector extends UIElement {
      *
      * <p>Rounded only on its OWN outer edge — left for the original swatch, right for the new one — so
      * the pair still reads as one pill with a straight seam down the middle, the same shape the CSS
-     * {@code border-*-radius} pair on {@code CgUiRect}-backed swatches elsewhere in this sheet
+     * {@code border-*-radius} pair on colour-backed swatches elsewhere in this sheet
      * gets for free. This one can't get it for free: see {@code setCornerRadius}'s own doc.</p>
      */
     private static void paintSwatch(UIElement swatch, int argb, boolean roundLeft) {
-        CgUiColorField field = new CgUiColorField()
-                .setMode(CgUiColorField.Mode.GRADIENT)
-                .setGradient(argb, argb);
         float r = SWATCH_CORNER_RADIUS;
-        if (roundLeft) {
-            field.setCornerRadius(r, r, 0f, 0f, 0f, 0f, r, r);
-        } else {
-            field.setCornerRadius(0f, 0f, r, r, r, r, 0f, 0f);
-        }
+        CgUiImage field = ColorField.ramp(argb, argb)
+                .corners(roundLeft ? CgCornerRadii.of(r, 0f, 0f, r) : CgCornerRadii.of(0f, r, r, 0f)).image();
         swatch.generalStyle(g -> g.background(field));
     }
 
     private void paintWheel() {
-        ring.generalStyle(g -> g.background(new CgUiColorField().setMode(CgUiColorField.Mode.HUE_RING)));
+        ring.generalStyle(g -> g.background(ColorField.hueRing(0.72f).image()));
         square.generalStyle(g -> g.background(
-                new CgUiColorField().setMode(CgUiColorField.Mode.SV_SQUARE).setHue(hue)));
+                ColorField.svSquare(hue).image()));
 
         // PERCENTAGE insets, so the handles stay put under a resize without this widget ever knowing
         // its own pixel size — which it cannot know before layout has run anyway.
@@ -716,10 +711,8 @@ public class ColorSelector extends UIElement {
             // judge. It is a palette, not a preview.
             boolean isHue = mode == Mode.HSV && index == 0;
             slider.generalStyle(g -> g.background(isHue
-                    ? new CgUiColorField().setMode(CgUiColorField.Mode.HUE_STRIP)
-                    : new CgUiColorField()
-                            .setMode(CgUiColorField.Mode.GRADIENT)
-                            .setGradient(trackStop(argb, index, 0f), trackStop(argb, index, max))));
+                    ? ColorField.hueStrip().image()
+                    : ColorField.ramp(trackStop(argb, index, 0f), trackStop(argb, index, max)).image()));
         }
     }
 
@@ -848,7 +841,7 @@ public class ColorSelector extends UIElement {
      * <p>It is also what makes the control describable at all. A swatch's fill and a hue ring are
      * drawables written from Java at INLINE origin, and {@code InlineStyleCodec} <b>refuses</b> a value
      * with no wire form rather than dropping it - correctly, since a silently dropped style renders
-     * differently on the two sides with nothing to explain why. A {@code CgUiColorField} has no wire
+     * differently on the two sides with nothing to explain why. A {@code ColorField} has no wire
      * form and needs none: it is never described, because the part it is on is never described.</p>
      * <p>The contract already says so and nothing was reading it: {@code acceptsDescribedChildren()} is
      * false for every one of these, which is what {@code ClientSmokeTest} now holds them to.</p>

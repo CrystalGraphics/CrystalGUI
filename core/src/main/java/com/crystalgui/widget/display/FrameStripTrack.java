@@ -126,8 +126,8 @@ public class FrameStripTrack extends FrameSeriesTrack {
         // THE BUDGET LINES FIRST, under the bars: a frame reaching the line should be seen touching
         // it, not hidden by it.
         float budgetY = bottom - usable * 0.5f;
-        ctx.rect().at(0f, budgetY).size(box.width(), 1f).fillColor((quiet & 0x00FFFFFF) | 0x40000000).submit();
-        ctx.rect().at(0f, TOP_INSET).size(box.width(), 1f).fillColor((quiet & 0x00FFFFFF) | 0x22000000).submit();
+        ctx.canvas().box(0f, budgetY, box.width(), 1f).fill((quiet & 0x00FFFFFF) | 0x40000000).draw();
+        ctx.canvas().box(0f, TOP_INSET, box.width(), 1f).fill((quiet & 0x00FFFFFF) | 0x22000000).draw();
 
         int columns = columnCount();
 
@@ -147,14 +147,14 @@ public class FrameStripTrack extends FrameSeriesTrack {
             if (bar == null) continue;
             float x = bar[0];
             float barWidth = bar[1];
-            ctx.rect().at(x, bottom - barHeight).size(barWidth, barHeight).fillColor(fill).submit();
+            ctx.canvas().box(x, bottom - barHeight, barWidth, barHeight).fill(fill).draw();
             if (collectedIn(columnFrom(column), columnTo(column))) {
-                ctx.rect().at(x, bottom + GC_GAP).size(Math.max(2f, barWidth), GC_TICK).fillColor(GC_COLOR).submit();
+                ctx.canvas().box(x, bottom + GC_GAP, Math.max(2f, barWidth), GC_TICK).fill(GC_COLOR).draw();
             }
             if (clipped) {
                 // OFF THE SCALE: a cap in the same colour, lifted, so a clipped bar cannot be mistaken
                 // for one that stopped exactly at the top.
-                ctx.rect().at(x, TOP_INSET - 3f).size(barWidth, 2f).fillColor(fill).submit();
+                ctx.canvas().box(x, TOP_INSET - 3f, barWidth, 2f).fill(fill).draw();
             }
         }
 
@@ -172,10 +172,10 @@ public class FrameStripTrack extends FrameSeriesTrack {
         // did not keep painter's order with the batched bars, so a tall bar drew through the plate. A plain
         // rect goes down the same batch as the bars and lands on top of them.
         int plate = 0xF0101114;
-        ctx.rect().at(box.width() - labelWidth - 4f, budgetY - 12f).size(labelWidth + 2f, 12f)
-                .fillColor(plate).submit();
-        ctx.rect().at(box.width() - labelWidth - 4f, TOP_INSET).size(labelWidth + 2f, 12f)
-                .fillColor(plate).submit();
+        ctx.canvas().box(box.width() - labelWidth - 4f, budgetY - 12f, labelWidth + 2f, 12f)
+                .fill(plate).draw();
+        ctx.canvas().box(box.width() - labelWidth - 4f, TOP_INSET, labelWidth + 2f, 12f)
+                .fill(plate).draw();
         label(ctx, font, budget, box.width() - labelWidth, budgetY - 12f, 12f, labelWidth, dim);
         label(ctx, font, top, box.width() - labelWidth, TOP_INSET, 12f, labelWidth, dim);
 
@@ -186,15 +186,15 @@ public class FrameStripTrack extends FrameSeriesTrack {
                 // A BREAK, not a bar: a cut through the well, wide enough to read at a glance, edged on
                 // both sides, with the count of what fell into it.
                 float half = GAP_W * 0.5f;
-                ctx.rect().at(x - half, 0f).size(GAP_W, box.height()).fillColor(0xFF000000).submit();
-                ctx.rect().at(x - half, 0f).size(1f, box.height()).fillColor(dim).submit();
-                ctx.rect().at(x + half - 1f, 0f).size(1f, box.height()).fillColor(dim).submit();
+                ctx.canvas().box(x - half, 0f, GAP_W, box.height()).fill(0xFF000000).draw();
+                ctx.canvas().box(x - half, 0f, 1f, box.height()).fill(dim).draw();
+                ctx.canvas().box(x + half - 1f, 0f, 1f, box.height()).fill(dim).draw();
                 String skipped = String.format("%,d not kept", gapFrames);
                 float width = LABEL_ADVANCE * skipped.length();
                 float left = Math.min(x + 4f, box.width() - labelWidth - width - 16f);
                 // HIGH, under the row's own label: along the bottom it covered the very bars beside the break.
                 float y = TOP_INSET + 16f;
-                ctx.rect().at(left, y).size(width + 8f, 12f).fillColor(plate).submit();
+                ctx.canvas().box(left, y, width + 8f, 12f).fill(plate).draw();
                 label(ctx, font, skipped, left + 4f, y, 12f, width, dim);
             }
         }
@@ -205,7 +205,7 @@ public class FrameStripTrack extends FrameSeriesTrack {
             int last = (int) Math.min(frames(), viewFrom() + visible());
             String shown = String.format("frames %,d\u2013%,d of %,d", first, last, frames());
             float width = LABEL_ADVANCE * shown.length();
-            ctx.rect().at(4f, TOP_INSET).size(width + 8f, 12f).fillColor(plate).submit();
+            ctx.canvas().box(4f, TOP_INSET, width + 8f, 12f).fill(plate).draw();
             label(ctx, font, shown, 8f, TOP_INSET, 12f, width, dim);
         }
     }

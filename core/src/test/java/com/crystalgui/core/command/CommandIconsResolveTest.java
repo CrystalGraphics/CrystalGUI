@@ -1,9 +1,9 @@
 package com.crystalgui.core.command;
 
+import com.crystalgraphics.api.vector.svg.CgSvg;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.core.undo.UndoCommands;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.widget.collection.tree.TreeEditCommands;
-import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.widget.texteditor.EditorCommands;
 import com.crystalgui.workbench.app.WorkbenchApplicationCommands;
 import com.crystalgui.workbench.chrome.problems.ProblemsCommands;
@@ -20,7 +20,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * A command's {@link Command#icon} names a file, and naming one that is not there fails <b>silently</b>:
- * {@code CgUiSvg.ofIcon} answers null, {@code MenuItem.drawIcon} substitutes {@code CgUiDrawable.EMPTY},
+ * {@code CgUiImage.findIcon} answers null, {@code MenuItem.drawIcon} substitutes {@code CgUiImage.NONE},
  * and the row draws a reserved, empty column. Nothing logs, nothing throws, and the menu looks like one
  * that was never given an icon at all — so a typo in an id survives every other check in the build.
  *
@@ -61,7 +61,7 @@ public class CommandIconsResolveTest {
         for (Command command : Commands.process().all()) {
             for (String mark : marksOf(command)) {
                 carried++;
-                if (CgUiSvg.ofIcon(mark) == null) unresolved.add(command.getId() + " -> " + mark);
+                if (CgUiImage.findIcon(mark) == null) unresolved.add(command.getId() + " -> " + mark);
             }
         }
         // Guards the guard: if registration silently stopped happening, every list below would be empty
@@ -85,9 +85,9 @@ public class CommandIconsResolveTest {
         for (Command command : Commands.process().all()) {
             for (String mark : marksOf(command)) {
                 if (ActionIcons.carriesItsOwnPalette(mark)) continue;
-                CgUiSvg glyph = CgUiSvg.ofIcon(mark);
+                CgUiImage.Icon glyph = CgUiImage.findIcon(mark);
                 if (glyph == null) continue;           // reported by the test above
-                SvgDocument document = glyph.getDocument();
+                CgSvg document = CgSvg.of(glyph.path());
                 if (document != null && !document.usesCurrentColor()) {
                     baked.add(command.getId() + " -> " + mark);
                 }
@@ -106,8 +106,8 @@ public class CommandIconsResolveTest {
     public void everyColouredMarkIsActuallyColoured() {
         List<String> tintable = new ArrayList<>();
         for (String icon : ActionIcons.COLOURED) {
-            CgUiSvg glyph = CgUiSvg.ofIcon(icon);
-            SvgDocument document = glyph == null ? null : glyph.getDocument();
+            CgUiImage.Icon glyph = CgUiImage.findIcon(icon);
+            CgSvg document = glyph == null ? null : CgSvg.of(glyph.path());
             if (document != null && document.usesCurrentColor()) tintable.add(icon);
         }
         assertEquals("listed as coloured but follows the cascade -- drop it from COLOURED",

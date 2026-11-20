@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder;
 
+import com.crystalgui.style.property.visual.image.ImageValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -25,7 +26,6 @@ import com.crystalgui.ui.service.UiClipboard;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
-import com.crystalgui.style.property.visual.texture.TextureValue;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -80,8 +80,8 @@ public class AttributeTransferTest extends UiDocumentTestBase {
         UIElement element = new UIElement().layout(l -> l.width(40f).height(40f));
         StyleGroup.inlinePipeline(element.getStyle().getGeneralGroup(), g -> g
                 .backdropFilter(BackdropFilterValue.parse("blur(12px) tint(#2B2D3088)"))
-                .mask(new TextureValue("linear-gradient(45deg, #FF0000FF, #0000FFFF)").compute())
-                .overlay(new TextureValue("grid(16, #6EDCD024)").compute()));
+                .mask(ImageValue.parse("linear-gradient(45deg, #FF0000FF, #0000FFFF)"))
+                .overlay(ImageValue.parse("grid(16, #6EDCD024)")));
         model.root().append(element);
         document.update(W, H);
 

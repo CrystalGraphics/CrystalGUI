@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.chrome.problems;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.workbench.view.HeaderContributor;
 import com.crystalgui.core.collection.tree.TreeRow;
@@ -13,7 +14,6 @@ import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.ConnectionGroup;
 import com.crystalgui.core.signal.Signal;
 import com.crystalgui.fs.Resource;
-import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.diagnostic.Diagnostic;
@@ -868,13 +868,13 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
                 icon.swapPrefixedClass(SEVERITY_PREFIX, SEVERITY_PREFIX + "file");
                 String name = item.resource().name();
                 FileIconTheme theme = FileIconTheme.getDefault();
-                CgUiDrawable glyph = theme.drawableFor(name, false, false);
+                CgUiImage glyph = theme.imageFor(name, false, false);
                 // DEFAULT origin, exactly as the project tree writes it: the theme's JSON is a default the
                 // cascade can beat, and writing it inline would make the icon the one part of a row a
                 // stylesheet cannot touch. It also means the severity rules — which are STYLESHEET origin —
                 // still win on a row recycled from a problem, so there is nothing to clear.
                 StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(),
-                        g -> g.overlay(glyph == null ? CgUiDrawable.EMPTY : glyph));
+                        g -> g.overlay(glyph == null ? CgUiImage.NONE : glyph));
                 icon.swapPrefixedClass(FILETYPE_PREFIX, theme.classFor(name, false));
                 label.setText(item.resource().name());
                 detail.setText(folderOf(item.resource()));

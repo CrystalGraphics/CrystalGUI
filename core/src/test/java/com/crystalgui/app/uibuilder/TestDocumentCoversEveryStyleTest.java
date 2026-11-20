@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder;
 
+import com.crystalgui.style.property.visual.image.ImageKinds;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
@@ -26,7 +27,6 @@ import com.crystalgui.serialization.style.StyleParts;
 import com.crystalgui.serialization.style.TransformParts;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.style.property.visual.texture.DrawableKinds;
 import com.crystalgui.style.property.visual.transform.Transform;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.UIElement;
@@ -66,7 +66,7 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
      * Drawable functions that cannot be computed without a GL context, and so are covered by their TEXT
      * here and by the harness for real.
      *
-     * <p>{@code asset()} resolves a named nine-slice through {@code CgUiSpriteRegistry}, which hands
+     * <p>{@code asset()} resolves a named nine-slice through {@code CgSpriteSheet}, which hands
      * back a sprite over a real {@code CgTexture2D} — and reaches {@code CgTextureManager} even for its
      * fallback. Headlessly that throws, {@code StyleValue} degrades it to null the way it degrades any
      * malformed value, and the declaration is simply gone. Worth knowing beyond this test:
@@ -135,7 +135,7 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
             Set<String> skipped = new LinkedHashSet<>();
             for (String name : style.keySet()) {
                 if (StylePropertyRegistry.byName(name) == null) unknown.add(element.getKey() + "." + name);
-                DrawableKinds.Kind kind = DrawableKinds.matching(style.get(name).getAsString());
+                ImageKinds.Kind kind = ImageKinds.matching(style.get(name).getAsString());
                 if (kind != null && NEEDS_A_GL_CONTEXT.contains(kind.id())) skipped.add(name);
             }
 
@@ -167,7 +167,7 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
     /**
      * <b>Every registered drawable function is written down somewhere in the fixture.</b>
      *
-     * <p>Read off {@link DrawableKinds} rather than a list here, which is the same reason the grouping
+     * <p>Read off {@link ImageKinds} rather than a list here, which is the same reason the grouping
      * is: a tenth function added to the registry gets a section of its own in Paste Attributes with
      * nothing to put in it, and nothing else anywhere says so.</p>
      */
@@ -177,12 +177,12 @@ public class TestDocumentCoversEveryStyleTest extends UiDocumentTestBase {
 
         Set<String> covered = new LinkedHashSet<>();
         for (String value : values) {
-            DrawableKinds.Kind kind = DrawableKinds.matching(value);
+            ImageKinds.Kind kind = ImageKinds.matching(value);
             if (kind != null) covered.add(kind.id());
         }
 
         List<String> missing = new ArrayList<>();
-        for (DrawableKinds.Kind kind : DrawableKinds.all()) {
+        for (ImageKinds.Kind kind : ImageKinds.all()) {
             if (!covered.contains(kind.id())) missing.add(kind.id());
         }
         assertTrue("registered drawable functions the fixture has no example of: " + missing

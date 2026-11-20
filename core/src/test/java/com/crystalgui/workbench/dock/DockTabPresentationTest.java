@@ -1,10 +1,8 @@
 package com.crystalgui.workbench.dock;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleSheetRegistry;
 import com.crystalgui.testsupport.UiDocumentTestBase;
@@ -106,17 +104,15 @@ public class DockTabPresentationTest extends UiDocumentTestBase {
         UIElement slot = tab.getPreIcon();
         assertNotNull("the tab has no icon slot", slot);
 
-        CgUiDrawable overlay = slot.getStyle().getGeneralGroup()
+        CgUiImage overlay = slot.getStyle().getGeneralGroup()
                 .getValueSave(StylePropertyRegistry.OVERLAY);
-        assertTrue("the slot holds " + overlay + ", not a vector icon", overlay instanceof CgUiSvg);
+        assertTrue("the slot holds " + overlay + ", not a vector icon", overlay instanceof CgUiImage.Icon);
 
-        // Identity, which is exact: SvgDocument.of caches per path, so the slot can only hold this
-        // instance if it resolved this path. "Not empty" would pass on the wrong icon entirely.
+        // The resolved file, which is exact: "not empty" would pass on the wrong icon entirely
         String resolved = FileIconTheme.withVariant(
                 FileIconTheme.getDefault().iconFor("Main.java", false, false));
-        assertSame("the tab is not showing the java icon",
-                SvgDocument.of(FileIconTheme.toResourcePath(resolved)),
-                ((CgUiSvg) overlay).getDocument());
+        assertEquals("the tab is not showing the java icon",
+                FileIconTheme.toResourcePath(resolved), ((CgUiImage.Icon) overlay).path());
     }
 
     /**

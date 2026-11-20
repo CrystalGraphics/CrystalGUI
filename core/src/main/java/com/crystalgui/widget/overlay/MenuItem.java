@@ -1,7 +1,6 @@
 package com.crystalgui.widget.overlay;
 
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgui.ui.contract.WidgetContracts;
@@ -143,7 +142,7 @@ public class MenuItem extends Button {
         iconClass = iconId == null ? null : cssClass;
         if (iconClass != null) addClass(iconClass);
         if (iconId == null && hadIcon) {
-            StyleGroup.defaultPipeline(mark.getStyle().getGeneralGroup(), g -> g.overlay(CgUiDrawable.EMPTY));
+            StyleGroup.defaultPipeline(mark.getStyle().getGeneralGroup(), g -> g.overlay(CgUiImage.NONE));
         } else if (document() != null) {
             drawIcon();
         }
@@ -190,8 +189,8 @@ public class MenuItem extends Button {
 
     private void drawIcon() {
         if (iconId == null) return;
-        CgUiSvg glyph = CgUiSvg.ofIcon(iconId);
-        CgUiDrawable drawn = glyph == null ? CgUiDrawable.EMPTY : glyph;
+        CgUiImage glyph = CgUiImage.findIcon(iconId);
+        CgUiImage drawn = glyph == null ? CgUiImage.NONE : glyph;
         StyleGroup.defaultPipeline(mark.getStyle().getGeneralGroup(), g -> g.overlay(drawn));
     }
 

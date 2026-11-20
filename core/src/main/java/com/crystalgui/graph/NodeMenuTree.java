@@ -227,7 +227,7 @@ public final class NodeMenuTree {
      *   <li>The bundled {@code MinecraftRegular.otf} has no {@code U+25B8}, and a missing glyph draws a
      *       <b>blank advance</b> rather than failing — so a joined {@code Math ▸ Vector} rendered as
      *       "Math&nbsp;&nbsp;&nbsp;Vector", which reads as a spacing bug. {@code UIText}'s own ellipsis
-     *       fallback documents the same trap for {@code U+2026}. {@code CgUiShape}'s
+     *       fallback documents the same trap for {@code U+2026}. {@code CgUiMark}'s
      *       {@code triangle-right} draws it with no font involved.</li>
      *   <li>Segments make the match tint <b>exact for free</b>. Highlighting a joined string means
      *       offsets computed against text whose separators may differ in length from the source's, and

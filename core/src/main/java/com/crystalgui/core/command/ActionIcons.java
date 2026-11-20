@@ -11,8 +11,8 @@ import com.crystalgui.core.command.ActionIcons;
  *
  * <h3>Why a class and not the string</h3>
  *
- * <p>An icon id that names no file fails <b>silently</b>: {@code CgUiSvg.ofIcon} answers null,
- * {@code MenuItem} substitutes {@code CgUiDrawable.EMPTY}, and the row draws a reserved, empty column.
+ * <p>An icon id that names no file fails <b>silently</b>: {@code CgUiImage.findIcon} answers null,
+ * {@code MenuItem} substitutes {@code CgUiImage.NONE}, and the row draws a reserved, empty column.
  * Nothing logs and nothing throws, so a typo survives a build, a test run and a screenshot. A constant
  * turns that into a compile error, which is the whole of the argument.</p>
  *
@@ -22,7 +22,7 @@ import com.crystalgui.core.command.ActionIcons;
  * <h3>Only marks that follow the cascade belong here</h3>
  *
  * <p>Every icon named below is authored as {@code currentColor}, so it takes the row's colour and dims
- * with {@code :disabled}. That is not decoration: {@code CgUiSvg.ofIcon} resolves a name through
+ * with {@code :disabled}. That is not decoration: {@code CgUiImage.findIcon} resolves a name through
  * {@code FileIconTheme.withVariant}, whose default is {@code Variant.DARK}, so a name here reaches
  * {@code <name>_dark.svg} when one exists — and <b>both halves of a pair have to carry
  * {@code currentColor}</b> or the light file's conversion is invisible. {@code CommandIconsResolveTest}

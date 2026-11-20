@@ -1,9 +1,8 @@
 package com.crystalgui.widget.dnd;
 
+import com.crystalgui.render.image.CgUiImage;
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -97,16 +96,15 @@ public final class DragGhost extends UIElement {
     }
 
     private void showIcon(DragPreview preview) {
-        CgUiDrawable glyph = preview.glyph();
+        CgUiImage glyph = preview.glyph();
         if (glyph == null) {
-            String name = preview.iconName();
-            CgUiSvg resolved = name == null || name.isEmpty() ? null : CgUiSvg.ofIcon(name);
-            glyph = resolved == null ? CgUiDrawable.EMPTY : resolved;
+            CgUiImage resolved = CgUiImage.findIcon(preview.iconName());
+            glyph = resolved == null ? CgUiImage.NONE : resolved;
         }
-        CgUiDrawable drawn = glyph;
+        CgUiImage drawn = glyph;
         int tint = preview.tint();
         StyleGroup.inlinePipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(drawn).overlayTint(tint));
-        boolean shown = drawn != CgUiDrawable.EMPTY;
+        boolean shown = drawn != CgUiImage.NONE;
         StyleGroup.inlinePipeline(icon.getStyle().getLayoutGroup(),
                 l -> l.display(shown ? TaffyDisplay.FLEX : TaffyDisplay.NONE));
         // THE BOX IS THE ICON'S, so it goes with the icon: a tinted square holding nothing reads as a glyph that

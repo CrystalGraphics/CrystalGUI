@@ -197,7 +197,7 @@ opens that frame in the profiler.
 |---|---|---|
 | The frame's phases | frame | `ui/dom/UIDocument`, `style/StyleEngine`, `ui/box/BoxTree`, `BoxPainter` |
 | Paint, segments, surfaces | frame, gpu | `render/CgUiPaintContext`, `PaintSegments`, `Surface`, `ui/box/BoxPainter` |
-| SVG | frame | `render/texture/svg/SvgDocument` (parse); drawing is CrystalGraphics' canvas |
+| SVG | frame | CrystalGraphics' `CgSvg` (parse, `svg.tier`); drawing is its canvas |
 | Jobs | `crystalgraphics.async` | CrystalGraphics' `CgJob`: `job.then` (a job's listeners at the drain), `job.task` (an `executor` task); `frame:jobs` is the drain itself |
 | The editor | frame, flow | `widget/texteditor/TextEditor`, its `part/`, `fold/`, `lang/`, `doc/` |
 | Text model | flow | `text/TextBuffer`, `text/wrap/ProjectedLines` |

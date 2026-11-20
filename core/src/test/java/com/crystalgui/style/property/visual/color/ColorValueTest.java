@@ -1,6 +1,6 @@
 package com.crystalgui.style.property.visual.color;
 
-import com.crystalgui.render.texture.svg.SvgColor;
+import com.crystalgraphics.api.paint.CgCssColors;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -41,7 +41,7 @@ public class ColorValueTest {
     public void anIntegerIsAnArgbLiteralToAPropertyAndNotACssColour() {
         assertEquals(-1, ColorValue.parseColor("-1").intValue());
         assertNull(ColorValue.parseCssColor("0"));
-        assertNull(SvgColor.parseColor("-1"));
-        assertEquals(0xFFFFD700, SvgColor.parseColor("gold").intValue());
+        assertNull(CgCssColors.parse("-1"));
+        assertEquals(0xFFFFD700, CgCssColors.parse("gold").intValue());
     }
 }

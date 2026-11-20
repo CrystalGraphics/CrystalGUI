@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder;
 
+import com.crystalgui.render.image.CgUiImage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 
@@ -10,7 +11,6 @@ import org.junit.Before;
 import org.junit.Test;
 
 import com.crystalgui.app.uibuilder.glyph.KindGlyphs;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import com.crystalgui.ui.dom.GlyphRole;
@@ -148,10 +148,10 @@ public class KindGlyphsTest extends UiDocumentTestBase {
         List<String> missing = new ArrayList<>();
         for (Name kind : UIElementRegistry.names()) {
             KindGlyphs.Glyph declared = KindGlyphs.declared(kind);
-            if (declared != null && CgUiSvg.ofIcon(declared.icon()) == null) missing.add(kind + " -> " + declared.icon());
+            if (declared != null && CgUiImage.findIcon(declared.icon()) == null) missing.add(kind + " -> " + declared.icon());
         }
         for (String mark : List.of("column", "row", "wrap", "grid", "frame", "absolute", "component")) {
-            if (CgUiSvg.ofIcon(ICONS + mark) == null) missing.add(ICONS + mark);
+            if (CgUiImage.findIcon(ICONS + mark) == null) missing.add(ICONS + mark);
         }
         assertEquals("glyphs with no file: " + missing, List.of(), missing);
         assertNotNull(KindGlyphs.declared(Button.NAME));

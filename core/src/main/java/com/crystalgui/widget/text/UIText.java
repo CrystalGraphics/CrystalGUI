@@ -874,7 +874,7 @@ public final class UIText extends UIElement implements Measurable {
         if (style == null || width <= 0f) return;
         int background = style.backgroundColor();
         if ((background >>> 24) == 0) return;
-        ctx.fillRect(x, y, width, height, background);
+        ctx.canvas().fill(x, y, width, height, background);
     }
 
     // ── Ellipsis ─────────────────────────────────────────────────────────────

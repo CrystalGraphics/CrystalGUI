@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.widget.composite.ColorField;
 import java.util.List;
 import java.util.function.BiConsumer;
 import java.util.function.Consumer;
@@ -10,7 +11,6 @@ import javax.annotation.Nullable;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.style.property.StyleProperty;
-import com.crystalgui.render.texture.CgUiColorField;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.visual.color.ColorProperty;
 import com.crystalgui.style.property.visual.color.ColorValue;
@@ -260,7 +260,7 @@ public class StyleChip extends ValueControl<String> {
             // OVER A CHECKERBOARD, which is the only way a transparent color reads as transparent rather
             // than as a swatch that failed to draw. `#972D8E00` is a color somebody picked, and flat
             // against the panel it is indistinguishable from no swatch at all -- so a picker that was
-            // working looked broken. `CgUiColorField` is what the color picker's own swatches use.
+            // working looked broken. `ColorField` is what the color picker's own swatches use.
             //
             // A DRAWABLE rather than the CSS text, and the BACKGROUND rather than the background COLOR:
             // the swatch's own band is a `background`, and a color set underneath it composites with it
@@ -286,10 +286,7 @@ public class StyleChip extends ValueControl<String> {
      */
     public static void paintColor(UIElement element, int argb) {
         StyleGroup.inlinePipeline(element.getStyle().getGeneralGroup(),
-                group -> group.background(new CgUiColorField()
-                        .setMode(CgUiColorField.Mode.GRADIENT)
-                        .setGradient(argb, argb)
-                        .setCornerRadius(2f, 2f)));
+                group -> group.background(ColorField.ramp(argb, argb).corners(2f).image()));
     }
 
     /** The value as the lines it reads in. @see CssValues#lines */

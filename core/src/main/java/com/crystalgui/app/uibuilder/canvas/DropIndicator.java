@@ -111,17 +111,17 @@ public final class DropIndicator extends UIElement {
         if (box == null || shown == null || line == null) return;
         int accent = getStyle().computed().get(StylePropertyRegistry.COLOR);
         CanvasRects.outline(paint, shown.targetRect(), OUTLINE, accent);
-        paint.fillRect(line[0], line[1], line[2], line[3], accent);
+        paint.canvas().fill(line[0], line[1], line[2], line[3], accent);
         // THE CAPS, across the line at each end. From the drop, not the line's proportions, which a tiny
         // container can invert.
         if (shown.against() == null || shown.column()) {
             float y = line[1] + line[3] / 2f - CAP / 2f;
-            paint.fillRect(line[0], y, LINE, CAP, accent);
-            paint.fillRect(line[0] + line[2] - LINE, y, LINE, CAP, accent);
+            paint.canvas().fill(line[0], y, LINE, CAP, accent);
+            paint.canvas().fill(line[0] + line[2] - LINE, y, LINE, CAP, accent);
         } else {
             float x = line[0] + line[2] / 2f - CAP / 2f;
-            paint.fillRect(x, line[1], CAP, LINE, accent);
-            paint.fillRect(x, line[1] + line[3] - LINE, CAP, LINE, accent);
+            paint.canvas().fill(x, line[1], CAP, LINE, accent);
+            paint.canvas().fill(x, line[1] + line[3] - LINE, CAP, LINE, accent);
         }
     }
 }

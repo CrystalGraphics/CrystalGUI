@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.widget.composite.ColorField;
 import com.crystalgui.ui.service.Input;
 import javax.annotation.Nullable;
 
@@ -9,7 +10,6 @@ import com.crystalgraphics.platform.input.CgMouseCodes;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
-import com.crystalgui.render.texture.CgUiColorField;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
@@ -87,7 +87,7 @@ public final class GradientBar extends ValueControl<Gradient> {
         append(ramp);
         append(track);
         onConnected(() -> StyleGroup.inlinePipeline(ramp.getStyle().getGeneralGroup(), group -> group.background(
-                new CgUiColorField().setMode(CgUiColorField.Mode.GRADIENT).setGradient(0, 0).setCornerRadius(3f, 3f))));
+                ColorField.ramp(0, 0).corners(3f).image())));
 
         // A PRESS ON THE RAMP OR THE EMPTY TRACK ADDS A STOP where it lands, as Figma's does: a stop's own press is
         // claimed by the stop, so only an empty place reaches here.

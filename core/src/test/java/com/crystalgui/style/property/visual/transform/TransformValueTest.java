@@ -9,7 +9,7 @@ import static org.junit.Assert.*;
 
 /**
  * The {@code transform} function-list parser, tested directly — no window, no stylesheet, no GL, in the
- * same spirit as {@code TextureValueRepeatTest}.
+ * same spirit as {@code ImageValueFormsTest}.
  *
  * <p>Two things matter most here and neither is about a single function: that the ops come back in the
  * order they were written, and that anything unrecognised rejects the <b>whole</b> value rather than

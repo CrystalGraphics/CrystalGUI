@@ -18,7 +18,7 @@ import com.crystalgui.ui.dom.UIElement;
  *
  * <pre>{@code
  * float[] r = CanvasRects.of(node, overlay);
- * if (r != null) ctx.fillRect(r[0], r[1], r[2], r[3], colour);
+ * if (r != null) ctx.canvas().fill(r[0], r[1], r[2], r[3], colour);
  * }</pre>
  *
  * <p><b>Through the matrices, never by subtracting positions.</b> {@code Box.x()} is parent-relative, so
@@ -291,10 +291,10 @@ public final class CanvasRects {
         if (ring == null) return;
         // A transparent interior carrying the stroke's rgb, so the shader's edge-to-fill mix has no dark
         // fringe to bleed. @see BoxPainter#paintRounded, which does the same for the same reason.
-        ctx.rect().at(ring[0], ring[1]).size(ring[2], ring[3])
-                .fillColor(argb & 0x00FFFFFF)
+        ctx.canvas().box(ring[0], ring[1], ring[2], ring[3])
+                .fill(argb & 0x00FFFFFF)
                 .border(thickness, argb)
-                .submit();
+                .draw();
     }
 
     /**

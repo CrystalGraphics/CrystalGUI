@@ -535,8 +535,8 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
         if (comparableFrom > 0 && comparableFrom < frameCount()) {
             // WHERE THE RECORDING CHANGED SHAPE. A line rather than a label: the header says what
             // changed, this says where.
-            ctx.rect().at(xOf(comparableFrom) - 0.5f, 0f).size(1f, height)
-                    .fillColor((accent & 0x00FFFFFF) | 0x80000000).submit();
+            ctx.canvas().box(xOf(comparableFrom) - 0.5f, 0f, 1f, height)
+                    .fill((accent & 0x00FFFFFF) | 0x80000000).draw();
         }
     }
 
@@ -554,7 +554,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     private void fillClipped(CgUiPaintContext ctx, float left, float right, float height, int argb) {
         float from = Math.max(0f, left);
         float to = Math.min(Math.max(1f, width()), right);
-        if (to > from) ctx.rect().at(from, 0f).size(to - from, height).fillColor(argb).submit();
+        if (to > from) ctx.canvas().box(from, 0f, to - from, height).fill(argb).draw();
     }
 
     /** Whether {@code index} is the selected frame — so a series can draw that one bar in the accent. */

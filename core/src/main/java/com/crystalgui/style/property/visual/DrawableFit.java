@@ -7,7 +7,7 @@ package com.crystalgui.style.property.visual;
  * fits <em>one</em> drawable into a box, it does not tile a repeating background.</p>
  *
  * <p>{@link #CONTAIN}/{@link #COVER}/{@link #NONE} need the drawable's natural size
- * ({@code CgUiDrawable.intrinsicWidth()}/{@code intrinsicHeight()}). Drawables with no natural size
+ * ({@code CgUiImagePainter.intrinsicWidth}/{@code intrinsicHeight}). Images with no natural size
  * — solid colours, SDF rounded rects — report {@code -1}, and every mode then degrades to
  * {@link #FILL} rather than drawing nothing.</p>
  */

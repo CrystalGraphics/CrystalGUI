@@ -1,10 +1,10 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.fs.CgPath;
 import com.crystalgui.fs.Resource;
 import com.crystalgui.fs.client.ContentProvider;
 import com.crystalgui.fs.project.SourceRoots;
-import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.lang.SymbolInfo;
@@ -212,7 +212,7 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         SourceRoots.Role role = directory ? tree.source().roleOf(item) : null;
         // THE ITEM'S OWN NAME, never the row label: a compacted row reads "main/java/com" and asking
         // the theme about that string would look up an extension of "/com".
-        CgUiDrawable glyph = theme.drawableFor(item.name(), directory, row.expanded());
+        CgUiImage glyph = theme.imageFor(item.name(), directory, row.expanded());
         // WHAT THE FILE DECLARES, through the SAME seam a library tab asks -- `symbolOf` on the
         // resource's provider. `LibrarySources` answers it for `library://`, which is why a
         // `FlexDirection.class` tab draws an enum; `ProjectSourceSymbols` answers it for `project://`.
@@ -235,8 +235,8 @@ final class FilesRenderer implements TreeRenderer<CgPath> {
         // default the cascade can beat -- write it INLINE and `.filetype-java { overlay: icon(...) }` in
         // a stylesheet silently does nothing, which makes the icon the one part of a row a theme cannot
         // touch.
-        CgUiDrawable painted = declared != null ? CgUiDrawable.EMPTY
-                : (glyph == null ? CgUiDrawable.EMPTY : glyph);
+        CgUiImage painted = declared != null ? CgUiImage.NONE
+                : (glyph == null ? CgUiImage.NONE : glyph);
         StyleGroup.defaultPipeline(parts.icon().getStyle().getGeneralGroup(),
                 g -> g.overlay(painted));
         // A DECLARATION'S WORDS, OR A DIRECTORY'S. Both from `SymbolIcon`, which is where every "what

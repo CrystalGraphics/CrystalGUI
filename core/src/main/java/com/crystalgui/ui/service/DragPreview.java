@@ -1,8 +1,8 @@
 package com.crystalgui.ui.service;
 
+import com.crystalgui.render.image.CgUiImage;
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.texture.CgUiDrawable;
 
 /**
  * What a drag looks like under the pointer: an icon, a label and a style, as values. The drag owns it and the host draws
@@ -28,7 +28,7 @@ import com.crystalgui.render.texture.CgUiDrawable;
 public final class DragPreview {
 
     private volatile @Nullable String iconName;
-    private volatile @Nullable CgUiDrawable glyph;
+    private volatile @Nullable CgUiImage glyph;
     private volatile int tint = 0xFFFFFFFF;
     private volatile String label = "";
     private volatile String style = "";
@@ -49,7 +49,7 @@ public final class DragPreview {
     }
 
     /** A picture already resolved, with the colour it is multiplied by ({@code 0xFFFFFFFF} draws it as authored). */
-    public static DragPreview of(@Nullable CgUiDrawable glyph, int tint, @Nullable String label) {
+    public static DragPreview of(@Nullable CgUiImage glyph, int tint, @Nullable String label) {
         DragPreview preview = new DragPreview();
         preview.glyph = glyph;
         preview.tint = tint;
@@ -102,7 +102,7 @@ public final class DragPreview {
     }
 
     @Nullable
-    public CgUiDrawable glyph() {
+    public CgUiImage glyph() {
         return glyph;
     }
 

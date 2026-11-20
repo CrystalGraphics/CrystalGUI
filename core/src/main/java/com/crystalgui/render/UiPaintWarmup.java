@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.api.vector.svg.CgSvg;
 import com.crystalgraphics.api.font.CgFont;
 import com.crystalgraphics.api.font.CgFontFamily;
 import com.crystalgraphics.api.font.CgFontStyle;
@@ -12,7 +13,6 @@ import com.crystalgraphics.util.io.CgIO;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.render.texture.asset.FileIconTheme;
-import com.crystalgui.render.texture.svg.SvgDocument;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -141,7 +141,7 @@ public final class UiPaintWarmup implements CgLoadStep {
                 for (String name : FileIconTheme.getDefault().iconNames()) {
                     paths.add(FileIconTheme.toResourcePath(FileIconTheme.withVariant(name)));
                 }
-                SvgDocument.preload(paths);
+                CgSvg.preload(paths);
             } catch (RuntimeException | LinkageError broken) {
                 CrystalGuiCore.LOGGER.warn("icon preload failed; icons parse on demand", broken);
             }

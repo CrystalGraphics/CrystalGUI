@@ -1,5 +1,6 @@
 package com.crystalgui.style.property;
 
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import java.util.Objects;
 
 import com.crystalgui.style.property.general.bools.BoolValue;
@@ -44,11 +45,10 @@ import com.crystalgui.style.property.visual.text.TextStrokeShorthand;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.property.visual.text.LineHeightProperty;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
-import com.crystalgui.style.property.visual.texture.TextureProperty;
+import com.crystalgui.style.property.visual.image.ImageProperty;
 import com.crystalgui.style.property.visual.transform.TransformOriginShorthand;
 import com.crystalgui.style.property.visual.transform.TransformProperty;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
 import com.crystalgui.style.transition.TransitionSpec;
 import com.crystalgui.style.transition.TransitionValue;
@@ -77,7 +77,7 @@ public class StylePropertyRegistry {
 
     // ── Properties ───────────────────────────────────────────────────────────
 
-    public static final StyleProperty<CgUiDrawable> BACKGROUND = create("background", CgUiDrawable.EMPTY);
+    public static final StyleProperty<CgUiImage> BACKGROUND = image("background");
     /**
      * {@code backdrop-filter} — CSS's own name for what is done to whatever shows through an element.
      *
@@ -86,19 +86,18 @@ public class StylePropertyRegistry {
      * A backdrop filter runs UNDER the element's own background, which is how the web writes acrylic —
      * {@code backdrop-filter: blur(24px)} beside {@code background-color: #1C1D21CC}.</p>
      *
-     * <p>Initially null rather than a no-op material: an element with no filter must not capture and
-     * blur the surface behind it to draw nothing. @see BackdropFilterValue</p>
+     * <p>{@link CgBackdropFilter#NONE} until set: an element with no filter captures nothing. @see BackdropFilterValue</p>
      */
-    public static final StyleProperty<CgUiBackdropFilter> BACKDROP_FILTER = create(
-            new StyleProperty<>("backdrop-filter", CgUiBackdropFilter.class, null, BackdropFilterValue::new)
+    public static final StyleProperty<CgBackdropFilter> BACKDROP_FILTER = create(
+            new StyleProperty<>("backdrop-filter", CgBackdropFilter.class, CgBackdropFilter.NONE, BackdropFilterValue::new)
                     .setWriter(BackdropFilterValue::write));
 
-    public static final StyleProperty<CgUiDrawable> OVERLAY = create("overlay", CgUiDrawable.EMPTY);
+    public static final StyleProperty<CgUiImage> OVERLAY = image("overlay");
     // Geometry longhands for the `overlay` layer, mirroring CSS background-origin / object-fit /
     // object-position. Defaults reproduce the engine's pre-existing behaviour exactly (stretch to
     // the full border box), so adding them changes nothing until a stylesheet opts in. Deliberately
     // NOT transition-enabled — enums don't interpolate.
-    // `background` has no equivalents yet: its rect doubles as CgUiRect's _BoxSize and as the
+    // `background` has no equivalents yet: its rect doubles as the painted box and as the
     // basis for percentage border-radius, so it can't be re-boxed without redefining border-radius.
     public static final StyleProperty<BoxOrigin> OVERLAY_ORIGIN =
             create("overlay-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
@@ -488,11 +487,11 @@ public class StylePropertyRegistry {
      */
     public static final StyleProperty<Float> TOOLTIP_DELAY =
             create("tooltip-delay", 0f).setRange(0f, Float.MAX_VALUE).setAllowTransition(false);
-    public static final StyleProperty<CgUiDrawable> MASK = create("mask", CgUiDrawable.EMPTY);
+    public static final StyleProperty<CgUiImage> MASK = image("mask");
     /** What of a box and its subtree is drawn: {@code none} or {@code inset(...)}. @see ClipPath */
     public static final StyleProperty<ClipPath> CLIP_PATH = create(new ClipPathProperty("clip-path"));
     // Geometry longhands for the `mask` layer, exactly mirroring the `overlay-*` trio above (same
-    // types, same defaults, same CgUiLayerBox.resolve path). Defaults reproduce the previous
+    // types, same defaults, same CgUiImagePainter.fit path). Defaults reproduce the previous
     // behaviour — the mask stretched to the full border box — so this changes nothing until a
     // stylesheet opts in. Like the overlay set, deliberately NOT transition-enabled: enums don't
     // interpolate.
@@ -512,7 +511,7 @@ public class StylePropertyRegistry {
     // how margin/padding/border-width work (BoxEdgeShorthands).
     public static final StyleProperty<Integer> BORDER_COLOR = create(new ColorProperty("border-color", 0xFF000000));
     // A per-edge OVERRIDE, not an independent colour — the initial value is fully transparent, which
-    // this pair reads as "unset" rather than as a real colour: CgUiRect falls back to
+    // this pair reads as "unset" rather than as a real colour: the painter falls back to
     // border-color's own resolved value whenever an edge's alpha is 0, so a widget that only ever sets
     // border-color keeps painting exactly as it always has. Unity's inset text-field bevel (a darker
     // top edge, a lighter bottom edge) is what this exists for, and a bevelled slot's dark top and left
@@ -530,7 +529,7 @@ public class StylePropertyRegistry {
     // Taffy — completely layout-free. That's exactly why CSS has `outline`: it's the standard way to
     // mark focus without resizing the element. Also frees `overlay` to stay a widget's own
     // decoration (e.g. a checkbox's check mark) instead of being fought over for focus rings.
-    public static final StyleProperty<CgUiDrawable> OUTLINE = create("outline", CgUiDrawable.EMPTY);
+    public static final StyleProperty<CgUiImage> OUTLINE = image("outline");
     // Positive expands the ring outward, negative insets it. Defaults to 0 (drawn exactly at the
     // border box) — both because that's what every LDLib2 `focus-overlay` does, and because an
     // outward ring is clipped by any ancestor with `overflow: hidden` (the scissor is real
@@ -713,8 +712,9 @@ public class StylePropertyRegistry {
     }
 
 
-    public static TextureProperty create(String name, CgUiDrawable initialValue) {
-        return create(new TextureProperty(name, initialValue));
+    /** An image property: {@code none} until set. */
+    public static ImageProperty image(String name) {
+        return create(new ImageProperty(name));
     }
 
     public static StyleProperty<Boolean> create(String name, boolean initialValue) {

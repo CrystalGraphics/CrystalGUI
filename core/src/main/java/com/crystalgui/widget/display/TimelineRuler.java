@@ -60,17 +60,17 @@ public class TimelineRuler extends TimelineTrack {
         // as the view pans: 4 ms stays at 4 ms however the window slides past it.
         long first = origin + Math.floorDiv(axis.from() - origin, step) * step;
 
-        ctx.rect().at(0f, bottom - 1f).size(box.width(), 1f).fillColor(tick).submit();
+        ctx.canvas().box(0f, bottom - 1f, box.width(), 1f).fill(tick).draw();
         for (long at = first; at <= axis.to(); at += step) {
             float x = axis.xOf(at);
             if (x < -1f) continue;
-            ctx.rect().at(x, bottom - 6f).size(1f, 6f).fillColor(tick).submit();
+            ctx.canvas().box(x, bottom - 6f, 1f, 6f).fill(tick).draw();
             // MINOR TICKS, four between each pair: enough to judge a bar's width by eye, too few to
             // become a texture.
             for (int minor = 1; minor < 5; minor++) {
                 float mx = axis.xOf(at + step * minor / 5);
                 if (mx > box.width()) break;
-                ctx.rect().at(mx, bottom - 3f).size(1f, 3f).fillColor((color & 0x00FFFFFF) | 0x30000000).submit();
+                ctx.canvas().box(mx, bottom - 3f, 1f, 3f).fill((color & 0x00FFFFFF) | 0x30000000).draw();
             }
             label(ctx, font, format(at - origin, step), x + 3f, 0f, bottom - 5f, TARGET_SPACING - 8f,
                     (color & 0x00FFFFFF) | 0xB0000000);

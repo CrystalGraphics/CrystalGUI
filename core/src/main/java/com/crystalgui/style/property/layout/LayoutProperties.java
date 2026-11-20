@@ -66,8 +66,8 @@ public class LayoutProperties {
     public static final StyleProperty<Float> FLEX = StylePropertyRegistry.create(new AutoFloatProperty("flex", Float.NaN));
     public static final StyleProperty<Float> FLEX_GROW = StylePropertyRegistry.create("flex-grow", 0f);
     public static final StyleProperty<Float> FLEX_SHRINK = StylePropertyRegistry.create("flex-shrink", 0f);
-    public static final StyleProperty<FlexDirection> FLEX_DIRECTION = StylePropertyRegistry.create("flex-direction", FlexDirection.class, FlexDirection.COLUMN);//;//.setIconProvider(FlexIcons::getFlexDirectionIcon);
-    public static final StyleProperty<FlexWrap> FLEX_WRAP = StylePropertyRegistry.create("flex-wrap", FlexWrap.class, FlexWrap.NO_WRAP);//;//.setIconProvider(FlexIcons::getFlexWrapIcon);
+    public static final StyleProperty<FlexDirection> FLEX_DIRECTION = StylePropertyRegistry.create("flex-direction", FlexDirection.class, FlexDirection.COLUMN);
+    public static final StyleProperty<FlexWrap> FLEX_WRAP = StylePropertyRegistry.create("flex-wrap", FlexWrap.class, FlexWrap.NO_WRAP);
     public static final StyleProperty<TaffyPosition> POSITION = StylePropertyRegistry.create("position", TaffyPosition.class, TaffyPosition.RELATIVE);
     // BORDER_BOX is a deliberate project default, NOT real CSS's actual initial value
     // (content-box) — see TaffyBridge.DEFAULT_TAFFY_STYLE's own explicit assignment, which this
@@ -133,12 +133,12 @@ public class LayoutProperties {
     public static final StyleProperty<TaffyDimension> MAX_HEIGHT = create("max-height", TaffyDimension.auto());
 
     public static final StyleProperty<Float> ASPECT_RATIO = StylePropertyRegistry.create(new AutoFloatProperty("aspect-ratio", Float.NaN));
-    public static final StyleProperty<AlignItems> ALIGN_ITEMS = StylePropertyRegistry.create("align-items", AlignItems.class, AlignItems.STRETCH, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
-    public static final StyleProperty<AlignItems> ALIGN_SELF = StylePropertyRegistry.create("align-self", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
-    public static final StyleProperty<AlignContent> ALIGN_CONTENT = StylePropertyRegistry.create("align-content", AlignContent.class, AlignContent.FLEX_START);//.setIconProvider(v -> IGuiTexture.EMPTY);
-    public static final StyleProperty<AlignItems> JUSTIFY_ITEMS = StylePropertyRegistry.create("justify-items", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
-    public static final StyleProperty<AlignItems> JUSTIFY_SELF = StylePropertyRegistry.create("justify-self", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);//.setIconProvider(v -> IGuiTexture.EMPTY);
-    public static final StyleProperty<AlignContent> JUSTIFY_CONTENT = StylePropertyRegistry.create("justify-content", AlignContent.class, AlignContent.FLEX_START);//.setIconProvider(v -> IGuiTexture.EMPTY);
+    public static final StyleProperty<AlignItems> ALIGN_ITEMS = StylePropertyRegistry.create("align-items", AlignItems.class, AlignItems.STRETCH, DEFAULT_ALIGN_ITEMS);
+    public static final StyleProperty<AlignItems> ALIGN_SELF = StylePropertyRegistry.create("align-self", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);
+    public static final StyleProperty<AlignContent> ALIGN_CONTENT = StylePropertyRegistry.create("align-content", AlignContent.class, AlignContent.FLEX_START);
+    public static final StyleProperty<AlignItems> JUSTIFY_ITEMS = StylePropertyRegistry.create("justify-items", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);
+    public static final StyleProperty<AlignItems> JUSTIFY_SELF = StylePropertyRegistry.create("justify-self", AlignItems.class, AlignItems.AUTO, DEFAULT_ALIGN_ITEMS);
+    public static final StyleProperty<AlignContent> JUSTIFY_CONTENT = StylePropertyRegistry.create("justify-content", AlignContent.class, AlignContent.FLEX_START);
 
     public static final StyleProperty<GridTemplate> GRID_TEMPLATE_ROWS =
             create("grid-template-rows", GridTemplate.EMPTY).setWriter(GridTemplateValue::write);

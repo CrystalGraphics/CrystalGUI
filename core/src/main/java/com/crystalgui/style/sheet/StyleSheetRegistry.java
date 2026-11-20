@@ -11,7 +11,7 @@ import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Named stylesheet lookup by resource path — {@code StyleSheetRegistry.of("namespace:path")},
- * mirroring {@link com.crystalgui.render.texture.asset.CgUiSpriteRegistry}'s lazy-load shape. One
+ * mirroring CrystalGraphics' {@code CgSpriteSheet}'s lazy-load shape. One
  * CSS file per path, at {@code assets/{namespace}/ui/styles/{path}.css}. A resource pack supplies a
  * theme simply by shipping a file at that path — no separate registration call needed.
  */
@@ -59,8 +59,8 @@ public final class StyleSheetRegistry {
     }
 
     /** Returns the parsed stylesheet for {@code namespacedPath}, or an empty (no-op) stylesheet if
-     * missing/malformed — never {@code null}. A missing file is NOT cached (matches
-     * {@code CgUiSpriteRegistry}'s computeIfAbsent-returns-null behavior), so it's retried on the
+     * missing/malformed — never {@code null}. A missing file is NOT cached (a
+     * {@code computeIfAbsent} that answers null stores nothing), so it's retried on the
      * next call rather than staying permanently empty once the owning resource pack loads. */
     public static StyleSheet of(String namespacedPath) {
         StyleSheet sheet = CACHE.computeIfAbsent(namespacedPath, StyleSheetRegistry::load);

@@ -1,5 +1,6 @@
 package com.crystalgui.ui.dom;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
@@ -8,8 +9,6 @@ import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.border.LengthPercent;
 import dev.vfyjxf.taffy.style.BoxSizing;
-import com.crystalgui.render.texture.CgUiRect;
-import com.crystalgui.render.texture.CgUiSprite;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
 import org.junit.Test;
 
@@ -378,56 +377,43 @@ public class StyleSheetTest extends UiDocumentTestBase {
 
     // ── sprite() tiling args, end-to-end through the stylesheet parser ──────────────────────────
 
-    /**
-     * The sprite behind a {@code background: sprite(...)}.
-     *
-     * <p><b>A sprite is a FILL, not a drawable.</b> Every {@code background} computes to the one
-     * drawable there is — a {@link CgUiRect} — and the sprite is what fills it, which is why
-     * {@code CgUiSprite.toRect()} exists for a caller that owes a {@code CgUiDrawable}. Both halves are
-     * asserted here so a regression in either says which one.</p>
-     */
-    private static CgUiSprite parseSpriteValue(String extraArgs) {
+    /** The picture a {@code background: sprite(...)} computes to. */
+    private static CgUiImage.Picture parseSpriteValue(String extraArgs) {
         var decls = StyleSheet.parse(".a { background: sprite(\"t.png\", \"0 0 16 16\", \"4 4 4 4\""
                 + extraArgs + "); }").getRules().get(0).declarations();
         assertEquals(1, decls.size());
         Object value = decls.get(0).value().compute();
-        assertTrue("expected a CgUiRect, got " + value, value instanceof CgUiRect);
-        CgUiRect.Fill fill = ((CgUiRect) value).getFill();
-        assertTrue("expected the rect to be filled with a sprite, got " + fill,
-                fill instanceof CgUiRect.Fill.Sprite);
-        return ((CgUiRect.Fill.Sprite) fill).sprite();
+        assertTrue("expected a picture, got " + value, value instanceof CgUiImage.Picture);
+        return (CgUiImage.Picture) value;
     }
 
     @Test
     public void spriteDefaultsToStretchOnBothAxes() {
         var sprite = parseSpriteValue("");
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.STRETCH, sprite.getRepeatX());
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.STRETCH, sprite.getRepeatY());
+        assertEquals(CgUiImage.Repeat.STRETCH, sprite.repeatX());
+        assertEquals(CgUiImage.Repeat.STRETCH, sprite.repeatY());
     }
 
     /** One keyword sets both axes, matching CSS border-image-repeat's shorthand. */
     @Test
     public void spriteSingleRepeatKeywordAppliesToBothAxes() {
         var sprite = parseSpriteValue(", \"round\"");
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, sprite.getRepeatX());
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, sprite.getRepeatY());
+        assertEquals(CgUiImage.Repeat.ROUND, sprite.repeatX());
+        assertEquals(CgUiImage.Repeat.ROUND, sprite.repeatY());
     }
 
     @Test
     public void spriteTwoRepeatKeywordsSetAxesIndependently() {
         var sprite = parseSpriteValue(", \"repeat space\"");
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.REPEAT, sprite.getRepeatX());
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.SPACE, sprite.getRepeatY());
+        assertEquals(CgUiImage.Repeat.REPEAT, sprite.repeatX());
+        assertEquals(CgUiImage.Repeat.SPACE, sprite.repeatY());
     }
 
-    /** Trailing args are type-sniffed, so the size reference and the tiling keyword may appear in
-     * either order — the same contract image() already had. */
+    /** Trailing args are type-sniffed: the size reference and the tiling keyword in either order. */
     @Test
     public void spriteTrailingArgsAreOrderIndependent() {
-        var a = parseSpriteValue(", \"64 64\", \"round\"");
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, a.getRepeatX());
-        var b = parseSpriteValue(", \"round\", \"64 64\"");
-        assertEquals(com.crystalgui.render.texture.CgUiRepeat.ROUND, b.getRepeatX());
+        assertEquals(parseSpriteValue(", \"64 64\", \"round\""), parseSpriteValue(", \"round\", \"64 64\""));
+        assertEquals(CgUiImage.Repeat.ROUND, parseSpriteValue(", \"64 64\", \"round\"").repeatX());
     }
 
     @Test
@@ -435,27 +421,16 @@ public class StyleSheetTest extends UiDocumentTestBase {
         var decls = StyleSheet.parse(
                         ".a { background: sprite(\"t.png\", \"0 0 16 16\", \"4 4 4 4\", \"wobble\"); }")
                 .getRules().get(0).declarations();
-        assertTrue("an unparseable sprite() must not yield a drawable",
+        assertTrue("an unparseable sprite() must not yield an image",
                 decls.isEmpty() || decls.get(0).value().compute() == null);
     }
 
-    /** Border/slice geometry survives the widened trailing-arg loop. */
     @Test
-    public void spriteBorderAndSizeReferenceStillParse() {
+    public void spriteSlicesAndSizeReferenceParse() {
         var sprite = parseSpriteValue(", \"64 64\"");
-        assertEquals(4f, sprite.getBorderLeft(), 0.001f);
-        assertEquals(4f, sprite.getBorderBottom(), 0.001f);
-        // 16x16 sprite with a 4px border on each side -> 8x8 centre, the horizontal tile size.
-        assertEquals(8f, sprite.centerSourceWidth(), 0.001f);
-        assertEquals(8f, sprite.centerSourceHeight(), 0.001f);
-    }
-
-    /** borderScale multiplies the tile size, so a 2x scale doubles it (Unity's PPU multiplier). */
-    @Test
-    public void borderScaleScalesTheCentreTileSize() {
-        var sprite = parseSpriteValue("");
-        sprite.setBorderScale(2f);
-        assertEquals(16f, sprite.centerSourceWidth(), 0.001f);
+        assertEquals(new CgUiImage.Picture.Slices(4, 4, 4, 4), sprite.slices());
+        assertEquals(64, sprite.refW());
+        assertEquals(64, sprite.refH());
     }
 
     private static Object findValue(java.util.List<StyleRule.Declaration> decls, com.crystalgui.style.property.StyleProperty<?> property) {

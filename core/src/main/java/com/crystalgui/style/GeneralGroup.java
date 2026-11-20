@@ -1,13 +1,13 @@
 package com.crystalgui.style;
 
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import com.crystalgui.style.property.visual.ClipPath;
 import com.crystalgui.style.property.visual.stacking.Isolation;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgui.style.property.visual.text.PaintOrder;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
@@ -33,21 +33,21 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         super(elementStyle);
     }
 
-    public CgUiDrawable background() {
+    public CgUiImage background() {
         return getValueSave(StylePropertyRegistry.BACKGROUND);
     }
 
-    public GeneralGroup background(CgUiDrawable drawable) {
-        set(StylePropertyRegistry.BACKGROUND, drawable);
+    public GeneralGroup background(CgUiImage image) {
+        set(StylePropertyRegistry.BACKGROUND, image);
         return this;
     }
 
-    public CgUiDrawable overlay() {
+    public CgUiImage overlay() {
         return getValueSave(StylePropertyRegistry.OVERLAY);
     }
 
-    public GeneralGroup overlay(CgUiDrawable drawable) {
-        set(StylePropertyRegistry.OVERLAY, drawable);
+    public GeneralGroup overlay(CgUiImage image) {
+        set(StylePropertyRegistry.OVERLAY, image);
         return this;
     }
 
@@ -92,12 +92,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
 
     // ── outline: layout-free focus/decoration ring, drawn above overlay ──────────────────────────
 
-    public CgUiDrawable outline() {
+    public CgUiImage outline() {
         return getValueSave(StylePropertyRegistry.OUTLINE);
     }
 
-    public GeneralGroup outline(CgUiDrawable drawable) {
-        set(StylePropertyRegistry.OUTLINE, drawable);
+    public GeneralGroup outline(CgUiImage image) {
+        set(StylePropertyRegistry.OUTLINE, image);
         return this;
     }
 
@@ -482,11 +482,11 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
     }
 
     /** What is done to whatever shows through, drawn UNDER this element's own background. */
-    public CgUiBackdropFilter backdropFilter() {
+    public CgBackdropFilter backdropFilter() {
         return getValueSave(StylePropertyRegistry.BACKDROP_FILTER);
     }
 
-    public GeneralGroup backdropFilter(CgUiBackdropFilter filter) {
+    public GeneralGroup backdropFilter(CgBackdropFilter filter) {
         set(StylePropertyRegistry.BACKDROP_FILTER, filter);
         return this;
     }
@@ -500,12 +500,12 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public CgUiDrawable mask() {
+    public CgUiImage mask() {
         return getValueSave(StylePropertyRegistry.MASK);
     }
 
-    public GeneralGroup mask(CgUiDrawable overflowClip) {
-        set(StylePropertyRegistry.MASK, overflowClip);
+    public GeneralGroup mask(CgUiImage image) {
+        set(StylePropertyRegistry.MASK, image);
         return this;
     }
 
@@ -626,15 +626,5 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         set(StylePropertyRegistry.TRANSITION, specs);
         return this;
     }
-
-
-//    public CgUiDrawable mask() {
-//        return getValueSave(StylePropertyRegistry.MASK);
-//    }
-//
-//    public VisualGroup mask(CgUiDrawable drawable) {
-//        set(StylePropertyRegistry.MASK, drawable);
-//        return this;
-//    }
 
 }

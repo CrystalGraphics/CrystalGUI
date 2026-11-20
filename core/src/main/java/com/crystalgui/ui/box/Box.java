@@ -1,13 +1,13 @@
 package com.crystalgui.ui.box;
 
-import com.crystalgui.render.texture.CgUiBackdropFilter;
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.core.data.Transform2D;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgraphics.api.canvas.CgKeptLayer;
 import com.crystalgraphics.api.vector.CgCornerRadii;
-import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.Overflow;
 import com.crystalgui.style.property.visual.stacking.Isolation;
@@ -326,8 +326,8 @@ public final class Box {
                 || !z.auto()
                 || opacity() < 1f
                 || !transform().isIdentity()
-                || CgUiBackdropFilter.isActive(style.get(StylePropertyRegistry.BACKDROP_FILTER))
-                || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY
+                || style.get(StylePropertyRegistry.BACKDROP_FILTER) != CgBackdropFilter.NONE
+                || style.get(StylePropertyRegistry.MASK) != CgUiImage.NONE
                 || style.get(StylePropertyRegistry.ISOLATION) == Isolation.ISOLATE
                 || willChange(style, WillChange.TRANSFORM) || willChange(style, WillChange.OPACITY)
                 || followsPointer() || animatesOnCompositor();
@@ -397,9 +397,12 @@ public final class Box {
     @Nullable
     private CgKeptLayer.Placement layerPlacement;
 
-    /** The corners its {@code overflow} and its {@code clip-path} clip with, as last painted: kept while they hold. */
+    /**
+     * The corners its background is drawn with, its {@code overflow} and its {@code clip-path} clip with, as last
+     * painted: kept while they hold.
+     */
     @Nullable
-    CgCornerRadii clipRadii, clipPathRadii;
+    CgCornerRadii paintRadii, clipRadii, clipPathRadii;
 
     void noteFadedNode(int node, long frame) {
         if (node == 0) return;

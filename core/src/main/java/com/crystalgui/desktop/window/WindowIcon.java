@@ -1,8 +1,7 @@
 package com.crystalgui.desktop.window;
 
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
-import com.crystalgui.render.texture.svg.SvgDocument;
+import com.crystalgraphics.api.vector.svg.CgSvg;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.Name;
@@ -34,7 +33,7 @@ import java.util.Objects;
  * a palette tile under it and there is a square behind a square; knock it out in the glyph colour and a
  * palette it was drawn with is tinted away. So artwork wears {@link #BRANDED_CLASS} instead of a tile
  * class and paints into the slot's whole box. <b>Which of the two an icon is comes off the FILE</b>
- * ({@link SvgDocument#usesCurrentColor}): a chrome mark is {@code currentColor} so the cascade can colour
+ * ({@link CgSvg#usesCurrentColor}): a chrome mark is {@code currentColor} so the cascade can colour
  * it, a brand mark names every colour it uses. Nothing has to declare it beside the name, and a pack that
  * drops in its own artwork gets the right treatment without knowing this class exists.</p>
  *
@@ -107,18 +106,18 @@ public class WindowIcon extends UIElement {
     /**
      * Shows {@code iconName}'s glyph on its tile, or {@code title}'s initial on the neutral one.
      *
-     * <p>Through {@link CgUiSvg#ofIcon}, never {@code of(path)} — that is what binds the light/dark
+     * <p>Through {@link CgUiImage#findIcon}, never {@code of(path)} — that is what binds the light/dark
      * variant at draw time, and the one time a caller reached past it every {@code icon()} in every
      * stylesheet drew the light file forever.</p>
      */
     public WindowIcon show(@Nullable String iconName, @Nullable String title) {
-        CgUiSvg glyph = iconName == null ? null : CgUiSvg.ofIcon(iconName);
+        CgUiImage.Icon glyph = CgUiImage.findIcon(iconName);
         if (glyph != null) {
             StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(glyph));
             if (showingMonogram) monogram.setDisplayed(false);
             showingMonogram = false;
             removeClass(MONOGRAM_CLASS);
-            SvgDocument document = glyph.getDocument();
+            CgSvg document = CgSvg.of(glyph.path());
             if (document != null && !document.usesCurrentColor()) {
                 // ARTWORK IS ITS OWN TILE -- see the class comment. No palette class, so nothing paints
                 // behind it, and the branded class lets the sheet drop the inset a knocked-out glyph needs.
@@ -131,7 +130,7 @@ public class WindowIcon extends UIElement {
         } else {
             // THE OLD GLYPH MUST GO. An overlay is a cascade candidate at DEFAULT origin and outlives the
             // icon it was set for, so a window that loses its icon would keep drawing it under the letter.
-            StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(CgUiDrawable.EMPTY));
+            StyleGroup.defaultPipeline(getStyle().getGeneralGroup(), g -> g.overlay(CgUiImage.NONE));
             monogram.setText(initialOf(title));
             if (!showingMonogram) monogram.setDisplayed(true);
             showingMonogram = true;

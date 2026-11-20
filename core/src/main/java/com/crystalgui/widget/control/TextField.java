@@ -1450,7 +1450,7 @@ public class TextField extends UIElement implements Measurable {
         if (drawsFocused() && hasSelection()) {
             float from = originX + prefixWidths[getSelectionStart()];
             float to = originX + prefixWidths[getSelectionEnd()];
-            ctx.fillRect(from, originY, to - from, inkHeight, styleGen.selectionColor());
+            ctx.canvas().fill(from, originY, to - from, inkHeight, styleGen.selectionColor());
         }
 
         // A PLACEHOLDER IS A HINT, AND ONLY WHILE YOU ARE TYPING INTO IT.
@@ -1485,7 +1485,7 @@ public class TextField extends UIElement implements Measurable {
         int runEnd = compositionStart + compositionLength;
         if (drawsFocused() && compositionStart >= 0 && compositionLength > 0 && runEnd < prefixWidths.length) {
             float from = originX + prefixWidths[compositionStart];
-            ctx.fillRect(from, originY + inkHeight - 1f, originX + prefixWidths[runEnd] - from, 1f, styleGen.color());
+            ctx.canvas().fill(from, originY + inkHeight - 1f, originX + prefixWidths[runEnd] - from, 1f, styleGen.color());
         }
         paintedCaret = new float[] { originX + prefixWidths[Math.min(caret, prefixWidths.length - 1)], originY, inkHeight };
 
@@ -1502,7 +1502,7 @@ public class TextField extends UIElement implements Measurable {
             // wherever the text is recoloured to say something about ITSELF -- a search box reds its query
             // when nothing matches, and a red caret reads as the caret being wrong.
             int caretColor = styleGen.caretColor();
-            ctx.fillRect(x, originY, styleGen.caretWidth(), inkHeight,
+            ctx.canvas().fill(x, originY, styleGen.caretWidth(), inkHeight,
                     caretColor == 0 ? styleGen.color() : caretColor);
         }
 

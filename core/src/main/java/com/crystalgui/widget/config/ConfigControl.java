@@ -269,7 +269,7 @@ public abstract class ConfigControl extends UIElement {
      * <p>It is also what makes the control describable at all. A swatch's fill and a hue ring are
      * drawables written from Java at INLINE origin, and {@code InlineStyleCodec} <b>refuses</b> a value
      * with no wire form rather than dropping it - correctly, since a silently dropped style renders
-     * differently on the two sides with nothing to explain why. A {@code CgUiColorField} has no wire
+     * differently on the two sides with nothing to explain why. A {@code ColorField} has no wire
      * form and needs none: it is never described, because the part it is on is never described.</p>
      * <p>The contract already says so and nothing was reading it: {@code acceptsDescribedChildren()} is
      * false for every one of these, which is what {@code ClientSmokeTest} now holds them to.</p>

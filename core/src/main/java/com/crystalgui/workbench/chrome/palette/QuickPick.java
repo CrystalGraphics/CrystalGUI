@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.chrome.palette;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgraphics.platform.input.CgKeyCodes;
@@ -11,8 +12,6 @@ import com.crystalgui.core.collection.pick.QuickPickSource;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.ui.dom.UIElement;
 import com.crystalgui.ui.dom.UIDocument;
@@ -751,13 +750,13 @@ public class QuickPick extends Popover {
 
             // KIND WINS. Both being set is a caller's mistake rather than a state to render, and drawing
             // both would be two glyphs where the sheet has spaced one.
-            CgUiSvg glyph = hasKind || item.iconName() == null || item.iconName().isEmpty()
-                    ? null : CgUiSvg.ofIcon(item.iconName());
+            CgUiImage glyph = hasKind || item.iconName() == null || item.iconName().isEmpty()
+                    ? null : CgUiImage.findIcon(item.iconName());
             show(row.fileIcon, glyph != null);
             // Cleared as well as set: rows are pooled, so a row that showed a `.java` and is reused for a
             // command would otherwise keep the drawable behind a hidden box -- and reappear with it the
             // next time anything unhid it.
-            final CgUiDrawable drawable = glyph == null ? CgUiDrawable.EMPTY : glyph;
+            final CgUiImage drawable = glyph == null ? CgUiImage.NONE : glyph;
             StyleGroup.defaultPipeline(row.fileIcon.getStyle().getGeneralGroup(),
                     g -> g.overlay(drawable));
 

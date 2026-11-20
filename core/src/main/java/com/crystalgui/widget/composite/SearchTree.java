@@ -1,5 +1,6 @@
 package com.crystalgui.widget.composite;
 
+import com.crystalgui.render.image.CgUiImage;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
@@ -17,8 +18,6 @@ import com.crystalgui.core.search.SearchMatch;
 import com.crystalgui.core.search.SearchMatcher;
 import com.crystalgui.core.search.SearchQuery;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.text.TextRange;
 import com.crystalgui.ui.box.Box;
@@ -553,8 +552,8 @@ public class SearchTree<N, T> extends UIElement {
             iconName = name;
             show(icon, name != null);
             if (name == null) return;
-            CgUiSvg svg = CgUiSvg.ofIcon(name);
-            CgUiDrawable drawn = svg == null ? CgUiDrawable.EMPTY : svg;
+            CgUiImage svg = CgUiImage.findIcon(name);
+            CgUiImage drawn = svg == null ? CgUiImage.NONE : svg;
             StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(), g -> g.overlay(drawn));
         }
 

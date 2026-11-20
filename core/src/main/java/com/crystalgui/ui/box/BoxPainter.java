@@ -1,5 +1,8 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgraphics.api.canvas.CgCanvasBox;
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
+import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgraphics.api.canvas.CgCanvasLayer;
 import com.crystalgraphics.api.canvas.CgKeptLayer;
@@ -13,7 +16,8 @@ import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.Surface;
 import com.crystalgui.render.texture.*;
-import com.crystalgui.render.texture.CgUiRect;
+import com.crystalgui.render.image.CgUiImage;
+import com.crystalgui.render.image.CgUiImagePainter;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.ClipPath;
@@ -229,7 +233,7 @@ public final class BoxPainter {
             if (!clipPath(box, style, canvas)) return;
             Radii radii = radiiOf(style, box.width(), box.height());
             boolean clips = box.clips();
-            boolean shaped = clips && (!radii.isZero() || style.get(StylePropertyRegistry.MASK) != CgUiDrawable.EMPTY);
+            boolean shaped = clips && (!radii.isZero() || style.get(StylePropertyRegistry.MASK) != CgUiImage.NONE);
             boolean square = clips && !shaped;
             // A SHAPE WITH NOTHING TO CLIP: it applies to the children and to nothing else.
             if (shaped && box.children().isEmpty()) {
@@ -360,8 +364,8 @@ public final class BoxPainter {
         canvas.save();
         try {
             shapeClip(box, style, canvas);
-            CgUiDrawable source = style.get(StylePropertyRegistry.MASK);
-            if (source == CgUiDrawable.EMPTY) {
+            CgUiImage source = style.get(StylePropertyRegistry.MASK);
+            if (source == CgUiImage.NONE) {
                 CgTrace.add(UiTrace.FRAME, "clips-rounded", 1);
                 paintChildren(box, ctx, base, false, asContext);
                 return;
@@ -378,17 +382,23 @@ public final class BoxPainter {
     }
 
     /**
-     * {@code layer} masked by a {@code mask} drawable: a colour by its alpha, a picture by its texels' alpha. One that
-     * would reveal nothing reveals the whole shape instead: {@code mask: none} and a clear colour clip alike.
+     * {@code layer} masked by a {@code mask} image: a colour by its alpha, a picture by its texels' alpha. One that
+     * would reveal nothing (a clear colour) or that is not a picture reveals the whole shape instead.
      */
-    private static void maskWith(CgCanvasLayer layer, CgUiDrawable source) {
+    private void maskWith(CgCanvasLayer layer, CgUiImage source) {
         // A cross-fade masks with the side it is nearer: a mask's own transition is not drawn
-        while (source instanceof CgUiCrossFade cf) source = cf.getT() < 0.5f ? cf.getFrom() : cf.getTo();
-        if (revealsNothing(source)) return;
-        switch (((CgUiRect) source).getFill()) {
-            case CgUiRect.Fill.Color(int argb) -> layer.opacity((argb >>> 24) / 255f);
-            case CgUiRect.Fill.Texture(var texture) -> layer.mask(CgBrush.texture(texture));
-            case CgUiRect.Fill.Sprite(var sprite) -> layer.mask(CgBrush.texture(sprite.getTexture()));
+        while (source instanceof CgUiImage.CrossFade f) source = f.t() < 0.5f ? f.from() : f.to();
+        switch (source) {
+            case CgUiImage.Color c -> {
+                if ((c.argb() >>> 24) != 0) layer.opacity((c.argb() >>> 24) / 255f);
+            }
+            case CgUiImage.Picture picture -> layer.mask(CgBrush.texture(images.texture(picture)));
+            case CgUiImage.Sheet sheet -> {
+                CgTexture texture = images.texture(sheet);
+                if (texture != null) layer.mask(CgBrush.texture(texture));
+            }
+            default -> {
+            }
         }
     }
 
@@ -400,8 +410,6 @@ public final class BoxPainter {
             return;
         }
         ctx.beginSegment();
-        // From white, never from the last box painted: a segment replayed before this one resets nothing.
-        ctx.setColor(WHITE);
         paintSelf(box, style, ctx, radii);
         node.paintContent(ctx, box);
         endSegment(box, node, ctx, BoxReplay.BEFORE, key);
@@ -416,7 +424,6 @@ public final class BoxPainter {
             return;
         }
         ctx.beginSegment();
-        ctx.setColor(WHITE);
         node.paintDecoration(ctx, box);
         paintOverlay(box, style, ctx);
         paintOutline(box, style, ctx);
@@ -483,18 +490,18 @@ public final class BoxPainter {
     private static boolean foldsOpacity(Box box, ComputedStyle style, UIElement node) {
         if (!box.children().isEmpty()) return false;
         if (node.paintsItsOwnContent()) return false;
-        if (CgUiBackdropFilter.isActive(style.get(StylePropertyRegistry.BACKDROP_FILTER))) return false;
+        if (style.get(StylePropertyRegistry.BACKDROP_FILTER) != CgBackdropFilter.NONE) return false;
 
         int primitives = 0;
-        CgUiDrawable background = style.get(StylePropertyRegistry.BACKGROUND);
-        CgUiDrawable overlay = style.get(StylePropertyRegistry.OVERLAY);
-        // A drawable that covers a pixel twice is already two primitives on its own: a stack, a cross-fade, a vector
-        // whose paths cross. @see CgUiDrawable#drawsOnePrimitive
-        if (!background.drawsOnePrimitive() || !overlay.drawsOnePrimitive()) return false;
-        if (background != CgUiDrawable.EMPTY || style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) primitives++;
-        if (overlay != CgUiDrawable.EMPTY) primitives++;
+        CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND);
+        CgUiImage overlay = style.get(StylePropertyRegistry.OVERLAY);
+        // An image that covers a pixel twice is already two primitives on its own: a stack, a cross-fade, a vector
+        // whose paths cross. @see CgUiImage#onePrimitive
+        if (!background.onePrimitive() || !overlay.onePrimitive()) return false;
+        if (background != CgUiImage.NONE || style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) primitives++;
+        if (overlay != CgUiImage.NONE) primitives++;
         LengthPercent stroke = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
-        if (style.get(StylePropertyRegistry.OUTLINE) != CgUiDrawable.EMPTY
+        if (style.get(StylePropertyRegistry.OUTLINE) != CgUiImage.NONE
                 || stroke != null && stroke.resolve(box.width()) > 0f) primitives++;
         return primitives <= 1;
     }
@@ -719,13 +726,13 @@ public final class BoxPainter {
         try {
             pose(canvas, poseScratch.set(base).mul(clip.localToWorld()));
             boolean square = radiiOf(style, clip.width(), clip.height()).isZero()
-                    && style.get(StylePropertyRegistry.MASK) == CgUiDrawable.EMPTY;
+                    && style.get(StylePropertyRegistry.MASK) == CgUiImage.NONE;
             if (square) {
                 paddingClip(clip, canvas);
             } else {
                 shapeClip(clip, style, canvas);
-                CgUiDrawable source = style.get(StylePropertyRegistry.MASK);
-                if (source != CgUiDrawable.EMPTY) {
+                CgUiImage source = style.get(StylePropertyRegistry.MASK);
+                if (source != CgUiImage.NONE) {
                     CgTrace.add(UiTrace.FRAME, "layers-mask", 1);
                     layMask(clip, style, source);
                     try (CgCanvasLayer layer = canvas.layer(laid[0], laid[1], laid[2], laid[3])) {
@@ -748,106 +755,60 @@ public final class BoxPainter {
 
         // THE BACKDROP FIRST, and it is not the background: `backdrop-filter` acts on what is BEHIND the element, so the
         // element's own background is drawn over the result. It clips itself to the radii.
-        CgUiBackdropFilter backdrop = style.get(StylePropertyRegistry.BACKDROP_FILTER);
-        if (CgUiBackdropFilter.isActive(backdrop)) {
-            backdrop.setCornerRadii(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
-                    radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
-            ctx.setColor(WHITE);
-            backdrop.draw(ctx, 0f, 0f, width, height);
+        CgBackdropFilter backdrop = style.get(StylePropertyRegistry.BACKDROP_FILTER);
+        CgCornerRadii corners = corners(box, radii);
+        if (backdrop != CgBackdropFilter.NONE) {
+            CgCanvasBox pane = ctx.canvas().box(0f, 0f, width, height).backdropFilter(backdrop);
+            if (corners != null) pane.radii(corners);
+            pane.draw();
         }
 
-        CgUiDrawable background = style.get(StylePropertyRegistry.BACKGROUND);
+        CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND);
+        // background-color tints the image; with none, and set, it is the fill. Its default is white (a no-op tint),
+        // so whether one was authored is read off the snapshot.
         int backgroundColor = style.get(StylePropertyRegistry.BACKGROUND_COLOR);
-        // background-color defaults to white (a no-op tint), so whether one was AUTHORED cannot be read off the value;
-        // the snapshot says whether anything set it.
-        boolean explicitBackgroundColor = style.isSet(StylePropertyRegistry.BACKGROUND_COLOR);
-        float borderWidth = borderSides(box);
-        boolean wrap = !radii.isZero() || borderWidth > 0f;
-
-        // A drawable that clips ITSELF (glass) takes the radii and is not wrapped: wrapped, it would become a rounded
-        // rectangle full of nothing.
-        if (background instanceof CornerRadiusAware aware) {
-            aware.setCornerRadii(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
-                    radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
-            ctx.setColor(backgroundColor);
-            background.draw(ctx, 0f, 0f, width, height);
-            return;
-        }
-        if (wrap && paintRounded(style, ctx, width, height, radii, borderWidth, background, backgroundColor,
-                explicitBackgroundColor)) {
-            return;
-        }
-        if (background == CgUiDrawable.EMPTY) {
-            ctx.setColor(WHITE);
-            if (explicitBackgroundColor) ctx.fillRect(0f, 0f, width, height, backgroundColor);
-        } else {
-            ctx.setColor(backgroundColor);
-            background.draw(ctx, 0f, 0f, width, height);
-        }
-    }
-
-    /** @return whether it painted; false when the background is a kind the rounded wrap cannot clip. */
-    private boolean paintRounded(ComputedStyle style, CgUiPaintContext ctx, float width, float height,
-                                 Radii radii, float borderWidth, CgUiDrawable background,
-                                 int backgroundColor, boolean explicitBackgroundColor) {
-        int borderColor = style.get(StylePropertyRegistry.BORDER_COLOR);
-        int borderTop = edgeColor(style.get(StylePropertyRegistry.BORDER_TOP_COLOR), borderColor);
-        int borderBottom = edgeColor(style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR), borderColor);
-        int borderLeft = edgeColor(style.get(StylePropertyRegistry.BORDER_LEFT_COLOR), borderColor);
-        int borderRight = edgeColor(style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR), borderColor);
-        if (background == CgUiDrawable.EMPTY) {
-            int fillArgb;
-            if (explicitBackgroundColor) {
-                fillArgb = backgroundColor;
-            } else if (borderWidth > 0f) {
-                // Border only: a transparent interior carrying the border's rgb, so the shader's edge->fill mix has no
-                // dark fringe to bleed.
-                fillArgb = borderColor & 0x00FFFFFF;
+        CgUiImagePainter.Border edge = border(box, style);
+        if (background == CgUiImage.NONE) {
+            if (style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) {
+                images.fill(ctx, backgroundColor, 0f, 0f, width, height, corners, edge);
             } else {
-                return false;
-            }
-            ctx.setColor(WHITE);
-            shaped(ctx, radii).size(width, height)
-                    .border(borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft)
-                    .borderSides(sides[0], sides[1], sides[2], sides[3])
-                    .fillColor(fillArgb)
-                    .submit();
-            return true;
-        }
-        if (!canPaintRounded(background)) return false;
-        ctx.setColor(backgroundColor);
-        paintRoundedLayer(ctx, background, width, height, radii, borderWidth, borderColor, borderTop, borderRight,
-                borderBottom, borderLeft);
-        return true;
-    }
-
-    private void paintRoundedLayer(CgUiPaintContext ctx, CgUiDrawable d, float width, float height,
-                                   Radii radii, float borderWidth, int borderColor, int borderTop, int borderRight,
-                                   int borderBottom, int borderLeft) {
-        if (d instanceof CgUiCrossFade cf) {
-            CgCanvas canvas = ctx.canvas();
-            canvas.save().opacity(1f - cf.getT());
-            try {
-                paintRoundedLayer(ctx, cf.getFrom(), width, height, radii, borderWidth, borderColor, borderTop,
-                        borderRight, borderBottom, borderLeft);
-            } finally {
-                canvas.restore();
-            }
-            canvas.save().opacity(cf.getT());
-            try {
-                paintRoundedLayer(ctx, cf.getTo(), width, height, radii, borderWidth, borderColor, borderTop,
-                        borderRight, borderBottom, borderLeft);
-            } finally {
-                canvas.restore();
+                images.paint(ctx, CgUiImage.NONE, 0f, 0f, width, height, WHITE, WHITE, corners, edge);
             }
             return;
         }
-        shaped(ctx, radii).size(width, height)
-                .border(borderWidth, borderColor, borderTop, borderRight, borderBottom, borderLeft)
-                .borderSides(sides[0], sides[1], sides[2], sides[3])
-                .fill(((CgUiRect) d).getFill())
-                .submit();
+        images.paint(ctx, background, 0f, 0f, width, height, backgroundColor, WHITE, corners, edge);
     }
+
+    /** The box's border as the image painter takes it, or null with none: each side at its own width and colour. */
+    @Nullable
+    private CgUiImagePainter.Border border(Box box, ComputedStyle style) {
+        if (borderSides(box) <= 0f) return null;
+        int color = style.get(StylePropertyRegistry.BORDER_COLOR);
+        CgUiImagePainter.Border e = edge;
+        e.left = sides[0];
+        e.top = sides[1];
+        e.right = sides[2];
+        e.bottom = sides[3];
+        e.color = color;
+        e.topColor = edgeColor(style.get(StylePropertyRegistry.BORDER_TOP_COLOR), color);
+        e.bottomColor = edgeColor(style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR), color);
+        e.leftColor = edgeColor(style.get(StylePropertyRegistry.BORDER_LEFT_COLOR), color);
+        e.rightColor = edgeColor(style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR), color);
+        return e;
+    }
+
+    /** {@link #border}'s scratch, read before another box paints. */
+    private final CgUiImagePainter.Border edge = new CgUiImagePainter.Border();
+
+    /** The box's corners as the canvas takes them, kept on the box while they hold; null when square. */
+    @Nullable
+    private static CgCornerRadii corners(Box box, Radii r) {
+        if (r.isZero()) return null;
+        return box.paintRadii = keep(box.paintRadii, r);
+    }
+
+    /** What every image of the tree is drawn by: its resolved resources are shared, its scratch is this painter's. */
+    private final CgUiImagePainter images = new CgUiImagePainter();
 
     /**
      * The box's four border widths into {@link #sides}, answering the widest: a border is drawn when any side has one.
@@ -871,51 +832,44 @@ public final class BoxPainter {
     // ── Mask ─────────────────────────────────────────────────────────────────
 
     /** Lays the {@code mask} drawable's rectangle out into {@link #laid}. */
-    private void layMask(Box box, ComputedStyle style, CgUiDrawable source) {
+    private void layMask(Box box, ComputedStyle style, CgUiImage source) {
         originBox(box, style.get(StylePropertyRegistry.MASK_ORIGIN), originBox);
         LengthPercent offset = style.get(StylePropertyRegistry.MASK_OFFSET);
         float offsetX = offset == null ? 0f : offset.resolve(originBox[2]);
         float offsetY = offset == null ? 0f : offset.resolve(originBox[3]);
-        CgUiLayerBox.resolveInto(source,
-                originBox[0] - offsetX, originBox[1] - offsetY,
-                Math.max(0f, originBox[2] + 2f * offsetX),
-                Math.max(0f, originBox[3] + 2f * offsetY),
+        images.fit(source, originBox[0] - offsetX, originBox[1] - offsetY,
+                Math.max(0f, originBox[2] + 2f * offsetX), Math.max(0f, originBox[3] + 2f * offsetY),
                 style.get(StylePropertyRegistry.MASK_SIZE), style.get(StylePropertyRegistry.MASK_POSITION), laid);
     }
 
     // ── Overlay and outline ──────────────────────────────────────────────────
 
     private void paintOverlay(Box box, ComputedStyle style, CgUiPaintContext ctx) {
-        ctx.setColor(WHITE);
-        CgUiDrawable overlay = style.get(StylePropertyRegistry.OVERLAY);
-        if (overlay == CgUiDrawable.EMPTY) return;
-        // A mark takes the box's `color`; a picture keeps its own palette, multiplied by `overlay-tint`.
-        if (overlay.followsTextColor()) ctx.setColor(style.get(StylePropertyRegistry.COLOR));
+        CgUiImage overlay = style.get(StylePropertyRegistry.OVERLAY);
+        if (overlay == CgUiImage.NONE) return;
         originBox(box, style.get(StylePropertyRegistry.OVERLAY_ORIGIN), originBox);
-        CgUiLayerBox.resolveInto(overlay, originBox[0], originBox[1], originBox[2], originBox[3],
+        images.fit(overlay, originBox[0], originBox[1], originBox[2], originBox[3],
                 style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION), laid);
-        ctx.setPictureTint(style.get(StylePropertyRegistry.OVERLAY_TINT));
-        try {
-            overlay.draw(ctx, laid[0], laid[1], laid[2], laid[3]);
-        } finally {
-            ctx.setPictureTint(WHITE);
-        }
+        // A mark takes the box's `color`; a picture keeps its own palette, multiplied by `overlay-tint`
+        int color = overlay.followsColor() ? style.get(StylePropertyRegistry.COLOR) : WHITE;
+        images.paint(ctx, overlay, laid[0], laid[1], laid[2], laid[3], color,
+                style.get(StylePropertyRegistry.OVERLAY_TINT), null, null);
     }
 
     private void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         float width = box.width(), height = box.height();
-        CgUiDrawable outline = style.get(StylePropertyRegistry.OUTLINE);
+        CgUiImage outline = style.get(StylePropertyRegistry.OUTLINE);
         LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
         float stroke = strokeLp == null ? 0f : strokeLp.resolve(width);
-        boolean hasDrawable = outline != CgUiDrawable.EMPTY;
+        boolean hasDrawable = outline != CgUiImage.NONE;
         if (!hasDrawable && stroke <= 0f) return;
-        ctx.setColor(WHITE);
         float top = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_TOP), height);
         float bottom = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_BOTTOM), height);
         float left = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_LEFT), width);
         float right = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT), width);
         if (hasDrawable) {
-            outline.draw(ctx, -left, -top, Math.max(0f, width + left + right), Math.max(0f, height + top + bottom));
+            images.paint(ctx, outline, -left, -top, Math.max(0f, width + left + right),
+                    Math.max(0f, height + top + bottom), WHITE, WHITE, null, null);
             return;
         }
         // The stroke measures inward from the shape's outer edge; a CSS outline grows outward from the offset edge --
@@ -940,12 +894,10 @@ public final class BoxPainter {
                     .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
         }
         int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
-        shaped(ctx, ring)
-                .at(x - insetLeft, y - insetTop)
-                .size(width + insetLeft + insetRight, height + insetTop + insetBottom)
-                .fillColor(color & 0x00FFFFFF)
-                .border(stroke, color)
-                .submit();
+        CgCanvasBox rim = ctx.canvas().box(x - insetLeft, y - insetTop, width + insetLeft + insetRight,
+                height + insetTop + insetBottom).fill(color & 0x00FFFFFF).border(stroke, color);
+        if (!ring.isZero()) rim.radii(ringRadii = keep(ringRadii, ring));
+        rim.draw();
     }
 
     /** @see #paintOutline -- the clip it rings, apart from {@link #clipPathRect}, which a child overwrites. */
@@ -968,10 +920,10 @@ public final class BoxPainter {
         float width = box.width(), height = box.height();
         float left = 0f, top = 0f, right = width, bottom = height;
 
-        CgUiDrawable outline = style.get(StylePropertyRegistry.OUTLINE);
+        CgUiImage outline = style.get(StylePropertyRegistry.OUTLINE);
         LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
         float stroke = strokeLp == null ? 0f : strokeLp.resolve(width);
-        boolean hasDrawable = outline != CgUiDrawable.EMPTY;
+        boolean hasDrawable = outline != CgUiImage.NONE;
         if (hasDrawable || stroke > 0f) {
             // A drawable outline fills the offset rect; a stroked one grows outward from it by its own width. Offsets
             // are commonly NEGATIVE here (`*` sets -1px), so this can subtract.
@@ -1023,25 +975,20 @@ public final class BoxPainter {
 
     // ── Fills and radii ──────────────────────────────────────────────────────
 
-    /**
-     * The context's rect scratch, carrying the element's radii, and NOT a {@code CgUiRect}: that value is shared across
-     * frames and elements, and its equality is what stops a repeated write retargeting a transition.
-     */
-    private static CgUiRect.Draw shaped(CgUiPaintContext ctx, Radii radii) {
-        return ctx.rect().radii(radii.rxTL, radii.ryTL, radii.rxTR, radii.ryTR,
-                radii.rxBR, radii.ryBR, radii.rxBL, radii.ryBL);
+    /** The outline ring's corners as last drawn: a run of equal rings shares one. */
+    @Nullable
+    private CgCornerRadii ringRadii;
+
+    /** {@code kept} while it equals {@code r}, else {@code r} as the canvas takes it. */
+    private static CgCornerRadii keep(@Nullable CgCornerRadii kept, Radii r) {
+        if (kept != null && kept.topLeftX() == r.rxTL && kept.topLeftY() == r.ryTL && kept.topRightX() == r.rxTR
+                && kept.topRightY() == r.ryTR && kept.bottomRightX() == r.rxBR && kept.bottomRightY() == r.ryBR
+                && kept.bottomLeftX() == r.rxBL && kept.bottomLeftY() == r.ryBL) {
+            return kept;
+        }
+        return new CgCornerRadii(r.rxTL, r.ryTL, r.rxTR, r.ryTR, r.rxBR, r.ryBR, r.rxBL, r.ryBL);
     }
 
-    /** Whether the rounded wrap can express this background: only a rect has a fill to re-shape. */
-    private static boolean canPaintRounded(CgUiDrawable d) {
-        if (d instanceof CgUiCrossFade cf) return canPaintRounded(cf.getFrom()) && canPaintRounded(cf.getTo());
-        return d != CgUiDrawable.EMPTY && d instanceof CgUiRect;
-    }
-
-    private static boolean revealsNothing(CgUiDrawable d) {
-        if (!(d instanceof CgUiRect rect)) return true;
-        return rect.getFill() instanceof CgUiRect.Fill.Color(int argb) && (argb >>> 24) == 0;
-    }
 
     /** The eight resolved corner radii of a box. Filled by {@link #radiiOf}. */
     static final class Radii {

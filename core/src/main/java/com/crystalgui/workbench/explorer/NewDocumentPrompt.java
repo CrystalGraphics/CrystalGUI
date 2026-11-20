@@ -1,5 +1,6 @@
 package com.crystalgui.workbench.explorer;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.core.property.ObservableList;
 import com.crystalgraphics.platform.input.CgKeyCodes;
 import com.crystalgui.ui.dom.UIDocument;
@@ -8,8 +9,6 @@ import com.crystalgui.ui.event.KeyboardEvent;
 import com.crystalgui.widget.collection.list.ListRenderer;
 import com.crystalgui.widget.collection.list.ListView;
 import com.crystalgui.document.NewDocumentKind;
-import com.crystalgui.render.texture.CgUiDrawable;
-import com.crystalgui.render.texture.CgUiSvg;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.widget.overlay.InputDialog;
@@ -185,8 +184,8 @@ public final class NewDocumentPrompt {
 
     /** A variant's own mark, drawn as an overlay so any icon works — not only a SymbolKind's. */
     private static void showGlyph(UIElement on, NewDocumentKind.Variant variant) {
-        CgUiSvg glyph = variant.icon() == null ? null : CgUiSvg.ofIcon(variant.icon());
-        CgUiDrawable drawn = glyph == null ? CgUiDrawable.EMPTY : glyph;
+        CgUiImage glyph = CgUiImage.findIcon(variant.icon());
+        CgUiImage drawn = glyph == null ? CgUiImage.NONE : glyph;
         StyleGroup.defaultPipeline(on.getStyle().getGeneralGroup(), g -> g.overlay(drawn));
     }
 

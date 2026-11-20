@@ -5,7 +5,7 @@ import java.util.Map;
 
 import javax.annotation.Nullable;
 
-import com.crystalgui.render.texture.CgUiDrawable;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.visual.transform.Transform;
 
@@ -32,7 +32,7 @@ public final class StylePartRegistry {
 
     static {
         BY_TYPE.put(Transform.class, TransformParts.INSTANCE);
-        BY_TYPE.put(CgUiDrawable.class, DrawableParts.INSTANCE);
+        BY_TYPE.put(CgUiImage.class, ImageParts.INSTANCE);
     }
 
     private StylePartRegistry() {

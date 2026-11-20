@@ -1,8 +1,8 @@
 package com.crystalgui.workbench.chrome.status;
 
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.dom.Name;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.texture.CgUiDrawable;
 import com.crystalgui.text.lang.SymbolInfo;
 import com.crystalgui.widget.display.SymbolIcon;
 import com.crystalgui.style.StyleGroup;
@@ -73,9 +73,9 @@ public class Breadcrumbs extends UIElement {
      *               {@code icon}, which stays the answer for a directory, a package, or a file that
      *               declares nothing.
      */
-    public record Crumb(String text, @Nullable CgUiDrawable icon, @Nullable String iconClass,
+    public record Crumb(String text, @Nullable CgUiImage icon, @Nullable String iconClass,
                         @Nullable SymbolInfo symbol) {
-        public Crumb(String text, @Nullable CgUiDrawable icon, @Nullable String iconClass) {
+        public Crumb(String text, @Nullable CgUiImage icon, @Nullable String iconClass) {
             this(text, icon, iconClass, null);
         }
 
@@ -190,8 +190,8 @@ public class Breadcrumbs extends UIElement {
             // DEFAULT origin, so `.filetype-java { overlay: icon(...) }` in a theme can still beat it
             // -- written INLINE this would be the one part of a trail a stylesheet cannot touch. The
             // same reasoning ProjectFileTree records for a row's icon.
-            CgUiDrawable painted = crumb.symbol() != null || crumb.icon() == null
-                    ? CgUiDrawable.EMPTY : crumb.icon();
+            CgUiImage painted = crumb.symbol() != null || crumb.icon() == null
+                    ? CgUiImage.NONE : crumb.icon();
             StyleGroup.defaultPipeline(icon.getStyle().getGeneralGroup(),
                     g -> g.overlay(painted));
             // SWAPPED, never added: a slot is a different file every time the trail moves, so adding

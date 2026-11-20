@@ -81,7 +81,7 @@ public final class SaveActions {
         if (slash >= 0) name = name.substring(slash + 1);
         FileIconTheme theme = FileIconTheme.getDefault();
         return name.isEmpty() ? List.of()
-                : declaring(List.of(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
+                : declaring(List.of(new Breadcrumbs.Crumb(name, theme.imageFor(name, false, false),
                         theme.classFor(name, false))), resource);
     }
 
@@ -139,11 +139,11 @@ public final class SaveActions {
                 // A NESTED CLASS IS ONE FILE. `Map$Entry` lives in `Map.java`, and a trail ending
                 // `Entry.java` names a file that does not exist.
                 String file = part.split("\\$")[0] + ".java";
-                trail.add(new Breadcrumbs.Crumb(file, theme.drawableFor(file, false, false),
+                trail.add(new Breadcrumbs.Crumb(file, theme.imageFor(file, false, false),
                         theme.classFor(file, false)));
                 break;
             }
-            trail.add(new Breadcrumbs.Crumb(part, theme.drawableFor(part, true, false), packageClass));
+            trail.add(new Breadcrumbs.Crumb(part, theme.imageFor(part, true, false), packageClass));
         }
         return trail;
     }
@@ -166,7 +166,7 @@ public final class SaveActions {
             String name = segments.get(i);
             walked = walked.resolve(name);
             if (i == segments.size() - 1) {
-                trail.add(new Breadcrumbs.Crumb(name, theme.drawableFor(name, false, false),
+                trail.add(new Breadcrumbs.Crumb(name, theme.imageFor(name, false, false),
                         theme.classFor(name, false)));
                 break;
             }
@@ -416,7 +416,7 @@ public final class SaveActions {
      */
     private Breadcrumbs.Crumb directoryCrumb(String name, CgPath at, FileIconTheme theme) {
         SourceRoots.Role role = workbench.projectListing().roleOf(at);
-        return new Breadcrumbs.Crumb(name, theme.drawableFor(name, true, false),
+        return new Breadcrumbs.Crumb(name, theme.imageFor(name, true, false),
                 SymbolIcon.classFor(role));
     }
 

@@ -1,8 +1,9 @@
 package com.crystalgui.widget.overlay;
 
+import com.crystalgui.render.image.CgUiMark;
+import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.ui.dom.Attribute;
 import com.crystalgui.ui.dom.UIElement;
-import com.crystalgui.render.texture.CgUiShape;
 import com.crystalgui.style.sheet.StyleSheet;
 import com.crystalgui.testsupport.UiDocumentTestBase;
 import org.junit.Test;
@@ -41,7 +42,6 @@ public class DropdownChevronTest extends UiDocumentTestBase {
 
         var overlay = chevrons.get(0).getStyle().getGeneralGroup().overlay();
         assertTrue("the marker must actually draw the chevron shape, not just claim the class",
-                overlay instanceof CgUiShape
-                        && ((CgUiShape) overlay).kind() == CgUiShape.Kind.CHEVRON_DOWN);
+                overlay instanceof CgUiImage.Mark m && m.mark() == CgUiMark.CHEVRON_DOWN);
     }
 }

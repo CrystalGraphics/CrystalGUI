@@ -1,5 +1,8 @@
 package com.crystalgui.desktop.taskbar;
 
+import java.util.function.ToDoubleFunction;
+import java.util.function.BiFunction;
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.platform.input.CgClipboard;
@@ -9,7 +12,6 @@ import com.crystalgui.core.property.Property;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.DesktopCommands;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.render.texture.CgUiBackdropFilter;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.backdrop.BackdropFilterValue;
@@ -49,9 +51,8 @@ import java.util.function.DoubleSupplier;
  *
  * <p>The island's look comes from {@code ua/desktop.css}, so every write here has to outrank a stylesheet
  * — that is what {@link StyleGroup#importantPipeline} is for. The backdrop is the same problem one level
- * down: the cascade owns the {@link CgUiBackdropFilter} that {@code backdrop-filter} parsed, and mutating someone
- * else's instance works only for as long as nothing re-resolves it. So the designer installs a glass of
- * its own, seeded from whatever the sheet had, and mutates that.</p>
+ * down: the designer holds a {@link CgBackdropFilter} of its own, seeded from whatever the sheet had, and writes it
+ * again as each slider moves.</p>
  *
  * <h3>Position is a TRANSFORM, deliberately</h3>
  *
@@ -72,7 +73,7 @@ public final class TaskbarDesigner {
 
     private final Taskbar taskbar;
     private final UIElement island;
-    private final CgUiBackdropFilter glass = new CgUiBackdropFilter();
+    private CgBackdropFilter glass = CgBackdropFilter.DEFAULT;
 
     // Geometry, in logical px. Seeded from the sheet on the first frame the island has a box.
     private float islandWidth, islandHeight, radius = 8f, padding = 4f, gap = 4f;
@@ -199,32 +200,33 @@ public final class TaskbarDesigner {
         });
 
         form.header("Backdrop");
-        glassSlider(form, "Blur", 0f, 40f, 0, glass::getBlurRadius, glass::setBlurRadius);
-        glassSlider(form, "Bezel", 0f, 40f, 0, glass::getBezel, glass::setBezel);
-        glassSlider(form, "Index of refraction", 1f, 2.5f, 2, glass::getIor, glass::setIor);
-        glassSlider(form, "Specular", 0f, 1.5f, 2, glass::getSpecular, glass::setSpecular);
+        glassSlider(form, "Blur", 0f, 40f, 0, g -> g.blur(), (g, v) -> g.blur(v));
+        glassSlider(form, "Bezel", 0f, 40f, 0, g -> g.bezel(), (g, v) -> g.lens(v, g.ior()));
+        glassSlider(form, "Index of refraction", 1f, 2.5f, 2, g -> g.ior(), (g, v) -> g.lens(g.bezel(), v));
+        glassSlider(form, "Specular", 0f, 1.5f, 2, g -> g.specular(), (g, v) -> g.highlight(v, g.glow(), g.rim(), g.rimWidth(), g.rimAmbient()));
         form.note("Rim is the hairline at the boundary; glow is the broad falloff. "
                 + "The rim should dominate \u2014 a highlight made mostly of glow reads as bloom.");
-        glassSlider(form, "Rim", 0f, 1f, 2, glass::getEdgeHighlight, glass::setEdgeHighlight);
-        glassSlider(form, "Rim width", 0f, 12f, 1, glass::getEdgeWidth, glass::setEdgeWidth);
-        glassSlider(form, "Rim evenness", 0f, 1f, 2, glass::getRimAmbient, glass::setRimAmbient);
-        glassSlider(form, "Glow", 0f, 1f, 2, glass::getGlow, glass::setGlow);
-        glassSlider(form, "Chromatic", 0f, 1f, 2, glass::getChromatic, glass::setChromatic);
-        glassSlider(form, "Noise", 0f, 0.25f, 3, glass::getNoise, glass::setNoise);
-        glassSlider(form, "Saturation", 0f, 3f, 2, glass::getSaturation, glass::setSaturation);
+        glassSlider(form, "Rim", 0f, 1f, 2, g -> g.rim(), (g, v) -> g.highlight(g.specular(), g.glow(), v, g.rimWidth(), g.rimAmbient()));
+        glassSlider(form, "Rim width", 0f, 12f, 1, g -> g.rimWidth(), (g, v) -> g.highlight(g.specular(), g.glow(), g.rim(), v, g.rimAmbient()));
+        glassSlider(form, "Rim evenness", 0f, 1f, 2, g -> g.rimAmbient(), (g, v) -> g.highlight(g.specular(), g.glow(), g.rim(), g.rimWidth(), v));
+        glassSlider(form, "Glow", 0f, 1f, 2, g -> g.glow(), (g, v) -> g.highlight(g.specular(), v, g.rim(), g.rimWidth(), g.rimAmbient()));
+        glassSlider(form, "Chromatic", 0f, 1f, 2, g -> g.chromatic(), (g, v) -> g.chromatic(v));
+        glassSlider(form, "Noise", 0f, 0.25f, 3, g -> g.noise(), (g, v) -> g.noise(v));
+        glassSlider(form, "Saturation", 0f, 3f, 2, g -> g.saturation(), (g, v) -> g.color(v, g.luminosity()));
         // THE ONE THAT WAS MISSING. The seed copied every other parameter and not this, so the designer
         // opened with the bar at luminosity 0 -- a plain alpha tint -- while the sheet ran it at 1, and
         // a tint alpha tuned here was tuned against a material the sheet does not draw.
         form.note("Luminosity is the Windows layer: how much of the backdrop's BRIGHTNESS the "
                 + "tint's replaces, hue kept. 1 is Mica \u2014 a temperature, never a picture; 0 is a "
                 + "plain alpha tint, where the tint's alpha alone decides what shows through.");
-        glassSlider(form, "Luminosity", 0f, 1f, 2, glass::getLuminosity, glass::setLuminosity);
+        glassSlider(form, "Luminosity", 0f, 1f, 2, g -> g.luminosity(), (g, v) -> g.color(g.saturation(), v));
 
         form.header("Tint");
         form.note("The color laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "
                 + "much of the tint sits over the backdrop, and the easiest thing here to overdo.");
-        form.prop(ConfigDescriptor.color("tint", "Tint"), Property.derived(glass::getTintArgb, argb -> {
-            glass.setTintArgb(argb);
+        form.prop(ConfigDescriptor.color("tint", "Tint"), Property.derived(() -> glass.tint(), argb -> {
+            glass = glass.tint(argb);
+            installGlass();
             refreshReadout();
         }));
 
@@ -284,15 +286,9 @@ public final class TaskbarDesigner {
     private static final String LINE = System.lineSeparator();
 
     private void seedFromCascade() {
-        Object background = island.getStyle().getComputed(StylePropertyRegistry.BACKDROP_FILTER);
-        if (background instanceof CgUiBackdropFilter live) {
-            glass.setBlurRadius(live.getBlurRadius()).setTintArgb(live.getTintArgb())
-                 .setSaturation(live.getSaturation()).setBezel(live.getBezel())
-                 .setIor(live.getIor()).setSpecular(live.getSpecular())
-                 .setNoise(live.getNoise()).setFallbackColorArgb(live.getFallbackColorArgb())
-                 .setGlow(live.getGlow()).setEdgeHighlight(live.getEdgeHighlight())
-                 .setEdgeWidth(live.getEdgeWidth()).setChromatic(live.getChromatic())
-                 .setRimAmbient(live.getRimAmbient()).setLuminosity(live.getLuminosity());
+        if (island.getStyle().getComputed(StylePropertyRegistry.BACKDROP_FILTER) instanceof CgBackdropFilter live
+                && live != CgBackdropFilter.NONE) {
+            glass = live;
         }
         // BEFORE the IMPORTANT writes below, or this reads back the designer's own value.
         if (island.getStyle().getComputed(LayoutProperties.MIN_WIDTH) instanceof TaffyDimension floor) {
@@ -323,7 +319,7 @@ public final class TaskbarDesigner {
         radius = island.getStyle().getComputed(BorderRadiusProperties.TOP_LEFT_X) instanceof LengthPercent r
                 ? r.resolve(islandWidth)
                 : 0f;
-        StyleGroup.inlinePipeline(island.getStyle().getGeneralGroup(), g -> g.backdropFilter(glass));
+        installGlass();
         applyGeometry();
     }
 
@@ -429,16 +425,17 @@ public final class TaskbarDesigner {
 
     /** A slider over one of the glass's own parameters, which re-states the CSS as it moves. */
     private void glassSlider(PanelForm form, String label, float min, float max, int decimals,
-                             FloatSupplier read, Consumer<Float> write) {
-        slider(form, label, min, max, decimals, read::get, v -> {
-            write.accept(v);
+                             ToDoubleFunction<CgBackdropFilter> read, BiFunction<CgBackdropFilter, Float, CgBackdropFilter> with) {
+        slider(form, label, min, max, decimals, () -> read.applyAsDouble(glass), v -> {
+            glass = with.apply(glass, v);
+            installGlass();
             refreshReadout();
         });
     }
 
-    /** A {@code float} getter, which {@code java.util.function} does not have. */
-    @FunctionalInterface
-    private interface FloatSupplier {
-        float get();
+    /** The designer's glass onto the island, inline: it outranks the sheet's. */
+    private void installGlass() {
+        CgBackdropFilter shown = glass;
+        StyleGroup.inlinePipeline(island.getStyle().getGeneralGroup(), g -> g.backdropFilter(shown));
     }
 }
