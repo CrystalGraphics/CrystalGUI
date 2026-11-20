@@ -445,7 +445,7 @@ returns `null`, same as any malformed CSS value).
 
 > **`glass()` is gone, and what it did is `backdrop-filter`.** It was a `background` value, which meant
 > an element could have the material or a colour and never both — and CSS already has a name for
-> filtering what shows through. `backdrop-filter: blur(24px) saturate(1.2) tint(#1C1D21CC)` is the same
+> filtering what shows through. `backdrop-filter: blur(8px) saturate(1.2) tint(#1C1D21CC)` is the same
 > effect as a property, painted UNDER the element's own background: a `CgBackdropFilter`, `NONE` when unset. `blur()`
 > and `saturate()` are CSS's; the other twelve functions are ours. @see `BackdropFilterValue`
 >

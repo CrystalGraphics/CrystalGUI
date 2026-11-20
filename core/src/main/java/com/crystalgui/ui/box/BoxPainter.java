@@ -1,7 +1,7 @@
 package com.crystalgui.ui.box;
 
-import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
+import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgraphics.api.canvas.CgCanvasLayer;

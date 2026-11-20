@@ -8576,15 +8576,11 @@ com/crystalgui/render/CgUiPaintContext
   method public beginSegment ()V
   method public canvas ()Lcom/crystalgraphics/api/canvas/CgCanvas;
   method public deviceScale ()F
-  method public drawImage (Lcom/crystalgraphics/api/texture/CgTexture;FFFFFFFFI)V
   method public endPasses ()V
   method public endSegment ()V
   method public endSegment (Lcom/crystalgraphics/api/canvas/CgPaintChunk;)Z
-  method public fillRect (FFFFI)V
   method public frameId ()J
-  method public getColor ()I
   method public getFont ()Lcom/crystalgraphics/api/font/CgFont;
-  method public getPictureTint ()I
   method public isFrameActive ()Z
   method public isPoseAxisAligned ()Z
   method public isVisible (FFFF)Z
@@ -8592,15 +8588,12 @@ com/crystalgui/render/CgUiPaintContext
   method public mirroring ()Z
   method public outsideClip (FFFF)Z
   method public recordFrame (II)V
-  method public rect ()Lcom/crystalgui/render/texture/CgUiRect$Draw;
   method public releaseTexture (Lcom/crystalgraphics/render/graph/CgGraphTexture;)V
   method public replay (Lcom/crystalgraphics/api/canvas/CgPaintChunk;)Z
   method public replayEpoch ()J
   method public requestTexture (Ljava/lang/String;II)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public seal ()Lcom/crystalgraphics/api/canvas/CgCanvasFrame;
   method public segmentDrawn ([F)Z
-  method public setColor (I)V
-  method public setPictureTint (I)V
   method public snapXToDevicePixel (F)F
   method public snapYToDevicePixel (F)F
   method public surface (Ljava/lang/Object;FFFF)Lcom/crystalgui/render/Surface;
@@ -8669,6 +8662,332 @@ com/crystalgui/render/UiPaintWarmup
   implements com/crystalgraphics/loading/task/CgLoadStep
   method public step (Lcom/crystalgraphics/loading/task/CgLoadTask;)Z
   method public,static preload ()Lcom/crystalgui/render/UiPaintWarmup;
+com/crystalgui/render/image/CgUiImage
+  access public,abstract,interface
+  extends java/lang/Object
+  field public,static,final NONE Lcom/crystalgui/render/image/CgUiImage$None;
+  method public followsColor ()Z
+  method public onePrimitive ()Z
+  method public,abstract css ()Ljava/lang/String;
+  method public,static color (I)Lcom/crystalgui/render/image/CgUiImage$Color;
+  method public,static findIcon (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Icon;
+  method public,static icon (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Icon;
+  method public,static interpolate (Lcom/crystalgui/render/image/CgUiImage;Lcom/crystalgui/render/image/CgUiImage;F)Lcom/crystalgui/render/image/CgUiImage;
+  method public,static layers (Ljava/util/List;)Lcom/crystalgui/render/image/CgUiImage;
+  method public,static mark (Lcom/crystalgui/render/image/CgUiMark;)Lcom/crystalgui/render/image/CgUiImage$Mark;
+  method public,static number (F)Ljava/lang/String;
+  method public,static paint (Lcom/crystalgraphics/api/paint/CgPaint;)Lcom/crystalgui/render/image/CgUiImage$Paint;
+  method public,static painted (Lcom/crystalgui/render/image/CgUiPainter;)Lcom/crystalgui/render/image/CgUiImage$Painted;
+  method public,static quote (Ljava/lang/String;)Ljava/lang/String;
+  method public,static svg (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Icon;
+com/crystalgui/render/image/CgUiImage$Color
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (I)V
+  method public argb ()I
+  method public css ()Ljava/lang/String;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$CrossFade
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Lcom/crystalgui/render/image/CgUiImage;Lcom/crystalgui/render/image/CgUiImage;F)V
+  method public css ()Ljava/lang/String;
+  method public from ()Lcom/crystalgui/render/image/CgUiImage;
+  method public onePrimitive ()Z
+  method public t ()F
+  method public to ()Lcom/crystalgui/render/image/CgUiImage;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Gradient
+  access public,final
+  extends java/lang/Object
+  implements com/crystalgui/render/image/CgUiImage
+  method public angleFor (FF)F
+  method public css ()Ljava/lang/String;
+  method public equals (Ljava/lang/Object;)Z
+  method public hashCode ()I
+  method public paint (FF)Lcom/crystalgraphics/api/paint/gradient/CgGradient;
+  method public stops ()Ljava/util/List;
+  method public toString ()Ljava/lang/String;
+  method public,static linear (FLjava/util/List;)Lcom/crystalgui/render/image/CgUiImage$Gradient;
+  method public,static linear (Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;Ljava/util/List;)Lcom/crystalgui/render/image/CgUiImage$Gradient;
+  method public,static radial (Lcom/crystalgui/render/image/CgUiImage$Gradient$Radial;Ljava/util/List;)Lcom/crystalgui/render/image/CgUiImage$Gradient;
+com/crystalgui/render/image/CgUiImage$Gradient$Corner
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final BOTTOM_LEFT Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;
+  field public,static,final BOTTOM_RIGHT Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;
+  field public,static,final TOP_LEFT Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;
+  field public,static,final TOP_RIGHT Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;
+  method public,static values ()[Lcom/crystalgui/render/image/CgUiImage$Gradient$Corner;
+com/crystalgui/render/image/CgUiImage$Gradient$Extent
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final CLOSEST_CORNER Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+  field public,static,final CLOSEST_SIDE Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+  field public,static,final FARTHEST_CORNER Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+  field public,static,final FARTHEST_SIDE Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+  method public,static values ()[Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+com/crystalgui/render/image/CgUiImage$Gradient$Length
+  access public,final,record
+  extends java/lang/Record
+  field public,static,final CENTRE Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;
+  method public <init> (FZ)V
+  method public percent ()Z
+  method public resolve (F)F
+  method public value ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Gradient$Radial
+  access public,final,record
+  extends java/lang/Record
+  field public,static,final DEFAULT Lcom/crystalgui/render/image/CgUiImage$Gradient$Radial;
+  method public <init> (ZLcom/crystalgui/render/image/CgUiImage$Gradient$Extent;Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;)V
+  method public centreX ()Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;
+  method public centreY ()Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;
+  method public circle ()Z
+  method public extent ()Lcom/crystalgui/render/image/CgUiImage$Gradient$Extent;
+  method public sizeX ()Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;
+  method public sizeY ()Lcom/crystalgui/render/image/CgUiImage$Gradient$Length;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Gradient$Stop
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (FI)V
+  method public argb ()I
+  method public position ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Grid
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (FFFI)V
+  method public argb ()I
+  method public cellX ()F
+  method public cellY ()F
+  method public css ()Ljava/lang/String;
+  method public lineWidth ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Icon
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Ljava/lang/String;ZIZFLcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)V
+  method public css ()Ljava/lang/String;
+  method public followsColor ()Z
+  method public monochrome ()Z
+  method public monochrome (Z)Lcom/crystalgui/render/image/CgUiImage$Icon;
+  method public named ()Z
+  method public onePrimitive ()Z
+  method public path ()Ljava/lang/String;
+  method public source ()Ljava/lang/String;
+  method public strokeHalfWidth ()F
+  method public strokeHalfWidth (F)Lcom/crystalgui/render/image/CgUiImage$Icon;
+  method public tint ()I
+  method public tint (I)Lcom/crystalgui/render/image/CgUiImage$Icon;
+  method public variant ()Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;
+  method public variant (Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)Lcom/crystalgui/render/image/CgUiImage$Icon;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Layers
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Ljava/util/List;)V
+  method public css ()Ljava/lang/String;
+  method public layers ()Ljava/util/List;
+  method public onePrimitive ()Z
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Mark
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Lcom/crystalgui/render/image/CgUiMark;)V
+  method public css ()Ljava/lang/String;
+  method public followsColor ()Z
+  method public mark ()Lcom/crystalgui/render/image/CgUiMark;
+  method public onePrimitive ()Z
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$None
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final NONE Lcom/crystalgui/render/image/CgUiImage$None;
+  implements com/crystalgui/render/image/CgUiImage
+  method public css ()Ljava/lang/String;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$None;
+  method public,static values ()[Lcom/crystalgui/render/image/CgUiImage$None;
+com/crystalgui/render/image/CgUiImage$Paint
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Lcom/crystalgraphics/api/paint/CgPaint;)V
+  method public css ()Ljava/lang/String;
+  method public paint ()Lcom/crystalgraphics/api/paint/CgPaint;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Painted
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/render/image/CgUiPainter;)V
+  method public css ()Ljava/lang/String;
+  method public name ()Ljava/lang/String;
+  method public onePrimitive ()Z
+  method public painter ()Lcom/crystalgui/render/image/CgUiPainter;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Picture
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Ljava/lang/String;IIIILcom/crystalgui/render/image/CgUiImage$Picture$Slices;Lcom/crystalgui/render/image/CgUiImage$Repeat;Lcom/crystalgui/render/image/CgUiImage$Repeat;IIIZF)V
+  method public css ()Ljava/lang/String;
+  method public h ()I
+  method public hollow ()Z
+  method public hollow (Z)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public path ()Ljava/lang/String;
+  method public refH ()I
+  method public refW ()I
+  method public reference (II)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public region (IIII)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public repeat (Lcom/crystalgui/render/image/CgUiImage$Repeat;Lcom/crystalgui/render/image/CgUiImage$Repeat;)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public repeatX ()Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  method public repeatY ()Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  method public sliceScale ()F
+  method public sliceScale (F)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public slices ()Lcom/crystalgui/render/image/CgUiImage$Picture$Slices;
+  method public slices (IIII)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public tint ()I
+  method public tint (I)Lcom/crystalgui/render/image/CgUiImage$Picture;
+  method public w ()I
+  method public x ()I
+  method public y ()I
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static of (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Picture;
+com/crystalgui/render/image/CgUiImage$Picture$Slices
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (IIII)V
+  method public bottom ()I
+  method public left ()I
+  method public right ()I
+  method public top ()I
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImage$Repeat
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final REPEAT Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  field public,static,final ROUND Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  field public,static,final SPACE Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  field public,static,final STRETCH Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  method public css ()Ljava/lang/String;
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage$Repeat;
+  method public,static values ()[Lcom/crystalgui/render/image/CgUiImage$Repeat;
+com/crystalgui/render/image/CgUiImage$Sheet
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiImage
+  method public <init> (Ljava/lang/String;Ljava/lang/String;)V
+  method public css ()Ljava/lang/String;
+  method public element ()Ljava/lang/String;
+  method public sheet ()Ljava/lang/String;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/render/image/CgUiImagePainter
+  access public,final
+  extends java/lang/Object
+  method public <init> ()V
+  method public fill (Lcom/crystalgui/render/CgUiPaintContext;IFFFFLcom/crystalgraphics/api/vector/CgCornerRadii;Lcom/crystalgui/render/image/CgUiImagePainter$Border;)V
+  method public fit (Lcom/crystalgui/render/image/CgUiImage;FFFFLcom/crystalgui/style/property/visual/DrawableFit;Lcom/crystalgui/style/property/visual/DrawableAlign;[F)V
+  method public intrinsicHeight (Lcom/crystalgui/render/image/CgUiImage;)F
+  method public intrinsicWidth (Lcom/crystalgui/render/image/CgUiImage;)F
+  method public paint (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/render/image/CgUiImage;FFFFIILcom/crystalgraphics/api/vector/CgCornerRadii;Lcom/crystalgui/render/image/CgUiImagePainter$Border;)V
+  method public texture (Lcom/crystalgui/render/image/CgUiImage$Picture;)Lcom/crystalgraphics/gpu/resource/CgTexture2D;
+  method public texture (Lcom/crystalgui/render/image/CgUiImage$Sheet;)Lcom/crystalgraphics/api/texture/CgTexture;
+com/crystalgui/render/image/CgUiImagePainter$Border
+  access public,final
+  extends java/lang/Object
+  field public bottom F
+  field public bottomColor I
+  field public color I
+  field public left F
+  field public leftColor I
+  field public right F
+  field public rightColor I
+  field public top F
+  field public topColor I
+  method public <init> ()V
+  method public active ()Z
+com/crystalgui/render/image/CgUiMark
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final ARROW_DOWN Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final ARROW_LEFT Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final ARROW_RIGHT Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final ARROW_UP Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final CHECKMARK Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final CHEVRON_DOWN Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final CHEVRON_LEFT Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final CHEVRON_RIGHT Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final CHEVRON_UP Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final CROSS Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final MINUS Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final PLUS Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final TRIANGLE_DOWN Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final TRIANGLE_LEFT Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final TRIANGLE_RIGHT Lcom/crystalgui/render/image/CgUiMark;
+  field public,static,final TRIANGLE_UP Lcom/crystalgui/render/image/CgUiMark;
+  method public cssName ()Ljava/lang/String;
+  method public paint (Lcom/crystalgraphics/api/canvas/CgCanvas;FFFFI)V
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiMark;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiMark;
+  method public,static values ()[Lcom/crystalgui/render/image/CgUiMark;
+com/crystalgui/render/image/CgUiPainter
+  access public,abstract,interface
+  extends java/lang/Object
+  field public,static,final NAMED Ljava/util/Map;
+  method public onePrimitive ()Z
+  method public,abstract paint (Lcom/crystalgraphics/api/canvas/CgCanvas;FFI)V
+  method public,static register (Ljava/lang/String;Lcom/crystalgui/render/image/CgUiPainter;)V
+  method public,static registered (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiPainter;
+com/crystalgui/render/image/CgUiPainter$ByName
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/render/image/CgUiPainter
+  method public <init> (Ljava/lang/String;)V
+  method public name ()Ljava/lang/String;
+  method public onePrimitive ()Z
+  method public paint (Lcom/crystalgraphics/api/canvas/CgCanvas;FFI)V
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/render/text/CssTextStyle
   access public,final
   extends java/lang/Object
@@ -8695,397 +9014,14 @@ com/crystalgui/render/texture/ArgbMath
   method public,static multiply (II)I
   method public,static toCss (I)Ljava/lang/String;
   method public,static toHsv (I)[F
-com/crystalgui/render/texture/CgUiBackdropFilter
-  access public,final
-  extends java/lang/Object
-  field public,static,final NONE Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  implements com/crystalgui/render/texture/CgUiDrawable
-  implements com/crystalgui/render/texture/CornerRadiusAware
-  method public <init> ()V
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public getBezel ()F
-  method public getBlurRadius ()F
-  method public getChromatic ()F
-  method public getEdgeHighlight ()F
-  method public getEdgeWidth ()F
-  method public getFallbackColorArgb ()I
-  method public getGlow ()F
-  method public getIor ()F
-  method public getLuminosity ()F
-  method public getNoise ()F
-  method public getRimAmbient ()F
-  method public getSaturation ()F
-  method public getSpecular ()F
-  method public getTintArgb ()I
-  method public look (Lcom/crystalgraphics/render/canvas/CgCanvasGlass$Look;)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setBezel (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setBlurRadius (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setChromatic (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setCornerRadii (FFFFFFFF)V
-  method public setEdgeHighlight (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setEdgeWidth (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setFallbackColorArgb (I)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setGlow (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setIor (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setLuminosity (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setNoise (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setRimAmbient (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setSaturation (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setSpecular (F)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public setTintArgb (I)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public,static isActive (Lcom/crystalgui/render/texture/CgUiBackdropFilter;)Z
-com/crystalgui/render/texture/CgUiColorField
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  method public <init> ()V
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public setCornerRadius (FF)Lcom/crystalgui/render/texture/CgUiColorField;
-  method public setCornerRadius (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiColorField;
-  method public setGradient (II)Lcom/crystalgui/render/texture/CgUiColorField;
-  method public setHue (F)Lcom/crystalgui/render/texture/CgUiColorField;
-  method public setInnerRadius (F)Lcom/crystalgui/render/texture/CgUiColorField;
-  method public setMode (Lcom/crystalgui/render/texture/CgUiColorField$Mode;)Lcom/crystalgui/render/texture/CgUiColorField;
-com/crystalgui/render/texture/CgUiColorField$Mode
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final GRADIENT Lcom/crystalgui/render/texture/CgUiColorField$Mode;
-  field public,static,final HUE_RING Lcom/crystalgui/render/texture/CgUiColorField$Mode;
-  field public,static,final HUE_STRIP Lcom/crystalgui/render/texture/CgUiColorField$Mode;
-  field public,static,final SV_SQUARE Lcom/crystalgui/render/texture/CgUiColorField$Mode;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiColorField$Mode;
-  method public,static values ()[Lcom/crystalgui/render/texture/CgUiColorField$Mode;
-com/crystalgui/render/texture/CgUiCrossFade
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  method public <init> (Lcom/crystalgui/render/texture/CgUiDrawable;Lcom/crystalgui/render/texture/CgUiDrawable;F)V
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public drawsOnePrimitive ()Z
-  method public getFrom ()Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public getT ()F
-  method public getTo ()Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public intrinsicHeight ()F
-  method public intrinsicWidth ()F
-com/crystalgui/render/texture/CgUiDrawable
-  access public,abstract,interface
-  extends java/lang/Object
-  field public,static,final EMPTY Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFF)V
-  method public drawsOnePrimitive ()Z
-  method public followsTextColor ()Z
-  method public intrinsicHeight ()F
-  method public intrinsicWidth ()F
-  method public,abstract draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-com/crystalgui/render/texture/CgUiGradient
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  implements com/crystalgui/render/texture/CornerRadiusAware
-  method public <init> (FLjava/util/List;)V
-  method public <init> (Lcom/crystalgui/render/texture/CgUiGradient$Corner;Ljava/util/List;)V
-  method public <init> (Lcom/crystalgui/render/texture/CgUiGradient$Radial;Ljava/util/List;)V
-  method public angleDeg ()F
-  method public angleFor (FF)F
-  method public axisFor (FF)[F
-  method public centreFor (FF)[F
-  method public colorAt (F)I
-  method public corner ()Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public radial ()Lcom/crystalgui/render/texture/CgUiGradient$Radial;
-  method public radiiFor (FF)[F
-  method public setCornerRadii (FFFFFFFF)V
-  method public stops ()Ljava/util/List;
-com/crystalgui/render/texture/CgUiGradient$Corner
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final BOTTOM_LEFT Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-  field public,static,final BOTTOM_RIGHT Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-  field public,static,final TOP_LEFT Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-  field public,static,final TOP_RIGHT Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-  method public,static values ()[Lcom/crystalgui/render/texture/CgUiGradient$Corner;
-com/crystalgui/render/texture/CgUiGradient$Extent
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final CLOSEST_CORNER Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-  field public,static,final CLOSEST_SIDE Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-  field public,static,final FARTHEST_CORNER Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-  field public,static,final FARTHEST_SIDE Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-  method public,static values ()[Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-com/crystalgui/render/texture/CgUiGradient$Length
-  access public,final,record
-  extends java/lang/Record
-  field public,static,final CENTRE Lcom/crystalgui/render/texture/CgUiGradient$Length;
-  method public <init> (FZ)V
-  method public percent ()Z
-  method public resolve (F)F
-  method public value ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiGradient$Radial
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (ZLcom/crystalgui/render/texture/CgUiGradient$Extent;Lcom/crystalgui/render/texture/CgUiGradient$Length;Lcom/crystalgui/render/texture/CgUiGradient$Length;Lcom/crystalgui/render/texture/CgUiGradient$Length;Lcom/crystalgui/render/texture/CgUiGradient$Length;)V
-  method public centreX ()Lcom/crystalgui/render/texture/CgUiGradient$Length;
-  method public centreY ()Lcom/crystalgui/render/texture/CgUiGradient$Length;
-  method public circle ()Z
-  method public extent ()Lcom/crystalgui/render/texture/CgUiGradient$Extent;
-  method public sizeX ()Lcom/crystalgui/render/texture/CgUiGradient$Length;
-  method public sizeY ()Lcom/crystalgui/render/texture/CgUiGradient$Length;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiGradient$Stop
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (FI)V
-  method public argb ()I
-  method public position ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiGrid
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  implements com/crystalgui/render/texture/CornerRadiusAware
-  method public <init> (FFFI)V
-  method public argb ()I
-  method public cellHeight ()F
-  method public cellWidth ()F
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public intrinsicHeight ()F
-  method public intrinsicWidth ()F
-  method public lineWidth ()F
-  method public setCornerRadii (FFFFFFFF)V
-com/crystalgui/render/texture/CgUiLayerBox
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (FFFF)V
-  method public height ()F
-  method public width ()F
-  method public x ()F
-  method public y ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static resolve (Lcom/crystalgui/render/texture/CgUiDrawable;FFFFLcom/crystalgui/style/property/visual/DrawableFit;Lcom/crystalgui/style/property/visual/DrawableAlign;)Lcom/crystalgui/render/texture/CgUiLayerBox;
-  method public,static resolveInto (Lcom/crystalgui/render/texture/CgUiDrawable;FFFFLcom/crystalgui/style/property/visual/DrawableFit;Lcom/crystalgui/style/property/visual/DrawableAlign;[F)V
-com/crystalgui/render/texture/CgUiLayers
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  implements com/crystalgui/render/texture/CornerRadiusAware
-  method public <init> (Ljava/util/List;)V
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public drawsOnePrimitive ()Z
-  method public intrinsicHeight ()F
-  method public intrinsicWidth ()F
-  method public layers ()Ljava/util/List;
-  method public setCornerRadii (FFFFFFFF)V
-  method public toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiRect
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  method public <init> ()V
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public equals (Ljava/lang/Object;)Z
-  method public getFill ()Lcom/crystalgui/render/texture/CgUiRect$Fill;
-  method public hashCode ()I
-  method public intrinsicHeight ()F
-  method public intrinsicWidth ()F
-  method public isPlain ()Z
-  method public toString ()Ljava/lang/String;
-  method public withBorder (FI)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withBorder (FIII)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withBorder (FIIIII)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withCornerRadius (FF)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withCornerRadius (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withFill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withFillColor (I)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withFillSprite (Lcom/crystalgui/render/texture/CgUiSprite;)Lcom/crystalgui/render/texture/CgUiRect;
-  method public withFillTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect;
-  method public,static ofColor (I)Lcom/crystalgui/render/texture/CgUiRect;
-com/crystalgui/render/texture/CgUiRect$Draw
-  access public,final
-  extends java/lang/Object
-  method public <init> ()V
-  method public at (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public begin (Lcom/crystalgui/render/CgUiPaintContext;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public border (FI)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public border (FIII)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public border (FIIIII)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public borderSides (FFFF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public fill (Lcom/crystalgui/render/texture/CgUiRect$Fill;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public fillColor (I)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public fillSprite (Lcom/crystalgui/render/texture/CgUiSprite;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public fillTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public radii (FFFFFFFF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public radius (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public size (FF)Lcom/crystalgui/render/texture/CgUiRect$Draw;
-  method public submit ()V
-com/crystalgui/render/texture/CgUiRect$Fill
-  access public,abstract,interface
-  extends java/lang/Object
-com/crystalgui/render/texture/CgUiRect$Fill$Color
-  access public,final,record
-  extends java/lang/Record
-  implements com/crystalgui/render/texture/CgUiRect$Fill
-  method public <init> (I)V
-  method public argb ()I
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiRect$Fill$Sprite
-  access public,final,record
-  extends java/lang/Record
-  implements com/crystalgui/render/texture/CgUiRect$Fill
-  method public <init> (Lcom/crystalgui/render/texture/CgUiSprite;)V
-  method public sprite ()Lcom/crystalgui/render/texture/CgUiSprite;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiRect$Fill$Texture
-  access public,final,record
-  extends java/lang/Record
-  implements com/crystalgui/render/texture/CgUiRect$Fill
-  method public <init> (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)V
-  method public texture ()Lcom/crystalgraphics/gpu/resource/CgTexture2D;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/CgUiRepeat
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final MAX_TILES_PER_AXIS I
-  field public,static,final REPEAT Lcom/crystalgui/render/texture/CgUiRepeat;
-  field public,static,final ROUND Lcom/crystalgui/render/texture/CgUiRepeat;
-  field public,static,final SPACE Lcom/crystalgui/render/texture/CgUiRepeat;
-  field public,static,final STRETCH Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public gap (FFF)F
-  method public tileCount (FF)F
-  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public,static values ()[Lcom/crystalgui/render/texture/CgUiRepeat;
-com/crystalgui/render/texture/CgUiShape
-  access public,final,record
-  extends java/lang/Record
-  implements com/crystalgui/render/texture/CgUiDrawable
-  method public <init> (Lcom/crystalgui/render/texture/CgUiShape$Kind;)V
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public followsTextColor ()Z
-  method public kind ()Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static cssName (Lcom/crystalgui/render/texture/CgUiShape$Kind;)Ljava/lang/String;
-  method public,static parseKind (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiShape$Kind;
-com/crystalgui/render/texture/CgUiShape$Kind
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final ARROW_DOWN Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final ARROW_LEFT Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final ARROW_RIGHT Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final ARROW_UP Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final CHECKMARK Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final CHEVRON_DOWN Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final CHEVRON_LEFT Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final CHEVRON_RIGHT Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final CHEVRON_UP Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final CROSS Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final MINUS Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final PLUS Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final TRIANGLE_DOWN Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final TRIANGLE_LEFT Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final TRIANGLE_RIGHT Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  field public,static,final TRIANGLE_UP Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiShape$Kind;
-  method public,static values ()[Lcom/crystalgui/render/texture/CgUiShape$Kind;
-com/crystalgui/render/texture/CgUiSprite
-  access public,final
-  extends java/lang/Object
-  field public,static,final PIXELS Lcom/crystalgraphics/gpu/resource/CgTextureSettings;
-  method public <init> ()V
-  method public borderSumX ()F
-  method public borderSumY ()F
-  method public brush (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgraphics/api/paint/brush/CgBrush;
-  method public centerSourceHeight ()F
-  method public centerSourceWidth ()F
-  method public copy ()Lcom/crystalgui/render/texture/CgUiSprite;
-  method public getBorderBottom ()F
-  method public getBorderLeft ()F
-  method public getBorderRight ()F
-  method public getBorderScale ()F
-  method public getBorderTop ()F
-  method public getRepeatX ()Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public getRepeatY ()Lcom/crystalgui/render/texture/CgUiRepeat;
-  method public getTexture ()Lcom/crystalgraphics/gpu/resource/CgTexture2D;
-  method public getTint ()I
-  method public getU0 ()F
-  method public getU1 ()F
-  method public getU2 ()F
-  method public getU3 ()F
-  method public getV0 ()F
-  method public getV1 ()F
-  method public getV2 ()F
-  method public getV3 ()F
-  method public hasBorder ()Z
-  method public isFillCenter ()Z
-  method public setBorder (I)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setBorder (IIII)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setBorderScale (F)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setFillCenter (Z)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setRepeat (Lcom/crystalgui/render/texture/CgUiRepeat;Lcom/crystalgui/render/texture/CgUiRepeat;)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setSprite (IIII)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setTexture (Lcom/crystalgraphics/gpu/resource/CgTexture2D;)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setTexture (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setTextureSizeReference (II)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public setTint (I)Lcom/crystalgui/render/texture/CgUiSprite;
-  method public sourceHeight ()F
-  method public sourceWidth ()F
-  method public toRect ()Lcom/crystalgui/render/texture/CgUiRect;
-com/crystalgui/render/texture/CgUiSvg
-  access public,final
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  method public draw (Lcom/crystalgui/render/CgUiPaintContext;FFFFFF)V
-  method public drawsOnePrimitive ()Z
-  method public followsTextColor ()Z
-  method public getDocument ()Lcom/crystalgui/render/texture/svg/SvgDocument;
-  method public intrinsicHeight ()F
-  method public intrinsicWidth ()F
-  method public setMonochrome (Z)Lcom/crystalgui/render/texture/CgUiSvg;
-  method public setStrokeHalfWidth (F)Lcom/crystalgui/render/texture/CgUiSvg;
-  method public setTint (I)Lcom/crystalgui/render/texture/CgUiSvg;
-  method public setVariantOverride (Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;)Lcom/crystalgui/render/texture/CgUiSvg;
-  method public,static of (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiSvg;
-  method public,static ofIcon (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiSvg;
-com/crystalgui/render/texture/CgUiTransformDrawable
-  access public,abstract
-  extends java/lang/Object
-  implements com/crystalgui/render/texture/CgUiDrawable
-  method public <init> ()V
-com/crystalgui/render/texture/CornerRadiusAware
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract setCornerRadii (FFFFFFFF)V
-com/crystalgui/render/texture/asset/CgUiSpriteRegistry
-  access public,final
-  extends java/lang/Object
-  method public,static clearCache ()V
-  method public,static get (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiDrawable;
 com/crystalgui/render/texture/asset/FileIconTheme
   access public,final
   extends java/lang/Object
   field public,static,final DEFAULT_PATH Ljava/lang/String;
   method public classFor (Ljava/lang/String;Z)Ljava/lang/String;
-  method public drawableFor (Ljava/lang/String;ZZ)Lcom/crystalgui/render/texture/CgUiSvg;
   method public iconFor (Ljava/lang/String;ZZ)Ljava/lang/String;
   method public iconNames ()Ljava/util/Set;
+  method public imageFor (Ljava/lang/String;ZZ)Lcom/crystalgui/render/image/CgUiImage$Icon;
   method public,static getDefault ()Lcom/crystalgui/render/texture/asset/FileIconTheme;
   method public,static getVariant ()Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;
   method public,static invalidateCache ()V
@@ -9101,318 +9037,6 @@ com/crystalgui/render/texture/asset/FileIconTheme$Variant
   method public suffix ()Ljava/lang/String;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;
   method public,static values ()[Lcom/crystalgui/render/texture/asset/FileIconTheme$Variant;
-com/crystalgui/render/texture/geometry/Position
-  access public
-  extends java/lang/Object
-  field public,final x I
-  field public,final y I
-  field public,static,final ORIGIN Lcom/crystalgui/render/texture/geometry/Position;
-  method public add (II)Lcom/crystalgui/render/texture/geometry/Position;
-  method public add (Lcom/crystalgui/render/texture/geometry/Position;)Lcom/crystalgui/render/texture/geometry/Position;
-  method public add (Lcom/crystalgui/render/texture/geometry/Size;)Lcom/crystalgui/render/texture/geometry/Position;
-  method public addX (I)Lcom/crystalgui/render/texture/geometry/Position;
-  method public addY (I)Lcom/crystalgui/render/texture/geometry/Position;
-  method public equals (Ljava/lang/Object;)Z
-  method public getX ()I
-  method public getY ()I
-  method public hashCode ()I
-  method public subtract (Lcom/crystalgui/render/texture/geometry/Position;)Lcom/crystalgui/render/texture/geometry/Position;
-  method public toString ()Ljava/lang/String;
-  method public vec2 ()Lorg/joml/Vector2f;
-  method public,static of (II)Lcom/crystalgui/render/texture/geometry/Position;
-com/crystalgui/render/texture/geometry/Size
-  access public
-  extends java/lang/Object
-  field public,final height I
-  field public,final width I
-  field public,static,final ZERO Lcom/crystalgui/render/texture/geometry/Size;
-  method public add (II)Lcom/crystalgui/render/texture/geometry/Size;
-  method public add (Lcom/crystalgui/render/texture/geometry/Size;)Lcom/crystalgui/render/texture/geometry/Size;
-  method public addHeight (I)Lcom/crystalgui/render/texture/geometry/Size;
-  method public addWidth (I)Lcom/crystalgui/render/texture/geometry/Size;
-  method public equals (Ljava/lang/Object;)Z
-  method public getHeight ()I
-  method public getWidth ()I
-  method public hashCode ()I
-  method public subtract (Lcom/crystalgui/render/texture/geometry/Size;)Lcom/crystalgui/render/texture/geometry/Size;
-  method public toString ()Ljava/lang/String;
-  method public,static add (Lcom/crystalgui/render/texture/geometry/Position;)Lcom/crystalgui/render/texture/geometry/Size;
-  method public,static of (II)Lcom/crystalgui/render/texture/geometry/Size;
-com/crystalgui/render/texture/svg/SvgColor
-  access public,final
-  extends java/lang/Object
-  method public,static mix (IIF)I
-  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-  method public,static parseColor (Ljava/lang/String;)Ljava/lang/Integer;
-  method public,static withOpacity (IF)I
-com/crystalgui/render/texture/svg/SvgColor$Paint
-  access public,final,record
-  extends java/lang/Record
-  field public,static,final CURRENT Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-  field public,static,final NONE Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-  method public <init> (IZZLjava/lang/String;)V
-  method public argb ()I
-  method public currentColor ()Z
-  method public present ()Z
-  method public reference ()Ljava/lang/String;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static of (I)Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-  method public,static url (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-com/crystalgui/render/texture/svg/SvgDocument
-  access public,final
-  extends java/lang/Object
-  method public bounds ()[F
-  method public cellCount ()I
-  method public height ()F
-  method public isEmpty ()Z
-  method public ops ()Ljava/util/List;
-  method public outline ()Ljava/util/List;
-  method public segmentCount ()I
-  method public usesCurrentColor ()Z
-  method public width ()F
-  method public,static generation ()I
-  method public,static invalidateCache ()V
-  method public,static load (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgDocument;
-  method public,static of (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgDocument;
-  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgDocument;
-  method public,static preload (Ljava/util/Collection;)Ljava/util/concurrent/CompletableFuture;
-  method public,static revalidate ()I
-com/crystalgui/render/texture/svg/SvgDocument$DrawOp
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Z[F[I[I[F[IZIZFI[ILcom/crystalgui/render/texture/svg/SvgScene$DropShadow;)V
-  method public argb ()I
-  method public cap ()I
-  method public colours ()[I
-  method public coloursEnd ()[I
-  method public currentColor ()Z
-  method public data ()[F
-  method public edges ()[I
-  method public fill ()Z
-  method public gradients ()[F
-  method public halfWidth ()F
-  method public opaque ()Z
-  method public segmentCaps ()[I
-  method public shadow ()Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgGradient
-  access public,final,record
-  extends java/lang/Record
-  field public,static,final CELL_BUDGET I
-  field public,static,final SPREAD_PAD I
-  field public,static,final SPREAD_REFLECT I
-  field public,static,final SPREAD_REPEAT I
-  method public <init> (ZZLcom/crystalgui/render/texture/svg/SvgTransform;FFFF[F[II)V
-  method public bandCountFor (FF)I
-  method public colourAt (F)I
-  method public colourAt (FF[F)I
-  method public colours ()[I
-  method public effectiveAxis ([F)[F
-  method public offsets ()[F
-  method public parameterAt (FF[F)F
-  method public radial ()Z
-  method public representativeColour ()I
-  method public resolvedAgainst ([F)Lcom/crystalgui/render/texture/svg/SvgGradient;
-  method public sampleSpacing ([F)[F
-  method public spread ()I
-  method public spreadPublic (F)F
-  method public transform ()Lcom/crystalgui/render/texture/svg/SvgTransform;
-  method public userSpace ()Z
-  method public x1 ()F
-  method public x2 ()F
-  method public y1 ()F
-  method public y2 ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static of (Ljava/util/Map;[F[ILcom/crystalgui/render/texture/svg/SvgGradient;)Lcom/crystalgui/render/texture/svg/SvgGradient;
-com/crystalgui/render/texture/svg/SvgPath
-  access public,final
-  extends java/lang/Object
-  method public,static parse (Ljava/lang/String;)Ljava/util/List;
-  method public,static parse (Ljava/lang/String;I)Ljava/util/List;
-com/crystalgui/render/texture/svg/SvgPath$Polyline
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/util/List;Z)V
-  method public closed ()Z
-  method public points ()Ljava/util/List;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScanner
-  access public,final
-  extends java/lang/Object
-  method public,static scan (Ljava/lang/String;)Ljava/util/List;
-com/crystalgui/render/texture/svg/SvgScanner$Kind
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final CLOSE Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;
-  field public,static,final OPEN Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;
-  field public,static,final SELF_CLOSE Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;
-  method public,static values ()[Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;
-com/crystalgui/render/texture/svg/SvgScanner$Tag
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;Ljava/lang/String;Ljava/util/Map;)V
-  method public attributes ()Ljava/util/Map;
-  method public get (Ljava/lang/String;)Ljava/lang/String;
-  method public has (Ljava/lang/String;)Z
-  method public kind ()Lcom/crystalgui/render/texture/svg/SvgScanner$Kind;
-  method public name ()Ljava/lang/String;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/util/List;FF)V
-  method public height ()F
-  method public isEmpty ()Z
-  method public nodes ()Ljava/util/List;
-  method public width ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene$DropShadow
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (FFFFII)V
-  method public argb ()I
-  method public dx ()F
-  method public dy ()F
-  method public id ()I
-  method public sigmaX ()F
-  method public sigmaY ()F
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene$Fill
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Lcom/crystalgui/render/texture/svg/SvgScene$Paint;Z)V
-  method public evenOdd ()Z
-  method public paint ()Lcom/crystalgui/render/texture/svg/SvgScene$Paint;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene$Gradient
-  access public,final,record
-  extends java/lang/Record
-  implements com/crystalgui/render/texture/svg/SvgScene$Paint
-  method public <init> (Lcom/crystalgui/render/texture/svg/SvgGradient;Lcom/crystalgui/render/texture/svg/SvgTransform;FIZ)V
-  method public alpha ()F
-  method public argb ()I
-  method public currentColor ()Z
-  method public gradient ()Lcom/crystalgui/render/texture/svg/SvgGradient;
-  method public transform ()Lcom/crystalgui/render/texture/svg/SvgTransform;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene$Node
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/util/List;Lcom/crystalgui/render/texture/svg/SvgScene$Fill;Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;)V
-  method public contours ()Ljava/util/List;
-  method public fill ()Lcom/crystalgui/render/texture/svg/SvgScene$Fill;
-  method public shadow ()Lcom/crystalgui/render/texture/svg/SvgScene$DropShadow;
-  method public stroke ()Lcom/crystalgui/render/texture/svg/SvgScene$Stroke;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene$Paint
-  access public,abstract,interface
-  extends java/lang/Object
-  method public,abstract currentColor ()Z
-com/crystalgui/render/texture/svg/SvgScene$Solid
-  access public,final,record
-  extends java/lang/Record
-  implements com/crystalgui/render/texture/svg/SvgScene$Paint
-  method public <init> (IZ)V
-  method public argb ()I
-  method public currentColor ()Z
-  method public opaque ()Z
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgScene$Stroke
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Lcom/crystalgui/render/texture/svg/SvgScene$Paint;FI)V
-  method public cap ()I
-  method public halfWidth ()F
-  method public paint ()Lcom/crystalgui/render/texture/svg/SvgScene$Paint;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/render/texture/svg/SvgStyle
-  access public,final,record
-  extends java/lang/Record
-  field public,static,final ROOT Lcom/crystalgui/render/texture/svg/SvgStyle;
-  method public <init> (Lcom/crystalgui/render/texture/svg/SvgColor$Paint;Lcom/crystalgui/render/texture/svg/SvgColor$Paint;FIZFFF)V
-  method public cap ()I
-  method public evenOdd ()Z
-  method public fill ()Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-  method public fillArgb ()I
-  method public fillOpacity ()F
-  method public fills ()Z
-  method public inherit (Ljava/util/Map;Ljava/util/Map;)Lcom/crystalgui/render/texture/svg/SvgStyle;
-  method public opacity ()F
-  method public stroke ()Lcom/crystalgui/render/texture/svg/SvgColor$Paint;
-  method public strokeArgb ()I
-  method public strokeHalfWidth ()F
-  method public strokeOpacity ()F
-  method public strokeWidth ()F
-  method public strokes ()Z
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static parseCap (Ljava/lang/String;)I
-com/crystalgui/render/texture/svg/SvgTransform
-  access public,final,record
-  extends java/lang/Record
-  field public,static,final IDENTITY Lcom/crystalgui/render/texture/svg/SvgTransform;
-  method public <init> (FFFFFF)V
-  method public a ()F
-  method public applyX (FF)F
-  method public applyY (FF)F
-  method public b ()F
-  method public c ()F
-  method public d ()F
-  method public e ()F
-  method public f ()F
-  method public lengthScale ()F
-  method public mapCovector (FF)[F
-  method public then (Lcom/crystalgui/render/texture/svg/SvgTransform;)Lcom/crystalgui/render/texture/svg/SvgTransform;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/texture/svg/SvgTransform;
-com/crystalgui/render/texture/svg/SvgTriangulator
-  access public,final
-  extends java/lang/Object
-  field public,static,final BOTTOM I
-  field public,static,final LEFT I
-  field public,static,final RIGHT I
-  field public,static,final TOP I
-  method public,static fill (Ljava/util/List;Z)[F
-  method public,static fill (Ljava/util/List;ZFF)Lcom/crystalgui/render/texture/svg/SvgTriangulator$Fill;
-  method public,static fill (Ljava/util/List;ZFF[F)Lcom/crystalgui/render/texture/svg/SvgTriangulator$Fill;
-com/crystalgui/render/texture/svg/SvgTriangulator$Fill
-  access public,final,record
-  extends java/lang/Record
-  method public <init> ([F[I[I)V
-  method public cells ()[F
-  method public edges ()[I
-  method public slice ()[I
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
 com/crystalgui/screen/CgUiScreen
   access public,final
   extends java/lang/Object
@@ -9536,16 +9160,16 @@ com/crystalgui/screen/ScreenKind$Builder
   access public,abstract,interface
   extends java/lang/Object
   method public,abstract build (Lcom/crystalgui/screen/ScreenContext;)V
-com/crystalgui/serialization/style/DrawableParts
+com/crystalgui/serialization/style/ImageParts
   access public,final
   extends java/lang/Object
-  field public,static,final INSTANCE Lcom/crystalgui/serialization/style/DrawableParts;
+  field public,static,final INSTANCE Lcom/crystalgui/serialization/style/ImageParts;
   implements com/crystalgui/serialization/style/StyleParts
-  method public divides (Lcom/crystalgui/render/texture/CgUiDrawable;)Z
-  method public encodePart (Lcom/crystalgraphics/serialization/CgDynamicOps;Lcom/crystalgui/render/texture/CgUiDrawable;Ljava/lang/String;)Ljava/lang/Object;
-  method public mergePart (Lcom/crystalgraphics/serialization/CgDynamicOps;Lcom/crystalgui/render/texture/CgUiDrawable;Ljava/lang/String;Ljava/lang/Object;)Lcom/crystalgui/render/texture/CgUiDrawable;
+  method public divides (Lcom/crystalgui/render/image/CgUiImage;)Z
+  method public encodePart (Lcom/crystalgraphics/serialization/CgDynamicOps;Lcom/crystalgui/render/image/CgUiImage;Ljava/lang/String;)Ljava/lang/Object;
+  method public mergePart (Lcom/crystalgraphics/serialization/CgDynamicOps;Lcom/crystalgui/render/image/CgUiImage;Ljava/lang/String;Ljava/lang/Object;)Lcom/crystalgui/render/image/CgUiImage;
   method public parts ()Ljava/util/List;
-  method public parts (Lcom/crystalgui/render/texture/CgUiDrawable;)Ljava/util/List;
+  method public parts (Lcom/crystalgui/render/image/CgUiImage;)Ljava/util/List;
 com/crystalgui/serialization/style/InlineStyleCodec
   access public,final
   extends java/lang/Object
@@ -9652,10 +9276,10 @@ com/crystalgui/style/GeneralGroup
   access public
   extends com/crystalgui/style/StyleGroup
   method public <init> (Lcom/crystalgui/style/ElementStyle;)V
-  method public backdropFilter ()Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public backdropFilter (Lcom/crystalgui/render/texture/CgUiBackdropFilter;)Lcom/crystalgui/style/GeneralGroup;
-  method public background ()Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public background (Lcom/crystalgui/render/texture/CgUiDrawable;)Lcom/crystalgui/style/GeneralGroup;
+  method public backdropFilter ()Lcom/crystalgraphics/api/paint/effect/CgBackdropFilter;
+  method public backdropFilter (Lcom/crystalgraphics/api/paint/effect/CgBackdropFilter;)Lcom/crystalgui/style/GeneralGroup;
+  method public background ()Lcom/crystalgui/render/image/CgUiImage;
+  method public background (Lcom/crystalgui/render/image/CgUiImage;)Lcom/crystalgui/style/GeneralGroup;
   method public backgroundColor ()I
   method public backgroundColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public borderBottomColor ()I
@@ -9691,8 +9315,8 @@ com/crystalgui/style/GeneralGroup
   method public isolation (Lcom/crystalgui/style/property/visual/stacking/Isolation;)Lcom/crystalgui/style/GeneralGroup;
   method public lineHeight ()F
   method public lineHeight (F)Lcom/crystalgui/style/GeneralGroup;
-  method public mask ()Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public mask (Lcom/crystalgui/render/texture/CgUiDrawable;)Lcom/crystalgui/style/GeneralGroup;
+  method public mask ()Lcom/crystalgui/render/image/CgUiImage;
+  method public mask (Lcom/crystalgui/render/image/CgUiImage;)Lcom/crystalgui/style/GeneralGroup;
   method public maskOffset ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
   method public maskOffset (Lcom/crystalgui/style/property/visual/border/LengthPercent;)Lcom/crystalgui/style/GeneralGroup;
   method public maskOrigin ()Lcom/crystalgui/style/property/visual/BoxOrigin;
@@ -9703,8 +9327,8 @@ com/crystalgui/style/GeneralGroup
   method public maskSize (Lcom/crystalgui/style/property/visual/DrawableFit;)Lcom/crystalgui/style/GeneralGroup;
   method public opacity ()F
   method public opacity (F)Lcom/crystalgui/style/GeneralGroup;
-  method public outline ()Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public outline (Lcom/crystalgui/render/texture/CgUiDrawable;)Lcom/crystalgui/style/GeneralGroup;
+  method public outline ()Lcom/crystalgui/render/image/CgUiImage;
+  method public outline (Lcom/crystalgui/render/image/CgUiImage;)Lcom/crystalgui/style/GeneralGroup;
   method public outlineColor ()I
   method public outlineColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public outlineOffset (Lcom/crystalgui/style/property/visual/border/LengthPercent;)Lcom/crystalgui/style/GeneralGroup;
@@ -9717,8 +9341,8 @@ com/crystalgui/style/GeneralGroup
   method public outlineWidth (Lcom/crystalgui/style/property/visual/border/LengthPercent;)Lcom/crystalgui/style/GeneralGroup;
   method public overflow ()Lcom/crystalgui/style/property/visual/Overflow;
   method public overflow (Lcom/crystalgui/style/property/visual/Overflow;)Lcom/crystalgui/style/GeneralGroup;
-  method public overlay ()Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public overlay (Lcom/crystalgui/render/texture/CgUiDrawable;)Lcom/crystalgui/style/GeneralGroup;
+  method public overlay ()Lcom/crystalgui/render/image/CgUiImage;
+  method public overlay (Lcom/crystalgui/render/image/CgUiImage;)Lcom/crystalgui/style/GeneralGroup;
   method public overlayOrigin ()Lcom/crystalgui/style/property/visual/BoxOrigin;
   method public overlayOrigin (Lcom/crystalgui/style/property/visual/BoxOrigin;)Lcom/crystalgui/style/GeneralGroup;
   method public overlayPosition ()Lcom/crystalgui/style/property/visual/DrawableAlign;
@@ -10289,7 +9913,6 @@ com/crystalgui/style/property/StylePropertyRegistry
   method public,static create (Lcom/crystalgui/style/property/StyleProperty;)Lcom/crystalgui/style/property/StyleProperty;
   method public,static create (Ljava/lang/String;F)Lcom/crystalgui/style/property/general/floats/FloatProperty;
   method public,static create (Ljava/lang/String;I)Lcom/crystalgui/style/property/general/ints/IntProperty;
-  method public,static create (Ljava/lang/String;Lcom/crystalgui/render/texture/CgUiDrawable;)Lcom/crystalgui/style/property/visual/texture/TextureProperty;
   method public,static create (Ljava/lang/String;Ljava/lang/Class;Ljava/lang/Enum;)Lcom/crystalgui/style/property/general/enums/EnumProperty;
   method public,static create (Ljava/lang/String;Ljava/lang/Class;Ljava/lang/Enum;Ljava/util/List;)Lcom/crystalgui/style/property/general/enums/EnumProperty;
   method public,static create (Ljava/lang/String;Ljava/lang/Class;Ljava/lang/Object;Lcom/crystalgui/style/property/StyleProperty$ValueParser;)Lcom/crystalgui/style/property/StyleProperty;
@@ -10298,6 +9921,7 @@ com/crystalgui/style/property/StylePropertyRegistry
   method public,static create (Ljava/lang/String;Z)Lcom/crystalgui/style/property/StyleProperty;
   method public,static createColor (Ljava/lang/String;I)Lcom/crystalgui/style/property/visual/color/ColorProperty;
   method public,static ensureCapacity (I)V
+  method public,static image (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/image/ImageProperty;
   method public,static register (Lcom/crystalgui/style/property/StyleProperty;)V
   method public,static toTaffyOverflow (Lcom/crystalgui/style/property/visual/Overflow;)Ldev/vfyjxf/taffy/style/Overflow;
 com/crystalgui/style/property/StyleSlot
@@ -10339,7 +9963,6 @@ com/crystalgui/style/property/general/enums/EnumProperty
   method public <init> (Ljava/lang/String;Ljava/lang/Class;Ljava/lang/Enum;)V
   method public <init> (Ljava/lang/String;Ljava/lang/Class;Ljava/lang/Enum;Ljava/util/List;)V
   method public setCandidates (Ljava/util/List;)Lcom/crystalgui/style/property/general/enums/EnumProperty;
-  method public setIconProvider (Ljava/util/function/Function;)Lcom/crystalgui/style/property/general/enums/EnumProperty;
   method public write (Ljava/lang/Enum;)Ljava/lang/String;
 com/crystalgui/style/property/general/enums/EnumValue
   access public
@@ -10766,10 +10389,10 @@ com/crystalgui/style/property/visual/ScrollBehavior
 com/crystalgui/style/property/visual/backdrop/BackdropFilterValue
   access public
   extends com/crystalgui/style/property/StyleValue
-  method protected doCompute (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
+  method protected doCompute (Ljava/lang/String;)Lcom/crystalgraphics/api/paint/effect/CgBackdropFilter;
   method public <init> (Ljava/lang/String;)V
-  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiBackdropFilter;
-  method public,static write (Lcom/crystalgui/render/texture/CgUiBackdropFilter;)Ljava/lang/String;
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgraphics/api/paint/effect/CgBackdropFilter;
+  method public,static write (Lcom/crystalgraphics/api/paint/effect/CgBackdropFilter;)Ljava/lang/String;
 com/crystalgui/style/property/visual/border/BorderRadiusProperties
   access public,final
   extends java/lang/Object
@@ -10846,6 +10469,37 @@ com/crystalgui/style/property/visual/color/StyleColor
   method public,final toString ()Ljava/lang/String;
   method public,static lerp (Lcom/crystalgui/style/property/visual/color/StyleColor;Lcom/crystalgui/style/property/visual/color/StyleColor;F)Lcom/crystalgui/style/property/visual/color/StyleColor;
   method public,static of (I)Lcom/crystalgui/style/property/visual/color/StyleColor;
+com/crystalgui/style/property/visual/image/ImageKinds
+  access public,final
+  extends java/lang/Object
+  method public,static all ()Ljava/util/Collection;
+  method public,static matching (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/image/ImageKinds$Kind;
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage;
+  method public,static register (Lcom/crystalgui/style/property/visual/image/ImageKinds$Kind;)V
+  method public,static unregister (Ljava/lang/String;)V
+com/crystalgui/style/property/visual/image/ImageKinds$Kind
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/function/Predicate;Ljava/util/function/Function;)V
+  method public id ()Ljava/lang/String;
+  method public label ()Ljava/lang/String;
+  method public matches ()Ljava/util/function/Predicate;
+  method public parse ()Ljava/util/function/Function;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static function (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/function/Function;)Lcom/crystalgui/style/property/visual/image/ImageKinds$Kind;
+com/crystalgui/style/property/visual/image/ImageProperty
+  access public
+  extends com/crystalgui/style/property/StyleProperty
+  method public <init> (Ljava/lang/String;)V
+  method public write (Lcom/crystalgui/render/image/CgUiImage;)Ljava/lang/String;
+com/crystalgui/style/property/visual/image/ImageValue
+  access public
+  extends com/crystalgui/style/property/StyleValue
+  method protected doCompute (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage;
+  method public <init> (Ljava/lang/String;)V
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/image/CgUiImage;
 com/crystalgui/style/property/visual/shadow/Shadow
   access public,final,record
   extends java/lang/Record
@@ -11040,37 +10694,6 @@ com/crystalgui/style/property/visual/text/WhiteSpace
   method public wraps ()Z
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/text/WhiteSpace;
   method public,static values ()[Lcom/crystalgui/style/property/visual/text/WhiteSpace;
-com/crystalgui/style/property/visual/texture/DrawableKinds
-  access public,final
-  extends java/lang/Object
-  method public,static all ()Ljava/util/Collection;
-  method public,static matching (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/texture/DrawableKinds$Kind;
-  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public,static register (Lcom/crystalgui/style/property/visual/texture/DrawableKinds$Kind;)V
-  method public,static unregister (Ljava/lang/String;)V
-com/crystalgui/style/property/visual/texture/DrawableKinds$Kind
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/lang/String;Ljava/lang/String;Ljava/util/function/Predicate;Ljava/util/function/Function;)V
-  method public id ()Ljava/lang/String;
-  method public label ()Ljava/lang/String;
-  method public matches ()Ljava/util/function/Predicate;
-  method public parse ()Ljava/util/function/Function;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-  method public,static function (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/util/function/Function;)Lcom/crystalgui/style/property/visual/texture/DrawableKinds$Kind;
-com/crystalgui/style/property/visual/texture/TextureProperty
-  access public
-  extends com/crystalgui/style/property/StyleProperty
-  method public <init> (Ljava/lang/String;Lcom/crystalgui/render/texture/CgUiDrawable;)V
-  method public write (Lcom/crystalgui/render/texture/CgUiDrawable;)Ljava/lang/String;
-com/crystalgui/style/property/visual/texture/TextureValue
-  access public
-  extends com/crystalgui/style/property/StyleValue
-  method protected doCompute (Ljava/lang/String;)Lcom/crystalgui/render/texture/CgUiDrawable;
-  method public <init> (Ljava/lang/String;)V
-  method public,static sourceOf (Lcom/crystalgui/render/texture/CgUiDrawable;)Ljava/lang/String;
 com/crystalgui/style/property/visual/transform/Transform
   access public,final
   extends java/lang/Object
@@ -14682,7 +14305,7 @@ com/crystalgui/ui/service/DragPreview
   access public,final
   extends java/lang/Object
   method public flipped (Z)Lcom/crystalgui/ui/service/DragPreview;
-  method public glyph ()Lcom/crystalgui/render/texture/CgUiDrawable;
+  method public glyph ()Lcom/crystalgui/render/image/CgUiImage;
   method public grabX ()F
   method public grabY ()F
   method public grabbing ()Lcom/crystalgui/ui/service/DragPreview;
@@ -14695,7 +14318,7 @@ com/crystalgui/ui/service/DragPreview
   method public text (Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
   method public tint ()I
   method public version ()I
-  method public,static of (Lcom/crystalgui/render/texture/CgUiDrawable;ILjava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
+  method public,static of (Lcom/crystalgui/render/image/CgUiImage;ILjava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
   method public,static of (Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
   method public,static of (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/ui/service/DragPreview;
 com/crystalgui/ui/service/Focus
@@ -15529,6 +15152,29 @@ com/crystalgui/widget/composite/ActionButton
   method public,static command (Ljava/lang/String;)Lcom/crystalgui/widget/composite/ActionButton;
   method public,static menu (Ljava/lang/String;Lcom/crystalgui/core/command/MenuId;)Lcom/crystalgui/widget/composite/ActionButton;
   method public,static menu (Ljava/lang/String;Ljava/util/function/Supplier;)Lcom/crystalgui/widget/composite/ActionButton;
+com/crystalgui/widget/composite/ColorField
+  access public,final
+  extends java/lang/Object
+  implements com/crystalgui/render/image/CgUiPainter
+  method public corners (F)Lcom/crystalgui/widget/composite/ColorField;
+  method public corners (Lcom/crystalgraphics/api/vector/CgCornerRadii;)Lcom/crystalgui/widget/composite/ColorField;
+  method public equals (Ljava/lang/Object;)Z
+  method public hashCode ()I
+  method public image ()Lcom/crystalgui/render/image/CgUiImage;
+  method public paint (Lcom/crystalgraphics/api/canvas/CgCanvas;FFI)V
+  method public,static hueRing (F)Lcom/crystalgui/widget/composite/ColorField;
+  method public,static hueStrip ()Lcom/crystalgui/widget/composite/ColorField;
+  method public,static ramp (II)Lcom/crystalgui/widget/composite/ColorField;
+  method public,static svSquare (F)Lcom/crystalgui/widget/composite/ColorField;
+com/crystalgui/widget/composite/ColorField$Mode
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final HUE_RING Lcom/crystalgui/widget/composite/ColorField$Mode;
+  field public,static,final HUE_STRIP Lcom/crystalgui/widget/composite/ColorField$Mode;
+  field public,static,final RAMP Lcom/crystalgui/widget/composite/ColorField$Mode;
+  field public,static,final SV_SQUARE Lcom/crystalgui/widget/composite/ColorField$Mode;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/widget/composite/ColorField$Mode;
+  method public,static values ()[Lcom/crystalgui/widget/composite/ColorField$Mode;
 com/crystalgui/widget/composite/ColorSelector
   access public
   extends com/crystalgui/ui/dom/UIElement
@@ -19755,9 +19401,9 @@ com/crystalgui/workbench/chrome/status/Breadcrumbs
 com/crystalgui/workbench/chrome/status/Breadcrumbs$Crumb
   access public,final,record
   extends java/lang/Record
-  method public <init> (Ljava/lang/String;Lcom/crystalgui/render/texture/CgUiDrawable;Ljava/lang/String;)V
-  method public <init> (Ljava/lang/String;Lcom/crystalgui/render/texture/CgUiDrawable;Ljava/lang/String;Lcom/crystalgui/text/lang/SymbolInfo;)V
-  method public icon ()Lcom/crystalgui/render/texture/CgUiDrawable;
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/render/image/CgUiImage;Ljava/lang/String;)V
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/render/image/CgUiImage;Ljava/lang/String;Lcom/crystalgui/text/lang/SymbolInfo;)V
+  method public icon ()Lcom/crystalgui/render/image/CgUiImage;
   method public iconClass ()Ljava/lang/String;
   method public symbol ()Lcom/crystalgui/text/lang/SymbolInfo;
   method public text ()Ljava/lang/String;

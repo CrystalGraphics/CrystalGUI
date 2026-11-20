@@ -1,8 +1,8 @@
 package com.crystalgui.desktop.taskbar;
 
+import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import java.util.function.ToDoubleFunction;
 import java.util.function.BiFunction;
-import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import com.crystalgui.desktop.manager.WindowManager;
 import com.crystalgraphics.job.CgHostThread;
 import com.crystalgraphics.platform.input.CgClipboard;
@@ -200,26 +200,26 @@ public final class TaskbarDesigner {
         });
 
         form.header("Backdrop");
-        glassSlider(form, "Blur", 0f, 40f, 0, g -> g.blur(), (g, v) -> g.blur(v));
-        glassSlider(form, "Bezel", 0f, 40f, 0, g -> g.bezel(), (g, v) -> g.lens(v, g.ior()));
-        glassSlider(form, "Index of refraction", 1f, 2.5f, 2, g -> g.ior(), (g, v) -> g.lens(g.bezel(), v));
-        glassSlider(form, "Specular", 0f, 1.5f, 2, g -> g.specular(), (g, v) -> g.highlight(v, g.glow(), g.rim(), g.rimWidth(), g.rimAmbient()));
+        glassSlider(form, "Blur", 0f, 15f, 1, g -> g.blur(), (g, v) -> g.blur(v));
+        glassSlider(form, "Bezel", 0f, 40f, 0, g -> g.lens().bezel(), (g, v) -> g.lens(g.lens().refraction(v, g.lens().ior())));
+        glassSlider(form, "Index of refraction", 1f, 2.5f, 2, g -> g.lens().ior(), (g, v) -> g.lens(g.lens().refraction(g.lens().bezel(), v)));
+        glassSlider(form, "Specular", 0f, 1.5f, 2, g -> g.lens().specular(), (g, v) -> g.lens(g.lens().highlight(v, g.lens().glow(), g.lens().rim(), g.lens().rimWidth(), g.lens().rimAmbient())));
         form.note("Rim is the hairline at the boundary; glow is the broad falloff. "
                 + "The rim should dominate \u2014 a highlight made mostly of glow reads as bloom.");
-        glassSlider(form, "Rim", 0f, 1f, 2, g -> g.rim(), (g, v) -> g.highlight(g.specular(), g.glow(), v, g.rimWidth(), g.rimAmbient()));
-        glassSlider(form, "Rim width", 0f, 12f, 1, g -> g.rimWidth(), (g, v) -> g.highlight(g.specular(), g.glow(), g.rim(), v, g.rimAmbient()));
-        glassSlider(form, "Rim evenness", 0f, 1f, 2, g -> g.rimAmbient(), (g, v) -> g.highlight(g.specular(), g.glow(), g.rim(), g.rimWidth(), v));
-        glassSlider(form, "Glow", 0f, 1f, 2, g -> g.glow(), (g, v) -> g.highlight(g.specular(), v, g.rim(), g.rimWidth(), g.rimAmbient()));
-        glassSlider(form, "Chromatic", 0f, 1f, 2, g -> g.chromatic(), (g, v) -> g.chromatic(v));
-        glassSlider(form, "Noise", 0f, 0.25f, 3, g -> g.noise(), (g, v) -> g.noise(v));
-        glassSlider(form, "Saturation", 0f, 3f, 2, g -> g.saturation(), (g, v) -> g.color(v, g.luminosity()));
+        glassSlider(form, "Rim", 0f, 1f, 2, g -> g.lens().rim(), (g, v) -> g.lens(g.lens().highlight(g.lens().specular(), g.lens().glow(), v, g.lens().rimWidth(), g.lens().rimAmbient())));
+        glassSlider(form, "Rim width", 0f, 12f, 1, g -> g.lens().rimWidth(), (g, v) -> g.lens(g.lens().highlight(g.lens().specular(), g.lens().glow(), g.lens().rim(), v, g.lens().rimAmbient())));
+        glassSlider(form, "Rim evenness", 0f, 1f, 2, g -> g.lens().rimAmbient(), (g, v) -> g.lens(g.lens().highlight(g.lens().specular(), g.lens().glow(), g.lens().rim(), g.lens().rimWidth(), v)));
+        glassSlider(form, "Glow", 0f, 1f, 2, g -> g.lens().glow(), (g, v) -> g.lens(g.lens().highlight(g.lens().specular(), v, g.lens().rim(), g.lens().rimWidth(), g.lens().rimAmbient())));
+        glassSlider(form, "Chromatic", 0f, 1f, 2, g -> g.lens().chromatic(), (g, v) -> g.lens(g.lens().chromatic(v)));
+        glassSlider(form, "Noise", 0f, 0.25f, 3, g -> g.lens().grain(), (g, v) -> g.lens(g.lens().grain(v)));
+        glassSlider(form, "Saturation", 0f, 3f, 2, g -> g.saturation(), (g, v) -> g.saturation(v));
         // THE ONE THAT WAS MISSING. The seed copied every other parameter and not this, so the designer
         // opened with the bar at luminosity 0 -- a plain alpha tint -- while the sheet ran it at 1, and
         // a tint alpha tuned here was tuned against a material the sheet does not draw.
         form.note("Luminosity is the Windows layer: how much of the backdrop's BRIGHTNESS the "
                 + "tint's replaces, hue kept. 1 is Mica \u2014 a temperature, never a picture; 0 is a "
                 + "plain alpha tint, where the tint's alpha alone decides what shows through.");
-        glassSlider(form, "Luminosity", 0f, 1f, 2, g -> g.luminosity(), (g, v) -> g.color(g.saturation(), v));
+        glassSlider(form, "Luminosity", 0f, 1f, 2, g -> g.luminosity(), (g, v) -> g.luminosity(v));
 
         form.header("Tint");
         form.note("The color laid over the blur. ALPHA IS THE ONE THAT MATTERS \u2014 it is how "

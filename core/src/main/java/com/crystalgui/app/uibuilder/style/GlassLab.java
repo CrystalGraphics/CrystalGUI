@@ -236,15 +236,15 @@ public final class GlassLab {
             case "blur" -> DEFAULTS.blur();
             case "saturate" -> DEFAULTS.saturation();
             case "luminosity" -> DEFAULTS.luminosity();
-            case "bezel" -> DEFAULTS.bezel();
-            case "ior" -> DEFAULTS.ior();
-            case "specular" -> DEFAULTS.specular();
-            case "glow" -> DEFAULTS.glow();
-            case "edge" -> DEFAULTS.rim();
-            case "edge-width" -> DEFAULTS.rimWidth();
-            case "rim-ambient" -> DEFAULTS.rimAmbient();
-            case "chromatic" -> DEFAULTS.chromatic();
-            case "noise" -> DEFAULTS.noise();
+            case "bezel" -> DEFAULTS.lens().bezel();
+            case "ior" -> DEFAULTS.lens().ior();
+            case "specular" -> DEFAULTS.lens().specular();
+            case "glow" -> DEFAULTS.lens().glow();
+            case "edge" -> DEFAULTS.lens().rim();
+            case "edge-width" -> DEFAULTS.lens().rimWidth();
+            case "rim-ambient" -> DEFAULTS.lens().rimAmbient();
+            case "chromatic" -> DEFAULTS.lens().chromatic();
+            case "noise" -> DEFAULTS.lens().grain();
             default -> null;
         };
     }

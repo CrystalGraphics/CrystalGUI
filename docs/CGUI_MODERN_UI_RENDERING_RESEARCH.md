@@ -5,7 +5,7 @@ the exact numbers each one publishes and what each implies for this engine. It e
 first version of every one of these was built from memory and looked plausible while being wrong in a
 way only the source could show: a Gaussian that was a comb, a "Mica" that let hue through, a gradient
 that banded. **Read the relevant section before touching CrystalGraphics' `ui/glass.shader`, `CgGpuOps.blurScaled`,
-`paint/gradient.glsl`, `CgUiBackdrop` or the taskbar's sheet.** Every claim below carries its source;
+`paint/gradient.glsl`, `CgBackdropFilter` (its chain and `Lens`) or the taskbar's sheet.** Every claim below carries its source;
 where a number is measured or community-reported rather than published, it says so.
 
 Last researched 2026-08-26. The "Implications" column in each section is ours; everything else is

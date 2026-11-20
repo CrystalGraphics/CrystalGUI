@@ -91,7 +91,7 @@
             "kind": "element",
             "id": "card",
             "style": {
-              "backdrop-filter": "blur(24px) saturate(1.2) tint(#FFFFFF1F) bezel(0px) specular(0.3) noise(0.05)",
+              "backdrop-filter": "blur(8px) saturate(1.2) tint(#FFFFFF1F) bezel(0px) specular(0.3) noise(0.05)",
               "background-color": "#FFFFFF1B",
               "border-bottom-left-radius-x": "22.0px",
               "border-bottom-left-radius-y": "22.0px",

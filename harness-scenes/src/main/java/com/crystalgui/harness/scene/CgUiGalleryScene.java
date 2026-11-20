@@ -226,10 +226,11 @@ public class CgUiGalleryScene extends UiDocumentScene {
     /** Every specimen on the page, so one slider retunes all of them at once. */
     private final List<UIElement> glassSpecimens = new ArrayList<>();
     /** What every specimen shows; a slider replaces it. */
-    private CgBackdropFilter glassLook = CgBackdropFilter.DEFAULT.blur(12f).lens(10f, 1.5f)
-            .highlight(0.3f, CgBackdropFilter.DEFAULT.glow(), CgBackdropFilter.DEFAULT.rim(),
-                    CgBackdropFilter.DEFAULT.rimWidth(), CgBackdropFilter.DEFAULT.rimAmbient())
-            .noise(0.035f).color(1.4f, CgBackdropFilter.DEFAULT.luminosity()).tint(0x40FFFFFF).fallback(0x66202430);
+    private CgBackdropFilter glassLook = CgBackdropFilter.DEFAULT.blur(4f).saturation(1.4f).tint(0x40FFFFFF)
+            .lens(CgBackdropFilter.Lens.DEFAULT.refraction(10f, 1.5f).highlight(0.3f, CgBackdropFilter.Lens.DEFAULT.glow(),
+                    CgBackdropFilter.Lens.DEFAULT.rim(), CgBackdropFilter.Lens.DEFAULT.rimWidth(), CgBackdropFilter.Lens.DEFAULT.rimAmbient())
+                    .grain(0.035f))
+            .fallback(0x66202430);
 
     private float glassPhase;
 
@@ -307,13 +308,13 @@ public class CgUiGalleryScene extends UiDocumentScene {
         UIElement right = new UIElement();
         right.addClass("gl-col");
 
-        left.append(glassControl("blur", 0f, 30f, 12f, "%.0f", (g, v) -> g.blur(v)));
-        left.append(glassControl("bezel", 0f, 30f, 10f, "%.0f", (g, v) -> g.lens(v, g.ior())));
-        left.append(glassControl("ior", 1f, 2.5f, 1.5f, "%.2f", (g, v) -> g.lens(g.bezel(), v)));
+        left.append(glassControl("blur", 0f, 10f, 4f, "%.1f", (g, v) -> g.blur(v)));
+        left.append(glassControl("bezel", 0f, 30f, 10f, "%.0f", (g, v) -> g.lens(g.lens().refraction(v, g.lens().ior()))));
+        left.append(glassControl("ior", 1f, 2.5f, 1.5f, "%.2f", (g, v) -> g.lens(g.lens().refraction(g.lens().bezel(), v))));
         right.append(glassControl("specular", 0f, 1.5f, 0.3f, "%.2f",
-                (g, v) -> g.highlight(v, g.glow(), g.rim(), g.rimWidth(), g.rimAmbient())));
-        right.append(glassControl("noise", 0f, 0.25f, 0.035f, "%.3f", (g, v) -> g.noise(v)));
-        right.append(glassControl("saturation", 0f, 3f, 1.4f, "%.2f", (g, v) -> g.color(v, g.luminosity())));
+                (g, v) -> g.lens(g.lens().highlight(v, g.lens().glow(), g.lens().rim(), g.lens().rimWidth(), g.lens().rimAmbient()))));
+        right.append(glassControl("noise", 0f, 0.25f, 0.035f, "%.3f", (g, v) -> g.lens(g.lens().grain(v))));
+        right.append(glassControl("saturation", 0f, 3f, 1.4f, "%.2f", (g, v) -> g.saturation(v)));
 
         controls.append(left);
         controls.append(right);

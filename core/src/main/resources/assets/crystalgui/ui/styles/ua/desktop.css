@@ -194,10 +194,8 @@ taskbar > .__window-preview__,
 launcher,
 .__window__,
 window.__failure__ {
-    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--glass-fallback, var(--taskbar-bg, #2B2D30)));
+    backdrop-filter: blur(8px) saturate(1.25) luminosity(0.3) tint(var(--taskbar-glass-tint, #20202013))
+                     noise(0.02) fallback(var(--glass-fallback, var(--taskbar-bg, #2B2D30)));
 }
 
 /* The bar's keyboard ring: white over the glass, where the system blue sinks into a blue sky. */
@@ -2218,10 +2216,8 @@ window.__failure__ .__title-bar__ .__pin__ {
 
 .__game-screen__.__background-blur__ {
     background-color: var(--screen-scrim-blur, #00000059);
-    backdrop-filter: blur(24px) tint(var(--taskbar-glass-tint, #20202013)) bezel(0px) ior(1)
-                     specular(0) noise(0.02) saturate(1.25) luminosity(0.3)
-                     glow(0) edge(0) edge-width(1px) rim-ambient(1)
-                     chromatic(0) fallback(var(--glass-fallback, var(--taskbar-bg, #2B2D30)));
+    backdrop-filter: blur(8px) saturate(1.25) luminosity(0.3) tint(var(--taskbar-glass-tint, #20202013))
+                     noise(0.02) fallback(var(--glass-fallback, var(--taskbar-bg, #2B2D30)));
 }
 
 /* What replaces a screen that faulted: a panel in the middle, one Close. */

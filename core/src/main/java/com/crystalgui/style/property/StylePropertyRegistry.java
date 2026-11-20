@@ -84,7 +84,7 @@ public class StylePropertyRegistry {
      * <p>A PROPERTY and not a {@code background} value, which is the whole of why it moved: as a value
      * it occupied the one background slot, so an element could have glass or a colour and never both.
      * A backdrop filter runs UNDER the element's own background, which is how the web writes acrylic —
-     * {@code backdrop-filter: blur(24px)} beside {@code background-color: #1C1D21CC}.</p>
+     * {@code backdrop-filter: blur(8px)} beside {@code background-color: #1C1D21CC}.</p>
      *
      * <p>{@link CgBackdropFilter#NONE} until set: an element with no filter captures nothing. @see BackdropFilterValue</p>
      */
