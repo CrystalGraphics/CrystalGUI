@@ -56,7 +56,7 @@ public final class CgSvgCanvasScene implements InteractiveSceneLifecycle {
         // The SCREEN stage, as cgui-svg-icon draws on: a 2D scene has no camera readout over the strip
         hud = CgRenderStage.SCREEN.register(CgRenderStage.VIEWPORT_WIDGETS, frame -> {
             turns++;
-            draw(CgCanvas.on(frame));
+            draw(frame.canvas());
         });
     }
 

@@ -84,7 +84,6 @@ import dev.vfyjxf.taffy.style.FlexDirection;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
-import java.util.function.BiConsumer;
 
 /**
  * Every CrystalGUI widget, one page each, in one navigable window — the front door.
@@ -2432,8 +2431,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
      * {@code CgUiPaintContext.curve()} — Bézier strokes as an ordinary painting capability, available
      * to any element's {@code paintSelf} exactly as a canvas fill is.
      *
-     * <p>The renderer itself is covered against a raw GL surface by the harness's
-     * {@code curve-renderer-test} scene. What this page covers is what the UI layer adds:</p>
+     * <p>The renderer itself is covered by the harness's {@code ui-canvas} scene. What this page covers is what
+     * the UI layer adds:</p>
      * <ul>
      *   <li><b>Pose</b> — strokes are placed in element-local coordinates. Were the {@code PoseStack}
      *       not applied they would land at raw screen coordinates, which reads as a layout bug rather

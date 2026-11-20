@@ -4,8 +4,8 @@
 
 ## Shipped assets
 
-> **CrystalGUI ships no shader.** Everything the UI draws is a CrystalGraphics canvas material (`CgEngineMaterials`, `CgCanvasPrimitives`:
-> box, curve, text, image, gradient, grid, glass), precached by the engine. A surface the canvas cannot draw is a canvas
+> **CrystalGUI ships no shader.** Everything the UI draws is a CrystalGraphics canvas material (`CgCanvas`, `CgCanvasPrimitives`:
+> element, curve, text, glass), precached by the engine. A surface the canvas cannot draw is a canvas
 > feature added to CrystalGraphics, as the colour picker's conic ring and checkerboard were, never a shader here
 > (`CrystalGraphics/docs/PRECACHE.md`).
 
@@ -31,7 +31,7 @@
 | `textures/gui/Spritesheet_UI_Flat.png` | Unreferenced by any stylesheet today. |
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
 | `ui/fonts/IBMPlexSans-Regular.ttf`, `JetBrainsMono-Regular.ttf` | The UI face and the code face, SIL OFL 1.1, each with its licence beside it (`IBMPlexSans-OFL.txt`, `OFL.txt`). IBM Plex moved here from CrystalGraphics on 2026-09-11, which now ships no fonts: anything neither face covers comes from the installed fonts (`CgSystemFonts`). |
-| (boxes, curves, gradients, grids, glass, coverage, the blur) | **Not shipped here: CrystalGraphics' canvas** (`CgEngineMaterials`, `CgCanvasPrimitives`, `crystalgraphics:shaders/canvas/`, `CANVAS.md` § 3) and its blur (`CgGpuOps.blurScaled`, compute). The paint context draws every box through `SCREEN.box()`, every stroke and cell through `SCREEN.curve()`, gradients, grids and glass through `CgCanvasGradient`, `CgCanvasGrid` and `CgCanvasGlass`, and an icon's coverage through `SCREEN.coverage()`; a thumbnail is `CgGpuOps.shrink`, on compute. A composite of a layer is a box quad stamped `CgShapeTable.PREMULTIPLIED`, its texture on the quad. **Every quad material here antialiases its own edges when rotated or sheared, with no MSAA** — the `CG_QUAD_EDGE_*` helpers in `canvas/primitives/quad.glsl`; the `edges` page of `cgui-gallery` shows every material rotated and skewed. |
+| (boxes, curves, gradients, grids, glass, coverage, the blur) | **Not shipped here: CrystalGraphics' canvas** (`CgCanvas`, `CgCanvasPrimitives`, `crystalgraphics:shaders/ui/`, `UI_CANVAS.md`) and its blur (`CgGpuOps.blurScaled`, compute). The paint context draws every box, image, gradient, grid and glass pane as a canvas element, every path and icon as exact coverage through the shared path atlas; a thumbnail is `CgGpuOps.shrink`, on compute. **Every element antialiases its own edges when rotated or sheared, with no MSAA**; the `edges` page of `cgui-gallery` shows every kind rotated and skewed. |
 
 ## Icons
 

@@ -1364,12 +1364,12 @@ side of it you land on.
 CgMaterial material = CgMaterial.load("mymod:shaders/badge.shader");   // a #domain ui material
 
 CgRenderStage.Registration badge = CgRenderStage.HUD.register(CgUiScreen.ORDER + 1, frame ->   // over the windows
-        frame.canvas().quad(material).at(8f, 8f).size(32f, 32f).color(0xFFFF8800).submit());
+        frame.canvas().box(8f, 8f, 32f, 32f).fill(0xFFFF8800).material(material).draw());
 badge.close();   // and it stops
 ```
 
 - **Coordinates** are the window's device pixels, origin top left: `frame.canvas()` draws under that camera, and
-  `frame.guiScaledCanvas()` in the GUI's pixels (Minecraft's GUI scale). `frame.host().width()`/`height()` are the
+  `frame.scaled()` in the GUI's pixels (Minecraft's GUI scale). `frame.host().width()`/`height()` are the
   surface's size.
 - **Once a frame each**, on the render thread, from the game's own screen and HUD hooks. `SCREEN` fires once whoever's
   screen is up; neither fires on a server, and Fabric below 1.16 has no `SCREEN`.
@@ -1382,8 +1382,8 @@ badge.close();   // and it stops
 - **`SCREEN` is rehearsed behind the loading screen**: CrystalGUI fires it into a hidden target with a throwaway
   desktop until the JIT settles (`CgRehearsal`), and your renderer runs in each pass too. Record what you would in
   play; `CgRehearsal.active()` says when it is one.
-- Everything a stage's canvas draws (images, lines, text, world-following widgets): CrystalGraphics'
-  [`docs/CANVAS.md`](../CrystalGraphics/docs/CANVAS.md).
+- Everything a stage's canvas draws (images, paths, text, world-following widgets): CrystalGraphics'
+  [`docs/UI_CANVAS.md`](../CrystalGraphics/docs/UI_CANVAS.md).
 - A world-space effect belongs in CrystalGraphics' scene or on its world stages instead (`CgScene.client()`,
   `CgRenderStage.TRANSLUCENT`); CrystalGraphics' [`docs/SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Drawing from your
   mod*.

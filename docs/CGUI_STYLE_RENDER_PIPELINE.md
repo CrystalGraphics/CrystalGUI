@@ -465,7 +465,7 @@ resolves to (§7), not a background value of its own.
 ## 7. Universal Border-Radius/Border-Width/Border-Color Layer
 
 `CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/lib/sdf.glsl`,
-`CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/canvas/box.shader`,
+`CrystalGraphics/core/src/main/resources/assets/crystalgraphics/shaders/ui/primitives/Element.primitive`,
 `core/src/main/java/com/crystalgui/ui/box/BoxPainter.java`, `core/src/main/java/com/crystalgui/render/image/`,
 `core/src/main/java/com/crystalgui/style/property/visual/border/`
 
@@ -529,8 +529,8 @@ never disagree about the element's shape. `sdf_coverage` turns a signed distance
 0–1 mask via `fwidth`.
 
 > **`sdf_coverage` is guarded out of the vertex and compute stages, and that guard is load-bearing.**
-> `canvas/box.shader` includes `sdf.glsl` at *material* scope, and CrystalGraphics' compiler
-> hoists every material-scope `#`-line into **both** generated stages — so without the guard,
+> The `Element` primitive includes `sdf.glsl` in its declarations, and CrystalGraphics' compiler
+> hoists every declaration-scope `#`-line into **both** generated stages — so without the guard,
 > `fwidth`, a fragment-only derivative builtin, lands in the vertex shader. NVIDIA compiles that
 > anyway. AMD refuses, and the whole material fails to compile: an AMD tester could not launch
 > `cgui-gallery` at all while it ran flawlessly here. The three `sdf_rounded_box` overloads are pure
@@ -557,7 +557,7 @@ gradients of one shape slide, anything else cross-fades.
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
 `opacity < 1` over children that can overlap, and a `mask`, paint into a **group layer**: the canvas's
-`layer(x, y, w, h)` (CrystalGraphics `api.canvas`, `CrystalGraphics/docs/CANVAS.md`), opened by `BoxPainter`. Ordinary
+`layer(x, y, w, h)` (CrystalGraphics `api.canvas`, `CrystalGraphics/docs/UI_CANVAS.md`), opened by `BoxPainter`. Ordinary
 elements (opacity 1, no mask) skip this entirely, and so does a rounded `overflow: hidden`, which is a clip (below).
 
 ```java

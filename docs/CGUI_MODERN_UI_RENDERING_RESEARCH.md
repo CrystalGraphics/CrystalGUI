@@ -4,8 +4,8 @@
 the exact numbers each one publishes and what each implies for this engine. It exists because the
 first version of every one of these was built from memory and looked plausible while being wrong in a
 way only the source could show: a Gaussian that was a comb, a "Mica" that let hue through, a gradient
-that banded. **Read the relevant section before touching CrystalGraphics' `canvas/glass.shader`, `CgGpuOps.blurScaled`,
-`canvas/gradient.shader`, `CgUiBackdrop` or the taskbar's sheet.** Every claim below carries its source;
+that banded. **Read the relevant section before touching CrystalGraphics' `ui/glass.shader`, `CgGpuOps.blurScaled`,
+`paint/gradient.glsl`, `CgUiBackdrop` or the taskbar's sheet.** Every claim below carries its source;
 where a number is measured or community-reported rather than published, it says so.
 
 Last researched 2026-08-26. The "Implications" column in each section is ours; everything else is
@@ -291,9 +291,9 @@ edge streak at the bottom lip for good. **Done:** the blur mirrors at its region
   to the colour *before* quantisation; unordered (hash) noise avoids the pattern ordered dithers show.
   — [Shader tutorial: colour banding and dithering](https://shader-tutorial.dev/advanced/color-banding-dithering/)
 
-**Implications.** `canvas/gradient.shader` is written to all of this and measured against it on the
-`cgui-gradient-probe` scene: one draw evaluates up to eight stops per fragment along CSS's gradient
-line (Skia's unrolled shape — a longer gradient is several draws, each owning a window of *t*),
+**Implications.** The canvas's gradients (`paint/gradient.glsl`, read from the recording's gradient table by
+`paint/gradient_table.glsl`) are written to all of this and measured against it on the
+`cgui-gradient-probe` scene: each element evaluates its stops per fragment along CSS's gradient line,
 interpolates **premultiplied** (CSS Images 3 §3.4.3: `transparent` is transparent black, so a straight
 lerp toward it passes through a dark half-colour), and adds `hash12(gl_FragCoord) − 0.5` over 255 to
 every channel including alpha (the bands in a translucent wash are alpha bands) as the LAST operation

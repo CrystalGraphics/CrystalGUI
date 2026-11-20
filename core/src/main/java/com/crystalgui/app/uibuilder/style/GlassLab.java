@@ -6,7 +6,6 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-import com.crystalgraphics.render.canvas.CgCanvasGlass;
 import com.crystalgui.app.uibuilder.inspect.LiveEdits;
 import com.crystalgui.core.config.ConfigDescriptor;
 import com.crystalgui.core.property.Property;
@@ -88,7 +87,7 @@ public final class GlassLab {
             new Knob("Edge width", "edge-width", 0f, 12f, Scale.PX),
             new Knob("Rim ambient", "rim-ambient", 0f, 100f, Scale.PERCENT)};
 
-    /** Each a different material rather than a different amount; the looks are the engine's (CgCanvasGlass). */
+    /** Each a different material rather than a different amount; the looks are the engine's (CgBackdropFilter's presets). */
     private static final Preset[] PRESETS = {
             new Preset("Clear", CgBackdropFilter.CLEAR),
             new Preset("Frosted", CgBackdropFilter.FROSTED),

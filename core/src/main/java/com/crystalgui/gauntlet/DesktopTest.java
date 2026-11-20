@@ -1,6 +1,5 @@
 package com.crystalgui.gauntlet;
 
-import com.crystalgraphics.api.material.engine.CgEngineMaterials;
 import com.crystalgui.screen.CgUiScreen;
 import java.util.ArrayList;
 import java.util.List;
@@ -186,8 +185,8 @@ public final class DesktopTest extends DesktopRun {
         }
 
         private void draw(CgStageFrame frame) {
-            // The canvas's image with no texture: its colour alone, the least a mod draws at a stage with.
-            frame.canvas().quad(CgEngineMaterials.IMAGE.screen()).at(4f, 4f).size(12f, 12f).color(MARK).submit();
+            // A flat colour: the least a mod draws at a stage with.
+            frame.canvas().fill(4f, 4f, 12f, 12f, MARK);
         }
     }
 }

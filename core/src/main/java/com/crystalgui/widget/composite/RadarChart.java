@@ -1,7 +1,7 @@
 package com.crystalgui.widget.composite;
 
 import com.crystalgraphics.api.canvas.CgCanvasTriangle;
-import com.crystalgraphics.render.canvas.CgCurveBatch;
+import com.crystalgraphics.render.ui.path.CgCurveRecords;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.render.texture.ArgbMath;
 import com.crystalgui.style.StyleGroup;
@@ -53,7 +53,7 @@ import java.util.List;
  * rather than a single polygon in one colour. That is this chart's own design rather than Chart.js's,
  * and it is what makes a six-attribute sheet readable at a glance: each attribute owns a wedge.</p>
  *
- * <p>Each wedge marks {@link CgCurveBatch#EDGE_P1_P2} as its silhouette — the rim — so only the
+ * <p>Each wedge marks {@link CgCurveRecords#EDGE_P1_P2} as its silhouette — the rim — so only the
  * outer edge is antialiased and the two spokes into the centre stay hard. Feathering all three would
  * put a soft seam between every neighbouring pair, which reads as a hairline crack through the fan.</p>
  *
