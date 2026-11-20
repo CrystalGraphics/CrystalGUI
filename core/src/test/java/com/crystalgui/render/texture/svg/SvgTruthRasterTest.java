@@ -9,10 +9,12 @@ import javax.imageio.ImageIO;
 
 import org.junit.Test;
 
+import com.crystalgraphics.util.io.CgIO;
+
 /**
  * The truth an icon raster is judged against: a document's own ops (its tessellation, not a browser's reading of the
- * file) rasterised on the CPU at 256 samples a pixel, fills by their cells and strokes as the union of their segments'
- * capsules, composited in op order. Writes premultiplied RGBA PNGs that {@code steps/UI7/truth.py} scores a capture
+ * file) at the tier drawn at that size, rasterised on the CPU at 256 samples a pixel, fills by their cells and strokes as the union of their segments'
+ * capsules, composited in op order. Writes straight-alpha PNGs that {@code steps/UI7/truth.py} scores a capture
  * against.
  *
  * <pre>{@code
@@ -30,11 +32,17 @@ public class SvgTruthRasterTest {
         String sizes = System.getProperty("crystalgui.svgTruth.sizes", "32,28,24,20,16");
         File out = new File(System.getProperty("crystalgui.svgTruth.out", "build/svg-truth"));
         out.mkdirs();
-        SvgDocument document = SvgDocument.load(icon);
+        String source = CgIO.loadSource(icon);
         for (String s : sizes.split(",")) {
             int device = Integer.parseInt(s.trim());
+            SvgDocument document = SvgDocument.parse(source, stepsFor(device));
             ImageIO.write(raster(document, device), "png", new File(out, "truth_" + device + ".png"));
         }
+    }
+
+    /** The curve resolution of the tier drawn at {@code device} px: {@code SvgDocument}'s ladder. */
+    static int stepsFor(int device) {
+        return device <= 24 ? 8 : device <= 64 ? 10 : device <= 160 ? 12 : 16;
     }
 
     /** The document fitted into {@code device} square pixels, centred, as {@code CgUiSvg} fits it on the grid. */
