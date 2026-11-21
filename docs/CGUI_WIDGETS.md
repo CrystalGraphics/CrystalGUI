@@ -1558,7 +1558,7 @@ raises — *why are there seventeen layers?* — and they account for every one:
 |---|---|
 | `layers-opacity` · `layers-mask` | What the layer is **for**. A mask layer is two targets and a composite; an opacity layer is one, and the two are removed by different things. `layers-mask` counts only the masks that could not be a rounded clip |
 | `layers-elided` · `masks-elided` | A layer that was **not** opened — an opacity folded into the draw, a rounded box with no children to clip |
-| `clips-rounded` | A rounded `overflow: hidden` clipped with no layer at all: a `CgClipTable` entry its children's draws carry |
+| `clips-rounded` | A rounded `overflow: hidden` clipped with no layer at all: a `CgClipTree` entry its children's draws carry |
 | `segments-replayed` · `segments-changed` | A box's own paint recorded again from what it kept, against painted anew |
 | `segments-dynamic` | Never kept, because the node repaints itself (`backdrop-filter`, or a node overriding a paint hook without `paintsDynamically()` false). A readout with many of these and few replayed usually means this, not a broken cache |
 | `surfaces-kept` · `surfaces-painted` | A window composited from its picture, against walked again |

@@ -597,7 +597,7 @@ nothing. It eases between two insets (`ClipPathProperty`), which is what a flyou
 **A rounded `overflow: hidden` is a clip, not a layer.** It clips the children to the padding box with the inner
 corners, **whatever the background** — CSS's rule; a translucent panel does not fade its own children, and alpha
 masking is the `mask` property's job. It is the canvas's `clip(x, y, w, h, radii)`, the radii cached on the `Box`:
-geometric, under any transform, so a rotated or skewed box clips exactly. Clips nest to `CgClipTable.MAX_DEPTH` (4);
+geometric, under any transform, so a rotated or skewed box clips exactly. Clips nest to `CgClipTree.MAX_DEPTH` (4);
 past that the canvas clips by a path mask. The children cost no target, no clear and no composite.
 
 **A subtree drawn wholly outside the clip is not walked.** `BoxPainter` carries each box's ink bounds through the
