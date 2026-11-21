@@ -8569,30 +8569,15 @@ com/crystalgui/net/window/WindowProtocol
 com/crystalgui/render/CgUiPaintContext
   access public,final
   extends java/lang/Object
-  field public mouseX I
-  field public mouseY I
-  field public,static,final CULL Z
-  field public,static,final DAMAGE Z
-  field public,static,final NODES Z
-  field public,static,final REPLAY Z
-  field public,static,final REPLAY_CHECK Z
-  field public,static,final SURFACES Z
   method public abortFrame ()V
-  method public beginPasses ()Lcom/crystalgraphics/render/graph/CgRecording;
   method public beginSegment ()V
   method public canvas ()Lcom/crystalgraphics/api/canvas/CgCanvas;
-  method public deviceScale ()F
-  method public endPasses ()V
   method public endSegment ()V
   method public endSegment (Lcom/crystalgraphics/api/canvas/CgPaintChunk;)Z
   method public frameId ()J
   method public getFont ()Lcom/crystalgraphics/api/font/CgFont;
   method public isFrameActive ()Z
-  method public isPoseAxisAligned ()Z
-  method public isVisible (FFFF)Z
-  method public mirrored (Ljava/lang/Runnable;)V
-  method public mirroring ()Z
-  method public outsideClip (FFFF)Z
+  method public passes (Ljava/util/function/Consumer;)V
   method public recordFrame (II)V
   method public releaseTexture (Lcom/crystalgraphics/render/graph/CgGraphTexture;)V
   method public replay (Lcom/crystalgraphics/api/canvas/CgPaintChunk;)Z
@@ -8600,13 +8585,7 @@ com/crystalgui/render/CgUiPaintContext
   method public requestTexture (Ljava/lang/String;II)Lcom/crystalgraphics/render/graph/CgGraphTexture;
   method public seal ()Lcom/crystalgraphics/api/canvas/CgCanvasFrame;
   method public segmentDrawn ([F)Z
-  method public snapXToDevicePixel (F)F
-  method public snapYToDevicePixel (F)F
   method public surface (Ljava/lang/Object;FFFF)Lcom/crystalgui/render/Surface;
-  method public targetHeight ()I
-  method public targetWidth ()I
-  method public text ()Lcom/crystalgraphics/text/render/CgTextDraw;
-  method public textDegradedDrawCount ()J
   method public textGamma (Lcom/crystalgraphics/text/render/CgTextGamma;)V
   method public update (Lcom/crystalgraphics/render/graph/CgGraphTexture;IIIILjava/nio/ByteBuffer;)V
   method public withoutRetention (Ljava/lang/Runnable;)V
@@ -8640,6 +8619,16 @@ com/crystalgui/render/InkOverflow
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
   method public,static uniform (F)Lcom/crystalgui/render/InkOverflow;
+com/crystalgui/render/PaintFlags
+  access public,final
+  extends java/lang/Object
+  field public,static,final CULL Z
+  field public,static,final DAMAGE Z
+  field public,static,final NODES Z
+  field public,static,final REPLAY Z
+  field public,static,final REPLAY_CHECK Z
+  field public,static,final SEGMENTS Z
+  field public,static,final SURFACES Z
 com/crystalgui/render/Surface
   access public,final
   extends java/lang/Object
@@ -8930,27 +8919,22 @@ com/crystalgui/render/image/CgUiImagePainter
   access public,final
   extends java/lang/Object
   method public <init> ()V
-  method public fill (Lcom/crystalgui/render/CgUiPaintContext;IFFFFLcom/crystalgraphics/api/vector/CgCornerRadii;Lcom/crystalgui/render/image/CgUiImagePainter$Border;)V
+  method public fill (Lcom/crystalgui/render/CgUiPaintContext;IFFFF)Lcom/crystalgui/render/image/CgUiImagePainter$Draw;
   method public fit (Lcom/crystalgui/render/image/CgUiImage;FFFFLcom/crystalgui/style/property/visual/DrawableFit;Lcom/crystalgui/style/property/visual/DrawableAlign;[F)V
+  method public image (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/render/image/CgUiImage;FFFF)Lcom/crystalgui/render/image/CgUiImagePainter$Draw;
   method public intrinsicHeight (Lcom/crystalgui/render/image/CgUiImage;)F
   method public intrinsicWidth (Lcom/crystalgui/render/image/CgUiImage;)F
-  method public paint (Lcom/crystalgui/render/CgUiPaintContext;Lcom/crystalgui/render/image/CgUiImage;FFFFIILcom/crystalgraphics/api/vector/CgCornerRadii;Lcom/crystalgui/render/image/CgUiImagePainter$Border;)V
   method public texture (Lcom/crystalgui/render/image/CgUiImage$Picture;)Lcom/crystalgraphics/gpu/resource/CgTexture2D;
   method public texture (Lcom/crystalgui/render/image/CgUiImage$Sheet;)Lcom/crystalgraphics/api/texture/CgTexture;
-com/crystalgui/render/image/CgUiImagePainter$Border
+  method public,static forgetResources ()V
+com/crystalgui/render/image/CgUiImagePainter$Draw
   access public,final
   extends java/lang/Object
-  field public bottom F
-  field public bottomColor I
-  field public color I
-  field public left F
-  field public leftColor I
-  field public right F
-  field public rightColor I
-  field public top F
-  field public topColor I
-  method public <init> ()V
-  method public active ()Z
+  method public border (FFFFIIII)Lcom/crystalgui/render/image/CgUiImagePainter$Draw;
+  method public color (I)Lcom/crystalgui/render/image/CgUiImagePainter$Draw;
+  method public draw ()V
+  method public pictureTint (I)Lcom/crystalgui/render/image/CgUiImagePainter$Draw;
+  method public radii (Lcom/crystalgraphics/api/vector/CgCornerRadii;)Lcom/crystalgui/render/image/CgUiImagePainter$Draw;
 com/crystalgui/render/image/CgUiMark
   access public,final,enum
   extends java/lang/Enum

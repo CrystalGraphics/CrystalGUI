@@ -5,8 +5,9 @@ import com.crystalgraphics.api.canvas.CgCanvasPresenter;
 import com.crystalgraphics.render.precache.CgPipelinePrecache;
 import com.crystalgui.core.trace.FrameLog;
 import com.crystalgui.core.trace.FrameStats;
+import com.crystalgui.render.image.CgUiImagePainter;
 import com.crystalgraphics.compute.ops.CgGpuOps;
-import org.jspecify.annotations.Nullable;
+import javax.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.LinkedHashSet;
@@ -65,10 +66,13 @@ public final class CgUiRenderer {
 
     /**
      * Frees what every view's paint context made: frame targets, surfaces, backdrop and icon-raster textures, requested
-     * from the graph, which no registry sweeps. Views stay open and make them again at their next frame. At graphics
-     * context destruction, before CrystalGraphics frees its own; render thread, idempotent.
+     * from the graph, which no registry sweeps; a frame recording on a document's own thread is waited for first. And
+     * forgets the images resolved against textures the context takes with it. Views stay open and make them again at
+     * their next frame. At graphics context destruction, before CrystalGraphics frees its own; render thread,
+     * idempotent.
      */
     public static void contextDestroyed() {
+        CgUiImagePainter.forgetResources();
         List<View> views;
         synchronized (PAINTING) {
             views = new ArrayList<>(PAINTING);

@@ -6,7 +6,7 @@ import com.crystalgraphics.text.atlas.CgGlyphAtlas;
 import com.crystalgraphics.text.cache.CgFontRegistry;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
-import org.jspecify.annotations.Nullable;
+import javax.annotation.Nullable;
 
 import java.util.Arrays;
 
@@ -16,9 +16,6 @@ import java.util.Arrays;
  * {@code replay} and {@code replayEpoch} are its doors.
  */
 final class PaintSegments {
-
-    /** Off with {@code -Dcrystalgui.paint.segments=false}: no box's paint is taken apart from its neighbours'. */
-    static final boolean SEGMENTS = !"false".equals(System.getProperty("crystalgui.paint.segments"));
 
     private final CgPaintChunk scratch = new CgPaintChunk();
 
@@ -49,7 +46,7 @@ final class PaintSegments {
     }
 
     void begin(CgCanvas canvas) {
-        if (!SEGMENTS) return;
+        if (!PaintFlags.SEGMENTS) return;
         if (depth == chunked.length) chunked = Arrays.copyOf(chunked, depth * 2);
         boolean take = !canvas.chunking();
         chunked[depth++] = take;
@@ -57,14 +54,14 @@ final class PaintSegments {
     }
 
     boolean end(CgCanvas canvas, @Nullable CgPaintChunk keep) {
-        if (!SEGMENTS) return false;
+        if (!PaintFlags.SEGMENTS) return false;
         drawnKnown = false;
         CgTrace.add(UiTrace.FRAME, "segments", 1);
         if (!chunked[--depth]) {
             if (keep != null) keep.clear();
             return false;
         }
-        CgPaintChunk into = keep != null && CgUiPaintContext.REPLAY ? keep : scratch;
+        CgPaintChunk into = keep != null && PaintFlags.REPLAY ? keep : scratch;
         CgPaintChunk.Refusal why = canvas.endChunk(into);
         if (into.kept()) drawn(into);
         if (into == scratch) {
@@ -79,7 +76,7 @@ final class PaintSegments {
     boolean replay(CgCanvas canvas, CgPaintChunk kept) {
         drawnKnown = false;
         // Inside another's chunk a replay would be taken twice: the box paints
-        if (!CgUiPaintContext.REPLAY || canvas.chunking() || !canvas.replay(kept)) return false;
+        if (!PaintFlags.REPLAY || canvas.chunking() || !canvas.replay(kept)) return false;
         drawn(kept);
         CgTrace.add(UiTrace.FRAME, "segments-replayed", 1);
         return true;

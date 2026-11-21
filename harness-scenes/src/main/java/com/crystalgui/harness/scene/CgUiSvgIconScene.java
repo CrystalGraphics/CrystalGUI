@@ -297,12 +297,12 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         // Pass 3 -- labels. One switch to the text path for all of them.
         float labelPx = Math.max(7f, Math.min(48f, 9f * zoom));
         for (int i = 0; i < entries.size(); i++) {
-            paint.text().at(cellX(i, cellW), cellY(i, cellH) + iconPx)
+            paint.canvas().textDraw().at(cellX(i, cellW), cellY(i, cellH) + iconPx)
                     .text(entries.get(i).name())
                     .font(paint.getFont().atSize((int) labelPx)).submit();
         }
 
-        paint.text().at(MARGIN, screenHeight - 16f)
+        paint.canvas().textDraw().at(MARGIN, screenHeight - 16f)
                 .text(String.format("%d icons  --  %d missing (red)  %d blank (amber)  "
                                 + "%d cells  %d segments  --  drag to pan, scroll to zoom (%.2fx)",
                         entries.size(), missing, blank, cells, segments, zoom))
@@ -359,7 +359,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         paint.canvas().save().scale(studyScale, studyScale);
         float x = MARGIN;
         for (int size : studySizes) {
-            studyPainter.paint(paint, study, x, MARGIN, size, size, 0xFFFFFFFF, 0xFFFFFFFF, null, null);
+            studyPainter.image(paint, study, x, MARGIN, size, size).draw();
             x += size + STUDY_GAP;
         }
         paint.canvas().restore();
@@ -369,7 +369,7 @@ public class CgUiSvgIconScene implements InteractiveSceneLifecycle, CgSystemInpu
         for (int size : studySizes) label.append(' ').append(size);
         label.append("  =  device");
         for (int size : studySizes) label.append(' ').append(Math.round(size * studyScale));
-        paint.text().at(MARGIN, (MARGIN + studySizes[0] + MARGIN) * studyScale)
+        paint.canvas().textDraw().at(MARGIN, (MARGIN + studySizes[0] + MARGIN) * studyScale)
                 .text(label.toString()).font(paint.getFont().atSize(12)).submit();
     }
 

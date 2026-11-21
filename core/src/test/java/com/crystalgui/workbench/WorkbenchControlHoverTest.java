@@ -1,6 +1,7 @@
 package com.crystalgui.workbench;
 
 import com.crystalgui.render.image.CgUiImage;
+import com.crystalgui.style.property.StylePropertyRegistry;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
@@ -234,8 +235,9 @@ public class WorkbenchControlHoverTest extends UiDocumentTestBase {
     }
 
     private static int backgroundOf(UIElement node) {
-        CgUiImage drawable = node.getStyle().getGeneralGroup().background();
-        assertTrue("expected a flat fill, got " + drawable, drawable instanceof CgUiImage.Color);
-        return ((CgUiImage.Color) drawable).argb();
+        // A flat colour is `background-color`; the image layer over it stays empty
+        CgUiImage image = node.getStyle().getGeneralGroup().background();
+        assertTrue("expected a flat fill, got the image " + image, image == CgUiImage.NONE);
+        return node.computedStyle().get(StylePropertyRegistry.BACKGROUND_COLOR);
     }
 }

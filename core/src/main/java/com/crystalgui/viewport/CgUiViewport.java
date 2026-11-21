@@ -109,7 +109,7 @@ public final class CgUiViewport implements CgSystemInput.Mouse, CgSystemInput.Ke
      * <pre>{@code
      * CgUiViewport.Content.whole(document);
      * CgUiViewport.Content.whole(document, ctx -> ctx.textGamma(gamma), null);       // before the document paints
-     * CgUiViewport.Content.whole(document, null, ctx -> ctx.text().at(4, 4).text(fps).submit());   // over it
+     * CgUiViewport.Content.whole(document, null, ctx -> ctx.canvas().textDraw().at(4, 4).text(fps).submit());   // over it
      * }</pre>
      */
     public interface Content {

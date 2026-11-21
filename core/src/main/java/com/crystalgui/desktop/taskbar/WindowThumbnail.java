@@ -339,15 +339,15 @@ public class WindowThumbnail extends UIElement {
     /** {@code width x height} centred in the box, into {@code out}: its origin on whole device pixels if {@code snap}. */
     private void place(CgUiPaintContext ctx, Box box, float width, float height, float[] out, boolean snap) {
         float x = (box.width() - width) / 2f, y = (box.height() - height) / 2f;
-        if (ctx.isPoseAxisAligned()) {
+        if (ctx.canvas().rectilinear()) {
             // The origin snapped and the size rounded once, in device pixels: snapping both edges instead lets
             // the width flip a pixel as the box slides, which changes the scale and the texels sampled.
             float[] m = ctx.canvas().transform(affine);
             float sx = Math.abs(m[0]), sy = Math.abs(m[3]);
             if (sx > 1e-6f && sy > 1e-6f) {
                 if (snap) {
-                    x = ctx.snapXToDevicePixel(x);
-                    y = ctx.snapYToDevicePixel(y);
+                    x = ctx.canvas().snapX(x);
+                    y = ctx.canvas().snapY(y);
                 }
                 width = Math.max(1f, Math.round(width * sx)) / sx;
                 height = Math.max(1f, Math.round(height * sy)) / sy;

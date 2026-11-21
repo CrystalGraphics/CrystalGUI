@@ -42,10 +42,10 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
 |---|---|
 | Frame | `recordFrame(w, h)` / `seal()`, `abortFrame()` for a paint that threw, `frameId()` |
 | Canvas | `canvas()`: the frame's `CgCanvas`. Placing, clipping and fading are its `save`/`setTransform`/`translate`/`clip`/`opacity`/`restore`; a group is `layer(...)` |
-| Draw | `text()` (`canvas().textDraw()`); everything else draws on the canvas: `fill`, `box(...)`, `image`, `spline()` |
-| Pixels | `deviceScale`, `isPoseAxisAligned`, `snapXToDevicePixel`/`snapYToDevicePixel`, `isVisible`, `outsideClip`, `targetWidth`/`targetHeight`, all read from the canvas's transform and clip |
+| Draw | nothing of its own: every item is the canvas's (`fill`, `box(...)`, `image`, `spline()`, `textDraw()`), and every item, text included, takes the canvas's opacity |
+| Pixels | the canvas's too: `deviceScale()`, `rectilinear()`, `snapX`/`snapY`, `outsideClip(...)`, `degradedDraws()` |
 | Retention | `beginSegment`/`endSegment`/`replay`, `segmentDrawn`, `replayEpoch`; `surface(key, x0, y0, x1, y1)`, `withoutRetention(body)` |
-| Textures | `requestTexture(name, w, h)` / `releaseTexture`, `update(texture, x, y, w, h, rgba)`, `beginPasses`/`endPasses` for a caller's own passes |
+| Textures | `requestTexture(name, w, h)` / `releaseTexture`, `update(texture, x, y, w, h, rgba)`, `passes(recording -> ...)` for a caller's own passes |
 
 > **Placing is the canvas's state, saved and restored.** A painter that moves, clips or fades brackets it:
 > `ctx.canvas().save().opacity(a).clip(x, y, w, h)` ... `restore()`. Nothing in the context pushes or pops.
@@ -57,6 +57,8 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
 
 > **A view's textures are freed by its `close()`, and by `CgUiRenderer.contextDestroyed()` for one left open**
 > (`CgUiClientLifecycle.onContextDestroy` calls it): the recorder's picture, kept surfaces and requested textures.
+> A frame recording on a document's own thread is waited for, two seconds at most, and the image painter's resolved
+> pictures, sheets and icons are forgotten with the textures under them.
 > Not what is borrowed from CrystalGraphics' registries (materials, font atlases): `destroyContext()` sweeps those, and
 > freeing them here would be a double free.
 
@@ -113,7 +115,7 @@ A host never writes that by hand: `CgUiViewport.frame(stage, content)` records i
 - **`Surface`**: a box's kept picture over `CgKeptLayer`, its key and its `Owner`.
 - **`InkOverflow`**: ink bounds past a box, for layers and surfaces sized to what they hold.
 - **`UiPaintWarmup`** — the default font, the stylesheets' glyphs and the shipped icons, loaded off the render
-  thread for `CgUiPaintContext.Warm`.
+  thread for the loading screen (`UiPaintWarmup.preload`).
 - **`FontFamilyCache`** — `(font-family stack, target px)` → `CgFontFamily`, cached. Reference
   equality on the result is therefore meaningful and is relied on by `UIText`. An entry is a resource
   path (`crystalgui:ui/fonts/x.ttf` — it holds a `:` or `/`, or ends in a font extension), an installed
@@ -139,7 +141,8 @@ CgUiImage.mark(CgUiMark.CHEVRON_DOWN);                // a mark, in the element'
 ColorField.ramp(from, to).corners(2f).image();        // a hand-drawn painter: CgUiPainter
 element.generalStyle(g -> g.overlay(CgUiImage.findIcon("crystalgui:save")));
 
-images.paint(ctx, image, x, y, w, h, color, pictureTint, radii, border);   // what BoxPainter does
+images.image(ctx, image, x, y, w, h).color(color).radii(radii).draw();      // what BoxPainter does
+images.fill(ctx, argb, 0, 0, w, h).border(1, 1, 1, 1, l, t, r, b).draw();    // a background colour, bordered
 images.fit(image, x, y, w, h, DrawableFit.CONTAIN, align, out);            // where a sized image lands
 ```
 
@@ -151,7 +154,7 @@ images.fit(image, x, y, w, h, DrawableFit.CONTAIN, align, out);            // wh
 | `Icon` | `icon("name", ...)` | `canvas.image(CgBrush.svg(...))`, its document re-read on a variant or `CgSvg.generation()` change; snapped where a hinted icon is |
 | `Mark` | `shape("checkmark")` | `CgUiMark`'s path, in `color` |
 | `Painted` | `paint(name)` | `CgUiPainter.paint(canvas, w, h, color)`; `CgUiPainter.register` names one for CSS |
-| `CrossFade`, `Layers` | `cross-fade(...)`, a comma list | both at crossing opacities; each layer, the first on top |
+| `CrossFade`, `Layers` | `cross-fade(...)`, a comma list | both added in a layer at `1 - t` and `t`, the border once; each layer, the first on top |
 
 - **Everything resolved is cached by value, shared by every painter**: a picture's texture and brush, a sheet's
   brush, an icon's document. A frame allocates nothing.

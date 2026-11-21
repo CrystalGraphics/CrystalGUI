@@ -37,7 +37,7 @@ channel the map names, and read the coverage (`unzoned`, `unexplained`, `GAP`, `
 | After layout | `frame:afterLayout` | — | every `afterLayout` hook |
 | Input | `frame:input` | — | the hover diff and every listener the frame's pointer events reach |
 | Hover | `frame:hover` | — | the re-style, layout and settle when the hover moved |
-| Paint | `paint:tree`; `glend:build`; `svg.loadSource`, `svg.parse` | `drawcalls`, `text-draws`, `culled`, `layers-opacity`/`-mask`/`-elided`, `masks-elided`, `clips-rounded`, `segments`, `segments-unchanged`/`-changed`/`-dynamic`, `segments-replayed`, `segments-kept`/`-unkept`, `segments-unkept-<reason>`, `replay-check-differs`, `surfaces-kept`/`-painted`/`-new`, `surface-miss-<reason>` | every box's paint, the canvas recording and the seal |
+| Paint | `paint:tree`; `glend:build`; `svg.loadSource`, `svg.parse` | `drawcalls`, `culled`, `layers-opacity`/`-mask`/`-elided`, `masks-elided`, `clips-rounded`, `segments`, `segments-unchanged`/`-changed`/`-dynamic`, `segments-replayed`, `segments-kept`/`-unkept`, `segments-unkept-<reason>`, `replay-check-differs`, `surfaces-kept`/`-painted`/`-new`, `surface-miss-<reason>` | every box's paint, the canvas recording and the seal |
 | Editor | `ed:*`, `ln:*`, `part:<name>` | — | zoned per phase; `ed:*` spans on `flow` for edits |
 | GPU | `gpu:ui` (the whole paint, composite included) | — | — |
 

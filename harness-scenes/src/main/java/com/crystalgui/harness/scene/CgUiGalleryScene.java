@@ -2919,7 +2919,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
     @Override
     protected void paintOver(CgUiPaintContext context) {
         Tab selected = pages.getSelectedTab();
-        context.text().at(0, 0)
+        context.canvas().textDraw().at(0, 0)
                 .text(String.format("Gallery — page=%s   theme=%s   uiScale=%.2f (Ctrl+= Ctrl+-)   clicks=%d   slider=%.0f",
                         selected == null ? "none" : selected.getText(),
                         oreOn ? "ore" : "default",

@@ -7,7 +7,6 @@ import com.crystalgui.ui.service.Drag;
 import com.crystalgui.app.shadergraph.ShaderGraphBridge;
 import com.crystalgui.core.command.ActionIcons;
 import com.crystalgraphics.render.graph.CgGraphTexture;
-import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgraphics.shadergraph.CgMainPreviewRenderer;
 import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgPreviewMesh;
@@ -448,6 +447,8 @@ public class MainPreviewPanel extends UIElement implements Disposable {
         }
 
         private boolean hadPicture;
+        /** What the last {@code passes} rendered: null without a successful compile. */
+        private CgGraphTexture rendered;
 
         private void paintContentTraced(CgUiPaintContext ctx, Box box) {
             super.paintContent(ctx, box);
@@ -455,13 +456,9 @@ public class MainPreviewPanel extends UIElement implements Disposable {
             // Recorded here, in the frame that draws it: cheap when nothing changed, since the renderer compares
             // the emitted source, the mesh and the camera and records nothing. Framed for the SURFACE, not the
             // panel: the header takes a strip off the top, and framing to the outer box would crop the mesh.
-            CgRecording recording = ctx.beginPasses();
-            CgGraphTexture texture;
-            try {
-                texture = renderer.render(graph, master, mesh, yaw, pitch, zoom, lit, surfaceAspect(), recording);
-            } finally {
-                ctx.endPasses();
-            }
+            ctx.passes(recording -> rendered = renderer.render(graph, master, mesh, yaw, pitch, zoom, lit,
+                    surfaceAspect(), recording));
+            CgGraphTexture texture = rendered;
             // Nothing yet: no successful compile so far. Painting nothing leaves the surface's own
             // background, so an empty panel reads as "not yet" rather than as a hole.
             // A PICTURE THAT WENT AWAY is a blink on screen, counted where it can be found in the Frame Profiler.

@@ -1468,17 +1468,17 @@ public class TextField extends UIElement implements Measurable {
         if (!shown.isEmpty()) {
             // A draw that did not get the glyph tier it asked for is provisional, so come back for it
             // next frame. @see CgUiPaintContext#textDegradedDrawCount
-            long degradedBefore = ctx.textDegradedDrawCount();
+            long degradedBefore = ctx.canvas().degradedDraws();
             CgFontFamily family = resolveFamily();
             int shownColor = showingPlaceholder ? dim(styleGen.color()) : styleGen.color();
-            CgTextDraw draw = ctx.text()
+            CgTextDraw draw = ctx.canvas().textDraw()
                     .at(originX, originY)
                     .text(shown)
                     .family(family);
             // currentcolor follows what is drawn, so a placeholder outlines in its dimmed colour.
             textStyle.applyTo(draw, family, styleGen, computedStyle(), shownColor);
             draw.submit();
-            if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
+            if (ctx.canvas().degradedDraws() != degradedBefore) repaint();
         }
 
         // An input method's run in progress, underlined along the ink box's foot in the text colour.

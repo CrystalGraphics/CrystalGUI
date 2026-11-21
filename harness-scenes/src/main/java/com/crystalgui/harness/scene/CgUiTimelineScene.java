@@ -214,8 +214,8 @@ public class CgUiTimelineScene extends UiDocumentScene {
 
     @Override
     protected void paintOver(CgUiPaintContext paint) {
-        paint.text().at(0, 0).text(status).font(paint.getFont().atSize(26)).submit();
-        paint.text().at(0, 16).text(selection).font(paint.getFont().atSize(26)).submit();
+        paint.canvas().textDraw().at(0, 0).text(status).font(paint.getFont().atSize(26)).submit();
+        paint.canvas().textDraw().at(0, 16).text(selection).font(paint.getFont().atSize(26)).submit();
     }
 
     @Override

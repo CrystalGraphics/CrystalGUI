@@ -10,7 +10,6 @@ import com.crystalgraphics.shadergraph.CgMasterNode;
 import com.crystalgraphics.shadergraph.CgPreviewRenderer;
 import com.crystalgraphics.shadergraph.CgShaderGraph;
 import com.crystalgraphics.shadergraph.CgShaderNodeRegistry;
-import com.crystalgraphics.render.graph.CgRecording;
 import com.crystalgui.render.CgUiPaintContext;
 import com.crystalgui.ui.service.Animation;
 import com.crystalgui.widget.graph.GraphNode;
@@ -278,12 +277,7 @@ public final class ShaderGraphPreviews  {
         if (!recordDue || deleted || graph == null) return;
         recordDue = false;
         try (CgTrace.Zone ignored = CgTrace.zone(UiTrace.FRAME, "sg:recordPreviews")) {
-            CgRecording recording = ctx.beginPasses();
-            try {
-                renderer.renderPending(graph, recording);
-            } finally {
-                ctx.endPasses();
-            }
+            ctx.passes(recording -> renderer.renderPending(graph, recording));
         }
     }
 

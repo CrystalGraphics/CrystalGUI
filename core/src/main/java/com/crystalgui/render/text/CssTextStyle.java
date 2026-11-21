@@ -31,7 +31,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * <pre>{@code
  * private final CssTextStyle textStyle = new CssTextStyle();
  *
- * CgTextDraw draw = ctx.text().layout(layout).family(family).at(x, y);
+ * CgTextDraw draw = ctx.canvas().textDraw().layout(layout).family(family).at(x, y);
  * textStyle.applyTo(draw, family, general, computedStyle(), color);
  * draw.submit();
  * }</pre>

@@ -14,6 +14,7 @@ import com.crystalgui.render.InkOverflow;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
+import com.crystalgui.render.PaintFlags;
 import com.crystalgui.render.Surface;
 import com.crystalgui.render.texture.*;
 import com.crystalgui.render.image.CgUiImage;
@@ -108,16 +109,16 @@ public final class BoxPainter {
         float opacity = box.opacity();
         if (opacity <= 0f) return;
         // NOTHING OF IT CAN SHOW: a row scrolled past its list's edge draws nothing the clip would keep.
-        if (CgUiPaintContext.CULL) {
+        if (PaintFlags.CULL) {
             inkThrough(box, base);
-            if (ctx.outsideClip(ink[0], ink[1], ink[2], ink[3])) {
+            if (ctx.canvas().outsideClip(ink[0], ink[1], ink[2], ink[3])) {
                 CgTrace.add(UiTrace.FRAME, "culled", 1);
                 return;
             }
         }
         // A BOX A COMPOSITOR MOVES (`will-change: transform`) is drawn in its own space, under a node that is a
         // whole-pixel translation to its corner: a move is the node's value.
-        if (CgUiPaintContext.NODES && box.willChangeTransform()) {
+        if (PaintFlags.NODES && box.willChangeTransform()) {
             Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld());
             movedWorld.set(origin);
             // AT ITS CORNER AT REST: its own transform is drawn over the node, so a flight leaves the node where it is.
@@ -185,7 +186,7 @@ public final class BoxPainter {
                 // A turned box composites below, through its turn; a picture alone composites nowhere
                 walk.opacity(!composite || turn != null ? 0f : fades ? 1f : opacity);
                 if (walk.draws()) {
-                    long degraded = ctx.textDegradedDrawCount();
+                    long degraded = ctx.canvas().degradedDraws();
                     walking = walk;
                     try {
                         paintBoxIn(box, ctx, base, asContext, 1f, true);
@@ -193,7 +194,7 @@ public final class BoxPainter {
                         walking = outer;
                     }
                     // TEXT STILL GENERATING was not kept: the surface comes back for it while nothing else changes.
-                    if (ctx.textDegradedDrawCount() != degraded) surface.walkAgain();
+                    if (ctx.canvas().degradedDraws() != degraded) surface.walkAgain();
                     // ITS PICTURE: the border box in the kept picture, whose corner is the walk's.
                     boundsThrough(0f, 0f, box.width(), box.height(), surfaceScratch.set(base).mul(box.localToWorld()));
                     surface.pictured(ink[0] - walk.x(), ink[1] - walk.y(), ink[2] - walk.x(), ink[3] - walk.y(),
@@ -455,7 +456,7 @@ public final class BoxPainter {
 
     /** Check mode: a segment whose key holds is painted and compared rather than replayed. */
     private static boolean checked(Box box, int segment) {
-        return CgUiPaintContext.REPLAY_CHECK && box.replay.kept(segment);
+        return PaintFlags.REPLAY_CHECK && box.replay.kept(segment);
     }
 
     /** Ends a box's segment, keeping what it drew when a key speaks for it, or comparing it in check mode. */
@@ -488,9 +489,9 @@ public final class BoxPainter {
      * per-primitive opacity part company: {@code 0.5} over {@code 0.5} composites to {@code 0.75} drawn separately and
      * to {@code 0.5} drawn as a group.</p>
      *
-     * <p><b>A node that paints its own content is never folded</b>, even a leaf: the canvas's opacity does not fade
-     * text, whose colour is its own, so a folded label would ignore the fade. That is also why the question is asked of
-     * the CLASS rather than of the style. {@code backdrop-filter} is excluded for its own reason: it composites what
+     * <p><b>A node that paints its own content is never folded</b>, even a leaf: what it draws (a label's fill under
+     * its outline and shadow, a field's text over its selection) overlaps itself, and the box cannot see how. That is
+     * why the question is asked of the CLASS rather than of the style. {@code backdrop-filter} is excluded for its own reason: it composites what
      * is behind the element, which is not this element's paint to scale.</p>
      */
     private static boolean foldsOpacity(Box box, ComputedStyle style, UIElement node) {
@@ -591,7 +592,7 @@ public final class BoxPainter {
             // A TRANSLATION BY WHOLE PIXELS, the scale left in the transform: text snaps to the pixel grid through it.
             int content = 0;
             Matrix4f contentBase = base;
-            if (CgUiPaintContext.NODES && box.isScrollContainer()
+            if (PaintFlags.NODES && box.isScrollContainer()
                     && (box.maxScrollLeft() > 0f || box.maxScrollTop() > 0f)) {
                 Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld())
                         .translate(-box.scrollLeft(), -box.scrollTop(), 0f);
@@ -685,9 +686,9 @@ public final class BoxPainter {
         for (int i = 0; i < lifted.size(); i++) {
             Box box = lifted.get(i);
             // CULLED BEFORE THE WALK UP: a context lists every realised row of every virtualised list under it.
-            if (CgUiPaintContext.CULL) {
+            if (PaintFlags.CULL) {
                 inkThrough(box, base);
-                if (ctx.outsideClip(ink[0], ink[1], ink[2], ink[3])) continue;
+                if (ctx.canvas().outsideClip(ink[0], ink[1], ink[2], ink[3])) continue;
             }
             List<Box> clips = clipsBetween(box, context);
             try {
@@ -774,37 +775,28 @@ public final class BoxPainter {
         CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND_IMAGE);
         int backgroundColor = style.get(StylePropertyRegistry.BACKGROUND_COLOR);
         boolean filled = (backgroundColor >>> 24) != 0;
-        CgUiImagePainter.Border edge = border(box, style);
         if (background == CgUiImage.NONE) {
-            if (filled) images.fill(ctx, backgroundColor, 0f, 0f, width, height, corners, edge);
-            else images.paint(ctx, CgUiImage.NONE, 0f, 0f, width, height, WHITE, WHITE, corners, edge);
+            CgUiImagePainter.Draw draw = filled ? images.fill(ctx, backgroundColor, 0f, 0f, width, height)
+                    : images.image(ctx, CgUiImage.NONE, 0f, 0f, width, height);
+            border(draw.radii(corners), box, style).draw();
             return;
         }
-        if (filled) images.fill(ctx, backgroundColor, 0f, 0f, width, height, corners, null);
-        images.paint(ctx, background, 0f, 0f, width, height, style.get(StylePropertyRegistry.BACKGROUND_TINT), WHITE,
-                corners, edge);
+        if (filled) images.fill(ctx, backgroundColor, 0f, 0f, width, height).radii(corners).draw();
+        border(images.image(ctx, background, 0f, 0f, width, height)
+                .color(style.get(StylePropertyRegistry.BACKGROUND_TINT)).radii(corners), box, style).draw();
     }
 
-    /** The box's border as the image painter takes it, or null with none: each side at its own width and colour. */
-    @Nullable
-    private CgUiImagePainter.Border border(Box box, ComputedStyle style) {
-        if (borderSides(box) <= 0f) return null;
+    /** {@code draw} with the box's border, each side at its own width and colour; as it was with none. */
+    private static CgUiImagePainter.Draw border(CgUiImagePainter.Draw draw, Box box, ComputedStyle style) {
+        FloatRect b = box.border();
+        if (b.left <= 0f && b.top <= 0f && b.right <= 0f && b.bottom <= 0f) return draw;
         int current = style.get(StylePropertyRegistry.COLOR);
-        CgUiImagePainter.Border e = edge;
-        e.left = sides[0];
-        e.top = sides[1];
-        e.right = sides[2];
-        e.bottom = sides[3];
-        e.topColor = style.get(StylePropertyRegistry.BORDER_TOP_COLOR).resolve(current);
-        e.bottomColor = style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR).resolve(current);
-        e.leftColor = style.get(StylePropertyRegistry.BORDER_LEFT_COLOR).resolve(current);
-        e.rightColor = style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR).resolve(current);
-        e.color = e.topColor;
-        return e;
+        return draw.border(b.left, b.top, b.right, b.bottom,
+                style.get(StylePropertyRegistry.BORDER_LEFT_COLOR).resolve(current),
+                style.get(StylePropertyRegistry.BORDER_TOP_COLOR).resolve(current),
+                style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR).resolve(current),
+                style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR).resolve(current));
     }
-
-    /** {@link #border}'s scratch, read before another box paints. */
-    private final CgUiImagePainter.Border edge = new CgUiImagePainter.Border();
 
     /** The box's corners as the canvas takes them, kept on the box while they hold; null when square. */
     @Nullable
@@ -815,21 +807,6 @@ public final class BoxPainter {
 
     /** What every image of the tree is drawn by: its resolved resources are shared, its scratch is this painter's. */
     private final CgUiImagePainter images = new CgUiImagePainter();
-
-    /**
-     * The box's four border widths into {@link #sides}, answering the widest: a border is drawn when any side has one.
-     * Each side at its own width.
-     */
-    private float borderSides(Box box) {
-        sides[0] = box.border().left;
-        sides[1] = box.border().top;
-        sides[2] = box.border().right;
-        sides[3] = box.border().bottom;
-        return Math.max(Math.max(sides[0], sides[1]), Math.max(sides[2], sides[3]));
-    }
-
-    /** {@link #borderSides}' answer, L,T,R,B. Read immediately: a tree paints one box at a time. */
-    private final float[] sides = new float[4];
 
 
     // ── Mask ─────────────────────────────────────────────────────────────────
@@ -855,8 +832,8 @@ public final class BoxPainter {
                 style.get(StylePropertyRegistry.OVERLAY_SIZE), style.get(StylePropertyRegistry.OVERLAY_POSITION), laid);
         // A mark takes the box's `color`; a picture keeps its own palette, multiplied by `overlay-tint`
         int color = overlay.followsColor() ? style.get(StylePropertyRegistry.COLOR) : WHITE;
-        images.paint(ctx, overlay, laid[0], laid[1], laid[2], laid[3], color,
-                style.get(StylePropertyRegistry.OVERLAY_TINT), null, null);
+        images.image(ctx, overlay, laid[0], laid[1], laid[2], laid[3]).color(color)
+                .pictureTint(style.get(StylePropertyRegistry.OVERLAY_TINT)).draw();
     }
 
     private void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {
@@ -870,8 +847,8 @@ public final class BoxPainter {
         float left = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_LEFT), width);
         float right = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_RIGHT), width);
         if (hasDrawable) {
-            images.paint(ctx, outline, -left, -top, Math.max(0f, width + left + right),
-                    Math.max(0f, height + top + bottom), WHITE, WHITE, null, null);
+            images.image(ctx, outline, -left, -top, Math.max(0f, width + left + right),
+                    Math.max(0f, height + top + bottom)).draw();
             return;
         }
         // The stroke measures inward from the shape's outer edge; a CSS outline grows outward from the offset edge --

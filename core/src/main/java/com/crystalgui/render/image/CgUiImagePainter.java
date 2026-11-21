@@ -1,5 +1,6 @@
 package com.crystalgui.render.image;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -8,15 +9,17 @@ import javax.annotation.Nullable;
 
 import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgraphics.api.canvas.CgCanvasBox;
+import com.crystalgraphics.api.canvas.CgCanvasLayer;
+import com.crystalgraphics.api.material.CgBlendMode;
 import com.crystalgraphics.api.paint.brush.CgBrush;
 import com.crystalgraphics.api.paint.brush.CgNineSlice;
 import com.crystalgraphics.api.paint.brush.CgSpriteSheet;
 import com.crystalgraphics.api.paint.brush.CgTiling;
 import com.crystalgraphics.api.paint.pattern.CgGrid;
 import com.crystalgraphics.api.texture.CgSampler;
+import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.api.vector.CgCornerRadii;
 import com.crystalgraphics.api.vector.svg.CgSvg;
-import com.crystalgraphics.api.texture.CgTexture;
 import com.crystalgraphics.gpu.resource.CgTexture2D;
 import com.crystalgraphics.gpu.resource.CgTextureManager;
 import com.crystalgraphics.gpu.resource.CgTextureSettings;
@@ -29,21 +32,25 @@ import com.crystalgui.style.property.visual.DrawableFit;
 
 /**
  * Draws a {@link CgUiImage} on a paint context's canvas: the one place a style's image becomes draws. One per painter
- * (a box tree's, a widget's), on its document's paint thread.
+ * (a box tree's, a widget's), on its document's paint thread. Describe the draw, then {@link Draw#draw draw} it, in one
+ * expression: the builder is this painter's scratch, reset by the next call.
  *
  * <pre>{@code
  * CgUiImagePainter images = new CgUiImagePainter();
- * images.paint(ctx, style.get(BACKGROUND_IMAGE), 0, 0, w, h, tint, WHITE, radii, border);
- * images.paint(ctx, icon, x, y, 16, 16, textColor, WHITE, null, null);
- * images.fit(icon, x, y, w, h, DrawableFit.CONTAIN, align, out);                 // where a sized image lands
+ * images.image(ctx, icon, x, y, 16, 16).color(textColor).draw();                       // an icon in the text's colour
+ * images.image(ctx, background, 0, 0, w, h).color(tint).radii(corners)
+ *       .border(1, 1, 1, 1, edge, edge, edge, edge).draw();                            // shaped into the box
+ * images.fill(ctx, 0xFF203040, 0, 0, w, h).radii(corners).draw();                      // a background colour
+ * images.fit(icon, x, y, w, h, DrawableFit.CONTAIN, align, out);                       // where a sized image lands
  * }</pre>
  *
  * <ul>
- *   <li>{@code color} is what the old context colour was: it tints a fill, a gradient and a picture, and is the
- *       {@code currentColor} of an icon, a mark and a painter.</li>
- *   <li>{@code pictureTint} multiplies an icon's or a picture's own colours ({@code overlay-tint}); white elsewhere.</li>
- *   <li>{@code radii} and {@code border} shape a fill, a gradient, a grid or a picture into the element's box; an icon,
- *       a mark and a painter draw unclipped, the border drawn over them.</li>
+ *   <li>{@code color} tints a fill, a gradient and a picture, and is the {@code currentColor} of an icon, a mark and a
+ *       painter. White by default.</li>
+ *   <li>{@code pictureTint} multiplies an icon's or a picture's own colours ({@code overlay-tint}). White by
+ *       default.</li>
+ *   <li>{@code radii} and {@code border} shape a fill, a gradient, a grid or a picture into the box; an icon, a mark
+ *       and a painter draw unclipped, the border drawn over them.</li>
  * </ul>
  */
 public final class CgUiImagePainter {
@@ -52,19 +59,7 @@ public final class CgUiImagePainter {
     static final CgTextureSettings PIXELS = CgTextureSettings.PLAIN.withSampler(CgSampler.NEAREST_CLAMP);
     /** Above this device size an SVG is artwork, not a UI icon: it is not fitted to the pixel grid. */
     private static final float SNAP_MAX_DEVICE_PX = 128f;
-
-    /**
-     * A box's border: each side's width and colour, and the colour a border drawn alone fills its middle with (its rgb,
-     * transparent, so the edge's mix into the middle has no dark fringe). Mutable scratch: fill it, pass it, done.
-     */
-    public static final class Border {
-        public float left, top, right, bottom;
-        public int leftColor, topColor, rightColor, bottomColor, color;
-
-        public boolean active() {
-            return left > 0f || top > 0f || right > 0f || bottom > 0f;
-        }
-    }
+    private static final int WHITE = 0xFFFFFFFF;
 
     /** Resolved resources, shared by every painter: a value resolves once. Threads: concurrent. */
     private static final Map<CgUiImage.Picture, Picture> PICTURES = new ConcurrentHashMap<>();
@@ -75,17 +70,133 @@ public final class CgUiImagePainter {
     /** This painter's grids as paints; the cascade holds few. */
     private final Map<CgUiImage.Grid, CgGrid> grids = new HashMap<>();
 
+    private final Draw draw = new Draw();
+
+    /**
+     * Forgets every resolved picture, sheet entry and icon: their textures die with the graphics context, and the next
+     * draw resolves them again from the texture manager. {@code CgUiRenderer.contextDestroyed} calls it.
+     */
+    public static void forgetResources() {
+        PICTURES.clear();
+        SHEETS.clear();
+        ICONS.clear();
+    }
+
     // ── Drawing ───────────────────────────────────────────────────────────────
 
-    /** Draws {@code image} into the box at {@code (x, y)}. */
-    public void paint(CgUiPaintContext ctx, CgUiImage image, float x, float y, float width, float height, int color,
-                      int pictureTint, @Nullable CgCornerRadii radii, @Nullable Border border) {
+    /** A draw of {@code image} into the box at {@code (x, y)}: describe it, then {@link Draw#draw}. */
+    public Draw image(CgUiPaintContext ctx, CgUiImage image, float x, float y, float width, float height) {
+        return draw.reset(ctx, image, 0, x, y, width, height);
+    }
+
+    /** A flat colour into the box, shaped as an image is: a {@code background-color} with no image. */
+    public Draw fill(CgUiPaintContext ctx, int argb, float x, float y, float width, float height) {
+        return draw.reset(ctx, null, argb, x, y, width, height);
+    }
+
+    /** One draw being described: {@link #image} or {@link #fill} hands it out, {@link #draw} draws it. */
+    public final class Draw {
+        private CgUiPaintContext ctx;
+        @Nullable
+        private CgUiImage image;
+        private int fill, color, pictureTint;
+        private float x, y, width, height;
+        @Nullable
+        private CgCornerRadii radii;
+        private final Border border = new Border();
+
+        private Draw() {
+        }
+
+        private Draw reset(CgUiPaintContext ctx, @Nullable CgUiImage image, int fill, float x, float y, float width,
+                           float height) {
+            this.ctx = ctx;
+            this.image = image;
+            this.fill = fill;
+            this.x = x;
+            this.y = y;
+            this.width = width;
+            this.height = height;
+            color = pictureTint = WHITE;
+            radii = null;
+            border.clear();
+            return this;
+        }
+
+        /** The tint and {@code currentColor}: the element's {@code color} for an icon or a mark. */
+        public Draw color(int argb) {
+            color = argb;
+            return this;
+        }
+
+        /** Multiplies an icon's or a picture's own colours: {@code overlay-tint}. */
+        public Draw pictureTint(int argb) {
+            pictureTint = argb;
+            return this;
+        }
+
+        /** Rounds the box's corners; null for square. */
+        public Draw radii(@Nullable CgCornerRadii radii) {
+            this.radii = radii;
+            return this;
+        }
+
+        /** Each side's border width and colour, drawn over the image; its middle is transparent in the top colour. */
+        public Draw border(float left, float top, float right, float bottom, int leftColor, int topColor,
+                           int rightColor, int bottomColor) {
+            border.set(left, top, right, bottom, leftColor, topColor, rightColor, bottomColor);
+            return this;
+        }
+
+        /** Draws it on the context's canvas. Nothing for an empty box. */
+        public void draw() {
+            Border edge = border.active() ? border : null;
+            if (image == null) paintFill(ctx, fill, x, y, width, height, radii, edge);
+            else paint(ctx, image, x, y, width, height, color, pictureTint, radii, edge);
+        }
+    }
+
+    /** A box's border: each side's width and colour, the top's being the colour its transparent middle takes. */
+    private static final class Border {
+        float left, top, right, bottom;
+        int leftColor, topColor, rightColor, bottomColor;
+
+        void set(float l, float t, float r, float b, int lc, int tc, int rc, int bc) {
+            left = l;
+            top = t;
+            right = r;
+            bottom = b;
+            leftColor = lc;
+            topColor = tc;
+            rightColor = rc;
+            bottomColor = bc;
+        }
+
+        void clear() {
+            left = top = right = bottom = 0f;
+        }
+
+        boolean active() {
+            return left > 0f || top > 0f || right > 0f || bottom > 0f;
+        }
+    }
+
+    private void paintFill(CgUiPaintContext ctx, int argb, float x, float y, float width, float height,
+                           @Nullable CgCornerRadii radii, @Nullable Border border) {
+        if (width <= 0f || height <= 0f) return;
+        CgCanvas canvas = ctx.canvas();
+        if (radii == null && border == null) canvas.fill(x, y, width, height, argb);
+        else shape(canvas.box(x, y, width, height).fill(argb), radii, border).draw();
+    }
+
+    private void paint(CgUiPaintContext ctx, CgUiImage image, float x, float y, float width, float height, int color,
+                       int pictureTint, @Nullable CgCornerRadii radii, @Nullable Border border) {
         if (width <= 0f || height <= 0f) return;
         CgCanvas canvas = ctx.canvas();
         switch (image) {
             case CgUiImage.None none -> borderOnly(canvas, x, y, width, height, radii, border);
             case CgUiImage.Color c -> {
-                if (plain(radii, border)) canvas.fill(x, y, width, height, ArgbMath.multiply(c.argb(), color));
+                if (radii == null && border == null) canvas.fill(x, y, width, height, ArgbMath.multiply(c.argb(), color));
                 else shape(canvas.box(x, y, width, height).tint(color).fill(c.argb()), radii, border).draw();
             }
             case CgUiImage.Paint p -> shape(canvas.box(x, y, width, height).tint(color).fill(p.paint()), radii, border)
@@ -129,18 +240,8 @@ public final class CgUiImagePainter {
                 borderOnly(canvas, x, y, width, height, radii, border);
             }
             case CgUiImage.CrossFade f -> {
-                canvas.save().opacity(1f - f.t());
-                try {
-                    paint(ctx, f.from(), x, y, width, height, color, pictureTint, radii, border);
-                } finally {
-                    canvas.restore();
-                }
-                canvas.save().opacity(f.t());
-                try {
-                    paint(ctx, f.to(), x, y, width, height, color, pictureTint, radii, border);
-                } finally {
-                    canvas.restore();
-                }
+                crossFade(ctx, f, x, y, width, height, color, pictureTint, radii);
+                borderOnly(canvas, x, y, width, height, radii, border);
             }
             case CgUiImage.Layers l -> {
                 // The first is on top: drawn last
@@ -152,13 +253,22 @@ public final class CgUiImagePainter {
         }
     }
 
-    /** A flat colour into the box, shaped as {@link #paint} shapes one: a {@code background-color} with no image. */
-    public void fill(CgUiPaintContext ctx, int argb, float x, float y, float width, float height,
-                     @Nullable CgCornerRadii radii, @Nullable Border border) {
-        if (width <= 0f || height <= 0f) return;
+    /**
+     * CSS's {@code cross-fade()}: {@code from} at {@code 1 - t} and {@code to} at {@code t}, added in a layer of their
+     * own (Chromium's {@code CrossfadeGeneratedImage}, {@code plus-lighter}), so two opaque images mid-fade stay opaque
+     * and the backdrop never shows through. The border is the caller's, drawn once.
+     */
+    private void crossFade(CgUiPaintContext ctx, CgUiImage.CrossFade f, float x, float y, float width, float height,
+                           int color, int pictureTint, @Nullable CgCornerRadii radii) {
         CgCanvas canvas = ctx.canvas();
-        if (plain(radii, border)) canvas.fill(x, y, width, height, argb);
-        else shape(canvas.box(x, y, width, height).fill(argb), radii, border).draw();
+        try (CgCanvasLayer both = canvas.layer(x, y, width, height)) {
+            try (CgCanvasLayer from = canvas.layer(x, y, width, height).opacity(1f - f.t())) {
+                paint(ctx, f.from(), x, y, width, height, color, pictureTint, radii, null);
+            }
+            try (CgCanvasLayer to = canvas.layer(x, y, width, height).opacity(f.t()).blend(CgBlendMode.ADDITIVE)) {
+                paint(ctx, f.to(), x, y, width, height, color, pictureTint, radii, null);
+            }
+        }
     }
 
     /** A picture's texture, loaded at its first use: what a {@code mask} reads the alpha of. */
@@ -173,24 +283,20 @@ public final class CgUiImagePainter {
         return brush == null ? null : brush.texture();
     }
 
-    private static boolean plain(@Nullable CgCornerRadii radii, @Nullable Border border) {
-        return radii == null && (border == null || !border.active());
-    }
-
     private static CgCanvasBox shape(CgCanvasBox box, @Nullable CgCornerRadii radii, @Nullable Border border) {
         if (radii != null) box.radii(radii);
-        if (border != null && border.active()) {
+        if (border != null) {
             box.border(border.top, border.right, border.bottom, border.left, border.topColor, border.rightColor,
                     border.bottomColor, border.leftColor);
         }
         return box;
     }
 
-    /** The border alone, over what is drawn: its middle transparent in its own colour. */
+    /** The border alone, over what is drawn: its middle transparent in its own colour, so its edge has no dark fringe. */
     private static void borderOnly(CgCanvas canvas, float x, float y, float w, float h, @Nullable CgCornerRadii radii,
                                    @Nullable Border border) {
-        if (border == null || !border.active()) return;
-        shape(canvas.box(x, y, w, h).fill(border.color & 0x00FFFFFF), radii, border).draw();
+        if (border == null) return;
+        shape(canvas.box(x, y, w, h).fill(border.topColor & 0x00FFFFFF), radii, border).draw();
     }
 
     // ── Pictures ──────────────────────────────────────────────────────────────
@@ -208,7 +314,9 @@ public final class CgUiImagePainter {
             this.texture = texture;
             boolean missing = texture.isMissing();
             float refW = p.refW() > 0 ? p.refW() : texture.getWidth(), refH = p.refH() > 0 ? p.refH() : texture.getHeight();
-            float rx = p.x(), ry = p.y(), rw = p.w() > 0 ? p.w() : refW, rh = p.w() > 0 ? p.h() : refH;
+            // A region names both sides or neither
+            boolean region = p.w() > 0 && p.h() > 0;
+            float rx = p.x(), ry = p.y(), rw = region ? p.w() : refW, rh = region ? p.h() : refH;
             this.width = rw;
             this.height = rh;
             this.u0 = refW > 0f ? rx / refW : 0f;
@@ -258,7 +366,7 @@ public final class CgUiImagePainter {
                                 @Nullable CgCornerRadii radii, @Nullable Border border) {
         Picture r = resolve(p);
         // A missing texture is drawn whole, a checkerboard that reads as missing; an unsliced plain one, its region
-        if (r.texture.isMissing() || (!r.sliced && plain(radii, border))) {
+        if (r.texture.isMissing() || (!r.sliced && radii == null && border == null)) {
             CgCanvasBox box = canvas.box(x, y, w, h).fill(r.texture).tint(tint);
             (r.texture.isMissing() ? box : box.region(r.u0, r.v0, r.u1, r.v1)).draw();
             return;
@@ -287,21 +395,47 @@ public final class CgUiImagePainter {
 
     // ── Icons ─────────────────────────────────────────────────────────────────
 
-    /** An icon's document for the variant and generation it was read at, and the last brush drawn. */
+    /** An icon's document for the variant and generation it was read at, and its brushes by colour. */
     private static final class Icon {
         @Nullable
         FileIconTheme.Variant variant;
         int generation = -1;
         @Nullable
         CgSvg svg;
-        /** The brush last drawn and what it was made of. */
+        /**
+         * Its brushes by what they were made of, so an icon in two colours keeps both; searched in place, a hit
+         * allocating nothing. Past {@link #BRUSHES_PER_ICON} the oldest is replaced. Cleared with the document.
+         */
+        final int[] colors = new int[BRUSHES_PER_ICON], tints = new int[BRUSHES_PER_ICON];
+        final float[] strokes = new float[BRUSHES_PER_ICON];
+        final CgBrush[] brushes = new CgBrush[BRUSHES_PER_ICON];
+        int count, next;
+
         @Nullable
-        CgBrush brush;
-        @Nullable
-        CgSvg brushSvg;
-        int brushColor, brushTint;
-        float brushStroke;
+        CgBrush brush(int color, int tint, float stroke) {
+            for (int b = 0; b < count; b++) {
+                if (colors[b] == color && tints[b] == tint && strokes[b] == stroke) return brushes[b];
+            }
+            return null;
+        }
+
+        void keep(int color, int tint, float stroke, CgBrush brush) {
+            int b = count < BRUSHES_PER_ICON ? count++ : next;
+            next = (b + 1) % BRUSHES_PER_ICON;
+            colors[b] = color;
+            tints[b] = tint;
+            strokes[b] = stroke;
+            brushes[b] = brush;
+        }
+
+        void clearBrushes() {
+            Arrays.fill(brushes, null);
+            count = next = 0;
+        }
     }
+
+    /** Brushes kept per icon. */
+    private static final int BRUSHES_PER_ICON = 8;
 
     /** The icon's document now: re-read when the theme's variant or the resources changed. */
     @Nullable
@@ -310,6 +444,7 @@ public final class CgUiImagePainter {
         if (state.generation != CgSvg.generation() || state.variant != variant) {
             state.generation = CgSvg.generation();
             state.variant = variant;
+            state.clearBrushes();
             try {
                 state.svg = CgSvg.of(i.path());
             } catch (IllegalArgumentException refused) {
@@ -321,16 +456,12 @@ public final class CgUiImagePainter {
     }
 
     private static Icon state(CgUiImage.Icon i) {
-        Icon state = ICONS.get(i);
-        if (state == null) {
-            state = new Icon();
-            ICONS.put(i, state);
-        }
-        return state;
+        return ICONS.computeIfAbsent(i, k -> new Icon());
     }
 
     private static void icon(CgUiPaintContext ctx, CgUiImage.Icon i, float x, float y, float w, float h, int color,
                              int pictureTint) {
+        CgCanvas canvas = ctx.canvas();
         Icon state = state(i);
         CgSvg svg;
         CgBrush brush;
@@ -340,22 +471,18 @@ public final class CgUiImagePainter {
             int argb = ArgbMath.multiply(i.tint(), color);
             // The half-width is in device pixels; the brush's width in canvas units
             float stroke = i.monochrome() && i.strokeHalfWidth() > 0f
-                    ? i.strokeHalfWidth() * 2f / Math.max(ctx.deviceScale(), 1e-4f) : 0f;
-            if (state.brush == null || state.brushSvg != svg || state.brushColor != argb || state.brushTint != pictureTint
-                    || state.brushStroke != stroke) {
+                    ? i.strokeHalfWidth() * 2f / Math.max(canvas.deviceScale(), 1e-4f) : 0f;
+            brush = state.brush(argb, pictureTint, stroke);
+            if (brush == null) {
                 CgBrush b = CgBrush.svg(svg).color(argb);
-                if (pictureTint != 0xFFFFFFFF) b = b.tint(pictureTint);
-                state.brush = i.monochrome() ? b.flat(stroke) : b;
-                state.brushSvg = svg;
-                state.brushColor = argb;
-                state.brushTint = pictureTint;
-                state.brushStroke = stroke;
+                if (pictureTint != WHITE) b = b.tint(pictureTint);
+                brush = i.monochrome() ? b.flat(stroke) : b;
+                state.keep(argb, pictureTint, stroke, brush);
             }
-            brush = state.brush;
         }
         float shown = Math.max(svg.width(), svg.height()) * Math.min(w / svg.width(), h / svg.height());
         // Snapped where a hinted icon is, and a snapped icon's raster is cached
-        CgCanvas canvas = ctx.canvas().save().pixelSnap(snappable(ctx, shown));
+        canvas.save().pixelSnap(snappable(canvas, shown));
         canvas.image(brush, x, y, w, h).restore();
     }
 
@@ -363,10 +490,10 @@ public final class CgUiImagePainter {
      * Whether a draw is a UI icon at rest: small, axis-aligned, at a scale a UI settles at (1, 1.5, 2). An icon mid-zoom
      * must not snap, or it judders between quantised positions.
      */
-    private static boolean snappable(CgUiPaintContext ctx, float logicalSize) {
-        float device = ctx.deviceScale();
+    private static boolean snappable(CgCanvas canvas, float logicalSize) {
+        float device = canvas.deviceScale();
         if (logicalSize * device > SNAP_MAX_DEVICE_PX) return false;
-        if (!ctx.isPoseAxisAligned()) return false;
+        if (!canvas.rectilinear()) return false;
         return Math.abs(device * 2f - Math.round(device * 2f)) < 0.01f;
     }
 

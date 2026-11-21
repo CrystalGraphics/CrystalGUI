@@ -113,7 +113,7 @@ public final class Surface {
         pictureX = walk.x();
         pictureY = walk.y();
         CgTrace.add(UiTrace.FRAME, walk.draws() ? "surfaces-painted" : "surfaces-kept", 1);
-        if (walk.draws() && !CgUiPaintContext.DAMAGE) walk.damage(x0, y0, x1 - x0, y1 - y0);
+        if (walk.draws() && !PaintFlags.DAMAGE) walk.damage(x0, y0, x1 - x0, y1 - y0);
         return walk;
     }
 

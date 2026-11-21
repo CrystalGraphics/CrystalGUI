@@ -16,7 +16,7 @@ import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.sheet.StyleRule;
 import com.crystalgui.style.sheet.StyleSheet;
-import org.jspecify.annotations.Nullable;
+import javax.annotation.Nullable;
 
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;

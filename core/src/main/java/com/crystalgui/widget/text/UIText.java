@@ -725,11 +725,11 @@ public final class UIText extends UIElement implements Measurable {
 
         // WHAT THE GLYPHS ACTUALLY GOT decides whether this paint was final -- see
         // CgUiPaintContext#textDegradedDrawCount. A shadow cell a worker has not built yet counts too.
-        long degradedBefore = ctx.textDegradedDrawCount();
+        long degradedBefore = ctx.canvas().degradedDraws();
 
         int color = general.color();
         ComputedStyle computed = computedStyle();
-        CgTextDraw draw = ctx.text().layout(layout).family(family).at(contentX, contentY);
+        CgTextDraw draw = ctx.canvas().textDraw().layout(layout).family(family).at(contentX, contentY);
         applyTextStyle(draw, family, general, computed, layout, color);
         // OVERFLOW CLIPS THE ELEMENT'S OWN TEXT, as CSS's does -- the painter's clip covers only its children, and a
         // squeezed tab's label ran on under the next tab. Only when the line is wider than the box.
@@ -745,7 +745,7 @@ public final class UIText extends UIElement implements Measurable {
             if (clip) ctx.canvas().restore();
         }
 
-        if (ctx.textDegradedDrawCount() != degradedBefore) repaint();
+        if (ctx.canvas().degradedDraws() != degradedBefore) repaint();
     }
 
     /**

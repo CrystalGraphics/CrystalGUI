@@ -338,7 +338,7 @@ try (CgCanvasLayer layer = canvas.layer(box.inkX0(), box.inkY0(), inkW, inkH)) {
 - **A rounded `overflow: hidden` is a clip, not a layer**: children clipped to the padding box with the inner
   corners, whatever the background (alpha masking is `mask`'s job). The canvas's `clip(x, y, w, h, radii)`, exact
   under any transform; clips nest to `CgClipTree.MAX_DEPTH` (4), then a path mask.
-- **A subtree wholly outside the clip is not walked** (`CgUiPaintContext.outsideClip`, Blink's cull rect).
+- **A subtree wholly outside the clip is not walked** (`CgCanvas.outsideClip`, Blink's cull rect).
   `-Dcrystalgui.paint.cull=false` paints everything.
 - **`mask`** clips the children to the box's shape, then masks them through a layer: a colour by its alpha, a picture
   or sheet entry by its texels' alpha. A mask revealing nothing reveals the whole shape. It masks **only the
