@@ -1383,7 +1383,7 @@ badge.close();   // and it stops
   desktop until the JIT settles (`CgRehearsal`), and your renderer runs in each pass too. Record what you would in
   play; `CgRehearsal.active()` says when it is one.
 - Everything a stage's canvas draws (images, paths, text, world-following widgets): CrystalGraphics'
-  [`docs/UI_CANVAS.md`](../CrystalGraphics/docs/UI_CANVAS.md).
+  [`docs/UI.md`](../CrystalGraphics/docs/UI.md).
 - A world-space effect belongs in CrystalGraphics' scene or on its world stages instead (`CgScene.client()`,
   `CgRenderStage.TRANSLUCENT`); CrystalGraphics' [`docs/SETUP.md`](../CrystalGraphics/docs/SETUP.md) § *Drawing from your
   mod*.

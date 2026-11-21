@@ -4,7 +4,7 @@
 
 ## Stack 5: Render — recorded on CrystalGraphics' canvas
 
-CrystalGUI paints through CrystalGraphics' `CgCanvas` (`api.canvas`, `CrystalGraphics/docs/UI_CANVAS.md`): state as
+CrystalGUI paints through CrystalGraphics' `CgCanvas` (`api.canvas`, `CrystalGraphics/docs/UI.md`): state as
 `save`/`restore`, clips, layers, kept layers, chunks and glass are the canvas's. What stays here is the box tree's
 side: which box paints when, segment keys, surfaces and their owners.
 

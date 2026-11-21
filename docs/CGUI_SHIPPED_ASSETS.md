@@ -31,14 +31,14 @@
 | `textures/gui/Spritesheet_UI_Flat.png` | Unreferenced by any stylesheet today. |
 | `ui/fonts/Minecraft.otf`, `MinecraftRegular.otf` | Public-domain MC fonts. |
 | `ui/fonts/IBMPlexSans-Regular.ttf`, `JetBrainsMono-Regular.ttf` | The UI face and the code face, SIL OFL 1.1, each with its licence beside it (`IBMPlexSans-OFL.txt`, `OFL.txt`). IBM Plex moved here from CrystalGraphics on 2026-09-11, which now ships no fonts: anything neither face covers comes from the installed fonts (`CgSystemFonts`). |
-| (boxes, curves, gradients, grids, glass, coverage, the blur) | **Not shipped here: CrystalGraphics' canvas** (`CgCanvas`, `CgCanvasPrimitives`, `crystalgraphics:shaders/ui/`, `UI_CANVAS.md`) and its blur (`CgGpuOps.blurScaled`, compute). The paint context draws every box, image, gradient, grid and glass pane as a canvas element, every path and icon as exact coverage through the shared path atlas; a thumbnail is `CgGpuOps.shrink`, on compute. **Every element antialiases its own edges when rotated or sheared, with no MSAA**; the `edges` page of `cgui-gallery` shows every kind rotated and skewed. |
+| (boxes, curves, gradients, grids, glass, coverage, the blur) | **Not shipped here: CrystalGraphics' canvas** (`CgCanvas`, `CgCanvasPrimitives`, `crystalgraphics:shaders/ui/`, `UI.md`) and its blur (`CgGpuOps.blurScaled`, compute). The paint context draws every box, image, gradient, grid and glass pane as a canvas element, every path and icon as exact coverage through the shared path atlas; a thumbnail is `CgGpuOps.shrink`, on compute. **Every element antialiases its own edges when rotated or sheared, with no MSAA**; the `edges` page of `cgui-gallery` shows every kind rotated and skewed. |
 
 ## Icons
 
 **A UI names an icon; CrystalGraphics draws it.** An icon is `"namespace:name"`, a file at
 `assets/{ns}/ui/icons/{name}.svg`; `CgUiImage.icon(name)` holds the name, and its file is chosen when it draws
 (`Icon.path()`), so a light/dark theme swap reaches every icon with no restyle. Drawing is CrystalGraphics' `CgSvg`
-(`CrystalGraphics/docs/UI_CANVAS.md` § *SVG*: snapping, tiers, the shared atlas, reload).
+(`CrystalGraphics/docs/UI.md` § 8 *Icons: SVG*: snapping, tiers, the shared atlas, reload).
 
 ```css
 .save { overlay: icon("crystalgui:save"); }                     /* follows `color` (currentColor) */

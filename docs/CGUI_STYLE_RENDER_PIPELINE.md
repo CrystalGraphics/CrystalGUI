@@ -557,7 +557,7 @@ gradients of one shape slide, anything else cross-fades.
 ## 8. Visual Layers (Opacity Isolation + Masking)
 
 `opacity < 1` over children that can overlap, and a `mask`, paint into a **group layer**: the canvas's
-`layer(x, y, w, h)` (CrystalGraphics `api.canvas`, `CrystalGraphics/docs/UI_CANVAS.md`), opened by `BoxPainter`. Ordinary
+`layer(x, y, w, h)` (CrystalGraphics `api.canvas`, `CrystalGraphics/docs/UI.md`), opened by `BoxPainter`. Ordinary
 elements (opacity 1, no mask) skip this entirely, and so does a rounded `overflow: hidden`, which is a clip (below).
 
 ```java
