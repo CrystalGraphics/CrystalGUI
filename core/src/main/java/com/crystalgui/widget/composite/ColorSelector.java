@@ -853,6 +853,6 @@ public class ColorSelector extends UIElement {
 
     /** {@code hue} 0..1, saturation and value 0..1, and a byte of alpha, as ARGB. */
     private static int hsvArgb(float hue, float saturation, float value, int alpha) {
-        return CgColor.hsv(hue * 360f, saturation, value, (alpha & 0xFF) / 255f).toArgb();
+        return CgColor.hsvArgb(hue * 360f, saturation, value, (alpha & 0xFF) / 255f);
     }
 }

@@ -66,7 +66,7 @@ public final class ColorField implements CgUiPainter {
         this.to = to;
         this.radii = radii;
         this.paint = switch (mode) {
-            case SV_SQUARE -> CgGradient.linear(90f).stop(0f, 0xFFFFFFFF).stop(1f, CgColor.hsv(hue * 360f, 1f, 1f, 1f).toArgb());
+            case SV_SQUARE -> CgGradient.linear(90f).stop(0f, 0xFFFFFFFF).stop(1f, CgColor.hsvArgb(hue * 360f, 1f, 1f, 1f));
             case RAMP -> CgGradient.linear(90f).stop(0f, from).stop(1f, to);
             default -> null;
         };
