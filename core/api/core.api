@@ -8619,16 +8619,6 @@ com/crystalgui/render/InkOverflow
   method public,final hashCode ()I
   method public,final toString ()Ljava/lang/String;
   method public,static uniform (F)Lcom/crystalgui/render/InkOverflow;
-com/crystalgui/render/PaintFlags
-  access public,final
-  extends java/lang/Object
-  field public,static,final CULL Z
-  field public,static,final DAMAGE Z
-  field public,static,final NODES Z
-  field public,static,final REPLAY Z
-  field public,static,final REPLAY_CHECK Z
-  field public,static,final SEGMENTS Z
-  field public,static,final SURFACES Z
 com/crystalgui/render/Surface
   access public,final
   extends java/lang/Object
@@ -8995,15 +8985,6 @@ com/crystalgui/render/text/FontFamilyCache
   method public,static resolveGroup (Ljava/util/List;I)Lcom/crystalgraphics/api/font/CgFontFamilyGroup;
   method public,static useLocale (Ljava/util/Locale;)V
   method public,static useSystemFonts (Lcom/crystalgraphics/api/font/CgSystemFonts;)V
-com/crystalgui/render/texture/ArgbMath
-  access public,final
-  extends java/lang/Object
-  method public,static fromHsv (FFFI)I
-  method public,static lerp (IIF)I
-  method public,static lerpPremultiplied (IIF)I
-  method public,static multiply (II)I
-  method public,static toCss (I)Ljava/lang/String;
-  method public,static toHsv (I)[F
 com/crystalgui/render/texture/asset/FileIconTheme
   access public,final
   extends java/lang/Object

@@ -166,7 +166,7 @@ images.fit(image, x, y, w, h, DrawableFit.CONTAIN, align, out);            // wh
 - An image built in Java with no CSS spelling (a painter, a `Paint`) throws from `css()`; the builder's copy
   (`ImageParts`) copies it whole.
 - CSS functions are `ImageKinds`, which a mod extends (`ImageKinds.register`); the value is `ImageValue`, the property
-  `ImageProperty`. `ArgbMath` is the colour maths; `render/texture/asset/FileIconTheme` the file-icon theme.
+  `ImageProperty`. Colour maths is CrystalGraphics' `CgColor` (`multiplyArgb`, `lerpArgbPremultiplied`, `toHex` on packed ARGB); `render/texture/asset/FileIconTheme` is the file-icon theme.
 
 > **Every static collection in `core` or `language` names its thread rule** (`// Threads:`, or is concurrent/synchronized):
 > `SharedStateTest` fails the build otherwise. Several documents run style, layout and paint at once.

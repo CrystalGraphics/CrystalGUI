@@ -25,7 +25,7 @@ import com.crystalgraphics.gpu.resource.CgTextureManager;
 import com.crystalgraphics.gpu.resource.CgTextureSettings;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 import com.crystalgui.style.property.visual.DrawableAlign;
 import com.crystalgui.style.property.visual.DrawableFit;
@@ -196,7 +196,7 @@ public final class CgUiImagePainter {
         switch (image) {
             case CgUiImage.None none -> borderOnly(canvas, x, y, width, height, radii, border);
             case CgUiImage.Color c -> {
-                if (radii == null && border == null) canvas.fill(x, y, width, height, ArgbMath.multiply(c.argb(), color));
+                if (radii == null && border == null) canvas.fill(x, y, width, height, CgColor.multiplyArgb(c.argb(), color));
                 else shape(canvas.box(x, y, width, height).tint(color).fill(c.argb()), radii, border).draw();
             }
             case CgUiImage.Paint p -> shape(canvas.box(x, y, width, height).tint(color).fill(p.paint()), radii, border)
@@ -215,11 +215,11 @@ public final class CgUiImagePainter {
                 shape(canvas.box(x, y, width, height).fill(grid).tint(color), radii, border).draw();
             }
             case CgUiImage.Picture p -> picture(canvas, p, x, y, width, height,
-                    ArgbMath.multiply(ArgbMath.multiply(p.tint(), color), pictureTint), radii, border);
+                    CgColor.multiplyArgb(CgColor.multiplyArgb(p.tint(), color), pictureTint), radii, border);
             case CgUiImage.Sheet s -> {
                 CgBrush brush = sheet(s);
                 if (brush == null) return;
-                shape(canvas.box(x, y, width, height).tint(ArgbMath.multiply(color, pictureTint)).fill(brush), radii,
+                shape(canvas.box(x, y, width, height).tint(CgColor.multiplyArgb(color, pictureTint)).fill(brush), radii,
                         border).draw();
             }
             case CgUiImage.Icon i -> {
@@ -468,7 +468,7 @@ public final class CgUiImagePainter {
         synchronized (state) {
             svg = document(i, state);
             if (svg == null || svg.isEmpty() || svg.width() <= 0f || svg.height() <= 0f) return;
-            int argb = ArgbMath.multiply(i.tint(), color);
+            int argb = CgColor.multiplyArgb(i.tint(), color);
             // The half-width is in device pixels; the brush's width in canvas units
             float stroke = i.monochrome() && i.strokeHalfWidth() > 0f
                     ? i.strokeHalfWidth() * 2f / Math.max(canvas.deviceScale(), 1e-4f) : 0f;

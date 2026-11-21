@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgraphics.api.canvas.CgCanvasFrame;
 import com.crystalgraphics.api.canvas.CgCanvasPresenter;
@@ -256,6 +257,11 @@ public final class CgUiPaintContext {
     /** A kept picture's largest side in device pixels: past it, the box draws into the frame. */
     private static final float MAX_SIDE = 4096f;
 
+    /** Read once: a box drawn into a surface one frame and into the frame the next would lose its picture. */
+    private static final CgVar.Bool SURFACES = CgVar.bool("crystalgui.paint.surfaces", true,
+            CgVar.DEV | CgVar.RESTART, "Draws a box the compositor moves into a picture kept across frames."
+                    + " Off: it draws into the frame as any box.");
+
     private final Map<Object, Surface> surfaces = new HashMap<>();
     private boolean retentionSuspended;
 
@@ -268,7 +274,7 @@ public final class CgUiPaintContext {
      */
     @Nullable
     public Surface surface(Object key, float x0, float y0, float x1, float y1) {
-        if (!PaintFlags.SURFACES || retentionSuspended || !(x1 > x0 && y1 > y0) || x1 - x0 > MAX_SIDE
+        if (!SURFACES.get() || retentionSuspended || !(x1 > x0 && y1 > y0) || x1 - x0 > MAX_SIDE
                 || y1 - y0 > MAX_SIDE) {
             return null;
         }

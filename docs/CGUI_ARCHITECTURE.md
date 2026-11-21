@@ -107,7 +107,7 @@ com.crystalgui.render          CgUiRenderer and its View per document (a CgUiPai
   .text                        FontFamilyCache: (font stack, px) → CgFontFamily
   .image                       CgUiImage (CSS's <image>, sealed records), CgUiImagePainter, CgUiMark, CgUiPainter
                                (hand-drawn images: paint(name) in CSS)
-  .texture                     ArgbMath
+  .texture
     .asset                     FileIconTheme (VS Code's file-icon-theme model)
 
 com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGroup, StyleOrigin, Styleable (what the

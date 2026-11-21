@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.api.canvas.CgCanvas;
 import com.crystalgraphics.api.canvas.CgPaintChunk;
 import com.crystalgraphics.text.atlas.CgGlyphAtlas;
@@ -16,6 +17,17 @@ import java.util.Arrays;
  * {@code replay} and {@code replayEpoch} are its doors.
  */
 final class PaintSegments {
+
+    /** Read once: a segment opened under one setting and closed under another would unbalance the canvas. */
+    static final CgVar.Bool SEGMENTS = CgVar.bool("crystalgui.paint.segments", true, CgVar.DEV | CgVar.RESTART,
+            "Takes each box's own paint apart from its neighbours' as a canvas chunk. Off: no segment, no replay.");
+    private static final CgVar.Bool REPLAY = CgVar.bool("crystalgui.paint.replay", true, CgVar.DEV,
+            "Adds a box's kept segment again when its key holds, instead of painting it. Off: every box paints.");
+
+    /** Whether a kept segment may stand in for a paint. */
+    static boolean replays() {
+        return SEGMENTS.get() && REPLAY.get();
+    }
 
     private final CgPaintChunk scratch = new CgPaintChunk();
 
@@ -46,7 +58,7 @@ final class PaintSegments {
     }
 
     void begin(CgCanvas canvas) {
-        if (!PaintFlags.SEGMENTS) return;
+        if (!SEGMENTS.get()) return;
         if (depth == chunked.length) chunked = Arrays.copyOf(chunked, depth * 2);
         boolean take = !canvas.chunking();
         chunked[depth++] = take;
@@ -54,14 +66,14 @@ final class PaintSegments {
     }
 
     boolean end(CgCanvas canvas, @Nullable CgPaintChunk keep) {
-        if (!PaintFlags.SEGMENTS) return false;
+        if (!SEGMENTS.get()) return false;
         drawnKnown = false;
         CgTrace.add(UiTrace.FRAME, "segments", 1);
         if (!chunked[--depth]) {
             if (keep != null) keep.clear();
             return false;
         }
-        CgPaintChunk into = keep != null && PaintFlags.REPLAY ? keep : scratch;
+        CgPaintChunk into = keep != null && replays() ? keep : scratch;
         CgPaintChunk.Refusal why = canvas.endChunk(into);
         if (into.kept()) drawn(into);
         if (into == scratch) {
@@ -76,7 +88,7 @@ final class PaintSegments {
     boolean replay(CgCanvas canvas, CgPaintChunk kept) {
         drawnKnown = false;
         // Inside another's chunk a replay would be taken twice: the box paints
-        if (!PaintFlags.REPLAY || canvas.chunking() || !canvas.replay(kept)) return false;
+        if (!replays() || canvas.chunking() || !canvas.replay(kept)) return false;
         drawn(kept);
         CgTrace.add(UiTrace.FRAME, "segments-replayed", 1);
         return true;

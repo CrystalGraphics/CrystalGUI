@@ -1,5 +1,6 @@
 package com.crystalgui.ui.box;
 
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import com.crystalgraphics.api.canvas.CgCanvasBox;
 import com.crystalgraphics.api.texture.CgTexture;
@@ -14,9 +15,7 @@ import com.crystalgui.render.InkOverflow;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.PaintFlags;
 import com.crystalgui.render.Surface;
-import com.crystalgui.render.texture.*;
 import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.render.image.CgUiImagePainter;
 import com.crystalgui.style.ComputedStyle;
@@ -59,6 +58,15 @@ import org.joml.Matrix4f;
 public final class BoxPainter {
 
     private static final int WHITE = 0xFFFFFFFF;
+
+    private static final CgVar.Bool CULL = CgVar.bool("crystalgui.paint.cull", true, CgVar.DEV,
+            "Skips a subtree whose ink lies wholly outside the clip (Blink's cull rect). Off: everything paints.");
+    /** Read once: a moved box's node is recorded with it, and a frame half with nodes would place it twice. */
+    private static final CgVar.Bool NODES = CgVar.bool("crystalgui.paint.nodes", true, CgVar.DEV | CgVar.RESTART,
+            "Records a moved box or a scroll under a node the compositor moves. Off: no node and no surface.");
+    private static final CgVar.Bool REPLAY_CHECK = CgVar.bool("crystalgui.paint.replayCheck", false, CgVar.DEV,
+            "Paints a segment whose key holds anyway and compares it with what it kept, naming once a box that"
+                    + " drew otherwise under an unchanged key.");
 
     /** One per {@link BoxTree}: the scratch below is the tree's, so two documents can paint at once. */
     BoxPainter() {
@@ -109,7 +117,7 @@ public final class BoxPainter {
         float opacity = box.opacity();
         if (opacity <= 0f) return;
         // NOTHING OF IT CAN SHOW: a row scrolled past its list's edge draws nothing the clip would keep.
-        if (PaintFlags.CULL) {
+        if (CULL.get()) {
             inkThrough(box, base);
             if (ctx.canvas().outsideClip(ink[0], ink[1], ink[2], ink[3])) {
                 CgTrace.add(UiTrace.FRAME, "culled", 1);
@@ -118,7 +126,7 @@ public final class BoxPainter {
         }
         // A BOX A COMPOSITOR MOVES (`will-change: transform`) is drawn in its own space, under a node that is a
         // whole-pixel translation to its corner: a move is the node's value.
-        if (PaintFlags.NODES && box.willChangeTransform()) {
+        if (NODES.get() && box.willChangeTransform()) {
             Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld());
             movedWorld.set(origin);
             // AT ITS CORNER AT REST: its own transform is drawn over the node, so a flight leaves the node where it is.
@@ -456,7 +464,7 @@ public final class BoxPainter {
 
     /** Check mode: a segment whose key holds is painted and compared rather than replayed. */
     private static boolean checked(Box box, int segment) {
-        return PaintFlags.REPLAY_CHECK && box.replay.kept(segment);
+        return REPLAY_CHECK.get() && box.replay.kept(segment);
     }
 
     /** Ends a box's segment, keeping what it drew when a key speaks for it, or comparing it in check mode. */
@@ -592,7 +600,7 @@ public final class BoxPainter {
             // A TRANSLATION BY WHOLE PIXELS, the scale left in the transform: text snaps to the pixel grid through it.
             int content = 0;
             Matrix4f contentBase = base;
-            if (PaintFlags.NODES && box.isScrollContainer()
+            if (NODES.get() && box.isScrollContainer()
                     && (box.maxScrollLeft() > 0f || box.maxScrollTop() > 0f)) {
                 Matrix4f origin = nodeOrigin.set(base).mul(box.localToWorld())
                         .translate(-box.scrollLeft(), -box.scrollTop(), 0f);
@@ -686,7 +694,7 @@ public final class BoxPainter {
         for (int i = 0; i < lifted.size(); i++) {
             Box box = lifted.get(i);
             // CULLED BEFORE THE WALK UP: a context lists every realised row of every virtualised list under it.
-            if (PaintFlags.CULL) {
+            if (CULL.get()) {
                 inkThrough(box, base);
                 if (ctx.canvas().outsideClip(ink[0], ink[1], ink[2], ink[3])) continue;
             }

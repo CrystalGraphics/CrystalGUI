@@ -143,7 +143,7 @@ public class StyleLabsTest {
      */
     @Test
     public void aShadowReadsWithItsColorAtEitherEnd() {
-        assertEquals("#AF9B00FF 0px 0px 12.919px", StylePropertyRegistry.TEXT_SHADOW.write(
+        assertEquals("#af9b00 0px 0px 12.919px", StylePropertyRegistry.TEXT_SHADOW.write(
                 StylePropertyRegistry.TEXT_SHADOW.valueParser.parse("0px 0px 12.919px #AF9B00").compute()));
     }
 

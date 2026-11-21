@@ -71,7 +71,7 @@ public class ShadowWptTest {
     public void colourAfterTheLengthsSerialisesFirst() {
         ShadowList list = l3("10px 20px 30px lime");
         assertEquals(l3("lime 10px 20px 30px"), list);
-        assertEquals("#00FF00FF 10px 20px 30px", ShadowParser.write(list));
+        assertEquals("#00ff00 10px 20px 30px", ShadowParser.write(list));
     }
 
     // ── text-shadow-invalid.html ─────────────────────────────────────────────────────────────────

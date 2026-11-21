@@ -3,7 +3,7 @@ package com.crystalgui.widget.composite;
 import com.crystalgraphics.api.canvas.CgCanvasTriangle;
 import com.crystalgraphics.render.ui.path.CgCurveRecords;
 import com.crystalgui.render.CgUiPaintContext;
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.style.StyleGroup;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.ui.contract.State;
@@ -735,7 +735,7 @@ public class RadarChart extends UIElement {
             float m = (float) slice / slices;
             float qx = ax + (bx - ax) * m;
             float qy = ay + (by - ay) * m;
-            int qc = ArgbMath.lerp(from, to, m);
+            int qc = CgColor.lerpArgb(from, to, m);
 
             CgCanvasTriangle wedge = ctx.canvas().triangle(cx, cy, px, py, qx, qy);
             if (fade) {
@@ -744,7 +744,7 @@ public class RadarChart extends UIElement {
                 // the centre and exactly 1 along the rim, which the bisector reading below only reaches
                 // at the rim's midpoint. Transparency keeps the RGB so the ramp fades rather than
                 // darkening toward transparent BLACK.
-                int mid = ArgbMath.lerp(from, to, (pm + m) / 2f);
+                int mid = CgColor.lerpArgb(from, to, (pm + m) / 2f);
                 float ex = qx - px, ey = qy - py;
                 float nx = -ey, ny = ex;
                 float d = (px - cx) * nx + (py - cy) * ny;

@@ -1,6 +1,6 @@
 package com.crystalgui.style.property.visual.shadow;
 
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.FontRelative;
 import com.crystalgui.style.property.visual.color.ColorValue;
@@ -231,7 +231,7 @@ final class ShadowParser {
         for (int i = 0; i < list.size(); i++) {
             Shadow s = list.get(i);
             if (i > 0) out.append(", ");
-            out.append(s.color().isCurrentColor() ? "currentcolor" : ArgbMath.toCss(s.color().literalArgb()));
+            out.append(s.color().isCurrentColor() ? "currentcolor" : CgColor.toHex(s.color().literalArgb()));
             out.append(' ').append(px(s.x())).append(' ').append(px(s.y())).append(' ').append(px(s.blur()));
             if (s.spread() != 0f) out.append(' ').append(px(s.spread()));
             if (s.inset()) out.append(" inset");

@@ -9,7 +9,7 @@ import javax.annotation.Nullable;
 import com.crystalgraphics.api.paint.effect.CgBackdropFilter;
 import com.crystalgraphics.api.paint.effect.CgFilter;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.style.CssParsingUtil;
 import com.crystalgui.style.property.StyleValue;
 import com.crystalgui.style.property.visual.color.ColorValue;
@@ -126,7 +126,7 @@ public class BackdropFilterValue extends StyleValue<CgBackdropFilter> {
                 case SATURATE -> out.add("saturate(" + trim(v) + ")");
                 case SEPIA -> out.add("sepia(" + trim(v) + ")");
                 case HUE_ROTATE -> out.add("hue-rotate(" + trim(v) + "deg)");
-                case TINT -> out.add("tint(" + ArgbMath.toCss(step.color()) + ")");
+                case TINT -> out.add("tint(" + CgColor.toHex(step.color()) + ")");
                 case LUMINOSITY -> out.add("luminosity(" + trim(v) + ")");
                 default -> throw new IllegalArgumentException("backdrop-filter has no spelling for " + step.function());
             }
@@ -142,7 +142,7 @@ public class BackdropFilterValue extends StyleValue<CgBackdropFilter> {
         addRatio(out, "chromatic", l.chromatic(), none.chromatic());
         addRatio(out, "noise", l.grain(), none.grain());
         if (filter.fallback() != CgBackdropFilter.of(CgFilter.NONE).fallback()) {
-            out.add("fallback(" + ArgbMath.toCss(filter.fallback()) + ")");
+            out.add("fallback(" + CgColor.toHex(filter.fallback()) + ")");
         }
         return out.isEmpty() ? "blur(0px)" : String.join(" ", out);
     }

@@ -5,7 +5,7 @@ import com.crystalgui.render.image.CgUiImage;
 import com.crystalgraphics.serialization.CgStateMap;
 import com.crystalgui.core.property.Property;
 import com.crystalgui.core.signal.Signal;
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.ui.box.Box;
 import com.crystalgui.ui.contract.Event;
 import com.crystalgraphics.net.rate.CgRatePolicy;
@@ -544,12 +544,12 @@ public class ColorSelector extends UIElement {
      * which already know the hue they meant. That is what stops a grey from resetting the ring.</p>
      */
     private void decompose(int argb) {
-        float[] hsv = ArgbMath.toHsv(argb);
+        float[] hsv = CgColor.argb(argb).toHsv();
         // ONLY the hue is retained, and only when the colour has none to give. Saturation and value are
         // never ambiguous — white's saturation genuinely IS 0 — so keeping them was simply wrong: typing
         // FFFFFF left saturation at whatever it had been, so the square's handle stayed hard right and
         // the square went on showing the previous hue while every other control read white.
-        if (hsv[1] > 0f) hue = hsv[0];
+        if (hsv[1] > 0f) hue = hsv[0] / 360f;
         saturation = hsv[1];
         value = hsv[2];
     }
@@ -571,7 +571,7 @@ public class ColorSelector extends UIElement {
      */
     private void applyHsv() {
         int before = color.get();
-        int next = ArgbMath.fromHsv(hue, saturation, value, (before >>> 24) & 0xFF);
+        int next = hsvArgb(hue, saturation, value, (before >>> 24) & 0xFF);
         color.set(next);
         // The colour did not move, but the MODEL did — so drive the refresh by hand. Not an else-branch
         // on a listener: this is the one caller that knows a suppressed set still changed something.
@@ -770,9 +770,9 @@ public class ColorSelector extends UIElement {
         float unit = max <= 0f ? 0f : channelValue / max;
         if (mode == Mode.HSV) {
             switch (index) {
-                case 0: return ArgbMath.fromHsv(unit, saturation, value, (argb >>> 24) & 0xFF);
-                case 1: return ArgbMath.fromHsv(hue, unit, value, (argb >>> 24) & 0xFF);
-                case 2: return ArgbMath.fromHsv(hue, saturation, unit, (argb >>> 24) & 0xFF);
+                case 0: return hsvArgb(unit, saturation, value, (argb >>> 24) & 0xFF);
+                case 1: return hsvArgb(hue, unit, value, (argb >>> 24) & 0xFF);
+                case 2: return hsvArgb(hue, saturation, unit, (argb >>> 24) & 0xFF);
                 default: return (argb & 0x00FFFFFF) | (Math.round(unit * 255f) << 24);
             }
         }
@@ -849,5 +849,10 @@ public class ColorSelector extends UIElement {
     @Override
     public List<UIElement> describedChildren() {
         return List.of();
+    }
+
+    /** {@code hue} 0..1, saturation and value 0..1, and a byte of alpha, as ARGB. */
+    private static int hsvArgb(float hue, float saturation, float value, int alpha) {
+        return CgColor.hsv(hue * 360f, saturation, value, (alpha & 0xFF) / 255f).toArgb();
     }
 }

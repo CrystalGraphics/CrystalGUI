@@ -14,7 +14,7 @@ import com.crystalgraphics.api.vector.CgStroke;
 import com.crystalgraphics.api.vector.CgVectorPath;
 import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.render.image.CgUiPainter;
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 
 /**
  * The colour picker's fields, drawn by hand: a hue ring, a saturation/value square, a ramp between two colours over a
@@ -66,7 +66,7 @@ public final class ColorField implements CgUiPainter {
         this.to = to;
         this.radii = radii;
         this.paint = switch (mode) {
-            case SV_SQUARE -> CgGradient.linear(90f).stop(0f, 0xFFFFFFFF).stop(1f, ArgbMath.fromHsv(hue, 1f, 1f, 0xFF));
+            case SV_SQUARE -> CgGradient.linear(90f).stop(0f, 0xFFFFFFFF).stop(1f, CgColor.hsv(hue * 360f, 1f, 1f, 1f).toArgb());
             case RAMP -> CgGradient.linear(90f).stop(0f, from).stop(1f, to);
             default -> null;
         };

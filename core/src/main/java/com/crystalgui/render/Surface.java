@@ -1,5 +1,6 @@
 package com.crystalgui.render;
 
+import com.crystalgraphics.variable.CgVar;
 import com.crystalgraphics.api.canvas.CgKeptLayer;
 import com.crystalgraphics.trace.CgTrace;
 import com.crystalgui.core.trace.UiTrace;
@@ -24,6 +25,9 @@ import com.crystalgui.core.trace.UiTrace;
  * box as it last painted, a minimised one included.</p>
  */
 public final class Surface {
+
+    private static final CgVar.Bool DAMAGE = CgVar.bool("crystalgui.paint.damage", true, CgVar.DEV,
+            "Executes only what changed in a surface walked again. Off: the whole surface executes.");
 
     /**
      * What a surface is keyed by, told of it each time it is drawn, and asked whether to keep it while nothing paints
@@ -113,7 +117,7 @@ public final class Surface {
         pictureX = walk.x();
         pictureY = walk.y();
         CgTrace.add(UiTrace.FRAME, walk.draws() ? "surfaces-painted" : "surfaces-kept", 1);
-        if (walk.draws() && !PaintFlags.DAMAGE) walk.damage(x0, y0, x1 - x0, y1 - y0);
+        if (walk.draws() && !DAMAGE.get()) walk.damage(x0, y0, x1 - x0, y1 - y0);
         return walk;
     }
 

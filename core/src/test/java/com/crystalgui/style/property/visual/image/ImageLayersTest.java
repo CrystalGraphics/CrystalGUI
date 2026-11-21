@@ -86,7 +86,7 @@ public class ImageLayersTest {
         CgUiImage merged = ImageParts.INSTANCE.mergePart(CgJsonOps.INSTANCE, ImageValue.parse("#FF0000FF"), "layer-1",
                 layer);
         String written = StylePropertyRegistry.BACKGROUND_IMAGE.write(merged);
-        assertEquals("#FF0000FF, #3574F0FF", written);
+        assertEquals("#ff0000, #3574f0", written);
         assertEquals(merged, ImageValue.parse(written));
     }
 

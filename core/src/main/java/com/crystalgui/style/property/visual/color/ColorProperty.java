@@ -1,6 +1,6 @@
 package com.crystalgui.style.property.visual.color;
 
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.style.property.StyleProperty;
 import lombok.experimental.Accessors;
 
@@ -11,7 +11,7 @@ public class ColorProperty extends StyleProperty<Integer> {
         setAllowTransition(true);
         // PREMULTIPLIED, as CSS interpolates colours: fading to `transparent` (transparent BLACK) must only lose alpha. A straight
         // lerp darkens the colour on the way, so a highlight fading out looked like it snapped off while one fading in did not.
-        setInterpolator(ArgbMath::lerpPremultiplied);
+        setInterpolator(CgColor::lerpArgbPremultiplied);
     }
 
     /**

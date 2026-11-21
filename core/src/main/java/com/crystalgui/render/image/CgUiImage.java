@@ -11,7 +11,7 @@ import com.crystalgraphics.api.paint.CgPaint;
 import com.crystalgraphics.api.paint.gradient.CgGradient;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgraphics.api.vector.svg.CgSvg;
-import com.crystalgui.render.texture.ArgbMath;
+import com.crystalgraphics.api.paint.CgColor;
 import com.crystalgui.render.texture.asset.FileIconTheme;
 
 /**
@@ -114,7 +114,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
         if (t >= 1f) return to;
         if (from.equals(to)) return to;
         if (from instanceof Color a && to instanceof Color b) {
-            return new Color(ArgbMath.lerpPremultiplied(a.argb(), b.argb(), t));
+            return new Color(CgColor.lerpArgbPremultiplied(a.argb(), b.argb(), t));
         }
         if (from instanceof Gradient a && to instanceof Gradient b && a.sameShape(b)) return a.mix(b, t);
         // A fade still running is the picture it is now, under the next one
@@ -137,7 +137,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
     record Color(int argb) implements CgUiImage {
         @Override
         public String css() {
-            return ArgbMath.toCss(argb);
+            return CgColor.toHex(argb);
         }
     }
 
@@ -284,7 +284,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
             List<Stop> stops = new ArrayList<>(declared.size());
             for (int i = 0; i < declared.size(); i++) {
                 stops.add(new Stop(positions[i] + (other.positions[i] - positions[i]) * t,
-                        ArgbMath.lerpPremultiplied(colours[i], other.colours[i], t)));
+                        CgColor.lerpArgbPremultiplied(colours[i], other.colours[i], t)));
             }
             return new Gradient(angle, corner, radial, stops);
         }
@@ -325,7 +325,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
             for (int i = 0; i < declared.size(); i++) {
                 if (i > 0) out.append(", ");
                 Stop s = declared.get(i);
-                out.append(ArgbMath.toCss(s.argb()));
+                out.append(CgColor.toHex(s.argb()));
                 if (!Float.isNaN(s.position())) out.append(' ').append(number(s.position() * 100f)).append('%');
             }
             return out.append(')').toString();
@@ -373,7 +373,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
         @Override
         public String css() {
             String cell = cellX == cellY ? number(cellX) : number(cellX) + " " + number(cellY);
-            return "grid(" + cell + ", " + ArgbMath.toCss(argb) + (lineWidth == 1f ? "" : ", " + number(lineWidth)) + ")";
+            return "grid(" + cell + ", " + CgColor.toHex(argb) + (lineWidth == 1f ? "" : ", " + number(lineWidth)) + ")";
         }
     }
 
@@ -467,7 +467,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
             if (slices != null && (repeatX != Repeat.STRETCH || repeatY != Repeat.STRETCH)) {
                 out.append(", ").append(quote(repeatX == repeatY ? repeatX.css() : repeatX.css() + " " + repeatY.css()));
             }
-            if (slices == null && tint != 0xFFFFFFFF) out.append(", ").append(ArgbMath.toCss(tint));
+            if (slices == null && tint != 0xFFFFFFFF) out.append(", ").append(CgColor.toHex(tint));
             return out.append(')').toString();
         }
     }
@@ -534,7 +534,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
                 throw new IllegalStateException("an icon by path, with a stroke override or a forced variant was built"
                         + " in Java and has no CSS: " + source);
             }
-            return "icon(" + quote(source) + (tint != 0xFFFFFFFF ? ", " + ArgbMath.toCss(tint) : "")
+            return "icon(" + quote(source) + (tint != 0xFFFFFFFF ? ", " + CgColor.toHex(tint) : "")
                     + (monochrome ? ", monochrome" : "") + ")";
         }
     }
@@ -578,7 +578,7 @@ public sealed interface CgUiImage permits CgUiImage.None, CgUiImage.Color, CgUiI
     record Paint(CgPaint paint) implements CgUiImage {
         @Override
         public String css() {
-            if (paint instanceof CgPaint.Solid solid && solid.intensity() == 1f) return ArgbMath.toCss(solid.argb());
+            if (paint instanceof CgPaint.Solid solid && solid.intensity() == 1f) return CgColor.toHex(solid.argb());
             throw new IllegalStateException("a " + paint.getClass().getSimpleName() + " paint was set from Java and has"
                     + " no CSS");
         }
