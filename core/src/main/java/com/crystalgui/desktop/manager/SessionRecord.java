@@ -37,13 +37,14 @@ import java.util.Locale;
  *       applications' order is the third, the only one the user arranges by hand.</li>
  *   <li><b>A window with no key is not persisted</b>: a record can only name a window by its key.</li>
  *   <li><b>An application's own state</b> is the string it last gave {@code AppContext.saveState}; the record never reads it.</li>
- *   <li><b>An old record is discarded, never migrated</b>: an arrangement invented by a migration is one nobody chose.</li>
+ *   <li><b>An old record is discarded, never migrated</b>: an arrangement invented by a migration is one nobody chose.
+ *       The one exception is 2 to 3, UI16's lengths doubled, which is the same arrangement in other units.</li>
  * </ul>
  */
 public final class SessionRecord {
 
-    /** Bump on any change that makes an older record mean something different. */
-    public static final int VERSION = 2;
+    /** Bump on any change that makes an older record mean something different. 3 is UI16's: lengths at a scale of 1. */
+    public static final int VERSION = 3;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_WINDOWS = "windows";
@@ -145,6 +146,16 @@ public final class SessionRecord {
                 CgCodecs.fieldOr(KEY_PINS, CgCodecs.listOf(CgCodecs.STRING), Saved::pins, List.of()),
                 CgCodecs.fieldOr(KEY_APPS, CgCodecs.listOf(App.CODEC), Saved::apps, List.of()),
                 Saved::new);
+
+        /** A version 2 record at version 3: written for a scale of 2, so every rect doubles. */
+        Saved atScaleOne() {
+            List<Placement> doubled = new ArrayList<>(windows.size());
+            for (Placement p : windows) {
+                doubled.add(new Placement(p.key(), p.left() * 2f, p.top() * 2f, p.width() * 2f, p.height() * 2f,
+                        p.maximized(), p.hidden(), p.app()));
+            }
+            return new Saved(VERSION, doubled, mru, pins, apps);
+        }
     }
 
     /**
@@ -294,6 +305,7 @@ public final class SessionRecord {
         if (raw == null || raw.isEmpty()) return null;
         try {
             Saved saved = CgFiles.JSON.fromText(Saved.CODEC, raw);
+            if (saved.version() == 2) return saved.atScaleOne();
             return saved.version() == VERSION ? saved : null;
         } catch (RuntimeException malformed) {
             // A record that will not parse is a record that describes nothing. Discarded rather than

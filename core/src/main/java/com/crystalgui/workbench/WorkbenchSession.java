@@ -26,6 +26,8 @@ import com.crystalgui.workbench.region.DockRegion;
 import com.crystalgui.workbench.toolwindow.ToolWindowLayout;
 import com.crystalgui.workbench.toolwindow.ToolWindowState;
 import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -34,6 +36,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.function.Predicate;
 
 import javax.annotation.Nullable;
 
@@ -135,8 +138,13 @@ public final class WorkbenchSession {
      * a record written at 5 has <b>no side at all</b>, so a migration would have to invent one — and a
      * silently invented {@code PRIMARY} for a panel the user had put in the bottom-right is a layout that
      * comes back subtly wrong rather than obviously default. One lost arrangement, once, is cheaper.</p>
+     *
+     * <h3>7 — lengths at a scale of 1, and the one migration</h3>
+     *
+     * <p>UI16 halved the default scale and doubled every length, so a record at 6 holds half-sized rects. Migrated
+     * ({@link #atScaleOne}), not discarded: doubling is the same arrangement in other units, with nothing to guess.</p>
      */
-    public static final int VERSION = 6;
+    public static final int VERSION = 7;
 
     private static final String KEY_VERSION = "version";
     private static final String KEY_DOCK = "dock";
@@ -575,11 +583,48 @@ public final class WorkbenchSession {
         return json != null && fromJson(json);
     }
 
+    /**
+     * A version 6 record at 7, the one migration this record takes: written for a scale of 2, so the dock's viewport,
+     * a floating tool window's rect and a view's pan double. The same arrangement in other units, nothing guessed.
+     */
+    static JsonElement atScaleOne(JsonElement tree) {
+        if (!tree.isJsonObject()) return tree;
+        JsonObject root = tree.getAsJsonObject();
+        JsonElement version = root.get(KEY_VERSION);
+        if (version == null || !version.isJsonPrimitive() || version.getAsInt() != 6) return tree;
+        root.addProperty(KEY_VERSION, VERSION);
+        JsonElement dock = root.get(KEY_DOCK);
+        if (dock != null && dock.isJsonObject()) doubleKeys(dock.getAsJsonObject(), k -> k.startsWith("viewport"));
+        doubleEach(root.get(KEY_TOOL_WINDOWS), k -> k.equals("fx") || k.equals("fy") || k.equals("fw") || k.equals("fh"));
+        JsonElement files = root.get(KEY_FILES);
+        if (files != null && files.isJsonArray()) {
+            for (JsonElement file : files.getAsJsonArray()) {
+                JsonElement view = file.isJsonObject() ? file.getAsJsonObject().get(KEY_VIEW) : null;
+                if (view != null && view.isJsonObject()) doubleKeys(view.getAsJsonObject(), k -> k.endsWith("panX") || k.endsWith("panY"));
+            }
+        }
+        return root;
+    }
+
+    private static void doubleEach(@Nullable JsonElement list, Predicate<String> which) {
+        if (list == null || !list.isJsonArray()) return;
+        for (JsonElement each : list.getAsJsonArray()) if (each.isJsonObject()) doubleKeys(each.getAsJsonObject(), which);
+    }
+
+    private static void doubleKeys(JsonObject object, Predicate<String> which) {
+        for (Map.Entry<String, JsonElement> entry : object.entrySet()) {
+            JsonElement value = entry.getValue();
+            if (which.test(entry.getKey()) && value.isJsonPrimitive() && value.getAsJsonPrimitive().isNumber()) {
+                entry.setValue(new JsonPrimitive(value.getAsDouble() * 2));
+            }
+        }
+    }
+
     /** Restores from text. Returns false when the record is unusable, having changed nothing. */
     public boolean fromJson(String json) {
         CgStateMap<JsonElement> in;
         try {
-            in = new CgStateMap<>(CgJsonOps.INSTANCE, CgJsonOps.fromText(json));
+            in = new CgStateMap<>(CgJsonOps.INSTANCE, atScaleOne(CgJsonOps.fromText(json)));
         } catch (RuntimeException malformed) {
             CrystalGuiCore.LOGGER.warn("Session record could not be read; opening with the defaults",
                     malformed);

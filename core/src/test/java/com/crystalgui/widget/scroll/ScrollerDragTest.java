@@ -26,9 +26,9 @@ import static org.junit.Assert.*;
  */
 public class ScrollerDragTest extends UiDocumentTestBase {
 
-    private static final float VIEWPORT = 100f;
-    private static final float ROW_H = 40f;
-    private static final int ROWS = 5;                 // 200px content in a 100px box
+    private static final float VIEWPORT = 200f;
+    private static final float ROW_H = 80f;
+    private static final int ROWS = 5;                 // 400px content in a 200px box
 
     private ScrollerView view;
 
@@ -50,12 +50,12 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         // each time, and `dragResultIsIndependentOfUiScale` calls this twice.
         document.removeAll();
         view = new ScrollerView();
-        view.layout(l -> l.width(120).height(VIEWPORT).flexDirection(FlexDirection.COLUMN));
+        view.layout(l -> l.width(240).height(VIEWPORT).flexDirection(FlexDirection.COLUMN));
         for (int i = 0; i < ROWS; i++) {
-            view.append(new UIElement().layout(l -> l.width(120).height(ROW_H)));
+            view.append(new UIElement().layout(l -> l.width(240).height(ROW_H)));
         }
 
-        UIElement root = new UIElement().layout(l -> l.width(400).height(300));
+        UIElement root = new UIElement().layout(l -> l.width(800).height(600));
         root.append(view);
 
         document.append(root);
@@ -470,7 +470,7 @@ public class ScrollerDragTest extends UiDocumentTestBase {
         pressTarget(bar.tail());
         float afterOne = view.getTargetScrollTop();
         assertTrue("a step should move the view", afterOne > 0f);
-        assertEquals("one click should be about one line", 40f, afterOne, 2f);
+        assertEquals("one click should be about one line", 80f, afterOne, 4f);
 
         pressTarget(bar.tail());
         assertEquals("a second click should add to the first, not restart",

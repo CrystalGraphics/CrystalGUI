@@ -27,7 +27,7 @@ import com.crystalgui.widget.text.UIText;
  */
 public final class ShadowLab {
 
-    static final String DEFAULT = "0 1px 2px #000000";
+    static final String DEFAULT = "0 2px 4px #000000";
 
     /** How far a fitted shadow may reach from the mark, in px. Half the chip, so the far side survives. */
     private static final float SAMPLE_REACH = 7f;

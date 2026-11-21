@@ -600,7 +600,7 @@ public class ColorSelector extends UIElement {
      * kept here rather than read back out of the cascade because there is nothing to read: see
      * {@link ColorField#corners(CgCornerRadii)}'s
      * own doc for why this specific shape can't go through {@code border-radius} at all. */
-    private static final float SWATCH_CORNER_RADIUS = 3f;
+    private static final float SWATCH_CORNER_RADIUS = 6f;
 
     /**
      * A flat fill that still shows its alpha, by being a gradient with both stops the same.

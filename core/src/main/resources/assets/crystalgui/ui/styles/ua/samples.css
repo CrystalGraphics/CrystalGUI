@@ -14,8 +14,8 @@
 
 /* A block drawn only for a sample: a pane's content, a node on a canvas, an empty element. */
 .__sample-block__ {
-    border-width: 1px;
-    border-radius: 2px;
+    border-width: 2px;
+    border-radius: 4px;
     border-color: var(--sample-block-border, #5A5D63);
     background-color: var(--sample-block-bg, #191A1C);
 }
@@ -33,7 +33,7 @@ canvasview.__sample-canvas__ {
 /* A bare text field wears the edge a search field has: the field itself draws none, and each context that
  * places one gives it its own. */
 textfield.__sample-field__ {
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--searchfield-border, #3C3C3C);
 }
 
@@ -41,7 +41,7 @@ textfield.__sample-field__ {
  * row reads as a label beside its value rather than two ends of a wide row. */
 .__sample-form__ .__configurator__ > .__label__,
 .__configurator__.__sample-form__ > .__label__ {
-    flex-basis: 30px;
+    flex-basis: 60px;
 }
 
 .__sample-form__ .__configurator__ > .__inline__ > .__config-control__,
@@ -51,10 +51,10 @@ textfield.__sample-field__ {
 
 /* A tree sample's fold arrow, the project tree's two shapes; a leaf keeps the slot. */
 .__sample-twisty__ {
-    width: 9px;
-    height: 9px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
-    margin-right: 2px;
+    margin-right: 4px;
     color: var(--tree-twisty-fg, #FFFFFF);
 }
 
@@ -73,32 +73,32 @@ textfield.__sample-field__ {
 
 /* A settings popover's room: its own chrome is a menu's, packed tight for rows. */
 popover.__sample-popover__ {
-    padding: 5px 6px 6px 6px;
-    gap: 3px;
+    padding: 10px 12px 12px 12px;
+    gap: 6px;
 }
 
 /* The point of a sample popover: a slot as tall as the tip that shows, holding a square turned a quarter-half
  * whose lower half the popover covers. No negative margin, which would leave the card measuring the sample
  * shorter than it draws. */
 .__sample-notch__ {
-    width: 9px;
-    height: 5px;
-    margin-top: 2px;
+    width: 18px;
+    height: 10px;
+    margin-top: 4px;
 }
 
 .__sample-notch-tip__ {
     position: absolute;
     left: 0;
-    top: 1px;
-    width: 9px;
-    height: 9px;
+    top: 2px;
+    width: 18px;
+    height: 18px;
     transform: rotate(45deg);
     background: var(--menu-bg, #4B4B4B);
-    outline: 1px var(--menu-border, #8C8C8C);
+    outline: 2px var(--menu-border, #8C8C8C);
 }
 
 /* A bar standing in for a line of text on a sample's page. */
 .__sample-line__ {
-    border-radius: 1px;
+    border-radius: 2px;
     background-color: var(--sample-line-fg, #6F737A);
 }

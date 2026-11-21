@@ -56,7 +56,7 @@ public class NodeControlKitTest extends UiDocumentTestBase {
     // --graph-ctrl-h: 14px was sized for the control kit's old 6px text; it became 18px alongside
     // --graph-font going from 6 to 9 (matching the title), so the same box wouldn't crowd the bigger
     // text against its own chevron/mark.
-    private static final float CTRL_H = 18f;
+    private static final float CTRL_H = 36f;
     private static final float ROW_H = 25f;
 
     private UIElement root;

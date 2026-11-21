@@ -114,7 +114,7 @@ public record Gradient(String direction, List<Stop> stops, @Nullable Radial radi
         /** An extent, or {@link #LENGTH} for a starting radius to edit. */
         public Radial withExtent(String choice) {
             if (choice.equals(extent())) return this;
-            String next = LENGTH.equals(choice) ? (circle ? "50px" : "50% 50%")
+            String next = LENGTH.equals(choice) ? (circle ? "100px" : "50% 50%")
                     : choice.equals(EXTENTS.get(0)) ? "" : choice;
             return new Radial(circle, next, position);
         }

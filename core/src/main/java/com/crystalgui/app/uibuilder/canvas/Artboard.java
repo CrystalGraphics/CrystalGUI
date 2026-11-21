@@ -33,8 +33,8 @@ public final class Artboard extends UIElement {
     /** On the frame, for a theme to draw the page edge. */
     public static final String FRAME_CLASS = "__artboard__";
 
-    private static final float DEFAULT_WIDTH = 800f;
-    private static final float DEFAULT_HEIGHT = 480f;
+    private static final float DEFAULT_WIDTH = 1600f;
+    private static final float DEFAULT_HEIGHT = 960f;
 
     private final UiBuilderDocument document;
 

@@ -263,8 +263,8 @@ public class HierarchyPanelFollowsTheOpenDocumentTest extends UiDocumentTestBase
 
     private void clickBlankPage(UIBuilderView editor) {
         Box board = editor.artboard().box();
-        Vector2f at = Transform2D.apply(board.localToWorld(),
-                board.width() * 0.5f, board.height() * 0.8f);
+        // Near the board's top-left, below the one text line: the board opens at zoom 1 and runs past the pane.
+        Vector2f at = Transform2D.apply(board.localToWorld(), 100f, 200f);
         press(at);
         frameAndPump();
         release(at);

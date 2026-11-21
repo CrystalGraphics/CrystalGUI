@@ -53,25 +53,25 @@ public class ZonesTab extends UIElement {
         layout(l -> l.flexDirection(FlexDirection.COLUMN).widthPercent(100f).heightPercent(100f));
 
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Zone", CgTraceAggregate.Stat::name)
-                .flexible(2f).minWidth(120f).sortable());
+                .flexible(2f).minWidth(240f).sortable());
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Calls", stat -> String.valueOf(stat.count()))
-                .width(44f).sortable(Comparator.comparingInt(CgTraceAggregate.Stat::count)));
+                .width(88f).sortable(Comparator.comparingInt(CgTraceAggregate.Stat::count)));
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Self",
                         stat -> String.format("%.3f", stat.selfMillis()))
-                .width(62f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::selfNanos)));
+                .width(124f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::selfNanos)));
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Self %", this::selfShare)
-                .width(52f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::selfNanos)));
+                .width(104f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::selfNanos)));
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Total",
                         stat -> String.format("%.3f", stat.totalMillis()))
-                .width(62f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::totalNanos)));
+                .width(124f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::totalNanos)));
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Max",
                         stat -> String.format("%.3f", stat.maxMillis()))
-                .width(62f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::maxNanos)));
+                .width(124f).sortable(Comparator.comparingLong(CgTraceAggregate.Stat::maxNanos)));
         // THE SOURCE IS A COLUMN, not a tooltip: the whole point of the location the engine walks for
         // every interned name is that a row can be jumped to, and a value nobody can see is not one.
         table.addColumn(TableColumn.<CgTraceAggregate.Stat>of("Source",
                         stat -> stat.source() == null ? "" : FlameChart.shortSource(stat.source()))
-                .flexible(1f).minWidth(90f).sortable());
+                .flexible(1f).minWidth(180f).sortable());
 
         append(table);
     }

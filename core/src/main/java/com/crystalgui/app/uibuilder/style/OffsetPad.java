@@ -68,7 +68,7 @@ public final class OffsetPad extends ValueControl<double[]> {
     public static final String TRACK_CLASS = "__offset-track__";
 
     /** How far the dot may travel from the crosshair, in px: half the pad less half the dot. */
-    private static final double DOT_REACH = 14d;
+    private static final double DOT_REACH = 28d;
 
     /** The middle of a box, where a pivot starts and what a right press puts it back to. */
     private static final double[] CENTRE = {0.5d, 0.5d};

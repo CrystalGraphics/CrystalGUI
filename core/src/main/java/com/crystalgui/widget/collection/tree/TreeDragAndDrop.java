@@ -77,7 +77,7 @@ final class TreeDragAndDrop<T> {
     static final float SCROLL_BAND = 24f;
 
     /** The most a drag scrolls the tree in one 60 Hz frame. */
-    static final float SCROLL_MAX_STEP = 10f;
+    static final float SCROLL_MAX_STEP = 20f;
 
     /** Bumped when a drag leaves or drops, so the hook of an earlier drag ends itself. */
     private int generation;
@@ -131,7 +131,7 @@ final class TreeDragAndDrop<T> {
      * A before/after line's left offset with no level to show: the user-agent sheet's {@code outline-offset: -1px}
      * on {@code *}, which keeps an outline inside a clipping panel.
      */
-    private static final float LINE_BASE_OFFSET = -1f;
+    private static final float LINE_BASE_OFFSET = -2f;
 
     /** How far under the last row, in row-heights, each further level out is. */
     static final float LEVEL_STEP_ROWS = 0.5f;

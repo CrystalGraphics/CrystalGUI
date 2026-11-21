@@ -71,10 +71,12 @@ public class PreferencesTest {
 
     @Test
     public void theTypedViewsReadWhatWasWritten() {
-        Preferences.update(p -> p.withUiScale(1.5f).withLocale(Locale.JAPAN).withTokenOverride("accent", "#FF00AA")
+        Preferences.update(p -> p.withDesktopScale(1.5f).withZoom("crystalgui:editor", 1.25f).withLocale(Locale.JAPAN).withTokenOverride("accent", "#FF00AA")
                 .withKeys("edit.save", List.of("Mod+S", "Mod+Shift+S")));
         Preferences now = Preferences.current();
-        assertEquals(1.5f, now.uiScale(), 0f);
+        assertEquals(1.5f, now.desktopScale(), 0f);
+        assertEquals(1.25f, now.zoom("crystalgui:editor"), 0f);
+        assertEquals("an app never zoomed is at 1", 1f, now.zoom("crystalgui:vfx-lab"), 0f);
         assertEquals(Locale.JAPAN, now.locale());
         assertEquals("#FF00AA", now.tokenOverrides().get("--accent"));
         assertEquals(List.of("Mod+S", "Mod+Shift+S"), now.keymap().get("edit.save"));
@@ -84,15 +86,22 @@ public class PreferencesTest {
     public void preferencesSurviveARestart() throws Exception {
         Path dir = Files.createTempDirectory("cgui-prefs");
         PreferencesStore.attach(new CgLocalConfigStorage(dir));
-        Preferences.update(p -> p.withUiScale(3f).with(Preferences.THEME, "Crystal Light"));
+        Preferences.update(p -> p.withDesktopScale(1.5f).with(Preferences.THEME, "Crystal Light"));
 
         // A new process: nothing set, the same directory
         PreferencesStore.detachForTesting();
         Preferences.update(p -> p.withAll(Map.of()));
-        assertEquals(2f, Preferences.current().uiScale(), 0f);
+        assertEquals(1f, Preferences.current().desktopScale(), 0f);
         PreferencesStore.attach(new CgLocalConfigStorage(dir));
 
-        assertEquals(3f, Preferences.current().uiScale(), 0f);
+        assertEquals(1.5f, Preferences.current().desktopScale(), 0f);
         assertEquals("Crystal Light", Preferences.current().theme());
+    }
+
+    @Test
+    public void aSavedUiScaleBecomesTheDesktopScaleAtHalf() {
+        Map<String, String> migrated = Preferences.migrated(Map.of("appearance.uiScale", "3"));
+        assertEquals("150%", migrated.get(Preferences.DESKTOP_SCALE));
+        assertNull("and the old key is gone", migrated.get("appearance.uiScale"));
     }
 }

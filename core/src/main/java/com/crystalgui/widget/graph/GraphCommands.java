@@ -59,7 +59,7 @@ public final class GraphCommands {
      * and the first thing anyone does is drag it away — so it starts already moved. Down and right, which
      * is what every editor does and matches the direction a cascade of repeated pastes should run.</p>
      */
-    private static final float PASTE_OFFSET = 24f;
+    private static final float PASTE_OFFSET = 48f;
 
     /**
      * Forgets what was copied. For a test that must not see what another one copied.
@@ -74,7 +74,7 @@ public final class GraphCommands {
 
     /** World units of breathing room when framing. Not a pixel value in a widget — framing is a view
      * operation with no stylesheet to read, and the number is a margin in the document's own units. */
-    private static final float FRAME_PADDING = 24f;
+    private static final float FRAME_PADDING = 48f;
 
     private GraphCommands() {
     }

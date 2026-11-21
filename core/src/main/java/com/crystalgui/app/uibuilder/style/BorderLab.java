@@ -52,7 +52,7 @@ public final class BorderLab {
     private static final float MAX_TYPED = 9999f;
 
     /** How far an outline offset is dragged either way; typed, it goes as far as {@link #MAX_TYPED}. */
-    private static final float OFFSET_REACH = 16f;
+    private static final float OFFSET_REACH = 32f;
 
     private static final String[] CORNER_LABELS = {"Top left", "Top right", "Bottom right", "Bottom left"};
     private static final String[] SIDE_LABELS = {"Top", "Right", "Bottom", "Left"};

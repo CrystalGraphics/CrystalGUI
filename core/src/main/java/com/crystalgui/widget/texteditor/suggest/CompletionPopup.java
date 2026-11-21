@@ -129,7 +129,7 @@ public final class CompletionPopup extends Popover {
      * the reason {@code QuickPick} states: a virtualised list needs the number in Java to turn an index into
      * a scroll offset, and it cannot read the cascade.
      */
-    private static final float ROW_HEIGHT = 16f;
+    private static final float ROW_HEIGHT = 32f;
 
     /**
      * How many rows before it scrolls.
@@ -140,20 +140,20 @@ public final class CompletionPopup extends Popover {
     private static final int MAX_VISIBLE_ROWS = 19;
 
     /** Used until the probe has measured, and as the floor afterwards. */
-    private static final float MIN_WIDTH = 260f;
+    private static final float MIN_WIDTH = 520f;
 
     /** Past this a signature is truncated rather than allowed to span the window. */
-    private static final float MAX_WIDTH = 620f;
+    private static final float MAX_WIDTH = 1240f;
 
     /** Room for the scrollbar and a little air at the right edge, added to whatever the probe measures. */
-    private static final float WIDTH_SLACK = 24f;
+    private static final float WIDTH_SLACK = 48f;
 
     /** Kept off the window edges when the popup would otherwise hang past them. */
-    private static final float MARGIN = 8f;
+    private static final float MARGIN = 16f;
 
     /** The bottom strip's height, paired with {@code .__completion-hint__} in the sheet — the flip-vs-drop
      * decision in {@link #reposition} is computed from the popup's total height and cannot read the cascade. */
-    private static final float HINT_HEIGHT = 16f;
+    private static final float HINT_HEIGHT = 32f;
 
     /**
      * The popup's own vertical padding, which its declared height has to CARRY.
@@ -168,7 +168,7 @@ public final class CompletionPopup extends Popover {
      * last row clipped and a scrollbar on a list that fits, at every row count, including one. It reads as
      * a scrolling bug and is an arithmetic one.</p>
      */
-    private static final float VERTICAL_PADDING = 4f;
+    private static final float VERTICAL_PADDING = 8f;
 
     /** Two rows and the strip — below this the popup is a box with nothing readable in it. */
     private static final float MIN_HEIGHT = 2f * ROW_HEIGHT + HINT_HEIGHT + VERTICAL_PADDING;

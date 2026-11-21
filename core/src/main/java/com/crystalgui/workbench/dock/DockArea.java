@@ -1781,7 +1781,7 @@ public class DockArea extends UIElement implements MinimumSize {
         DockGroup group = leaf == null ? null : holding.groupFor(leaf);
         Box box = group == null ? null : group.box();
         if (box == null) return;
-        holding.openWindow(DockDragPayload.ofPanel(holding, leaf, panel), box.worldX() + 32f, box.worldY() + 32f);
+        holding.openWindow(DockDragPayload.ofPanel(holding, leaf, panel), box.worldX() + 64f, box.worldY() + 64f);
     }
 
     /** The window a drag out of this dock opens, at {@code (left, top)} in the desktop's space. */

@@ -21,12 +21,12 @@ frameprofiler {
     flex-direction: column;
     width: 100%;
     height: 100%;
-    gap: 6px;
-    padding: 8px;
+    gap: 12px;
+    padding: 16px;
     background-color: var(--profiler-timeline-bg);
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
-    font-size: 11px;
+    font-size: 22px;
 }
 
 frameprofiler .__spacer__ {
@@ -39,25 +39,25 @@ frameprofiler .__spacer__ {
 frameprofiler .__toolbar__ {
     flex-direction: row;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     width: 100%;
     min-width: 0px;
-    height: 26px;
+    height: 52px;
     flex-shrink: 0;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* FLAT, like every other toolbar in the shell: no face at rest, a quiet fill on hover. Four filled
  * grey buttons were the loudest thing on the window and said nothing. */
 frameprofiler .__toolbar__ button {
-    height: 24px;
+    height: 48px;
     min-height: 0px;
-    padding-left: 9px;
-    padding-right: 9px;
-    border-radius: var(--radius-control, 4px);
+    padding-left: 18px;
+    padding-right: 18px;
+    border-radius: var(--radius-control, 8px);
     background: none;
     color: var(--profiler-heading-fg);
-    font-size: 11px;
+    font-size: 22px;
 }
 
 frameprofiler .__toolbar__ button:hover {
@@ -93,7 +93,7 @@ frameprofiler .__export-note__ {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
-    margin-left: 12px;
+    margin-left: 24px;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--profiler-caption-fg);
@@ -104,13 +104,13 @@ frameprofiler .__stats__ {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
-    margin-left: 12px;
+    margin-left: 24px;
     text-align: right;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 /* ── frame strip ─────────────────────────────────────────────────────────── */
@@ -119,27 +119,27 @@ frameprofiler .__stats__ {
  * `color` is the quiet in-budget bar; `border-color` is the accent the selection takes. */
 framestrip {
     width: 100%;
-    height: 72px;
+    height: 144px;
     /* gives way before the window's minimum does: a clipped band loses its rounding */
     flex-shrink: 1;
-    min-height: 32px;
+    min-height: 64px;
     background-color: var(--profiler-strip-bg);
-    border-radius: var(--radius-panel, 8px);
+    border-radius: var(--radius-panel, 16px);
     color: var(--profiler-bar-good);
     border-color: var(--profiler-playhead);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9px;
+    font-size: 18px;
 }
 
 /* THE WAY ALONG THE RING. Tucked under the strip, on the same well: `color` is the thumb, `border-color`
  * the grips' lit state. Negative top margin cancels the column gap, so the bar reads as the strip's own. */
 framescrollbar {
     width: 100%;
-    height: 12px;
+    height: 24px;
     flex-shrink: 0;
-    margin-top: -4px;
+    margin-top: -8px;
     background-color: var(--profiler-strip-bg);
-    border-radius: var(--radius-panel, 8px);
+    border-radius: var(--radius-panel, 16px);
     color: var(--profiler-scroll-thumb);
     border-color: var(--profiler-playhead);
 }
@@ -149,14 +149,14 @@ framescrollbar {
 frameprofiler .__frame-header__ {
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     width: 100%;
     min-width: 0px;
-    height: 32px;
+    height: 64px;
     flex-shrink: 0;
-    padding-left: 4px;
-    padding-right: 4px;
-    font-size: 11px;
+    padding-left: 8px;
+    padding-right: 8px;
+    font-size: 22px;
     /* CLIPPED, not scrolled: a narrow window cuts the least important figures off the end, where an
      * overflowing header put a horizontal scrollbar on the whole window. */
     overflow: hidden;
@@ -165,23 +165,23 @@ frameprofiler .__frame-header__ {
 /* A LADDER OF THREE: caption small and dim, figure mono and secondary, headline large. The eye reads
  * the headline first and the rest only if it wants to. */
 frameprofiler .__caption__ {
-    margin-left: 8px;
+    margin-left: 16px;
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 frameprofiler .__figure__ {
     color: var(--profiler-heading-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11px;
+    font-size: 22px;
 }
 
 frameprofiler .__headline__ {
-    margin-left: 6px;
-    margin-right: 6px;
+    margin-left: 12px;
+    margin-right: 12px;
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 18px;
+    font-size: 36px;
 }
 
 frameprofiler .__figure__.__mostly__ {
@@ -193,20 +193,20 @@ frameprofiler .__figure__.__mostly__ {
 frameprofiler .__absent__ {
     color: var(--profiler-pending);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11px;
+    font-size: 22px;
     font-style: italic;
 }
 
 frameprofiler .__badge__ {
-    padding-left: 7px;
-    padding-right: 7px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    border-radius: var(--radius-control, 4px);
+    padding-left: 14px;
+    padding-right: 14px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-radius: var(--radius-control, 8px);
     background-color: var(--profiler-badge-bg);
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9px;
+    font-size: 18px;
 }
 
 frameprofiler .__badge__.__following__ {
@@ -224,23 +224,23 @@ flamechart {
     flex-direction: column;
     width: 100%;
     height: 100%;
-    min-height: 40px;
-    gap: 4px;
-    padding: 8px;
+    min-height: 80px;
+    gap: 8px;
+    padding: 16px;
     background-color: var(--profiler-panel-bg);
-    border-radius: var(--radius-panel, 8px);
+    border-radius: var(--radius-panel, 16px);
     overflow: scroll;
 }
 
 /* The readout names what is under the pointer, indented to sit over the spans rather than over the
  * thread labels: label slot plus the row's gap. */
 flamechart .__detail__ {
-    height: 16px;
+    height: 32px;
     flex-shrink: 0;
-    padding-left: 64px;
+    padding-left: 128px;
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -248,13 +248,13 @@ flamechart .__detail__ {
 flamechart .__detail__.__hint__ {
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 flamechart .__thread-row__ {
     flex-direction: row;
     align-items: flex-start;
-    gap: 8px;
+    gap: 16px;
     width: 100%;
     flex-shrink: 0;
 }
@@ -263,12 +263,12 @@ flamechart .__thread-row__ {
  * threads rather than as ragged bars, and a long thread name would otherwise push its own chart
  * narrower than its neighbour's. */
 flamechart .__thread-label__ {
-    width: 56px;
+    width: 112px;
     flex-shrink: 0;
-    padding-top: 3px;
+    padding-top: 6px;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -278,7 +278,7 @@ timelineruler {
     flex-grow: 1;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9px;
+    font-size: 18px;
 }
 
 /* `color` is the text on a zone; `border-color` the ring on the selected one. */
@@ -288,13 +288,13 @@ spantrack {
     color: var(--profiler-zone-text);
     border-color: var(--profiler-zone-ring);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 flamechart .__empty__ {
     color: var(--profiler-pending);
-    padding: 12px;
-    font-size: 11px;
+    padding: 24px;
+    font-size: 22px;
 }
 
 /* ── the split between chart and tabs ────────────────────────────────────── */
@@ -311,7 +311,7 @@ frameprofiler splitview {
  * four bands plus a grey bar, and a quiet line under the pointer so it can be found. A grab handle
  * that shouts is a control the eye keeps landing on for no reason. */
 frameprofiler splitview.__vertical__ > .__divider__ {
-    height: 6px;
+    height: 12px;
     background: none;
     background-color: var(--profiler-timeline-bg);
 }
@@ -327,10 +327,10 @@ frameprofiler splitview.__vertical__ > .__divider__:active {
 frameprofiler tabview {
     width: 100%;
     height: 100%;
-    min-height: 56px;
+    min-height: 112px;
     background-color: var(--profiler-tabs-bg);
-    border-radius: var(--radius-panel, 8px);
-    font-size: 11px;
+    border-radius: var(--radius-panel, 16px);
+    font-size: 22px;
 }
 
 zonestab,
@@ -344,20 +344,20 @@ bufferstab {
     flex-direction: column;
     width: 100%;
     height: 100%;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* ── frame images: the Screen tab and the strip's hover preview ────────────── */
 
 screentab {
-    gap: 6px;
-    padding: 6px;
+    gap: 12px;
+    padding: 12px;
 }
 
 screentab .__screen-caption__ {
     flex-shrink: 0;
     color: var(--profiler-caption-fg);
-    font-size: 11px;
+    font-size: 22px;
 }
 
 screentab frameimage {
@@ -370,14 +370,14 @@ screentab frameimage {
 frameprofiler .__frame-preview__ {
     position: absolute;
     flex-direction: column;
-    gap: 3px;
-    width: 200px;
-    height: 138px;
-    padding: 4px;
+    gap: 6px;
+    width: 400px;
+    height: 276px;
+    padding: 8px;
     background-color: var(--profiler-strip-bg);
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--profiler-zone-ring);
-    border-radius: var(--radius-control, 4px);
+    border-radius: var(--radius-control, 8px);
 }
 
 frameprofiler .__frame-preview__ frameimage {
@@ -390,7 +390,7 @@ frameprofiler .__frame-preview__ .__caption__ {
     flex-shrink: 0;
     margin-left: 0px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 /* SIDE BY SIDE, in a split: callees on the left, callers on the right. Stacked, the two trees halved a
@@ -411,9 +411,9 @@ calltreetab .__call-side__ {
 
 /* A leaf keeps the slot and draws nothing, so every name at a depth starts at the same x. */
 calltreetab .__twisty__ {
-    margin-left: 4px;
-    width: 12px;
-    height: 12px;
+    margin-left: 8px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     color: var(--tree-twisty-fg, #FFFFFF);
 }
@@ -458,9 +458,9 @@ bufferstab .__buffers-elements__ {
 
 bufferstab .__buffers-status__ {
     flex-shrink: 0;
-    padding: 4px 6px;
+    padding: 8px 12px;
     color: var(--profiler-caption-fg);
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* THE SELECTED ROW, scoped to this panel as every list here must be: `ListView` marks the row and
@@ -485,13 +485,13 @@ calltreetab treeview .__row__.__selected__:hover {
 zonestab tableview .__cell__,
 bufferstab tableview .__cell__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 zonestab tableview .__header-cell__,
 bufferstab tableview .__header-cell__ {
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 /* A heading row whose two cost heads sit exactly over the rows' cost columns: same widths, same
@@ -502,19 +502,19 @@ calltreetab .__call-heading__ {
     width: 100%;
     flex-shrink: 0;
     /* Over the names, which start past the twisty's slot: its margin, its width and the row's gap. */
-    padding-left: 24px;
+    padding-left: 48px;
     /* The row's own right padding plus the tree's scrollbar gutter, which the heading row has no
      * scrollbar to take up -- without it the heads sat a gutter's width right of their numbers. */
-    padding-right: 18px;
-    padding-top: 6px;
-    padding-bottom: 2px;
+    padding-right: 36px;
+    padding-top: 12px;
+    padding-bottom: 4px;
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 calltreetab .__call-heading__ text {
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 calltreetab .__call-title__ {
@@ -535,19 +535,19 @@ calltreetab .__call-row__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    padding-right: 4px;
-    gap: 8px;
+    padding-right: 8px;
+    gap: 16px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 calltreetab .__call-cost__ {
-    width: 72px;
+    width: 144px;
     text-align: right;
     color: var(--profiler-caption-fg);
     flex-shrink: 0;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 /* ── counters ────────────────────────────────────────────────────────────── */
@@ -556,8 +556,8 @@ calltreetab .__call-cost__ {
  * whole reason it is drawn on the strip's axis. Padding here slid every spike a few frames right of
  * the bar it belongs to. */
 counterstab {
-    padding-top: 6px;
-    padding-bottom: 6px;
+    padding-top: 12px;
+    padding-bottom: 12px;
 }
 
 counterstab scrollerview {
@@ -570,15 +570,15 @@ counterstab scrollerview {
  * second row rather than as a chart of its own. */
 countertrack {
     width: 100%;
-    height: 34px;
+    height: 68px;
     flex-shrink: 0;
-    margin-bottom: 3px;
+    margin-bottom: 6px;
     background-color: var(--profiler-strip-bg);
-    border-radius: var(--radius-control, 4px);
+    border-radius: var(--radius-control, 8px);
     color: var(--profiler-bar-good);
     border-color: var(--profiler-playhead);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9px;
+    font-size: 18px;
 }
 
 /* A counter nothing has written lately — its channel is off. Below the live ones, and quiet. */
@@ -588,8 +588,8 @@ counterstab countertrack.__stale__ {
 
 counterstab .__empty__ {
     color: var(--profiler-pending);
-    padding: 12px;
-    font-size: 11px;
+    padding: 24px;
+    font-size: 22px;
 }
 
 /* ── channels ────────────────────────────────────────────────────────────── */
@@ -602,15 +602,15 @@ channelscontrol {
 }
 
 channelscontrol maskcontrol .__toggle__ {
-    height: 24px;
+    height: 48px;
     min-height: 0px;
-    max-width: 200px;
-    padding-left: 9px;
-    padding-right: 9px;
-    border-radius: var(--radius-control, 4px);
+    max-width: 400px;
+    padding-left: 18px;
+    padding-right: 18px;
+    border-radius: var(--radius-control, 8px);
     background: none;
     color: var(--profiler-heading-fg);
-    font-size: 11px;
+    font-size: 22px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -635,18 +635,18 @@ profilersettings {
     width: 100%;
     height: 0px;
     flex-grow: 1;
-    gap: 8px;
-    font-size: 11px;
+    gap: 16px;
+    font-size: 22px;
 }
 
 profilersettings .__settings-header__ {
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     width: 100%;
     flex-shrink: 0;
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 
 /* The title and the ring's state under it take the slack, so the two buttons sit at the right edge. */
@@ -655,18 +655,18 @@ profilersettings .__settings-titles__ {
     width: 0px;
     flex-grow: 1;
     min-width: 0px;
-    gap: 2px;
+    gap: 4px;
 }
 
 profilersettings .__settings-title__ {
     color: var(--profiler-metric-fg);
-    font-size: 15px;
+    font-size: 30px;
 }
 
 profilersettings .__settings-summary__ {
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -679,19 +679,19 @@ profilersettings .__configurator-panel__ {
     flex-grow: 1;
     min-height: 0px;
     background: var(--profiler-panel-bg);
-    border-radius: var(--radius-panel, 8px);
+    border-radius: var(--radius-panel, 16px);
 }
 
 /* Wide enough for "Stop after a frame slower than (ms)" on one line. */
 profilersettings .__configurator__ > .__label__ {
-    width: 250px;
-    min-width: 250px;
+    width: 500px;
+    min-width: 500px;
 }
 
 /* SIZED TO WHAT THEY HOLD: a number field the width of the window reads as a text box, and "300" at the
  * far left of 900 pixels of field is not where the eye looks for it. */
 profilersettings .__configurator__ > .__inline__ > .__config-control__ {
-    width: 360px;
+    width: 720px;
     flex-grow: 0;
 }
 
@@ -701,13 +701,13 @@ profilersettings .__configurator__ > .__inline__ > .__config-control__ {
 profilersettings .__configurator__ > .__inline__ > .__config-control__.__note__ {
     width: 0px;
     flex-grow: 1;
-    padding-left: 22px;
-    padding-bottom: 8px;
+    padding-left: 44px;
+    padding-bottom: 16px;
 }
 
 profilersettings .__config-control__.__note__ .__value__ {
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 /* ── hints ───────────────────────────────────────────────────────────────── */
@@ -722,9 +722,9 @@ hintstab scrollerview {
 hintstab .__hint__ {
     flex-direction: column;
     width: 100%;
-    gap: 3px;
-    padding: 8px;
-    border-radius: var(--radius-control, 4px);
+    gap: 6px;
+    padding: 16px;
+    border-radius: var(--radius-control, 8px);
 }
 
 hintstab .__hint__:hover {
@@ -734,41 +734,41 @@ hintstab .__hint__:hover {
 hintstab .__hint-head__ {
     flex-direction: row;
     align-items: center;
-    gap: 10px;
+    gap: 20px;
 }
 
 hintstab .__hint-code__ {
     color: var(--profiler-hint-code-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11px;
+    font-size: 22px;
 }
 
 hintstab .__hint-meta__ {
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 hintstab .__hint-text__ {
     width: 100%;
     color: var(--profiler-metric-fg);
-    font-size: 11px;
+    font-size: 22px;
     white-space: normal;
 }
 
 hintstab .__hint-links__ {
     flex-direction: row;
-    gap: 6px;
+    gap: 12px;
 }
 
 /* A LINK, not a button: flat, in the accent, underlined by nothing but its colour. */
 hintstab .__hint-link__ {
-    height: 20px;
+    height: 40px;
     min-height: 0px;
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
     background: none;
     color: var(--profiler-playhead);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 hintstab .__hint-link__:hover {
@@ -779,49 +779,49 @@ hintstab .__hint-link__:hover {
 hintstab .__hint-ref__ {
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 hintstab .__empty__ {
-    padding: 12px;
+    padding: 24px;
     color: var(--profiler-caption-fg);
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* ── compare ─────────────────────────────────────────────────────────────── */
 
 comparetab {
-    gap: 4px;
+    gap: 8px;
 }
 
 comparetab .__compare-bar__ {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 16px;
     width: 100%;
     flex-shrink: 0;
-    padding-top: 4px;
+    padding-top: 8px;
 }
 
 comparetab .__compare-bar__ button {
-    height: 22px;
+    height: 44px;
     min-height: 0px;
-    font-size: 10px;
+    font-size: 20px;
 }
 
 comparetab .__compare-side__ {
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
-    margin-right: 8px;
+    font-size: 20px;
+    margin-right: 16px;
 }
 
 comparetab .__compare-summary__ {
     flex-shrink: 0;
-    padding-left: 4px;
+    padding-left: 8px;
     color: var(--profiler-heading-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11px;
+    font-size: 22px;
 }
 
 comparetab tableview {
@@ -836,12 +836,12 @@ comparetab tableview .__row__:hover {
 
 comparetab tableview .__cell__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 comparetab tableview .__header-cell__ {
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 comparetab tableview .__cell__.__worse__ {
@@ -864,12 +864,12 @@ counterstab countertrack.__highlight__ {
 frameprofiler .__footer__ {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 16px;
     width: 100%;
     min-width: 0px;
-    height: 20px;
+    height: 40px;
     flex-shrink: 0;
-    padding-left: 4px;
+    padding-left: 8px;
 }
 
 frameprofiler .__footer__ .__caption__ {
@@ -878,19 +878,19 @@ frameprofiler .__footer__ .__caption__ {
     min-width: 0px;
     margin-left: 0px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9px;
+    font-size: 18px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
 
 frameprofiler .__footer__ button {
-    height: 18px;
+    height: 36px;
     min-height: 0px;
-    padding-left: 8px;
-    padding-right: 8px;
+    padding-left: 16px;
+    padding-right: 16px;
     background: none;
     color: var(--profiler-playhead);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 frameprofiler .__footer__ button:hover {
@@ -912,27 +912,27 @@ chainstab .__chain-heading__ {
     align-items: center;
     width: 100%;
     flex-shrink: 0;
-    padding-left: 24px;
-    padding-right: 18px;
-    padding-top: 6px;
-    padding-bottom: 2px;
+    padding-left: 48px;
+    padding-right: 36px;
+    padding-top: 12px;
+    padding-bottom: 4px;
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 chainstab .__chain-heading__ text {
     color: var(--profiler-caption-fg);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 chainstab .__chain-row__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    padding-right: 4px;
-    gap: 8px;
+    padding-right: 8px;
+    gap: 16px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 chainstab .__chain-name__ {
@@ -944,12 +944,12 @@ chainstab .__chain-name__ {
 }
 
 chainstab .__chain-figure__ {
-    width: 80px;
+    width: 160px;
     text-align: right;
     flex-shrink: 0;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10px;
+    font-size: 20px;
 }
 
 /* A WAIT is time nothing in the chain was doing: dim, so the steps read first. */
@@ -973,9 +973,9 @@ chainstab treeview .__row__.__selected__:hover {
 }
 
 chainstab .__twisty__ {
-    margin-left: 4px;
-    width: 12px;
-    height: 12px;
+    margin-left: 8px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     color: var(--tree-twisty-fg, #FFFFFF);
 }
@@ -985,7 +985,7 @@ chainstab .__expanded__ > .__twisty__ { overlay: shape("chevron-down"); }
 chainstab .__leaf__ > .__twisty__ { overlay: none; }
 
 chainstab .__empty__ {
-    padding: 12px;
+    padding: 24px;
     color: var(--profiler-caption-fg);
-    font-size: 11px;
+    font-size: 22px;
 }

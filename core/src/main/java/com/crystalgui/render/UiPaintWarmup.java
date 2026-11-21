@@ -31,7 +31,7 @@ import java.util.Set;
  * the stylesheets' glyphs. A load task's step, waiting a frame at a time; the GPU half is the desktop's rehearsal.
  *
  * <pre>{@code
- * plan.task("crystalgui:paint").render(UiPaintWarmup.preload()).start();   // CgUiClientLifecycle.onLoad
+ * plan.task("crystalgui:paint").render(UiPaintWarmup.preload(UiScale.desktop())).start();   // CgUiClientLifecycle.onLoad
  * }</pre>
  *
  * <ul>
@@ -42,11 +42,6 @@ import java.util.Set;
  */
 public final class UiPaintWarmup implements CgLoadStep {
 
-    /**
-     * The {@code uiScale} glyphs are warmed at: the host's (Minecraft sets 2). A glyph is keyed by the size it is
-     * rasterised at, {@code font-size * uiScale}, so a warm at another scale fills entries no draw looks up.
-     */
-    static final float UI_SCALE = 2f;
 
     /** How long a warm waits for the sheets' families at most, so a font that never settles cannot hold the loading screen. */
     static final long GLYPH_WAIT_NANOS = 5_000_000_000L;
@@ -66,11 +61,19 @@ public final class UiPaintWarmup implements CgLoadStep {
     private CgJob<?> glyphs;
     private long glyphsDeadline;
 
-    private UiPaintWarmup() {}
+    private final float uiScale;
 
-    /** A fresh step: the font, then the icons and glyphs. One per load. */
-    public static UiPaintWarmup preload() {
-        return new UiPaintWarmup();
+    private UiPaintWarmup(float uiScale) {
+        this.uiScale = uiScale;
+    }
+
+    /**
+     * A fresh step: the font, then the icons and glyphs, warmed at {@code uiScale}: the desktop's. A glyph is keyed by
+     * the size it is rasterised at, {@code font-size * uiScale}, so a warm at another scale fills entries no draw
+     * looks up. One per load.
+     */
+    public static UiPaintWarmup preload(float uiScale) {
+        return new UiPaintWarmup(uiScale);
     }
 
     @Override
@@ -84,7 +87,7 @@ public final class UiPaintWarmup implements CgLoadStep {
         }
         if (glyphsDeadline == 0L) {
             preloadIcons();
-            glyphs = warmGlyphs(UI_SCALE);
+            glyphs = warmGlyphs(uiScale);
             glyphsDeadline = System.nanoTime() + GLYPH_WAIT_NANOS;
             task.progress(0.5f);
         }

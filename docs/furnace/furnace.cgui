@@ -1,5 +1,5 @@
 {
-  "cgui": 1,
+  "cgui": 2,
   "stylesheets": [
     "crystalgui:ore",
     "furnace.css"
@@ -10,9 +10,9 @@
     "style": {
       "align-items": "center",
       "justify-content": "center",
-      "width": "640.0px",
-      "height": "480.0px",
-      "background-image": "radial-gradient(260px 150px at 50% 88%, #FF7A2E59, #FF7A2E00), linear-gradient(to bottom, #262626, #121212)"
+      "width": "1280px",
+      "height": "960px",
+      "background-image": "radial-gradient(520px 300px at 50% 88%, #FF7A2E59, #FF7A2E00), linear-gradient(to bottom, #262626, #121212)"
     },
     "children": [
       {
@@ -20,7 +20,7 @@
         "id": "furnace",
         "class": "panel",
         "style": {
-          "width": "150.0px",
+          "width": "300px",
           "flex-direction": "column",
           "transform": "scale(3, 3)",
           "transform-origin-x": "50.0%",
@@ -113,7 +113,7 @@
             "id": "actions",
             "class": "row",
             "style": {
-              "margin-top": "2.0px"
+              "margin-top": "4px"
             },
             "children": [
               {

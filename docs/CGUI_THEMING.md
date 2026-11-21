@@ -494,7 +494,7 @@ editor scheme's.
 | `--palette-match-fg` | `var(--accent)` | base.css |
 | `--palette-selected-bg` | `var(--selection-bg)` | base.css |
 | `--panel-bg` | `var(--surface-panel)` | base.css |
-| `--panel-gap` | `3px` | crystal-dark.css |
+| `--panel-gap` | `6px` | crystal-dark.css |
 | `--panel-header-fg` | `var(--fg)` | base.css |
 | `--panel-header-icon` | `var(--fg-secondary)` | base.css |
 | `--panel-header-icon-hover` | `var(--fg)` | base.css |
@@ -564,8 +564,8 @@ editor scheme's.
 | `--prompt-field-bg` | `var(--surface-recessed)` | base.css |
 | `--prompt-field-fg` | `var(--fg)` | base.css |
 | `--radar-web` | `var(--border-base)` | base.css |
-| `--radius-control` | `4px` | crystal-dark.css |
-| `--radius-panel` | `8px` | crystal-dark.css |
+| `--radius-control` | `8px` | crystal-dark.css |
+| `--radius-panel` | `16px` | crystal-dark.css |
 | `--region-drop-bg` | `#3574F055` | crystal-dark.css |
 | `--region-drop-border` | `var(--accent)` | base.css |
 | `--run-action-disabled-fg` | `var(--fg-disabled)` | base.css |

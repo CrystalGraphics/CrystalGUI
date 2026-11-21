@@ -39,7 +39,7 @@ public final class RotationCursor {
      * <p>The arc still bows OUTWARD from here, away from the pivot, so it stays concentric with the
      * turn.</p>
      */
-    private static final float INSET = 20f;
+    private static final float INSET = 40f;
 
     /** Signed for the maths: the arrow's chord sits at this radius from the pointer. @see #INSET */
     private static final float OFFSET = -INSET;
@@ -57,8 +57,8 @@ public final class RotationCursor {
     private static final float BARB = 0.52f;
 
     /** Drawn twice: a dark halo first, a light body over it. @see #paint */
-    private static final float BODY_WIDTH = 1.1f;
-    private static final float HALO_WIDTH = 2.6f;
+    private static final float BODY_WIDTH = 2.2f;
+    private static final float HALO_WIDTH = 5.2f;
 
     private static final int BODY = 0xFFFFFFFF;
     private static final int HALO = 0xC0000000;

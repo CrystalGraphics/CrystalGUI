@@ -219,8 +219,8 @@ final class VfxViewport extends UIElement {
         float[] up = {sinYaw * sinPitch, cosPitch, cosYaw * sinPitch};
         for (int axis = 0; axis < 3; axis++) {
             float x = cx + right[axis] * GIZMO_ARM, y = cy - up[axis] * GIZMO_ARM;
-            ctx.canvas().spline().line(cx, cy, x, y).width(2f).color(GIZMO_COLORS[axis]).draw();
-            ctx.canvas().fill(x - 2f, y - 2f, 4f, 4f, GIZMO_COLORS[axis]);
+            ctx.canvas().spline().line(cx, cy, x, y).width(8f).color(GIZMO_COLORS[axis]).draw();
+            ctx.canvas().fill(x - 4f, y - 4f, 8f, 8f, GIZMO_COLORS[axis]);
         }
     }
 }

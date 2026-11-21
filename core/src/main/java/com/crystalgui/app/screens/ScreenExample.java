@@ -26,8 +26,8 @@ public final class ScreenExample {
 
     private static final String PANEL = "__screen-example__";
 
-    private static final String SHEET = "." + PANEL + " { align-self: center; margin-top: 96px; width: 320px; padding: 16px;"
-            + " gap: 8px; background-color: var(--window-bg, #191A1C); outline: 1px var(--accent, #3574F0); }";
+    private static final String SHEET = "." + PANEL + " { align-self: center; margin-top: 192px; width: 640px; padding: 32px;"
+            + " gap: 16px; background-color: var(--window-bg, #191A1C); outline: 2px var(--accent, #3574F0); }";
 
     /** What the screen is: built each time it is shown, on its own document. */
     public static final ScreenKind SCREEN = ScreenKind.of(ID, screen -> {

@@ -21,7 +21,7 @@ import com.crystalgui.render.CgUiPaintContext;
 public final class PivotMark {
 
     /** The mark's whole span, in logical pixels — arm tip to arm tip. */
-    public static final float SIZE = 9f;
+    public static final float SIZE = 18f;
 
     /** The mark itself: one logical pixel, as every line the box draws is. */
     private static final float HAIRLINE = 0.5f;

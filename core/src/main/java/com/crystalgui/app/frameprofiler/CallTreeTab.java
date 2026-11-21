@@ -64,7 +64,7 @@ public class CallTreeTab extends UIElement {
     private boolean showing;
 
     private static final String NO_ZONE = "Callers — select a zone";
-    private static final float PANE_MIN_PX = 280f;
+    private static final float PANE_MIN_PX = 560f;
 
     public CallTreeTab() {
         super(NAME);

@@ -5,7 +5,7 @@ vfxlab {
     flex-direction: column;
     width: 100%;
     height: 100%;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* ── toolbar: the transport as icons, then the values it plays with ──────── */
@@ -14,25 +14,25 @@ vfxlab .lab-toolbar {
     overflow: hidden;
     flex-direction: row;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     width: 100%;
     min-width: 0px;
-    height: 34px;
+    height: 68px;
     flex-shrink: 0;
-    padding-left: 6px;
-    padding-right: 6px;
-    font-size: 11px;
+    padding-left: 12px;
+    padding-right: 12px;
+    font-size: 22px;
 }
 
 /* A textless button: its icon fills the content box and takes `color`. */
 vfxlab .lab-icon {
-    width: 28px;
-    height: 26px;
+    width: 56px;
+    height: 52px;
     min-width: 0px;
     min-height: 0px;
-    padding: 5px;
+    padding: 10px;
     flex-shrink: 0;
-    border-radius: var(--radius-control, 4px);
+    border-radius: var(--radius-control, 8px);
     background: none;
     color: var(--fg-secondary, #B4B8BF);
     overlay-origin: content-box;
@@ -55,7 +55,7 @@ vfxlab .lab-icon.lab-on,
 vfxlab .lab-icon.lab-on:hover {
     background: none;
     background-color: var(--accent-soft, #2E436E);
-    outline: 1px var(--accent, #3574F0);
+    outline: 2px var(--accent, #3574F0);
     color: var(--fg, #FFFFFF);
 }
 
@@ -79,11 +79,11 @@ vfxlab .lab-clear { overlay: icon("crystalgui:trash"); }
 vfxlab .lab-camera { overlay: icon("crystalgui:crosshair"); }
 
 vfxlab .lab-separator {
-    width: 1px;
-    height: 18px;
+    width: 2px;
+    height: 36px;
     flex-shrink: 0;
-    margin-left: 5px;
-    margin-right: 5px;
+    margin-left: 10px;
+    margin-right: 10px;
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
@@ -91,21 +91,21 @@ vfxlab .lab-separator {
 vfxlab .lab-speed {
     flex-direction: row;
     align-items: center;
-    height: 26px;
+    height: 52px;
     flex-shrink: 0;
-    margin-right: 10px;
-    font-size: 11px;
+    margin-right: 20px;
+    font-size: 22px;
 }
 
 vfxlab .lab-speed .__label__ {
-    margin-right: 6px;
+    margin-right: 12px;
     color: var(--fg-secondary, #9DA0A8);
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 vfxlab .lab-speed numbercontrol {
-    width: 58px;
+    width: 116px;
 }
 
 vfxlab .lab-slack {
@@ -116,7 +116,7 @@ vfxlab .lab-slack {
 /* Under the toolbar and over the status bar. */
 vfxlab .lab-rule {
     width: 100%;
-    height: 1px;
+    height: 2px;
     flex-shrink: 0;
     background-color: var(--statusbar-sep, #3C3F41);
 }
@@ -129,7 +129,7 @@ vfxlab .lab-panes {
     height: 0px;
     flex-grow: 1;
     /* The band that gives way: the toolbar and status bar keep their height, and the window stops here. */
-    min-height: 160px;
+    min-height: 320px;
 }
 
 vfxlab .lab-effects,
@@ -140,29 +140,29 @@ vfxlab .lab-inspector {
 }
 
 vfxlab .lab-effects {
-    gap: 4px;
-    padding: 4px;
+    gap: 8px;
+    padding: 8px;
     /* the pane's limits, read by the split from its content */
-    min-width: 120px;
-    max-width: 360px;
+    min-width: 240px;
+    max-width: 720px;
 }
 
 /* An inset well, darker than the panel: --field-bg alone is the panel's own grey. */
 vfxlab .lab-effects searchfield {
-    height: 24px;
+    height: 48px;
     flex-shrink: 0;
-    gap: 4px;
-    padding-left: 6px;
-    border-radius: var(--radius-control, 4px);
+    gap: 8px;
+    padding-left: 12px;
+    border-radius: var(--radius-control, 8px);
     background-color: var(--surface-base, #1E1F22);
-    outline: 1px var(--button-border, #FFFFFF24);
-    font-size: 11px;
+    outline: 2px var(--button-border, #FFFFFF24);
+    font-size: 22px;
 }
 
 vfxlab .lab-effects searchfield .__field__,
 vfxlab .lab-effects searchfield::part(field) {
     background: none;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 vfxlab .lab-tree {
@@ -175,10 +175,10 @@ vfxlab .lab-tree {
 vfxlab .lab-tree-row {
     flex-direction: row;
     align-items: center;
-    gap: 2px;
-    border-radius: var(--radius-control, 4px);
+    gap: 4px;
+    border-radius: var(--radius-control, 8px);
     color: var(--tree-fg, #DFE1E5);
-    font-size: 11px;
+    font-size: 22px;
 }
 
 vfxlab .lab-tree-row.lab-category {
@@ -197,8 +197,8 @@ vfxlab .lab-tree-row.__selected__:hover {
 }
 
 vfxlab .lab-tree-row .__twisty__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     color: var(--tree-twisty-fg, #A8ADB5);
 }
@@ -226,7 +226,7 @@ vfxlab .lab-tree-label {
     min-width: 0px;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* ── viewport ──────────────────────────────────────────────────────────── */
@@ -234,25 +234,25 @@ vfxlab .lab-tree-label {
 vfxlab vfxviewport {
     width: 100%;
     height: 100%;
-    min-width: 60px;
+    min-width: 120px;
 }
 
 vfxlab .lab-hint {
     position: absolute;
-    right: 8px;
-    bottom: 6px;
+    right: 16px;
+    bottom: 12px;
     color: var(--fg-secondary, #FFFFFF99);
     white-space: nowrap;
-    font-size: 10px;
+    font-size: 20px;
 }
 
 vfxlab .lab-stats {
     position: absolute;
-    left: 8px;
-    top: 6px;
+    left: 16px;
+    top: 12px;
     color: var(--fg, #FFFFFF);
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 /* ── inspector ─────────────────────────────────────────────────────────── */
@@ -261,8 +261,8 @@ vfxlab .lab-stats {
 vfxlab .lab-side {
     width: 100%;
     height: 100%;
-    min-width: 200px;
-    max-width: 520px;
+    min-width: 400px;
+    max-width: 1040px;
 }
 
 vfxlab .lab-side .__panes__ {
@@ -274,30 +274,30 @@ vfxlab .lab-head {
     align-items: center;
     width: 100%;
     flex-shrink: 0;
-    padding: 8px var(--cfg-pad-x, 8px) 6px var(--cfg-pad-x, 8px);
+    padding: 16px var(--cfg-pad-x, 16px) 12px var(--cfg-pad-x, 16px);
 }
 
 vfxlab .lab-names {
     width: 0px;
     flex-grow: 1;
     min-width: 0px;
-    gap: 2px;
+    gap: 4px;
 }
 
 /* The header's reset-all, larger than a row's. */
 vfxlab .lab-reset-all {
-    width: 16px;
-    height: 16px;
+    width: 32px;
+    height: 32px;
 }
 
 vfxlab .lab-title {
     color: var(--fg, #FFFFFF);
-    font-size: 13px;
+    font-size: 26px;
 }
 
 vfxlab .lab-id {
     color: var(--fg-hint, #7A7E85);
-    font-size: 10px;
+    font-size: 20px;
 }
 
 vfxlab .lab-params {
@@ -307,18 +307,18 @@ vfxlab .lab-params {
 }
 
 vfxlab .lab-intensity {
-    width: 52px;
+    width: 104px;
     flex-shrink: 0;
-    margin-left: 4px;
+    margin-left: 8px;
 }
 
 /* Unreal's reset-to-default arrow, on a row whose value is not the look's. */
 vfxlab .lab-reset {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
-    margin-left: 4px;
-    margin-right: 4px;
+    margin-left: 8px;
+    margin-right: 8px;
     overlay: shape("arrow-left");
     color: var(--accent, #3574F0);
 }
@@ -332,23 +332,23 @@ vfxlab .lab-reset:hover {
 vfxlab .lab-status {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 16px;
     width: 100%;
-    height: 24px;
+    height: 48px;
     flex-shrink: 0;
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 20px;
+    padding-right: 20px;
     background-color: var(--statusbar-bg, #2B2B2B);
     color: var(--statusbar-item-fg, #C9CCD1);
     white-space: nowrap;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 vfxlab .lab-state-dot {
-    width: 7px;
-    height: 7px;
+    width: 14px;
+    height: 14px;
     flex-shrink: 0;
-    border-radius: 4px;
+    border-radius: 8px;
     background-color: var(--statusbar-item-dim-fg, #6F737A);
 }
 
@@ -361,8 +361,8 @@ vfxlab .lab-state-dot.lab-held {
 }
 
 vfxlab .lab-status-sep {
-    width: 1px;
-    height: 12px;
+    width: 2px;
+    height: 24px;
     flex-shrink: 0;
     background-color: var(--statusbar-sep, #3C3F41);
 }

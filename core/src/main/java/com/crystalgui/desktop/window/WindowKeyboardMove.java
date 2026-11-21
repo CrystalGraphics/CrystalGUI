@@ -32,10 +32,10 @@ import javax.annotation.Nullable;
 public final class WindowKeyboardMove {
 
     /** One arrow press, in logical pixels — Win32 nudges by one and accelerates on repeat; this does not. */
-    public static final float STEP = 8f;
+    public static final float STEP = 16f;
 
     /** With the fine modifier held. A window is placed by eye, so a coarse step is the common case. */
-    public static final float FINE_STEP = 1f;
+    public static final float FINE_STEP = 2f;
 
     /** What the arrows are doing. */
     public enum Mode {

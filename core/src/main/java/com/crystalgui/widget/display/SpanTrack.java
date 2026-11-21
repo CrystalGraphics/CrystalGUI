@@ -75,7 +75,7 @@ public class SpanTrack extends TimelineTrack {
     private final List<Span> spans = new ArrayList<>();
     private int maxDepth;
 
-    private float rowHeight = 18f;
+    private float rowHeight = 36f;
 
     @Nullable
     private Span selected;
@@ -113,7 +113,7 @@ public class SpanTrack extends TimelineTrack {
     }
 
     public SpanTrack setRowHeight(float value) {
-        rowHeight = Math.max(4f, value);
+        rowHeight = Math.max(8f, value);
         markTreeDirty();
         return this;
     }
@@ -237,7 +237,7 @@ public class SpanTrack extends TimelineTrack {
 
             // A HAIRLINE GAP BETWEEN NEIGHBOURS, taken from the right edge: two siblings that touch
             // would otherwise read as one bar, and a flame chart is mostly touching siblings.
-            float drawn = width > 3f ? width - 1f : width;
+            float drawn = width > 6f ? width - 2f : width;
             if (drawn < SLIVER && !isSelected && !isHovered) {
                 // A SLIVER on a pixel its row has already painted adds nothing a reader can see, and a
                 // frame of glyph-level zones is thousands of them. One per pixel column per row, and
@@ -253,7 +253,7 @@ public class SpanTrack extends TimelineTrack {
             }
             if (isSelected) {
                 ctx.canvas().box(left, top, drawn, height).radius(RADIUS)
-                        .border(1.5f, ring).fill(fill).draw();
+                        .border(3.0f, ring).fill(fill).draw();
             } else {
                 ctx.canvas().box(left, top, drawn, height).radius(RADIUS)
                         .fill(fill).draw();
@@ -277,7 +277,7 @@ public class SpanTrack extends TimelineTrack {
         for (long at : boundaries) {
             float x = axis.xOf(at);
             if (x < 0f || x > trackWidth) continue;
-            ctx.canvas().box(x - 0.5f, 0f, 1f, box.height())
+            ctx.canvas().box(x - 1.0f, 0f, 2f, box.height())
                     .fill((textColor & 0x00FFFFFF) | 0x66000000).draw();
         }
     }
@@ -289,12 +289,12 @@ public class SpanTrack extends TimelineTrack {
     }
 
     /** So a zone one pixel wide is still a mark rather than nothing. */
-    private static final float MIN_SPAN_WIDTH = 1f;
+    private static final float MIN_SPAN_WIDTH = 2f;
 
     /** Space between rows, so depth reads as a stack of bars rather than one solid block. */
-    private static final float ROW_GAP = 2f;
+    private static final float ROW_GAP = 4f;
 
-    private static final float RADIUS = 2.5f;
+    private static final float RADIUS = 5.0f;
 
     /** Narrower than two corners, a span is drawn plain and merged per pixel. @see #paintTrack */
     private static final float SLIVER = 2f * RADIUS;
@@ -308,10 +308,10 @@ public class SpanTrack extends TimelineTrack {
         return grown;
     }
 
-    private static final float LABEL_PAD = 4f;
+    private static final float LABEL_PAD = 8f;
 
     /** Below this a bar carries no label; it is a shape, and the table below names it. */
-    private static final float MIN_LABEL_SPAN = 26f;
+    private static final float MIN_LABEL_SPAN = 52f;
 
     /**
      * A stable colour for {@code name}: the category's hue, stepped slightly by the rest of the name.

@@ -61,7 +61,7 @@ public final class Drag implements InputMode {
      * ordinary click armed a drag — reported as "even the slightest of drags" tearing a tool window off
      * its rail. Scaled here, once, where the surface distance is compared.</p>
      */
-    public static final float DEFAULT_THRESHOLD_PX = 4f;
+    public static final float DEFAULT_THRESHOLD_PX = 8f;
 
     /** What a drag reports back to whoever started it. */
     public interface Listener {

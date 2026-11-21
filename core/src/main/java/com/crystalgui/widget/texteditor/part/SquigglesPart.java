@@ -142,7 +142,7 @@ public final class SquigglesPart extends EditorViewPart {
      * bottom of the line box. True, and true only of a value the part <b>writes</b> — reading it once and
      * using it for both is what makes the two incapable of disagreeing, whatever a theme says.</p>
      */
-    private static final float DEFAULT_THICKNESS = 1f;
+    private static final float DEFAULT_THICKNESS = 2f;
 
     /** Set AND cleared, all three, because bands are recycled — a band that underlined an error and is
      * reused for a warning would otherwise carry both classes and take whichever the cascade preferred. */

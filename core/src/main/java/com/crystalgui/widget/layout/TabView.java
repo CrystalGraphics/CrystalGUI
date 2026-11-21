@@ -813,7 +813,7 @@ public class TabView extends UIElement {
     }
 
     /** One "line" of travel for a bar step — matches ScrollerView's own constant. */
-    private static final float LINE_PX = 40f;
+    private static final float LINE_PX = 80f;
 
     /** The container holding every pane. Panes themselves come from {@link Tab#content()}. */
     public UIElement panes() {

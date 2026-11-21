@@ -43,10 +43,10 @@ public class FrameScrollbar extends UIElement implements Measurable {
     private enum Grab { NONE, BODY, START, END }
 
     /** How far inside each end of the thumb a press takes that end rather than the body, in pixels. */
-    private static final float GRIP = 8f;
+    private static final float GRIP = 16f;
     /** The narrowest a thumb is drawn, so a deep zoom still leaves something to take hold of. */
-    private static final float MIN_THUMB = 2f * GRIP + 4f;
-    private static final float HEIGHT = 12f;
+    private static final float MIN_THUMB = 2f * GRIP + 8f;
+    private static final float HEIGHT = 24f;
 
     private final FrameSeriesTrack target;
     private final List<Runnable> gestureListeners = new ArrayList<>(2);
@@ -168,7 +168,7 @@ public class FrameScrollbar extends UIElement implements Measurable {
     @Override
     public Size measure(Constraints constraints) {
         float width = constraints.hasKnownWidth() ? constraints.knownWidth()
-                : constraints.hasAvailableWidth() ? constraints.availableWidth() : 256f;
+                : constraints.hasAvailableWidth() ? constraints.availableWidth() : 512f;
         return new Size(width, HEIGHT);
     }
 
@@ -185,15 +185,15 @@ public class FrameScrollbar extends UIElement implements Measurable {
         float height = box.height();
         boolean active = grab != Grab.NONE || hover != Grab.NONE;
         int body = active ? (thumbColor & 0x00FFFFFF) | 0xE0000000 : (thumbColor & 0x00FFFFFF) | 0xA0000000;
-        ctx.canvas().box(thumb[0], 2f, thumb[1], height - 4f).fill(body).draw();
+        ctx.canvas().box(thumb[0], 4f, thumb[1], height - 8f).fill(body).draw();
         // THE GRIPS say the ends can be taken hold of; lit in the accent while one is under the pointer.
-        paintGrip(ctx, thumb[0] + 3f, height, hover == Grab.START || grab == Grab.START ? accent : 0xFF000000);
-        paintGrip(ctx, thumb[0] + thumb[1] - 5f, height, hover == Grab.END || grab == Grab.END ? accent : 0xFF000000);
+        paintGrip(ctx, thumb[0] + 6f, height, hover == Grab.START || grab == Grab.START ? accent : 0xFF000000);
+        paintGrip(ctx, thumb[0] + thumb[1] - 10f, height, hover == Grab.END || grab == Grab.END ? accent : 0xFF000000);
     }
 
     private static void paintGrip(CgUiPaintContext ctx, float x, float height, int argb) {
         int color = (argb & 0x00FFFFFF) | 0x90000000;
-        ctx.canvas().box(x, 4f, 1f, height - 8f).fill(color).draw();
-        ctx.canvas().box(x + 2f, 4f, 1f, height - 8f).fill(color).draw();
+        ctx.canvas().box(x, 8f, 2f, height - 16f).fill(color).draw();
+        ctx.canvas().box(x + 4f, 8f, 2f, height - 16f).fill(color).draw();
     }
 }

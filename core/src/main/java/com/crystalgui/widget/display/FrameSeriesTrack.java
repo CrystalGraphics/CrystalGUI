@@ -68,7 +68,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
      */
     private int comparableFrom;
 
-    private float height = 64f;
+    private float height = 128f;
 
     private final List<IntConsumer> selectionListeners = new ArrayList<>(2);
     private final List<Consumer<Range>> rangeListeners = new ArrayList<>(2);
@@ -145,7 +145,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     private boolean autoView = true;
 
     /** A frame's width in the opening view, in pixels. */
-    private static final float AUTO_FRAME_PX = 3f;
+    private static final float AUTO_FRAME_PX = 6f;
 
     /** The span in force: the opening view's, or the one set; 0 for the whole ring. */
     private double span() {
@@ -323,7 +323,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     }
 
     public FrameSeriesTrack setRowHeight(float value) {
-        height = Math.max(8f, value);
+        height = Math.max(16f, value);
         markTreeDirty();
         return this;
     }
@@ -406,7 +406,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
         return new float[]{x, w};
     }
 
-    private static final float MARK_MIN = 3f;
+    private static final float MARK_MIN = 6f;
 
     /**
      * A bar in {@code column}, clipped to the row: {@code [x, width]}, or null when nothing of it is
@@ -415,7 +415,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     protected final float[] barOf(int column) {
         float x = columnX(column);
         float w = columnW(column);
-        float bar = w >= 4f ? w - 1f : Math.max(1f, w - 0.35f);
+        float bar = w >= 8f ? w - 2f : Math.max(2f, w - 0.7f);
         float left = Math.max(0f, x);
         float right = Math.min(Math.max(1f, width()), x + bar);
         return right > left ? new float[]{left, right - left} : null;
@@ -535,7 +535,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
         if (comparableFrom > 0 && comparableFrom < frameCount()) {
             // WHERE THE RECORDING CHANGED SHAPE. A line rather than a label: the header says what
             // changed, this says where.
-            ctx.canvas().box(xOf(comparableFrom) - 0.5f, 0f, 1f, height)
+            ctx.canvas().box(xOf(comparableFrom) - 1.0f, 0f, 2f, height)
                     .fill((accent & 0x00FFFFFF) | 0x80000000).draw();
         }
     }

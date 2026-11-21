@@ -28,7 +28,6 @@ import com.crystalgui.fs.client.WorkspaceClient;
 import com.crystalgraphics.api.canvas.CgCanvasPresenter;
 import com.crystalgui.render.text.FontFamilyCache;
 import com.crystalgui.style.theme.ThemeRegistry;
-import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.viewport.CgUiViewport;
@@ -84,8 +83,6 @@ public final class CgUiScreen {
     /** The theme a first run starts with: the editor's own default. */
     public static final String DEFAULT_THEME = "crystalgui:crystal-dark";
 
-    /** The scale a host starts with; the user's own is {@code Preferences.current().uiScale()}, which defaults to it. */
-    public static final float UI_SCALE = 2f;
 
     /** What the desktop is showing this host frame. */
     public enum Mode {
@@ -430,6 +427,7 @@ public final class CgUiScreen {
         // BEFORE ANYTHING THAT MAY RETURN: an inline application's launch is sent from the shell and waits for this, in
         // the loading screen, with no desktop up and on a game screen, where nothing is painted.
         appDocuments.drain();
+        UiScale.poll();
         GameState state = game;
         if (state == null) return;
         long ticking = CgTrace.stamp(UiTrace.FLOW);
@@ -494,8 +492,7 @@ public final class CgUiScreen {
         // THE LANGUAGE BEFORE ANY TEXT, so no font family is built in the JVM's and rebuilt a frame later.
         FontFamilyCache.useLocale(state.locale());
         UIDocument built = newDocument();
-        Preferences.PUBLISHED.changes().subscribe(
-                () -> built.execute(() -> built.boxes().setUiScale(Preferences.current().uiScale())));
+        UiScale.bind(built, null);
         // THE HOST SAYS WHERE crystalgui/ IS AND NOTHING ELSE: the desktop derives its config, its cache and its
         // arrangement from that one directory.
         Desktop made = Desktop.of(built).useStorage(state.installationDirectory());
@@ -532,13 +529,11 @@ public final class CgUiScreen {
     }
 
     /**
-     * A document as the desktop and every application have it: at the user's scale, with the themes' sheets and the
-     * theme in force. The caller follows the scale preference and gives the document a viewport.
+     * A document as the desktop and every application have it: with the themes' sheets and the theme in force. The
+     * caller gives it its scale ({@link UiScale#bind}) and a viewport.
      */
     static UIDocument newDocument() {
         UIDocument built = new UIDocument();
-        // Logical pixels to the surface's: the user's preference, on the box tree's root transform and nowhere else.
-        built.boxes().setUiScale(Preferences.current().uiScale());
         // NOT INSTALLED FOR YOU: without the sheets nothing matches, and without a theme every token falls back.
         UiThemeManager themes = UiThemeManager.getInstance();
         themes.installInto(built.styles());

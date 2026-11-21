@@ -252,7 +252,7 @@ public class ShaderGraphView extends UIElement implements DocumentEditor, Dispos
     }
 
     public ShaderGraphView fitToContent() {
-        graph.fitToContent(24f);
+        graph.fitToContent(48f);
         return this;
     }
 

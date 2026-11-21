@@ -133,7 +133,7 @@ public class TableView<T> extends ListView<T> {
     }
 
     /** Room for the header, which sits over the rows rather than in them. */
-    private static final float HEADER_HEIGHT = 16f;
+    private static final float HEADER_HEIGHT = 32f;
 
     // ── Columns ─────────────────────────────────────────────────────────────
 
@@ -322,7 +322,7 @@ public class TableView<T> extends ListView<T> {
      * <p>Out of flow also matches what a divider <em>is</em>: a grab handle straddling a boundary, not
      * a column of its own.</p>
      */
-    private static final float DIVIDER_HALF_WIDTH = 1.5f;
+    private static final float DIVIDER_HALF_WIDTH = 3.0f;
 
     // ── The header ──────────────────────────────────────────────────────────
 

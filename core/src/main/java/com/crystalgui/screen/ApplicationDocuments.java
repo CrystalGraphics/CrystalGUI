@@ -5,7 +5,6 @@ import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgraphics.variable.CgVar;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.core.async.UiSequence;
-import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.desktop.app.AppDocument;
 import com.crystalgui.desktop.app.AppDocuments;
@@ -22,6 +21,7 @@ import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.CopyOnWriteArrayList;
+import javax.annotation.Nullable;
 
 /**
  * The documents applications run in, one viewport each: built when an application launches, framed on every host
@@ -103,21 +103,25 @@ final class ApplicationDocuments implements AppDocuments {
     private final List<Entry> open = new CopyOnWriteArrayList<>();
     private final Queue<Entry> closing = new ConcurrentLinkedQueue<>();
 
+    ApplicationDocuments() {
+        ZoomCommands.register();
+    }
+
     @Override
     public AppDocument open(ApplicationKind kind) {
-        return open("app:" + kind.id(), kind.threading() == ApplicationKind.Threading.INLINE
+        return open("app:" + kind.id(), kind.id(), kind.threading() == ApplicationKind.Threading.INLINE
                 ? CgUiViewport.Threading.INLINE : CgUiViewport.Threading.fromFlags(), false);
     }
 
     @Override
     public AppDocument openServer(String name) {
-        return open("server:" + name, CgUiViewport.Threading.fromFlags(), true);
+        return open("server:" + name, null, CgUiViewport.Threading.fromFlags(), true);
     }
 
-    /** {@code first}: framed before the applications', whose windows may show what it draws. */
-    private AppDocument open(String name, CgUiViewport.Threading threading, boolean first) {
+    /** {@code app}: whose zoom it draws at, null for the desktop's scale. {@code first}: framed before the applications'. */
+    private AppDocument open(String name, @Nullable String app, CgUiViewport.Threading threading, boolean first) {
         UIDocument document = CgUiScreen.newDocument();
-        document.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET));
+        document.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET + ZoomIndicator.SHEET));
         document.useTopLayer(new PopupLayer());
         CgUiViewport viewport = CgUiViewport.open(document, threading, name);
         // Its frames execute and show nothing: the shell draws what they leave in the clients' surfaces.
@@ -167,9 +171,7 @@ final class ApplicationDocuments implements AppDocuments {
                 if (made[0] != null) made[0].fault(cause);
             }
         };
-        // THE USER'S SCALE, as the shell's: the clients draw at the size their frames give them.
-        Connection scale = Preferences.PUBLISHED.changes().subscribe(
-                () -> document.execute(() -> document.boxes().setUiScale(Preferences.current().uiScale())));
+        Connection scale = UiScale.bind(document, app);
         Entry entry = new Entry(this, viewport, content, scale);
         entry.first = first;
         made[0] = new AppDocument(document, entry);

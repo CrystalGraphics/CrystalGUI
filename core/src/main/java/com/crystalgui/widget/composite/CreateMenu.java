@@ -63,7 +63,7 @@ public class CreateMenu<N, T> extends Popover {
     public static final String DEFAULT_HINTS = "↑↓ to choose · Enter to insert · Esc to close";
 
     /** A row, tall enough for a 14px mark beside the label: the command palette's rhythm. */
-    private static final float ROW_HEIGHT = 20f;
+    private static final float ROW_HEIGHT = 40f;
 
     public static final String TITLE_BAR_CLASS = "__title-bar__";
     public static final String TITLE_CLASS = "__title__";

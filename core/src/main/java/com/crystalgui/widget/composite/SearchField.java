@@ -147,7 +147,7 @@ public class SearchField extends UIElement {
 
     {
         StyleGroup.defaultPipeline(optionSlot.getStyle().getLayoutGroup(),
-                l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER).gapAll(2f));
+                l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER).gapAll(4f));
     }
 
     /** Fires on every keystroke — see the constructor's note on why this is not deferred to Enter. */

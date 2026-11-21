@@ -222,7 +222,7 @@ public class VfxLab extends UIElement {
         search.field().setPlaceholderShownUnfocused(true);
         search.onQueryChanged.connect(this::refreshTree);
         tree.addClass("lab-tree");
-        tree.setItemHeight(20f);
+        tree.setItemHeight(40f);
         tree.setRenderer(new EffectRows());
         tree.onSelectionChanged.connect(this::picked);
         // Double-click or Enter on an effect plays it from the start.

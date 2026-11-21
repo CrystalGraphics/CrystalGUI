@@ -25,9 +25,9 @@ import com.crystalgui.ui.dom.UIElement;
 public class MatchedRulesTest extends UiDocumentTestBase {
 
     /** What the shipped user-agent sheet sets on everything -- {@code * { font-size: 10 }}. */
-    private static final float UA_FONT_SIZE = 10f;
+    private static final float UA_FONT_SIZE = 20f;
 
-    private static final float THEME_FONT_SIZE = 20f;
+    private static final float THEME_FONT_SIZE = 40f;
 
     /**
      * The real two-sheet stack: {@code StyleSheet.DEFAULT} under a theme.
@@ -41,7 +41,7 @@ public class MatchedRulesTest extends UiDocumentTestBase {
         label.addClass("label");
         document.append(label);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        document.styleEngine().addStylesheet(StyleSheet.parse(".label { font-size: 20px }"));
+        document.styleEngine().addStylesheet(StyleSheet.parse(".label { font-size: 40px }"));
         document.update(W, H);
         return label;
     }

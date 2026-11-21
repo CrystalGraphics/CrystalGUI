@@ -43,7 +43,7 @@ public final class GlassLab {
     private static final float SAMPLE_SCALE = 0.25f;
 
     /** What an empty or {@code none} value opens on, and what a palette pick of the property starts at. */
-    static final String DEFAULT = "blur(12px) saturate(1.2)";
+    static final String DEFAULT = "blur(24px) saturate(1.2)";
 
     /** The engine's own filter, which is what an unwritten function means. */
     private static final CgBackdropFilter DEFAULTS = CgBackdropFilter.DEFAULT;
@@ -172,7 +172,7 @@ public final class GlassLab {
             ConfigDescriptor descriptor = ConfigDescriptor.number("lab." + knob.name(), knob.label())
                     .range(knob.min(), knob.max());
             descriptor = switch (knob.scale()) {
-                // WHOLE PIXELS: a tenth of one is not a thing a person tunes glass by, and "16.0px" overran its box.
+                // WHOLE PIXELS: a tenth of one is not a thing a person tunes glass by, and "32px" overran its box.
                 case PX -> descriptor.unit("px").decimals(0);
                 case PERCENT -> descriptor.unit("%").decimals(0);
                 case RATIO -> descriptor.decimals(2);

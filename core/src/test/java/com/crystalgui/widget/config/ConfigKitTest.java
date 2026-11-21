@@ -32,7 +32,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
      * asserts only that the sheet agrees with itself — which it always does.
      *
      * <p>18, measured off Unity's own inspector: a 20px row pitch with an 18px control in it. */
-    private static final float CTRL_H = 18f;
+    private static final float CTRL_H = 36f;
 
     private UIElement root;
 
@@ -517,7 +517,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // a theme could set the colours and forget the width (or vice versa) and nothing would warn.
         UIElement field = deepAll(text.control(), "textfield").get(0);
         assertEquals("the field must carry a non-zero border for the bevel colours to have anything "
-                        + "to stroke", 1f, field.box().border().left, 0.01f);
+                        + "to stroke", 2f, field.box().border().left, 0.01f);
         assertEquals("top edge must be the DARK bevel colour",
                 0xFF121212, field.getStyle().getGeneralGroup().borderTopColor());
         assertEquals("bottom edge must be the LIGHT bevel colour",
@@ -535,7 +535,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
                         + "does not become a column of status lights",
                 0, (backgroundOf(mark) >>> 24) & 0xFF);
         assertEquals("and it has an edge to be an empty box of, or it reads as a floating checkmark",
-                1f, mark.box().border().left, 0.01f);
+                2f, mark.box().border().left, 0.01f);
 
         var overlay = mark.getStyle().getGeneralGroup().overlay();
         assertTrue("the on/off distinction must be the vector checkmark, not a colour swap",
@@ -606,7 +606,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         UIElement mark = deepAll(row.control(), "." + Checkbox.MARK_PART).get(0);
         var c = mark.box();
         assertEquals("a checkbox must be square", c.width(), c.height(), 0.5f);
-        assertEquals("...at the checkbox token, not the kit height", 13f, c.height(), 0.5f);
+        assertEquals("...at the checkbox token, not the kit height", 26f, c.height(), 0.5f);
         assertTrue("...and it must sit INSIDE the row, not define it",
                 c.height() < CTRL_H);
     }
@@ -632,12 +632,12 @@ public class ConfigKitTest extends UiDocumentTestBase {
 
         // 88, from --cfg-label-w, restated rather than read: it is where a SHORT label's value starts.
         // A label wider than it pushes its own row out instead -- aLongLabelWidensItsRowRatherThanEllipsizing.
-        assertEquals("the column a short label's value lines up against", 88f,
-                labelWidth(row, 300f), 1f);
+        assertEquals("the column a short label's value lines up against", 176f,
+                labelWidth(row, 600f), 1f);
 
-        float narrowValue = valueWidth(row, 150f);
+        float narrowValue = valueWidth(row, 300f);
         assertEquals("the label column gave way instead of the row growing",
-                88f, row.label().box().width(), 1f);
+                176f, row.label().box().width(), 1f);
         // NOT SQUEEZED means the value keeps its own width and is reachable -- not that the column is
         // wide enough to contain it. The text overflows the column and the panel scrolls to it, which is
         // the same outcome by a different mechanism; asserting the column contained it was asserting the
@@ -649,7 +649,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         assertTrue("the value is squeezed below its own text: " + narrowValue
                 + " vs " + value.box().width(), value.box().width() > narrowValue - 0.01f);
         assertTrue("the panel does not scroll far enough to reach the value: "
-                + panel.box().scrollWidth(), panel.box().scrollWidth() > 150f);
+                + panel.box().scrollWidth(), panel.box().scrollWidth() > 300f);
     }
 
     /** The `__value__` a fact draws, found through the composed tree since it is a shadow part. */

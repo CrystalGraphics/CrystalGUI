@@ -573,7 +573,7 @@ public class FrameProfilerPanel extends UIElement {
         Vector2f origin = Box.originIn(row, own);
         float width = preview.box() != null ? preview.box().width() : PREVIEW_WIDTH;
         float left = Math.max(0f, Math.min(own.width() - width, origin.x + strip.pointerX() - width * 0.5f));
-        float top = origin.y + row.height() + 4f;
+        float top = origin.y + row.height() + 8f;
         StyleGroup.inlinePipeline(preview.getStyle().getLayoutGroup(), l -> l.left(left).top(top));
         preview.setDisplayed(true);
     }
@@ -582,7 +582,7 @@ public class FrameProfilerPanel extends UIElement {
     private int previewIndex = -1;
 
     /** The preview's width before it has a box to measure. Matches the sheet. */
-    private static final float PREVIEW_WIDTH = 200f;
+    private static final float PREVIEW_WIDTH = 400f;
 
     public Tab chainsTab() {
         return chainsTab;

@@ -22,7 +22,7 @@ public class SessionRecordTest {
     @Test
     public void aRecordAsTheDesktopWritesItComesBack() {
         CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
-        storage.write(SessionRecord.fileNameFor("main"), "{\"version\":2,"
+        storage.write(SessionRecord.fileNameFor("main"), "{\"version\":3,"
                 + "\"windows\":[{\"key\":\"editor\",\"left\":10.0,\"top\":20.0,\"width\":300.0,\"height\":200.0,"
                 + "\"maximized\":true},{\"key\":\"log\",\"left\":0,\"top\":0,\"width\":120,\"height\":80,\"hidden\":true}],"
                 + "\"mru\":[{\"key\":\"log\"},{\"key\":\"editor\"}]}");
@@ -36,7 +36,7 @@ public class SessionRecordTest {
 
     @Test
     public void aWindowWithNoKeyOrNoSizeIsSkipped() {
-        List<SessionRecord.Placement> windows = read("{\"version\":2,\"windows\":["
+        List<SessionRecord.Placement> windows = read("{\"version\":3,\"windows\":["
                 + "{\"left\":1,\"top\":1,\"width\":50,\"height\":50},{\"key\":\"flat\",\"width\":0,\"height\":0},"
                 + "{\"key\":\"ok\",\"width\":50,\"height\":50}]}");
         assertEquals(1, windows.size());
@@ -45,20 +45,27 @@ public class SessionRecordTest {
 
     @Test
     public void anotherVersionsRecordOrABrokenOneOpensAtTheDefaults() {
-        assertTrue("an older record is discarded, not migrated",
+        assertTrue("a record older than 2 is discarded, not migrated",
                 read("{\"version\":1,\"windows\":[{\"key\":\"a\",\"width\":5,\"height\":5}]}").isEmpty());
         assertTrue(read("{\"windows\":[{\"key\":\"a\",\"width\":5,\"height\":5}]}").isEmpty());
-        assertTrue(read("{\"version\":2,\"windows\":[").isEmpty());
-        assertFalse(read("{\"version\":2,\"windows\":[{\"key\":\"a\",\"width\":5,\"height\":5}]}").isEmpty());
+        assertTrue(read("{\"version\":3,\"windows\":[").isEmpty());
+        assertFalse(read("{\"version\":3,\"windows\":[{\"key\":\"a\",\"width\":5,\"height\":5}]}").isEmpty());
     }
 
     @Test
     public void theRunningApplicationsAndTheirStateComeBackInOrder() {
         CgInMemoryConfigStorage storage = new CgInMemoryConfigStorage();
-        storage.write(SessionRecord.fileNameFor("main"), "{\"version\":2,\"apps\":["
+        storage.write(SessionRecord.fileNameFor("main"), "{\"version\":3,\"apps\":["
                 + "{\"id\":\"crystalgui:editor\",\"state\":\"{tabs}\"},{\"id\":\"crystalgui:vfx-lab\"},{\"state\":\"x\"}]}");
         List<SessionRecord.App> apps = new SessionRecord(null, storage).readApplications("main");
         assertEquals(Arrays.asList(new SessionRecord.App("crystalgui:editor", "{tabs}"),
                 new SessionRecord.App("crystalgui:vfx-lab", "")), apps);
+    }
+
+    @Test
+    public void aVersionTwoRecordComesBackAtAScaleOfOne() {
+        List<SessionRecord.Placement> windows = read("{\"version\":2,\"windows\":["
+                + "{\"key\":\"editor\",\"left\":10,\"top\":20,\"width\":300,\"height\":200}]}");
+        assertEquals(new SessionRecord.Placement("editor", 20, 40, 600, 400, false, false, ""), windows.get(0));
     }
 }

@@ -72,7 +72,7 @@ theme {
     --warning-icon: #FFAF0F;
     --info-icon: #548AF7;
     /* COMPLETES THE ICON TIER. error, warning and info each already have a brighter variant for a small
-     * glyph, where the body colour is too dark to read at 10px; success had none because nothing drew one
+     * glyph, where the body colour is too dark to read at 20px; success had none because nothing drew one
      * until the Run panel's live mark. This is the green IntelliJ puts over its Run tool window. */
     --success-icon: #5FAD65;
     /* ATTENTION: what Windows flashes a taskbar button that wants looking at -- the one thing asking rather than
@@ -87,9 +87,9 @@ theme {
 
     /* ── Islands geometry. Same in both themes: a theme changes the LOOK, and a flat theme is
      * expressed by zeroing these rather than by shipping different structure. ── */
-    --radius-panel: 8px;
-    --radius-control: 4px;
-    --panel-gap: 3px;
+    --radius-panel: 16px;
+    --radius-control: 8px;
+    --panel-gap: 6px;
 
 }
 
@@ -173,7 +173,7 @@ theme {
     --taskbar-start-pressed-tint: #B7CDF7;
 
     /* THE WINDOW ICON TILES. Six hues, keyed on the icon name by WindowIcon; a filled rounded square
-     * with a white glyph on it, so each is tuned to carry white at 14–18px on a dark bar — saturated
+     * with a white glyph on it, so each is tuned to carry white at 14–36px on a dark bar — saturated
      * enough to read as a brand tile, muted enough that six of them in a row do not read as a warning
      * strip. The order is arbitrary and it stays arbitrary: nothing may key a meaning to a slot. */
     --window-icon-tile-1: #4A7CE0;

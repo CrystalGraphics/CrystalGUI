@@ -35,7 +35,7 @@ public class TimelineRuler extends TimelineTrack {
     public static final Name NAME = Name.of("timelineruler");
 
     /** Roughly how far apart labelled ticks should sit, in pixels. */
-    private static final float TARGET_SPACING = 90f;
+    private static final float TARGET_SPACING = 180f;
 
     public TimelineRuler(TimelineAxis axis) {
         super(NAME, axis);
@@ -43,7 +43,7 @@ public class TimelineRuler extends TimelineTrack {
 
     @Override
     protected float trackHeight() {
-        return 18f;
+        return 36f;
     }
 
     @Override
@@ -60,19 +60,19 @@ public class TimelineRuler extends TimelineTrack {
         // as the view pans: 4 ms stays at 4 ms however the window slides past it.
         long first = origin + Math.floorDiv(axis.from() - origin, step) * step;
 
-        ctx.canvas().box(0f, bottom - 1f, box.width(), 1f).fill(tick).draw();
+        ctx.canvas().box(0f, bottom - 2f, box.width(), 2f).fill(tick).draw();
         for (long at = first; at <= axis.to(); at += step) {
             float x = axis.xOf(at);
-            if (x < -1f) continue;
-            ctx.canvas().box(x, bottom - 6f, 1f, 6f).fill(tick).draw();
+            if (x < -2f) continue;
+            ctx.canvas().box(x, bottom - 12f, 2f, 12f).fill(tick).draw();
             // MINOR TICKS, four between each pair: enough to judge a bar's width by eye, too few to
             // become a texture.
             for (int minor = 1; minor < 5; minor++) {
                 float mx = axis.xOf(at + step * minor / 5);
                 if (mx > box.width()) break;
-                ctx.canvas().box(mx, bottom - 3f, 1f, 3f).fill((color & 0x00FFFFFF) | 0x30000000).draw();
+                ctx.canvas().box(mx, bottom - 6f, 2f, 6f).fill((color & 0x00FFFFFF) | 0x30000000).draw();
             }
-            label(ctx, font, format(at - origin, step), x + 3f, 0f, bottom - 5f, TARGET_SPACING - 8f,
+            label(ctx, font, format(at - origin, step), x + 6f, 0f, bottom - 10f, TARGET_SPACING - 16f,
                     (color & 0x00FFFFFF) | 0xB0000000);
         }
     }

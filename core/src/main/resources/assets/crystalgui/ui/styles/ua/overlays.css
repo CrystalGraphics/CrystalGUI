@@ -15,12 +15,12 @@
  *
  * Note the padding does NOT have to leave room for the text vertically: the field paints its text
  * centred on the BORDER box and clips only horizontally, precisely because a one-line field is
- * routinely shorter than its font's line box once padding comes out (Ore's 14px field with 3px
- * padding leaves 8px for 10px text). The padding here positions the text's left edge and nothing
+ * routinely shorter than its font's line box once padding comes out (Ore's 28px field with 6px
+ * padding leaves 16px for 20px text). The padding here positions the text's left edge and nothing
  * more. */
 textfield {
-    height: 16px;
-    padding: 3px;
+    height: 32px;
+    padding: 6px;
     align-items: center;
     background: var(--field-bg, #2A2A2A);
     color: var(--field-fg, #EEEEEE);
@@ -28,7 +28,7 @@ textfield {
      * the only one this sheet moves onto resolveOverflowClip()'s FBO mask path. Worth it on a field,
      * which is the widget a square corner reads worst on; not worth it on a scroll viewport, which is
      * why the containers above stay square. */
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
 }
 /* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
  * which reuses `color`, dims itself with no widget-specific support. */
@@ -43,10 +43,10 @@ textfield:invalid {
 }
 /* .__conflict__ is TextField.setConflicting: the text names something that already exists. A red edge rather
  * than :invalid's fill, because the text is well-formed and its owner may still offer a free name for it.
- * THE FOCUS RING TOO: a field being typed into is focused, and :focus-visible's 1px ring is drawn inside the
+ * THE FOCUS RING TOO: a field being typed into is focused, and :focus-visible's 2px ring is drawn inside the
  * border box, over the border -- so a red border alone stayed blue until focus left. */
 textfield.__conflict__ {
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--field-conflict-border, #F14C4C);
     outline-color: var(--field-conflict-border, #F14C4C);
 }
@@ -63,11 +63,11 @@ textfield:disabled {
 .row {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
+    gap: 16px;
 }
 .column {
     flex-direction: column;
-    gap: 8px;
+    gap: 16px;
 }
 .label {
     color: var(--label-fg, #FFFFFF);
@@ -105,15 +105,15 @@ tooltip {
      *
      * The property, not a constant in the widget: this class's own doc asked for it that way. */
     tooltip-delay: 0;
-    /* IntelliJ's tooltip: the overlay surface, a hairline border, 4px corners and room around the words. */
+    /* IntelliJ's tooltip: the overlay surface, a hairline border, 8px corners and room around the words. */
     background: var(--tooltip-bg, #2B2D30);
-    outline: 1px var(--tooltip-border, #43454A);
-    border-radius: var(--radius-control, 4px);
-    padding-left: 6px;
-    padding-right: 6px;
-    padding-top: 3px;
-    padding-bottom: 4px;
-    margin-top: 3px;
+    outline: 2px var(--tooltip-border, #43454A);
+    border-radius: var(--radius-control, 8px);
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 6px;
+    padding-bottom: 8px;
+    margin-top: 6px;
     /* FADED IN, every tooltip: the closed state is a declared 0 so the fade has a start (Tooltip.OPEN_CLASS).
      * Hiding has no fade, for the reason it has no delay: the pointer has moved on. */
     opacity: 0;
@@ -134,22 +134,22 @@ tooltip.__above__ {
  * description under both. Tooltip.setShortcut / setDescription fill the parts; empty ones take no space. */
 tooltip::part(heading) {
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     flex-shrink: 0;
 }
 
 tooltip::part(shortcut) {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--fg-secondary, #9DA0A8);
     white-space: nowrap;
     flex-shrink: 0;
 }
 
 tooltip::part(description) {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--fg-secondary, #9DA0A8);
-    max-width: 170px;
-    margin-top: 2px;
+    max-width: 340px;
+    margin-top: 4px;
     white-space: normal;
     flex-shrink: 0;
 }
@@ -185,9 +185,9 @@ tooltip .__label__,
 tooltip::part(label) {
     /* UNDER THE SHELL'S 10, as IntelliJ's tooltips sit under its UI font -- a tooltip is read in
      * passing, beside the text it explains, and at the same size it reads as more of that text. */
-    font-size: 8px;
+    font-size: 16px;
     color: var(--tooltip-fg, #FFFFFF);
-    max-width: 170px;
+    max-width: 340px;
     /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
      * it describes. Anchor it to a status-bar item, a table header, a graph node title — anything that
      * carries `white-space: nowrap` so its own label ellipsizes — and the tooltip inherits the prohibition
@@ -237,8 +237,8 @@ tooltip::part(label) {
  * happens to agree with is not the same as one it actually states; see `dialog .__close__` below for
  * exactly the case where relying on it silently goes wrong. */
 dialog {
-    min-width: 80px;
-    min-height: 40px;
+    min-width: 160px;
+    min-height: 80px;
     background: var(--dialog-bg, #2E2E2E);
     /* NO EDGE ON THE DIALOG ITSELF -- the BODY carries it, three sides only. @see .__content__ below.
      *
@@ -249,7 +249,7 @@ dialog {
      *
      * `#00000000`, not `transparent`: that keyword does not parse in this shorthand and a value it
      * cannot read degrades to the initial one, which is an OPAQUE edge. CSS order, alpha last. */
-    outline: 1px #00000000;
+    outline: 2px #00000000;
     color: var(--dialog-fg, #DDDDDD);
     z-index: 5;
     /* THE RESTING END of the blocked pulse — __pulse__ below carries what it eases FROM, which is the
@@ -293,7 +293,7 @@ dialog.__open__ {
  * is dropped on the next frame, so pressing repeatedly re-plays rather than latching. */
 dialog.__pulse__ {
     transform: scale(1.03, 1.03);
-    outline: 1px var(--dialog-pulse-border, #3574F0);
+    outline: 2px var(--dialog-pulse-border, #3574F0);
 }
 /* `ColorControl`'s popup only. Translucent-over-OPAQUE composites right back to opaque (tinted, but
  * alpha 1.0) — colorselector's own `#1E1E1E76` sitting directly on this element's normal `#2E2E2E`
@@ -307,17 +307,17 @@ dialog.__picker__ {
     background: var(--dialog-picker-bg, #2E2E2E76);
 }
 
-/* 14px, not 16 — matches the base `button, dropdown` row height already used everywhere else in this
- * sheet, rather than a number picked just for this one bar. Against a 10px title, 16 read as a band of
+/* 28px, not 16 — matches the base `button, dropdown` row height already used everywhere else in this
+ * sheet, rather than a number picked just for this one bar. Against a 20px title, 16 read as a band of
  * dead air above and below the text; 14 is the smallest this convention already commits to. */
 dialog .__title-bar__ {
     /* THE FRAME'S CAPTION, to the pixel. A dialog and a window sit side by side on the same desktop, so
      * a caption of a different height and a different grey reads as one of them being wrong rather than
-     * as the two being different kinds of thing. 20px is the frame's own derivation: a 16px control plus
-     * the 2px above and below it. `min-height`, not `height`, so a longer title can still grow it. */
-    min-height: 20px;
+     * as the two being different kinds of thing. 40px is the frame's own derivation: a 32px control plus
+     * the 4px above and below it. `min-height`, not `height`, so a longer title can still grow it. */
+    min-height: 40px;
     width: 100%;
-    padding-left: 6px;
+    padding-left: 12px;
     /* NO RIGHT PADDING. The close button stretches to the caption's full height and sits flush against
      * its end, exactly as the frame's controls do -- the hover fill is meant to reach the corner. */
     padding-right: 0px;
@@ -330,7 +330,7 @@ dialog .__title-bar__ {
     background: var(--dialog-title-bg, #26282B);
     color: var(--dialog-title-fg, #DFE1E5);
     /* PAINTED AFTER THE BODY, which is what hides the body's fourth edge. Children paint in z-index
-     * order (Box#paintOrder sorts by it), and the body's outline puts a 1px segment on this bar's last
+     * order (Box#paintOrder sorts by it), and the body's outline puts a 2px segment on this bar's last
      * row -- so the caption's own background covers it and the header and body read as one surface.
      * They do not overlap otherwise, so nothing else changes by raising it. */
     z-index: 1;
@@ -346,7 +346,7 @@ popover,
 menu,
 dropdown .__menu__,
 dropdown::part(menu) {
-    min-width: 60px;
+    min-width: 120px;
     /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version
      * got both backwards: #2A2F36 with a #00000060 outline is within a few points of every dark surface in
      * this sheet, so a menu rendered perfectly and was simply invisible — reported from the harness as
@@ -357,7 +357,7 @@ dropdown::part(menu) {
      * config kit and every graph node share it) is the same grayscale family as this open menu, and a
      * tinted menu on top of a grayscale face read as two different materials the instant it opened. */
     background: var(--menu-bg, #4B4B4B);
-    outline: 1px var(--menu-border, #8C8C8C);
+    outline: 2px var(--menu-border, #8C8C8C);
     /* Light text, set on the POPOVER so it inherits to every item and to arbitrary popover content.
      * Needed because a Dropdown is a Button, so its menu — an internal child — inherits the button's dark
      * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
@@ -381,12 +381,12 @@ dropdown::part(menu) {
      * against IntelliJ, what looks like a gap there is the border itself.
      *
      * It was 2 for one round, which leaves a pixel of surface showing, and that read as the bar floating.
-     * The row adds nothing either way -- it used to pull in 4px more, so the highlight sat 6px inside a
+     * The row adds nothing either way -- it used to pull in 8px more, so the highlight sat 12px inside a
      * popup that looked like a wide box around a narrow list.
      *
      * Vertical is NOT this number: `menu { padding-top/bottom }` below states it separately, because the
      * vertical inset is tied to the row rhythm (row padding + gap) and the horizontal one is not. */
-    padding: 2px;
+    padding: 4px;
     flex-direction: column;
     /* A long menu must scroll rather than run off the screen. AnchoredPlacement clamps the BOX into the
      * containing block, which without this would just squash the items instead. */
@@ -420,7 +420,7 @@ dropdown::part(menu):open {
 
 /* THE GAP MATCHES THE POPUP'S PADDING, and that equality is the whole rule.
  *
- * They were 1px and 2px, so the first row sat 2px from the frame while every row after it sat 1px from
+ * They were 2px and 4px, so the first row sat 4px from the frame while every row after it sat 2px from
  * its neighbour -- and with the focus highlight being an inset BAR rather than a full-width strip, the
  * difference is drawn rather than merely spaced, which is why it reads as the first item being mis-set
  * instead of as the menu being a pixel loose. Even means the first bar is inset from the frame by the
@@ -428,7 +428,7 @@ dropdown::part(menu):open {
 menu .__items__,
 menu::part(items) {
     flex-direction: column;
-    gap: 2px;
+    gap: 4px;
 }
 
 /* NO TALLER THAN THE WINDOW: past that the rows scroll, as the font list's do, rather than running off the bottom.
@@ -441,18 +441,18 @@ menu::part(scroller) {
     min-height: 0;
 }
 
-/* The gap stays 2px while the rows tightened, and that is deliberate: it is what keeps two focus bars
+/* The gap stays 4px while the rows tightened, and that is deliberate: it is what keeps two focus bars
  * from touching, which is a different job from the space around the text. Tightening it as well is what
  * would make a run of highlighted rows read as one block. */
 
 /* THE FRAME INSET IS THE ROW'S PADDING PLUS THE GAP, which is what makes the first label sit the
  * same distance from
  * the top of the menu as two labels sit from each other. See menuitem for the derivation. Vertical only:
- * the horizontal inset is the popup padding plus the row's own 4px margin, which is the inset-bar look
+ * the horizontal inset is the popup padding plus the row's own 8px margin, which is the inset-bar look
  * and has nothing to do with the vertical rhythm. */
 menu {
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-top: 6px;
+    padding-bottom: 6px;
 }
 
 /* A grouping rule, as every native context menu uses. Margins rather than padding on the neighbours:
@@ -463,12 +463,12 @@ menu {
  * than as a divider inside it, which is why Windows insets its own. */
 menu .__separator__,
 menu::part(separator) {
-    height: 1px;
-    min-height: 1px;
+    height: 2px;
+    min-height: 2px;
     flex-grow: 0;
     flex-shrink: 0;
-    margin-top: 3px;
-    margin-bottom: 3px;
+    margin-top: 6px;
+    margin-bottom: 6px;
     /* AS WIDE AS A ROW, which is what it divides -- these track `menuitem`'s own margins above and are
      * not free numbers. At 6 the rule was inset further than the highlight it sits between, so a menu
      * read as two different widths stacked: a bar running nearly to the border, and a short line
@@ -477,8 +477,8 @@ menu::part(separator) {
      * Still inset rather than edge to edge: a rule touching both borders reads as the BOTTOM of the
      * menu rather than as a divider inside it, which is why Windows insets its own. Matching the rows
      * keeps that and takes the disagreement out. */
-    margin-left: 2px;
-    margin-right: 2px;
+    margin-left: 4px;
+    margin-right: 4px;
     background: var(--menu-separator, #6E6E6E);
 }
 
@@ -502,16 +502,16 @@ menu::part(separator) {
 menuitem text,
 menuitem::part(label),
 menuitem::part(post-icon) {
-    font-size: 7px;
+    font-size: 14px;
 }
 
 menuitem {
     /* PADDING RATHER THAN SLACK, and this is what makes the rhythm even in the only place it can be
      * judged -- between the TEXT, not between the row boxes.
      *
-     * The row was 13px tall around a 10.4px label with the label flush to its top, so every row carried
-     * 2.6px of dead space UNDERNEATH it: the first label sat 2px from the frame while consecutive labels
-     * sat 4.6px apart. The boxes were evenly spaced the whole time, which is why measuring them said
+     * The row was 26px tall around a 20.8px label with the label flush to its top, so every row carried
+     * 5.2px of dead space UNDERNEATH it: the first label sat 4px from the frame while consecutive labels
+     * sat 9.2px apart. The boxes were evenly spaced the whole time, which is why measuring them said
      * nothing was wrong.
      *
      * Expressed as padding so the slack is symmetric and known, and the menu's own vertical padding is
@@ -520,20 +520,20 @@ menuitem {
      *
      * MIN-HEIGHT HAS TO COME DOWN WITH THE PADDING or none of this shows. It is a DIFFERENT PROPERTY, so
      * it does not compete with the padding above -- it wins outright whenever it is the larger number, and
-     * at 13px around a 10.4px label it was: dropping the padding from 2 to 1 would have left every row
+     * at 26px around a 20.8px label it was: dropping the padding from 2 to 1 would have left every row
      * exactly as tall as before, with nothing in the cascade to look at. It stays as a floor for a row
      * whose content is shorter than a label (a separator's neighbour, an icon-only entry), which is what
      * it is for; it is simply no longer the number that decides an ordinary row. */
     align-items: center;
-    padding-top: 1px;
-    padding-bottom: 1px;
-    min-height: 11px;
-    padding-left: 6px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    min-height: 22px;
+    padding-left: 12px;
     /* ASYMMETRIC, because the two sides hold different things: the left is the label's inset and the
      * right is where a chevron or an accelerator ENDS. `margin-left: auto` puts the arrow at the end of
      * the CONTENT box, so this padding is its distance from the row's edge -- and on top of it the shape
-     * sits inset inside its own 9px box, which is why a 6 here read as the arrow stopping well short. */
-    padding-right: 4px;
+     * sits inset inside its own 18px box, which is why a 6 here read as the arrow stopping well short. */
+    padding-right: 8px;
     justify-content: flex-start;
     background: #00000000;
 
@@ -541,17 +541,17 @@ menuitem {
      * modern menu since. The highlight is a rounded BAR sitting inside the popup's padding rather
      * than a strip running edge to edge, which is what stops a menu reading as a table of cells.
      *
-     * The radius is the whole of it. The bar used to be pulled in 4px from the popup's padding as well,
+     * The radius is the whole of it. The bar used to be pulled in 8px from the popup's padding as well,
      * on the reasoning that a rounded highlight flush to the edge has its corners cut by the popup's own
      * rounding -- true when the popup's inset was zero, and not the shape IntelliJ actually draws: there
-     * the bar runs to within a pixel of the border and the popup's 1px of padding is what keeps the two
+     * the bar runs to within a pixel of the border and the popup's 2px of padding is what keeps the two
      * radii apart. Six pixels of gap either side made the rows read as a list inside a box. */
-    /* A PIXEL UNDER --radius-control, and deliberately not the token: a control's 4px arc is drawn on
+    /* A PIXEL UNDER --radius-control, and deliberately not the token: a control's 8px arc is drawn on
      * something with a border and a fill of its own, while this is a bar of colour inside a rounded
      * popup, and at 4 it read as noticeably softer than the menu it sits in. 3 is IntelliJ's. */
-    border-radius: 3px;
-    margin-left: 2px;
-    margin-right: 4px;
+    border-radius: 6px;
+    margin-left: 4px;
+    margin-right: 8px;
 }
 /* The active row is highlighted by :focus and DELIBERATELY NOT by :hover.
  *
@@ -612,12 +612,12 @@ menuitem.__has-submenu__::part(post-icon) {
     margin-left: auto;
     /* 9, not 8: measured against IntelliJ's, which is a pixel bigger than ours was and reads as an
      * affordance rather than as punctuation at the end of the label. */
-    width: 9px;
-    height: 9px;
-    /* AND NOT THE ACCELERATOR'S 24px GUTTER. `menuitem::part(post-icon)` in ua/workbench.css reserves
+    width: 18px;
+    height: 18px;
+    /* AND NOT THE ACCELERATOR'S 48px GUTTER. `menuitem::part(post-icon)` in ua/workbench.css reserves
      * that so a shortcut cannot touch its label -- and an arrow is the SAME slot, so it took the gutter
-     * too. Padding cannot be compressed, so the 9px box grew to 24 and the chevron, fitted and centred
-     * in it, drew a dozen pixels short of the row's end: measured at 24px wide with a zero content box.
+     * too. Padding cannot be compressed, so the 18px box grew to 24 and the chevron, fitted and centred
+     * in it, drew a dozen pixels short of the row's end: measured at 48px wide with a zero content box.
      * It reads as an arrow that gave up before the edge, which is exactly what it was. */
     padding-left: 0px;
     flex-grow: 0;
@@ -630,7 +630,7 @@ menuitem.__has-submenu__::part(post-icon) {
  *
  * `margin-left: auto` on the arrow absorbs FREE space, and a menu is content-sized: a popup holding one
  * short row has none, so the chevron came to rest against the last letter of the word. That is the trap
- * the accelerator's own 24px records -- an auto margin contributes nothing to min-content, so the row
+ * the accelerator's own 48px records -- an auto margin contributes nothing to min-content, so the row
  * that sets the menu's width is exactly the row that ends up with nothing between its two halves.
  *
  * The arrow cannot carry it as padding: padding cannot be compressed, so the box grows to it and the
@@ -638,9 +638,9 @@ menuitem.__has-submenu__::part(post-icon) {
  * on the label does contribute to min-content, so a narrow menu widens to fit, while a wide one is
  * unchanged because the auto margin still collects everything left over at the arrow.
  *
- * 24px: the accelerator's gutter, so a menu holding both kinds of row reserves one trailing column. */
+ * 48px: the accelerator's gutter, so a menu holding both kinds of row reserves one trailing column. */
 menuitem.__has-submenu__::part(label) {
-    margin-right: 24px;
+    margin-right: 48px;
 }
 
 menuitem:focus-visible {
@@ -652,7 +652,7 @@ menuitem:focus-visible {
  * row's own `menuitem:focus` background; the container never needs a ring of its own.
  *
  * RESTATES the border rather than zeroing it, and that is the whole point of this rule now.
- * `outline: 0` suppressed the focus ring correctly and took the menu's own 1px chrome with it, because
+ * `outline: 0` suppressed the focus ring correctly and took the menu's own 2px chrome with it, because
  * in this engine they are the same property — so a menu opened straight into focus had NO border, and
  * grew one the moment you hovered a row and focus moved off the container. It read as "the border only
  * appears on hover", which points at `:hover` and is nowhere near the cause.
@@ -661,7 +661,7 @@ menuitem:focus-visible {
  * `outline` is a shorthand, and a `var()` inside a shorthand silently resolves to nothing here — the
  * same trap that produced zero padding on the main preview's header. */
 menu:focus-visible {
-    outline: 1px var(--menu-border, #8C8C8C);
+    outline: 2px var(--menu-border, #8C8C8C);
 }
 menuitem:disabled {
     background: #00000000;
@@ -689,15 +689,15 @@ menuitem::part(mark) {
 dropdown .__menu__ menuitem::part(pre-icon),
 dropdown .__menu__ menuitem .__mark__,
 dropdown .__menu__ menuitem::part(mark) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-grow: 0;
     flex-shrink: 0;
     /* menuitem's own cross-axis alignment is engine-default `stretch`, which — for a child with an
      * explicit, non-auto cross size like this one — degenerates to top-aligned rather than centred, so
      * without this the mark sat flush with the row's top edge instead of level with the label's text. */
     align-self: center;
-    margin-right: 1px;
+    margin-right: 2px;
     color: var(--menu-mark, #DDDDDD);
 }
 dropdown .__menu__ menuitem:checked::part(pre-icon),
@@ -718,17 +718,17 @@ dropdown .__menu__ menuitem:checked::part(mark) {
  * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
  * label sideways. */
 /* THE GUTTER, and it is what a menu's left inset actually IS. With the part unreachable every row's
- * mark measured zero, so labels sat flush against the row's own 6px padding instead of a glyph's width
+ * mark measured zero, so labels sat flush against the row's own 12px padding instead of a glyph's width
  * further in -- which reads as the menu having lost its padding rather than its gutter. */
 menu.__has-checkable__ menuitem .__mark__,
 menu.__has-checkable__ menuitem::part(pre-icon),
 menu.__has-checkable__ menuitem::part(mark) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-grow: 0;
     flex-shrink: 0;
     align-self: center;
-    margin-right: 1px;
+    margin-right: 2px;
     color: var(--menu-mark, #DDDDDD);
 }
 /* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
@@ -738,9 +738,9 @@ menu.__has-checkable__ menuitem.__checkable__:checked .__mark__,
 menu.__has-checkable__ menuitem.__checkable__:checked::part(mark) {
     overlay: shape("checkmark");
 }
-/* Same trim the dropdown rule below makes, and for the same reason: the base `menuitem` rule's 6px
- * left padding was sized for a bare label sitting straight against the row's edge. Put a 12px gutter
- * in front of it and the two stack — the mark floats clear of the edge and the label ends up 19px in,
+/* Same trim the dropdown rule below makes, and for the same reason: the base `menuitem` rule's 12px
+ * left padding was sized for a bare label sitting straight against the row's edge. Put a 24px gutter
+ * in front of it and the two stack — the mark floats clear of the edge and the label ends up 38px in,
  * which reads as the menu being indented rather than as a column of marks.
  *
  * On the ROW, never on the mark. Narrowing `__mark__` would shrink the checkmark glyph itself, and
@@ -756,16 +756,16 @@ menu.__has-checkable__ menuitem {
 menu.__has-icons__ menuitem .__mark__,
 menu.__has-icons__ menuitem::part(pre-icon),
 menu.__has-icons__ menuitem::part(mark) {
-    width: 10px;
-    height: 10px;
+    width: 20px;
+    height: 20px;
     flex-grow: 0;
     flex-shrink: 0;
     align-self: center;
-    margin-right: 5px;
+    margin-right: 10px;
     overlay-size: contain;
 }
 menu.__has-icons__ menuitem {
-    padding-left: 4px;
+    padding-left: 8px;
 }
 
 /* A kind's glyph in a menu, tinted by its role as the Hierarchy tints it. @see GlyphRole */
@@ -775,17 +775,17 @@ menuitem.__glyph-control__::part(pre-icon) { color: var(--kind-glyph-control, #7
 menuitem.__glyph-collection__::part(pre-icon) { color: var(--kind-glyph-collection, #B38FD8); }
 menuitem.__glyph-overlay__::part(pre-icon) { color: var(--kind-glyph-overlay, #68C4BE); }
 menuitem.__glyph-addon__::part(pre-icon) { color: var(--kind-glyph-addon, #7AC0A0); }
-/* The base `menuitem` rule's 6px left padding was sized for a bare label with no mark before it — once
- * the 12px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
+/* The base `menuitem` rule's 12px left padding was sized for a bare label with no mark before it — once
+ * the 24px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
  * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the
  * whole column — mark and label alike — shifts left together instead of the mark alone moving and
  * throwing off the shared gutter's alignment. */
 dropdown .__menu__ menuitem {
-    padding-left: 1px;
-    /* Same trim on the trailing edge — the base sheet's 6px was sized for a generic context-menu row
+    padding-left: 2px;
+    /* Same trim on the trailing edge — the base sheet's 12px was sized for a generic context-menu row
      * with a submenu arrow to clear; a dropdown row has neither, so it just left dead air between the
      * label and the menu's own edge. */
-    padding-right: 2px;
+    padding-right: 4px;
 }
 
 /* The closed-state marker on the button, so a theme can point an arrow at it. */
@@ -801,8 +801,8 @@ dropdown {
 dropdown .__chevron__,
 dropdown::part(post-icon),
 dropdown::part(chevron) {
-    width: 8px;
-    height: 8px;
+    width: 16px;
+    height: 16px;
     flex-grow: 0;
     flex-shrink: 0;
     align-items: center;
@@ -836,7 +836,7 @@ dialog .__backdrop__ {
  * sheet ellipsizes generic text — overflowing content spilling is the correct CSS default, because
  * content is the author's and silently hiding it would be a worse failure than an ugly one.
  *
- * A title bar is not content, though. It is chrome: a fixed 16px strip with a close button pinned to
+ * A title bar is not content, though. It is chrome: a fixed 32px strip with a close button pinned to
  * its right edge, and a title long enough to reach that button paints straight over it. Every native
  * window manager ellipsizes window titles for exactly this reason, and a widget user-agent sheet is
  * the right layer to encode it — an author who wants the full title can still override, which is what
@@ -885,7 +885,7 @@ dialog > .__content__ {
     flex-shrink: 1;
     min-height: 0;
     width: 100%;
-    padding: 6px;
+    padding: 12px;
     /* THE EDGE, AND ONLY THREE SIDES OF IT.
      *
      * The BODY is the half that needs one: --dialog-bg is --surface-panel and the editor a dialog
@@ -899,8 +899,8 @@ dialog > .__content__ {
      * edge is pushed up onto the caption's last row for it to cover.
      *
      * The top offset at 0 IS THAT PUSH, and it is one pixel. Outlines here are drawn INSIDE the
-     * border box -- ua/core.css sets `outline-offset: -1px` on `*` so a focus ring survives an
-     * ancestor's `overflow: hidden` -- so at the inherited -1px this edge sits on the body's FIRST ROW,
+     * border box -- ua/core.css sets `outline-offset: -2px` on `*` so a focus ring survives an
+     * ancestor's `overflow: hidden` -- so at the inherited -2px this edge sits on the body's FIRST ROW,
      * below the caption and impossible to cover. At 0 the stroke lands in the band just outside the
      * box, which is the caption's last row. The other three keep the inherited inset and do not move.
      *
@@ -910,8 +910,8 @@ dialog > .__content__ {
      * Not clipped by the `overflow: hidden` below, though it looks as though it should be: BoxPainter
      * pushes the scissor inside paintChildren and pops it before paintOutline, so a box's own
      * decorations are never clipped by its own overflow. */
-    outline: 1px var(--dialog-edge, #26282B);
-    outline-offset: 0 -1px -1px -1px;
+    outline: 2px var(--dialog-edge, #26282B);
+    outline-offset: 0 -2px -2px -2px;
     /* A dialog contains its content: it is user-movable and user-resizable, and an unclipped panel
      * spills the moment either shrinks it below the content. Same lesson as the resize page. */
     overflow: hidden;
@@ -927,7 +927,7 @@ dialog > .__content__ {
  * `Dialog` opened from `ColorControl` (this one) is a genuine DOM descendant of `.__config-control__`:
  * promotion to the top layer moves the dialog's Taffy parent, never its DOM parent, so the cascade
  * still reaches straight through. On a tie the LATER rule in source order wins, and the kit section is
- * declared after this one — so the close button silently inherited an 18px floor no edit here appeared
+ * declared after this one — so the close button silently inherited an 36px floor no edit here appeared
  * to touch, the same "won a specificity fight nobody knew was happening" trap `colorselector`'s own
  * comments document repeatedly. One more class component (specificity 21) settles it outright. */
 dialog .__title-bar__ .__close__ {
@@ -940,16 +940,16 @@ dialog .__title-bar__ .__close__ {
      * specificity (11) with the config kit's `.__config-control__ button`, and a Dialog opened from
      * ColorControl is a genuine DOM descendant of it -- promotion moves a dialog's Taffy parent, never
      * its DOM parent, so the cascade reaches straight through. On a tie the later rule wins and the kit
-     * is declared after this one, so the button silently inherited an 18px floor no edit here appeared
+     * is declared after this one, so the button silently inherited an 36px floor no edit here appeared
      * to touch. One more class component settles it outright. */
-    width: var(--activity-bar-w, 20px);
+    width: var(--activity-bar-w, 40px);
     align-self: stretch;
     min-height: 0px;
     min-width: 0px;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     flex-shrink: 0;
     border-radius: 0px;
     background: none;
@@ -992,16 +992,16 @@ dialog .__title-bar__ .__close__:hover {
     z-index: 10;
 }
 
-/* Edges: full-length grab strips, 4px thick. */
+/* Edges: full-length grab strips, 8px thick. */
 .__resizer-top__,
 .__resizer-bottom__ {
     width: 100%;
-    height: 4px;
+    height: 8px;
     left: 0;
 }
 .__resizer-left__,
 .__resizer-right__ {
-    width: 4px;
+    width: 8px;
     height: 100%;
     top: 0;
 }
@@ -1016,12 +1016,12 @@ dialog .__title-bar__ .__close__:hover {
 .__resizer-top-right__,
 .__resizer-bottom-left__,
 .__resizer-bottom-right__ {
-    width: 8px;
-    height: 8px;
+    width: 16px;
+    height: 16px;
     z-index: 11;
 }
 
-/* NO HANDLE DRAWS ANYTHING. All eight are invisible grab areas, and the corners are still 8px and still
+/* NO HANDLE DRAWS ANYTHING. All eight are invisible grab areas, and the corners are still 16px and still
  * win the hit test against the edges crossing under them — this is about paint, not about hit area.
  *
  * The bottom-right one used to carry a tinted grip, on the reasoning that one visible mark says "this
@@ -1133,7 +1133,7 @@ dialog.__paste-attributes__ {
      * width nobody has decided yet -- so every copy asked for the whole area and every copy came out at
      * exactly the cap. A wrap needs a width to wrap AT; leaving it to the content means there is nothing
      * to wrap against. It is a STARTING size, not the only one -- see `resize` below. */
-    width: 380px;
+    width: 760px;
     /* RESIZABLE, all eight handles. A dialog is out of flow, which is what makes the leading edges
      * meaningful: left and top move the origin as they size, and `Dialog` already owns its position, so
      * the resizer has somewhere to write. How much there is to read depends on what was copied, and
@@ -1142,7 +1142,7 @@ dialog.__paste-attributes__ {
     /* THE CAP IS HERE, not on the scroller. A window is as tall as what was copied until that would be
      * too tall to read, and past that the groups scroll. It is a STARTING ceiling and not a permanent
      * one -- see the rule below, which is what makes that true. */
-    max-height: 400px;
+    max-height: 800px;
 }
 
 /* AN OPENING SIZE IS NOT A LIMIT, and a cap that outlives the opening makes the handle dead.
@@ -1196,11 +1196,11 @@ dialog.__user-sized-width__ {
  * it has no business knowing what a column is worth. So it says only "fewer than three", the way it
  * already says "the reader has sized this".
  *
- * 300 rather than the two columns' 270, and the footer is why: its own row is 281px of checkbox and
+ * 300 rather than the two columns' 270, and the footer is why: its own row is 562px of checkbox and
  * buttons that neither wrap nor shrink, so it is the real floor and no arrangement of the grid gets
  * under it. */
 dialog.__paste-attributes__.__paste-narrow__ {
-    width: 300px;
+    width: 600px;
 }
 
 dialog.__paste-attributes__ .__paste-groups__ {
@@ -1215,7 +1215,7 @@ dialog.__paste-attributes__ .__paste-groups__ {
      * bar cannot move -- it is what `right: 0` means -- so the content has to come in.
      *
      * It comes in on both sides, because the alternative is a band whose left inset and right inset
-     * differ by the width of a scrollbar that is only sometimes there. 6px for a 4px bar leaves it clear
+     * differ by the width of a scrollbar that is only sometimes there. 12px for a 8px bar leaves it clear
      * of the border rather than touching it, which is the same reserve `.__completion-row__` makes.
      *
      * PADDING RATHER THAN A MARGIN ON THE SECTIONS: a margin is outside the box, so `min-width: 100%`
@@ -1224,8 +1224,8 @@ dialog.__paste-attributes__ .__paste-groups__ {
      * absolute child's inset against the border box with padding NOT subtracted (FlexboxComputer,
      * `insetRelativeWidth`), which is exactly why the bar stays out at the edge while the sections
      * move in. */
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
 }
 
 /* ONE STEP DOWN, everywhere inside. This window is a dense list of property names rather than prose, and
@@ -1237,28 +1237,28 @@ dialog.__paste-attributes__ .__paste-groups__ {
  * the labels of Checkbox and Button, which live in shadow trees an ordinary selector cannot enter. */
 dialog.__paste-attributes__,
 dialog.__paste-attributes__ * {
-    font-size: 9px;
+    font-size: 18px;
 }
 
 dialog.__paste-attributes__ checkbox::part(label),
 dialog.__paste-attributes__ button::part(label) {
-    font-size: 9px;
+    font-size: 18px;
 }
 
 /* FROM and TO, each a dimmed key beside the name it is about. The key column is fixed so the two names
  * line up: ragged, the pair reads as two unrelated sentences rather than as one before-and-after. */
 .__paste-header__ {
     width: 100%;
-    gap: 2px;
+    gap: 4px;
 }
 
 .__paste-line__ {
     align-items: center;
-    gap: 6px;
+    gap: 12px;
 }
 
 .__paste-key__ {
-    width: 34px;
+    width: 68px;
     color: var(--tree-dimmed-fg, #9DA0A8);
 }
 
@@ -1270,13 +1270,13 @@ dialog.__paste-attributes__ button::part(label) {
 /* The rule under the header: above it is WHAT is being pasted, below it is HOW MUCH of it. */
 .__paste-rule__ {
     width: 100%;
-    height: 1px;
-    margin-top: 8px;
+    height: 2px;
+    margin-top: 16px;
     /* SHORTER BELOW THAN ABOVE, because what follows brings its own: the first group's heading has an
-     * 8px margin of its own, so an even 8 here put 16px between the rule and the first word under it
+     * 16px margin of its own, so an even 8 here put 32px between the rule and the first word under it
      * while two groups inside the band sit 12 apart. Matched pairs of margins are the usual answer and
      * this is the case they are wrong for -- the space a reader sees is the SUM. */
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     background-color: var(--dialog-border, #43454A);
 }
 
@@ -1284,10 +1284,10 @@ dialog.__paste-attributes__ button::part(label) {
  * cell of the grid and stops looking like a heading at all. */
 .__paste-group__ {
     font-weight: bold;
-    margin-top: 8px;
-    margin-bottom: 4px;
+    margin-top: 16px;
+    margin-bottom: 8px;
     /* Indented to the box's own content, so the heading and the first property share a left edge. */
-    margin-left: 4px;
+    margin-left: 8px;
 }
 
 /* THE GRID: the properties of one group, three across, boxed so it is unmistakable which heading owns
@@ -1301,15 +1301,15 @@ dialog.__paste-attributes__ button::part(label) {
      * truncated property name is neither readable nor searchable, and nobody recognises half of
      * `border-bottom-left-radius-x`. Wider than the window is what the scroller is there to carry. */
     min-width: 100%;
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--dialog-border, #43454A);
-    border-radius: 4px;
-    padding-top: 6px;
-    padding-bottom: 6px;
-    padding-left: 18px;
-    padding-right: 6px;
+    border-radius: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    padding-left: 36px;
+    padding-right: 12px;
     /* ENOUGH TO SEPARATE AND NO MORE: the box and the heading above it already carry the separation. */
-    margin-bottom: 4px;
+    margin-bottom: 8px;
     /* COLUMNS, not even gaps -- and the two cannot both be had.
      *
      * Spreading items to fill the row is only "even" when the row is full: a group of two then puts one
@@ -1319,7 +1319,7 @@ dialog.__paste-attributes__ button::part(label) {
      *
      * The gap is on the ROW axis only. A column gap would come out of the same hundred percent the
      * thirds are measured in, so three would no longer fit and the last would wrap. */
-    row-gap: 7px;
+    row-gap: 14px;
     column-gap: 0;
 }
 
@@ -1327,7 +1327,7 @@ dialog.__paste-attributes__ button::part(label) {
  *
  * Three columns while three fit and fewer where they do not, and the rule is a row's rather than the
  * grid's: a row of short names keeps its three even when the row above it holds one long one. A single
- * floor for every item cannot express that. It was 150px, which is wider than a third of the default
+ * floor for every item cannot express that. It was 300px, which is wider than a third of the default
  * window, so one long name in the whole list took every row down to two.
  *
  * The breathing room is padding INSIDE the column rather than a gap between columns -- border-box, so
@@ -1349,7 +1349,7 @@ dialog.__paste-attributes__ button::part(label) {
      * minimum -- would say this directly, but this engine's min-size default is 0 and `auto` is not a
      * value it accepts (@see AGENTS.md), which is what the `width: auto` above is standing in for. */
     min-width: 33%;
-    padding-right: 8px;
+    padding-right: 16px;
 }
 
 /* NEVER TRUNCATED AND NEVER WRAPPED. The base `checkbox::part(label)` ellipsizes, which is right for a
@@ -1364,12 +1364,12 @@ dialog.__paste-attributes__ button::part(label) {
 }
 
 /* MORE AIR BETWEEN THE BOX AND ITS WORD than a bare checkbox wants. These are property names read as a
- * list rather than one label answering one control, and at the stock 2px the tick crowds the first
+ * list rather than one label answering one control, and at the stock 4px the tick crowds the first
  * letter. */
 .__paste-group__,
 .__paste-item__,
 .__paste-remember__ {
-    gap: 3px;
+    gap: 6px;
 }
 
 /* NOT a property: a question about the WINDOW rather than about the copy, which is why it sits on the
@@ -1383,19 +1383,19 @@ dialog.__paste-attributes__ button::part(label) {
     align-items: center;
     /* The standing choice at one end, the two ways out at the other. */
     justify-content: space-between;
-    /* THE SAME AIR ABOVE THE ROW AS BELOW IT, and below it is the content box's own 6px padding -- so
+    /* THE SAME AIR ABOVE THE ROW AS BELOW IT, and below it is the content box's own 12px padding -- so
      * this is that number and not a round one. At 12 the footer sat visibly low in its own margin. */
-    margin-top: 6px;
+    margin-top: 12px;
 }
 
 .__paste-buttons__ {
-    gap: 6px;
+    gap: 12px;
 }
 
 /* WIDER THAN THEIR WORDS. A dialog's two ways out are aimed at rather than read, and Cancel being the
  * longer word should not make it the larger target. */
 .__paste-buttons__ > button {
-    min-width: 76px;
+    min-width: 152px;
     justify-content: center;
 }
 
@@ -1408,16 +1408,16 @@ dialog.__paste-attributes__ button::part(label) {
  * flickering rather than as the digits changing.
  */
 framestats {
-    top: 2px;
-    right: 80px;
-    padding: 4px 6px;
+    top: 4px;
+    right: 160px;
+    padding: 8px 12px;
     background-color: var(--framestats-bg, #0C0C0C96);
-    border-radius: 3px;
+    border-radius: 6px;
     /* A CAP, because the readout is drawn OVER the application: the rows are cut to a width in
      * FrameStats, and this is the guard that keeps a row nobody cut from growing the plate across the
      * menu bar. A row past it WRAPS, which is ugly and visible -- the two ways of making it not wrap
      * are both worse, see the row rule below. */
-    max-width: 300px;
+    max-width: 600px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
     color: var(--framestats-fg, #C3CCD4);
 }
@@ -1434,13 +1434,13 @@ framestats {
  * it. Either alone is merely untidy; the pair is invisible. The rows are cut to a character budget in
  * FrameStats instead, which is the one place that knows what it is about to write. */
 framestats .__row__ {
-    font-size: 7px;
+    font-size: 14px;
 }
 
 /* The headline row - the rate, read at a glance. After the row rule, since the two carry equal
  * specificity and this is the one that must win. */
 framestats .__head__ {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--framestats-head-fg, #F0F4F8);
 }
 

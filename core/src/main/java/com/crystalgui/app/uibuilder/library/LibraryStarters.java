@@ -42,7 +42,7 @@ public final class LibraryStarters {
     }
 
     /** What a {@link Fit#NARROW} starter is laid out at in its card, in logical pixels. */
-    private static final float NARROW_WIDTH = 100f;
+    private static final float NARROW_WIDTH = 200f;
 
     public static final LibraryCatalog.Entry ROW = starter(LAYOUT, "Row", "row", Fit.OWN, "crystalgui:nodes/ui/row",
             "Children side by side, centred on the cross axis.", "horizontal", "hstack", "inline");

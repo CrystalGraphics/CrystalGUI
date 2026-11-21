@@ -190,12 +190,12 @@ public class CgUiStylingScene extends UiDocumentScene {
         UIElement root = new UIElement()
                 .generalStyle(s -> s.background(panelSprite))
                 .layout(l -> l
-                        .width(420)
-                        .height(320)
-                        .paddingAll(16)
+                        .width(840)
+                        .height(640)
+                        .paddingAll(32)
                         .flexDirection(FlexDirection.ROW)
                         .flexWrap(FlexWrap.WRAP)
-                        .gapAll(12)
+                        .gapAll(24)
                         .justifyContent(AlignContent.CENTER)
                         .alignItems(AlignItems.CENTER)
                 ).setFocusPolicy(FocusPolicy.NONE);
@@ -241,50 +241,50 @@ public class CgUiStylingScene extends UiDocumentScene {
         // border-width-* longhand Taffy resolves, not a bespoke SDF-only number.
         UIElement roundedButton = new UIElement()
                 .generalStyle(s -> s.background(CgUiImage.color(0xFFEE8822))
-                        .borderRadius(10f)
+                        .borderRadius(20f)
                         .borderColor(0xFF224488))
-                .layout(l -> l.width(48).height(48).borderAll(3));
+                .layout(l -> l.width(96).height(96).borderAll(6));
         root.append(roundedButton);
 
         // Phase 7 smoke-test: background/background-color parsers exercised through the real
         // stylesheet pipeline (not constructed directly in Java), plus the new sprite(...) CSS
         // function for 9-slice-from-CSS.
-        UIElement colorSwatch = new UIElement().layout(l -> l.width(24).height(48));
+        UIElement colorSwatch = new UIElement().layout(l -> l.width(48).height(96));
         colorSwatch.addClass("color-swatch");
         root.append(colorSwatch);
 
-        UIElement slicedSwatch = new UIElement().layout(l -> l.width(32).height(32));
+        UIElement slicedSwatch = new UIElement().layout(l -> l.width(64).height(64));
         slicedSwatch.addClass("sliced-swatch");
         root.append(slicedSwatch);
 
-        UIElement croppedSwatch = new UIElement().layout(l -> l.width(32).height(32));
+        UIElement croppedSwatch = new UIElement().layout(l -> l.width(64).height(64));
         croppedSwatch.addClass("cropped-swatch");
         root.append(croppedSwatch);
 
         // Background cross-fade demo — move the mouse over each swatch to trigger the
         // `background 700ms ease-in-out` transition. Each pairs a different CgUiImage
         // combination on either side of the fade:
-        UIElement fadeColorColor = new UIElement().layout(l -> l.width(48).height(48)); // flat color -> flat color
+        UIElement fadeColorColor = new UIElement().layout(l -> l.width(96).height(96)); // flat color -> flat color
         fadeColorColor.addClass("fade-color-color");
         root.append(fadeColorColor);
 
-        UIElement fadeColorTexture = new UIElement().layout(l -> l.width(48).height(48)); // flat color -> full texture
+        UIElement fadeColorTexture = new UIElement().layout(l -> l.width(96).height(96)); // flat color -> full texture
         fadeColorTexture.addClass("fade-color-texture");
         root.append(fadeColorTexture);
 
-        UIElement fadeTextureTexture = new UIElement().layout(l -> l.width(48).height(48)); // 9-slice -> 9-slice
+        UIElement fadeTextureTexture = new UIElement().layout(l -> l.width(96).height(96)); // 9-slice -> 9-slice
         fadeTextureTexture.addClass("fade-texture-texture");
         root.append(fadeTextureTexture);
 
-        UIElement fadeSdfColor = new UIElement().layout(l -> l.width(48).height(48)); // SDF rounded rect -> SDF rounded rect (color fill)
+        UIElement fadeSdfColor = new UIElement().layout(l -> l.width(96).height(96)); // SDF rounded rect -> SDF rounded rect (color fill)
         fadeSdfColor.addClass("fade-sdf-color");
         root.append(fadeSdfColor);
 
-        UIElement fadeSdfTexture = new UIElement().layout(l -> l.width(48).height(48)); // SDF rounded rect, color fill -> texture fill
+        UIElement fadeSdfTexture = new UIElement().layout(l -> l.width(96).height(96)); // SDF rounded rect, color fill -> texture fill
         fadeSdfTexture.addClass("fade-sdf-texture");
         root.append(fadeSdfTexture);
 
-        UIElement roundedCorners = new UIElement().layout(l -> l.width(48).height(48)); // per-corner radii: top rounded, bottom square
+        UIElement roundedCorners = new UIElement().layout(l -> l.width(96).height(96)); // per-corner radii: top rounded, bottom square
         roundedCorners.addClass("rounded-corners-swatch");
         root.append(roundedCorners);
 

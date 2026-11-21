@@ -310,10 +310,13 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
      */
     @Test
     public void aLabOpenedFromTheEdgeStaysOnScreen() {
+        // A screen the lab fits on: it is taller than the base's 600.
+        float w = 2 * W, h = 2 * H;
+        viewport(w, h);
         UIElement edge = new UIElement().layout(l -> l.positionType(TaffyPosition.ABSOLUTE)
-                .left(W - 60f).top(H - 60f).width(40).height(16));
+                .left(w - 120f).top(h - 120f).width(80).height(32));
         document.append(edge);
-        document.update(W, H);
+        document.update(w, h);
         frame();
 
         ShadowLab.open(edge, StylePropertyRegistry.TEXT_SHADOW, Property.of("0 1px 2px #000000"));
@@ -325,8 +328,8 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         assertNotNull("and laid out", box);
         assertTrue("its left edge is on screen", box.x() >= 0f);
         assertTrue("its top edge is on screen", box.y() >= 0f);
-        assertTrue("its right edge is too: " + (box.x() + box.width()), box.x() + box.width() <= W + 0.5f);
-        assertTrue("and its bottom: " + (box.y() + box.height()), box.y() + box.height() <= H + 0.5f);
+        assertTrue("its right edge is too: " + (box.x() + box.width()), box.x() + box.width() <= w + 0.5f);
+        assertTrue("and its bottom: " + (box.y() + box.height()), box.y() + box.height() <= h + 0.5f);
     }
 
     private void clickCentre(Box box) {

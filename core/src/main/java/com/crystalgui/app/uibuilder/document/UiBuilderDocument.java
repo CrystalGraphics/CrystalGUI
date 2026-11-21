@@ -287,7 +287,7 @@ public final class UiBuilderDocument extends AbstractDocumentModel {
     private static final String PARSE = "cgui.parse";
 
     /** What a new file is: a format line and an empty root, so a fresh document opens rather than fails. */
-    public static final String EMPTY = "{\n  \"cgui\": 1,\n  \"root\": { \"kind\": \"element\" }\n}\n";
+    public static final String EMPTY = "{\n  \"cgui\": " + UiTemplate.FORMAT + ",\n  \"root\": { \"kind\": \"element\" }\n}\n";
 
     /** Everything the document declared except the tree, in the order it was written. */
     private static JsonObject headerOf(UiTemplate parsed) {

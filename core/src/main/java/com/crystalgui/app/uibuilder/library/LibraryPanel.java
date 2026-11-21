@@ -87,10 +87,10 @@ public final class LibraryPanel extends UIElement implements DataProvider {
     public static final String DROP_CLASS = "__drop-target__";
 
     /** A folder or compact row's height. The view positions rows, so the heights are the view's to state. */
-    static final float ROW_HEIGHT = 20f;
+    static final float ROW_HEIGHT = 40f;
 
     /** A strip's height before a card has been measured. */
-    private static final float DEFAULT_STRIP_HEIGHT = 64f;
+    private static final float DEFAULT_STRIP_HEIGHT = 128f;
 
     /** Space a strip keeps below its cards. */
     private static final float STRIP_SLACK = 4f;

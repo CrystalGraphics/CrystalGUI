@@ -122,7 +122,7 @@ public final class WidgetSamples {
     public static final String LINE_CLASS = "__sample-line__";
 
     /** How wide a form is laid out: a label column and a field, as in an inspector. */
-    private static final float FORM_WIDTH = 110f;
+    private static final float FORM_WIDTH = 220f;
 
     /** The radar's wedges, one hue per axis — data, as a chart's colours are. */
     private static final int[] RADAR_HUES = {0xFF4C9AFF, 0xFF6CC070, 0xFFE0A040, 0xFFD06070, 0xFFA070E0};
@@ -146,13 +146,13 @@ public final class WidgetSamples {
 
     /** Short enough to sit in the card at its own thickness, and at half so the fill shows. */
     public static Preview slider() {
-        return Preview.sample(() -> new Slider().setValue(0.5f)).width(54f);
+        return Preview.sample(() -> new Slider().setValue(0.5f)).width(108f);
     }
 
     /** As it looks being typed into: the placeholder and a caret. Unfocused, an empty field draws nothing at all. */
     public static Preview textField() {
         return Preview.sample(() -> new TextField().setPlaceholder("Type here").presentFocused().addClass(FIELD_CLASS))
-                .width(72f);
+                .width(144f);
     }
 
     /** Wide enough to read as a field and not a button. */
@@ -161,7 +161,7 @@ public final class WidgetSamples {
             SearchField search = new SearchField().setPlaceholder("Search");
             search.field().presentFocused();
             return search;
-        }).width(72f);
+        }).width(144f);
     }
 
     public static Preview dropdown() {
@@ -174,7 +174,7 @@ public final class WidgetSamples {
 
     public static Preview colorSelector() {
         // WHOLE, at its own width: the wheel, the sliders and the values together are what a colour selector is.
-        return Preview.sample(ColorSelector::new).width(160f).whole();
+        return Preview.sample(ColorSelector::new).width(320f).whole();
     }
 
     // ── Display ──────────────────────────────────────────────────────────
@@ -184,7 +184,7 @@ public final class WidgetSamples {
             ProgressBar bar = new ProgressBar();
             bar.setFraction(0.6f);
             return bar;
-        }).width(54f);
+        }).width(108f);
     }
 
     public static Preview symbolIcon() {
@@ -198,7 +198,7 @@ public final class WidgetSamples {
                     .setAxisLabels(List.of("", "", "", "", ""))
                     .setValues(0.85, 0.55, 0.95, 0.4, 0.7)
                     .setAxisColors(RADAR_HUES);
-            chart.layout(l -> l.width(46f).height(46f));
+            chart.layout(l -> l.width(92f).height(92f));
             return chart;
         });
     }
@@ -209,7 +209,7 @@ public final class WidgetSamples {
     public static Preview markupView() {
         return Preview.sample(() -> new MarkupView(MarkupParser.parse(
                 "<h1>Guide</h1><ul><li><b>Bold</b> and <i>italic</i></li><li>A <a href=\"#\">link</a></li></ul>"
-                        + "<pre>let x = 1;</pre>"))).width(100f).whole();
+                        + "<pre>let x = 1;</pre>"))).width(200f).whole();
     }
 
     /** Coloured code with its gutter, read-only so the card never takes a caret. */
@@ -225,50 +225,50 @@ public final class WidgetSamples {
                     .setReadOnly(true)
                     // Nothing below the code to scroll to, so no bar.
                     .setScrollBeyondLastLine(false);
-            editor.layout(l -> l.height(58f));
+            editor.layout(l -> l.height(116f));
             return editor;
-        }).width(150f).whole();
+        }).width(300f).whole();
     }
 
     // ── Layout ───────────────────────────────────────────────────────────
 
     /** One empty box: a container, with no children to suggest a layout it does not have. */
     public static Preview element() {
-        return Preview.sample(() -> block(44f, 30f));
+        return Preview.sample(() -> block(88f, 60f));
     }
 
     public static Preview scrollView() {
         return Preview.sample(() -> {
             ScrollerView scroller = new ScrollerView();
-            scroller.layout(l -> l.height(40f));
+            scroller.layout(l -> l.height(80f));
             for (String line : List.of("First line", "Second line", "Third line", "Fourth line", "Fifth line")) {
                 scroller.append(new UIText(line));
             }
             return scroller;
-        }).width(70f);
+        }).width(140f);
     }
 
     public static Preview splitView() {
         return Preview.sample(() -> {
             SplitView split = new SplitView();
-            split.layout(l -> l.height(44f));
+            split.layout(l -> l.height(88f));
             while (split.paneCount() < 2) split.addPane();
             split.paneContent(0, fill(block(0f, 0f)));
             split.paneContent(1, fill(block(0f, 0f)));
             return split;
-        }).width(90f);
+        }).width(180f);
     }
 
     /** The whole view: its strip over a framed page of content, which is what separates it from a tab. */
     public static Preview tabView() {
         return Preview.sample(() -> {
             TabView tabs = new TabView();
-            tabs.layout(l -> l.height(52f));
+            tabs.layout(l -> l.height(104f));
             for (String label : List.of("Scene", "Game", "Log")) {
                 tabs.addTab(label).content().append(fill(block(0f, 0f).append(page(3))));
             }
             return tabs.selectIndex(0);
-        }).width(96f);
+        }).width(192f);
     }
 
     /** The strip alone: tabs with their close buttons, the first one active — no page under it. */
@@ -278,22 +278,22 @@ public final class WidgetSamples {
             for (String label : List.of("Tab", "Other")) tabs.addTab(label).setClosable(true);
             tabs.panes().layout(l -> l.display(TaffyDisplay.NONE));
             return tabs.selectIndex(0);
-        }).width(90f);
+        }).width(180f);
     }
 
     /** One page shown in front of the pages it swaps between, offset behind it like a deck. */
     public static Preview pageStack() {
         return Preview.sample(() -> {
             UIElement deck = new UIElement();
-            deck.layout(l -> l.width(66f).height(48f));
+            deck.layout(l -> l.width(132f).height(96f));
             for (int i = 2; i >= 1; i--) {
-                float offset = i * 5f;
+                float offset = i * 10f;
                 UIElement back = block(0f, 0f).addClass(BACK_PAGE_CLASS);
-                back.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).left(offset).top(0f).width(54f).height(48f - offset));
+                back.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).left(offset).top(0f).width(108f).height(96f - offset));
                 deck.append(back);
             }
             PageStack<String> pages = new PageStack<>();
-            pages.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f).width(54f).height(48f));
+            pages.layout(l -> l.positionType(TaffyPosition.ABSOLUTE).left(0f).top(0f).width(108f).height(96f));
             pages.setPageFactory(key -> {
                 UIElement page = block(0f, 0f);
                 page.append(new UIText(key).addClass(TITLE_CLASS));
@@ -310,11 +310,11 @@ public final class WidgetSamples {
         return Preview.sample(() -> {
             CanvasView canvas = new CanvasView();
             canvas.addClass(CANVAS_CLASS);
-            canvas.layout(l -> l.height(44f));
-            canvas.addNode(block(22f, 14f), 8f, 8f);
-            canvas.addNode(block(22f, 14f), 44f, 22f);
+            canvas.layout(l -> l.height(88f));
+            canvas.addNode(block(44f, 28f), 16f, 16f);
+            canvas.addNode(block(44f, 28f), 88f, 44f);
             return canvas;
-        }).width(90f);
+        }).width(180f);
     }
 
     // ── Collections ──────────────────────────────────────────────────────
@@ -326,10 +326,10 @@ public final class WidgetSamples {
             ListView<String> list = new ListView<>(rows);
             list.setRenderer(textRows());
             // EXACTLY ITS ROWS: a sliced fourth row and a scrollbar read as a broken list, not a long one.
-            list.setItemHeight(14f);
-            list.layout(l -> l.height(42f));
+            list.setItemHeight(28f);
+            list.layout(l -> l.height(84f));
             return list.select(1);
-        }).width(70f);
+        }).width(140f);
     }
 
     public static Preview treeView() {
@@ -369,10 +369,10 @@ public final class WidgetSamples {
                 }
             });
             tree.setExpandedItems(List.of("assets", "textures"));
-            tree.setItemHeight(14f);
-            tree.layout(l -> l.height(70f));
+            tree.setItemHeight(28f);
+            tree.layout(l -> l.height(140f));
             return tree;
-        }).width(80f);
+        }).width(160f);
     }
 
     public static Preview tableView() {
@@ -382,11 +382,11 @@ public final class WidgetSamples {
             rows.add(new String[] {"Shield", "2"});
             rows.add(new String[] {"Potion", "5"});
             TableView<String[]> table = new TableView<>(rows);
-            table.addColumn(TableColumn.<String[]>of("Item", row -> row[0]).width(44f));
-            table.addColumn(TableColumn.<String[]>of("Qty", row -> row[1]).width(28f));
-            table.layout(l -> l.height(52f));
+            table.addColumn(TableColumn.<String[]>of("Item", row -> row[0]).width(88f));
+            table.addColumn(TableColumn.<String[]>of("Qty", row -> row[1]).width(56f));
+            table.layout(l -> l.height(104f));
             return table;
-        }).width(76f);
+        }).width(152f);
     }
 
     // ── Overlays, drawn open where they stand ────────────────────────────
@@ -403,9 +403,9 @@ public final class WidgetSamples {
             popover.addClass(POPOVER_CLASS);
             popover.append(new UIText("Opacity").addClass(TITLE_CLASS));
             UIElement row = new UIElement();
-            row.layout(l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER).gapAll(4f));
+            row.layout(l -> l.flexDirection(FlexDirection.ROW).alignItems(AlignItems.CENTER).gapAll(8f));
             Slider opacity = new Slider().setValue(0.7f);
-            opacity.layout(l -> l.width(50f));
+            opacity.layout(l -> l.width(100f));
             row.append(opacity);
             row.append(new UIText("70%"));
             popover.append(row);
@@ -443,7 +443,7 @@ public final class WidgetSamples {
             Dialog dialog = new Dialog("Dialog");
             dialog.getContent().append(new UIText("Are you sure?"));
             return dialog.presentInline();
-        }).width(100f);
+        }).width(200f);
     }
 
     // ── Forms: a field in its row where the label is part of the picture, the control alone where not ──
@@ -473,7 +473,7 @@ public final class WidgetSamples {
             panel.addClass(FORM_CLASS);
             // NO BARS: at card size a scrollbar is a stripe across the rows, and nothing here scrolls.
             panel.setScrollbarsVisible(false);
-            panel.layout(l -> l.height(62f));
+            panel.layout(l -> l.height(124f));
             panel.add(ConfigDescriptor.header("Material"), null);
             panel.add(ConfigDescriptor.color("tint", "Tint"), 0xFF4C9AFF);
             panel.add(ConfigDescriptor.bool("lit", "Lit"), true);
@@ -506,7 +506,7 @@ public final class WidgetSamples {
     public static Preview colorField() {
         ConfigDescriptor tint = ConfigDescriptor.color("tint", "Tint");
         // THE SWATCH ALONE, at a width: a compact cell sizes a swatch to nothing.
-        return Preview.sample(() -> new ColorControl(tint, 0xFF4C9AFF)).width(48f);
+        return Preview.sample(() -> new ColorControl(tint, 0xFF4C9AFF)).width(96f);
     }
 
     public static Preview formHeader() {
@@ -540,7 +540,7 @@ public final class WidgetSamples {
     public static Preview matrixField() {
         ConfigDescriptor scale = ConfigDescriptor.matrix("scale", "Scale", 2);
         // THE GRID ALONE: a matrix has no room for a label beside it on a card.
-        return Preview.sample(() -> new MatrixControl(scale, new double[] {1, 0, 0, 1})).width(46f);
+        return Preview.sample(() -> new MatrixControl(scale, new double[] {1, 0, 0, 1})).width(92f);
     }
 
     public static Preview numberField() {
@@ -556,7 +556,7 @@ public final class WidgetSamples {
     public static Preview sliderField() {
         ConfigDescriptor volume = ConfigDescriptor.number("volume", "Volume").range(0f, 1f);
         // THE TRACK AND ITS VALUE ALONE: a compact cell sizes the track to nothing, and a row's label shrinks it to specks.
-        return Preview.sample(() -> new SliderControl(volume, 0.5)).width(80f);
+        return Preview.sample(() -> new SliderControl(volume, 0.5)).width(160f);
     }
 
     public static Preview textControl() {
@@ -567,7 +567,7 @@ public final class WidgetSamples {
     public static Preview vectorField() {
         ConfigDescriptor position = ConfigDescriptor.vector("position", "Pos", 3);
         // THE COMPONENTS ALONE, at a width that gives each its letter: compact stacks the letters over each other.
-        return Preview.sample(() -> new VectorControl(position, new double[] {0, 1, 0})).width(96f);
+        return Preview.sample(() -> new VectorControl(position, new double[] {0, 1, 0})).width(192f);
     }
 
     // ── Parts ────────────────────────────────────────────────────────────
@@ -589,11 +589,11 @@ public final class WidgetSamples {
     /** Bars of decreasing length standing in for a page's text. */
     private static UIElement page(int lines) {
         UIElement page = new UIElement();
-        page.layout(l -> l.gapAll(3f).paddingAll(4f));
+        page.layout(l -> l.gapAll(6f).paddingAll(8f));
         for (int i = 0; i < lines; i++) {
-            float width = 40f - i * 9f;
+            float width = 80f - i * 18f;
             UIElement line = new UIElement().addClass(LINE_CLASS);
-            line.layout(l -> l.width(width).height(3f));
+            line.layout(l -> l.width(width).height(6f));
             page.append(line);
         }
         return page;

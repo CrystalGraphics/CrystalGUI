@@ -80,9 +80,9 @@ theme {
 
     /* ── Islands geometry. Same in both themes: a theme changes the LOOK, and a flat theme is
      * expressed by zeroing these rather than by shipping different structure. ── */
-    --radius-panel: 8px;
-    --radius-control: 4px;
-    --panel-gap: 3px;
+    --radius-panel: 16px;
+    --radius-control: 8px;
+    --panel-gap: 6px;
 
 }
 

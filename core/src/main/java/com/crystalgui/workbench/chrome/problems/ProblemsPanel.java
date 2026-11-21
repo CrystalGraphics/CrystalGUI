@@ -578,7 +578,7 @@ public class ProblemsPanel extends UIElement implements DataProvider, HeaderCont
         if (tree != null) tree.removeSelf();
         tree = new TreeView<>(source);
         tree.addClass(LIST_CLASS);
-        tree.setItemHeight(16f);
+        tree.setItemHeight(32f);
         // A PROBLEM IS NOT WORTH HALF-READING. A driver's message names a line, a symbol and a reason,
         // and the part truncated in a narrow panel is the end -- which is the part that says what is
         // wrong. The project tree gives a long filename the same answer.

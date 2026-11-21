@@ -30,7 +30,7 @@ final class MachineRows {
         UIElement row = new UIElement();
         row.addClass(MachineStyles.ROW_CLASS);
 
-        UIElement slot = new UIElement().layout(l -> l.width(90));
+        UIElement slot = new UIElement().layout(l -> l.width(180));
         UIText text = new UIText(caption);
         text.addClass(MachineStyles.LABEL_CLASS);
         slot.append(text);

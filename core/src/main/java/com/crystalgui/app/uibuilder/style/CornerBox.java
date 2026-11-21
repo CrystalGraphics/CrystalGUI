@@ -71,11 +71,11 @@ public final class CornerBox extends ValueControl<double[]> {
     private static final float ON_CURVE = (float) (1d - 1d / Math.sqrt(2d));
 
     /** The largest the miniature is drawn; the element's proportions decide which side reaches its limit. */
-    static final float MAX_WIDTH = 168f;
-    static final float MAX_HEIGHT = 100f;
+    static final float MAX_WIDTH = 336f;
+    static final float MAX_HEIGHT = 200f;
 
     /** The shortest a side of the miniature gets, so a hairline element still has corners to hold. */
-    private static final float MIN_SIDE = 28f;
+    private static final float MIN_SIDE = 56f;
 
     private final Property<Boolean> linked;
     private final Property<Boolean> elliptical;

@@ -56,5 +56,5 @@
  * only the shared shrink. Stated here rather than in default.css because a theme that wants no badges
  * at all should be able to say so without editing the user-agent sheet. */
 .__project-row__ .__badge__ {
-    font-size: 11px;
+    font-size: 22px;
 }

@@ -66,7 +66,7 @@ public class NodeWireLayer extends UIElement {
     /** Minimum horizontal pull on the control points, so a short wire still leaves its port sideways
      * rather than cutting the corner. Unity, Blender and Unreal all do this; a straight line between
      * two ports reads as a wire passing behind the node rather than into it. */
-    private static final float MIN_TANGENT = 24f;
+    private static final float MIN_TANGENT = 48f;
 
     /**
      * The horizontal pull on both control points, for a span of {@code dx}.
@@ -127,7 +127,7 @@ public class NodeWireLayer extends UIElement {
     /** Wires are drawn under nodes, so a stroke that clipped a node's corner would be hidden anyway —
      * but a wire whose endpoints are both off-screen can still cross the viewport, so the cull rect is
      * grown rather than tested exactly. */
-    private static final float CULL_MARGIN = 64f;
+    private static final float CULL_MARGIN = 128f;
 
     @Nullable
     private final GraphView view;
@@ -189,7 +189,7 @@ public class NodeWireLayer extends UIElement {
 
     /** How close a click must land, in world units. Generous, because a 2px wire is a 2px target and a
      * pointer is not that accurate — the same reasoning that makes a port's padding its hit area. */
-    private static final float PICK_TOLERANCE = 5f;
+    private static final float PICK_TOLERANCE = 10f;
 
     /** Samples per wire when picking. */
     private static final int PICK_SAMPLES = 24;

@@ -33,7 +33,7 @@ public final class HoverHighlight extends UIElement {
     /** The label at the corner — kind, {@code #id}, size. */
     public static final String TAG_PART = "tag";
 
-    private static final float THICKNESS = 1f;
+    private static final float THICKNESS = 2f;
 
     private final SurfaceContext ctx;
 

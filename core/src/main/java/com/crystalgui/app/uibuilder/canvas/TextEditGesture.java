@@ -198,7 +198,7 @@ public final class TextEditGesture extends UIElement {
         if (nodeBox == null || fieldBox == null || frame == null) return;
         var padding = nodeBox.padding();
         StyleGroup.inlinePipeline(field.getStyle().getLayoutGroup(),
-                l -> l.width(Math.max(24f, nodeBox.width())).height(Math.max(12f, nodeBox.height()))
+                l -> l.width(Math.max(48f, nodeBox.width())).height(Math.max(24f, nodeBox.height()))
                         .paddingLeft(padding.left).paddingTop(padding.top)
                         .paddingRight(padding.right).paddingBottom(padding.bottom));
         fieldBox.setTransformOrigin(0f, 0f);

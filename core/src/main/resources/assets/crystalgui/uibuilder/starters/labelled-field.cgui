@@ -1,11 +1,11 @@
 {
-  "cgui": 1,
+  "cgui": 2,
   "root": {
     "kind": "element",
     "style": {
       "flex-direction": "row",
       "align-items": "center",
-      "gap": "8px 8px"
+      "gap": "16px 16px"
     },
     "children": [
       {
@@ -17,8 +17,8 @@
       {
         "kind": "textfield",
         "style": {
-          "width": "60px",
-          "outline-width": "1px",
+          "width": "120px",
+          "outline-width": "2px",
           "outline-color": "#3C3C3C"
         },
         "state": {

@@ -60,7 +60,7 @@ public final class GradientBar extends ValueControl<Gradient> {
     public static final String REMOVING_CLASS = "__removing__";
 
     /** How far off the track a stop is dragged before letting go removes it, in px. */
-    private static final float REMOVE_DISTANCE = 28f;
+    private static final float REMOVE_DISTANCE = 56f;
 
     private final StyleProperty<?> property;
     private final Property<Integer> selected;

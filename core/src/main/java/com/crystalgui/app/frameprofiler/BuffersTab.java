@@ -98,14 +98,14 @@ public class BuffersTab extends UIElement {
         bar.append(watch, previous, next, follow);
 
         sites.addClass(SITES_CLASS);
-        sites.addColumn(TableColumn.<Key>of("Buffer", Key::buffer).flexible(2f).minWidth(100f).sortable());
-        sites.addColumn(TableColumn.<Key>of("After pass", Key::pass).flexible(2f).minWidth(100f).sortable());
+        sites.addColumn(TableColumn.<Key>of("Buffer", Key::buffer).flexible(2f).minWidth(200f).sortable());
+        sites.addColumn(TableColumn.<Key>of("After pass", Key::pass).flexible(2f).minWidth(200f).sortable());
         sites.addColumn(TableColumn.<Key>of("Elements", key -> String.valueOf(site(key).elements()))
-                .width(64f).sortable(Comparator.comparingInt(key -> site(key).elements())));
+                .width(128f).sortable(Comparator.comparingInt(key -> site(key).elements())));
         sites.addColumn(TableColumn.<Key>of("Element", key -> site(key).decl().element() + ", " + site(key).decl().stride() + " B")
-                .width(110f).sortable());
+                .width(220f).sortable());
         sites.addColumn(TableColumn.<Key>of("Kernel", key -> shortFile(site(key).file()) + " " + site(key).kernel()
-                + " (" + site(key).decl().name() + ")").flexible(2f).minWidth(120f).sortable());
+                + " (" + site(key).decl().name() + ")").flexible(2f).minWidth(240f).sortable());
         sites.onSelectionChanged.connect(indices -> {
             Key key = sites.getSelectedItems().isEmpty() ? null : sites.getSelectedItems().iterator().next();
             if (key == null || key.equals(selected)) return;
@@ -260,12 +260,12 @@ public class BuffersTab extends UIElement {
         TableView<Element> table = new TableView<>(elementRows);
         table.addClass(ELEMENTS_CLASS);
         table.addColumn(TableColumn.<Element>of("#", e -> String.valueOf(e.index()))
-                .width(56f).sortable(Comparator.comparingInt(Element::index)));
+                .width(112f).sortable(Comparator.comparingInt(Element::index)));
         for (int f = 0; f < fields.size(); f++) {
             int at = f;
             CgElementField field = fields.get(f);
             String header = field.name().isEmpty() ? field.type() : field.name() + " (" + field.type() + ")";
-            table.addColumn(TableColumn.<Element>of(header, e -> e.values()[at]).flexible(1f).minWidth(60f)
+            table.addColumn(TableColumn.<Element>of(header, e -> e.values()[at]).flexible(1f).minWidth(120f)
                     .sortable(Comparator.comparingDouble(e -> firstNumber(e.values()[at]))));
         }
         return table;

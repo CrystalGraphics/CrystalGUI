@@ -67,7 +67,7 @@ public class TreeView<T> extends ListView<TreeRow<T>> {
     private final Set<T> expanded = new LinkedHashSet<>();
 
     @Getter
-    private float indentPerDepth = 12f;
+    private float indentPerDepth = 24f;
 
     /** The tree-level renderer, which {@link com.crystalgui.ui.elements.tree.TreeSearch} decorates. */
     @Getter

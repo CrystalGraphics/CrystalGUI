@@ -47,7 +47,7 @@ import java.util.WeakHashMap;
 public final class SystemMenu {
 
     /** The gap between a jump list and the bar's top edge, as the previews'. The sheet's rise is the same distance. */
-    private static final float GAP = 1f;
+    private static final float GAP = 2f;
 
     /**
      * On a system menu opened from a taskbar entry — Windows' jump list.

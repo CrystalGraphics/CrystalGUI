@@ -94,7 +94,7 @@ public class InsertionMarker extends UIElement {
      *
      * <p>So the placeholder reads as sitting <em>between</em> two items rather than as covering one.</p>
      */
-    public static final float GAP = 2f;
+    public static final float GAP = 4f;
 
     /** Which way the list runs. */
     public enum Axis {

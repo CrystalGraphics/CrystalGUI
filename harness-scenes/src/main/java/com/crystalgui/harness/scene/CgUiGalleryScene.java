@@ -171,7 +171,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
     private UIElement createDemo() {
         UIElement root = new UIElement()
-                .layout(l -> l.paddingAll(8).flexDirection(FlexDirection.COLUMN).gapAll(6))
+                .layout(l -> l.paddingAll(16).flexDirection(FlexDirection.COLUMN).gapAll(12))
                 .setFocusPolicy(FocusPolicy.NONE);
         root.addClass("gallery-root");
         root.addClass("panel");
@@ -295,8 +295,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
             glassPhase += delta;
             Box box = blobs.box();
             if (box != null) {
-                box.setTransform(Transform.translate((float) Math.sin(glassPhase * 0.23) * 26f,
-                        (float) Math.cos(glassPhase * 0.17) * 18f));
+                box.setTransform(Transform.translate((float) Math.sin(glassPhase * 0.23) * 52f,
+                        (float) Math.cos(glassPhase * 0.17) * 36f));
             }
             return true;
         });
@@ -308,8 +308,8 @@ public class CgUiGalleryScene extends UiDocumentScene {
         UIElement right = new UIElement();
         right.addClass("gl-col");
 
-        left.append(glassControl("blur", 0f, 10f, 4f, "%.1f", (g, v) -> g.blur(v)));
-        left.append(glassControl("bezel", 0f, 30f, 10f, "%.0f", (g, v) -> g.lens(g.lens().refraction(v, g.lens().ior()))));
+        left.append(glassControl("blur", 0f, 20f, 8f, "%.1f", (g, v) -> g.blur(v)));
+        left.append(glassControl("bezel", 0f, 60f, 20f, "%.0f", (g, v) -> g.lens(g.lens().refraction(v, g.lens().ior()))));
         left.append(glassControl("ior", 1f, 2.5f, 1.5f, "%.2f", (g, v) -> g.lens(g.lens().refraction(g.lens().bezel(), v))));
         right.append(glassControl("specular", 0f, 1.5f, 0.3f, "%.2f",
                 (g, v) -> g.lens(g.lens().highlight(v, g.lens().glow(), g.lens().rim(), g.lens().rimWidth(), g.lens().rimAmbient()))));
@@ -370,10 +370,10 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
     private String textLabFamily = "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
     /** -Dcrystalgui.gallery.textLabSize=N opens the lab at that size, for an unattended capture. */
-    private float textLabSize = Float.parseFloat(System.getProperty("crystalgui.gallery.textLabSize", "64"));
+    private float textLabSize = Float.parseFloat(System.getProperty("crystalgui.gallery.textLabSize", "128"));
     private FontWeight textLabWeight = FontWeight.NORMAL;
     private FontStyle textLabFontStyle = FontStyle.NORMAL;
-    private float textLabStrokeValue = 2f;
+    private float textLabStrokeValue = 4f;
     private Slider textLabStrokeSlider;
     private boolean textLabApplying;
     private UIText textLabNote;
@@ -393,9 +393,9 @@ public class CgUiGalleryScene extends UiDocumentScene {
     // ── text-shadow ──
     /** 0 off, 1 one shadow, 2 the shadow plus a glow beneath it, 3 the shadow plus a sharp drop beneath it. */
     private int textLabShadowLayers;
-    private float textLabShadowX = 3f;
-    private float textLabShadowY = 4f;
-    private float textLabShadowBlur = 8f;
+    private float textLabShadowX = 6f;
+    private float textLabShadowY = 8f;
+    private float textLabShadowBlur = 16f;
     private float textLabShadowSpread;
     private float textLabShadowOpacity = 0.75f;
     private boolean textLabShadowInset;
@@ -473,7 +473,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         family.select(0);
         colA.append(textLabRow("font", family));
 
-        colA.append(textLabSlider("size", 8f, 120f, textLabSize, "%.0f", v -> textLabSize = v));
+        colA.append(textLabSlider("size", 16f, 240f, textLabSize, "%.0f", v -> textLabSize = v));
 
         Dropdown weight = new Dropdown();
         weight.addClass("tl-drop");
@@ -586,7 +586,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         view.addClass("tl-ground");
         view.addClass(styleClass);
         view.setZoomRange(0.25f, 100f);
-        view.addNode(specimen, 14f, 10f);
+        view.addNode(specimen, 28f, 20f);
 
         UIText hint = new UIText("1.00x");
         hint.addClass("tl-hint");
@@ -1705,7 +1705,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
         ListView<String> list = new ListView<>(model);
         list.addClass("lv");
-        list.setItemHeight(12f);
+        list.setItemHeight(24f);
         list.setSelectionMode(SelectionMode.MULTIPLE);
         list.setRenderer(new ListRenderer<String>() {
             @Override
@@ -1795,7 +1795,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
         TreeView<String> tree = new TreeView<>(source);
         tree.addClass("tv");
-        tree.setItemHeight(12f);
+        tree.setItemHeight(24f);
         tree.setSelectionMode(SelectionMode.MULTIPLE);
         tree.setRenderer(new TreeRenderer<String>() {
             @Override
@@ -1949,13 +1949,13 @@ public class CgUiGalleryScene extends UiDocumentScene {
         controls.addClass("page-row");
         Button openModal = new Button("showModal()");
         openModal.attachListener(() -> {
-            modal.moveTo(60f, 20f);
+            modal.moveTo(120f, 40f);
             modal.showModal();
         });
         controls.append(openModal);
         Button openModeless = new Button("show()");
         openModeless.attachListener(() -> {
-            modal.moveTo(60f, 20f);
+            modal.moveTo(120f, 40f);
             modal.show();
         });
         controls.append(openModeless);
@@ -2516,6 +2516,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
             // The frame clock, which the harness sets from its fixed delta: a capture at frame N is one picture.
             double t = CgFrameClock.seconds();
 
+            ctx.canvas().save().scale(2f, 2f);  // UI16: authored at 2 UI px a unit
             switch (mode) {
                 case BASICS -> paintBasics(ctx, x, y);
                 case CAPS -> paintCaps(ctx, x, y);
@@ -2533,6 +2534,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                 case INTERLEAVED -> paintInterleaved(ctx, x, y);
                 case OPACITY -> paintOpacity(ctx, x, y);
             }
+            ctx.canvas().restore();
         }
 
         /** Line, arc, taper, gradient — the four things one stroke can vary. */
@@ -2924,7 +2926,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
                         document().boxes().uiScale(),
                         buttonClicks,
                         continuous.getValue()))
-                .font(context.getFont().atSize(14)).submit();
+                .font(context.getFont().atSize(28)).submit();
     }
 
     /** The preview pool's targets are createOwned framebuffers, so no registry sweep reaches them: this frees them. */
@@ -3058,7 +3060,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
         Button open = new Button("open picker");
         open.addClass("canvas-btn");
-        open.attachListener(() -> window.show().moveTo(40f, 90f));
+        open.attachListener(() -> window.show().moveTo(80f, 180f));
 
 
 
@@ -3069,7 +3071,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         pane.append(row(slot("picker"), open));
         pane.append(row);
         pane.append(window);
-        window.show().moveTo(40f, 90f);
+        window.show().moveTo(80f, 180f);
     }
 
     private void shaderGraphPage(UIElement pane) {
@@ -3123,7 +3125,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
         Button frame = new Button("fit");
         frame.addClass("canvas-btn");
-        frame.attachListener(() -> shaderGraph.fitToContent(24f));
+        frame.attachListener(() -> shaderGraph.fitToContent(48f));
 
         pane.append(row(slot("view"), compile, frame, shaderStatus));
         // Hints BEFORE the split: the split takes the pane's slack, so anything after it is pushed off
@@ -3156,10 +3158,10 @@ public class CgUiGalleryScene extends UiDocumentScene {
         var multiply = library.get("cg:Math/Basic/multiply");
         var outputType = library.get(ShaderGraphBridge.MASTER_TYPE);
 
-        GraphNode colourNode = addShaderNode(library, colour, 20f, 30f);
-        GraphNode timeNode = addShaderNode(library, time, 20f, 150f);
-        GraphNode multiplyNode = addShaderNode(library, multiply, 240f, 60f);
-        GraphNode outputNode = addShaderNode(library, outputType, 470f, 60f);
+        GraphNode colourNode = addShaderNode(library, colour, 40f, 60f);
+        GraphNode timeNode = addShaderNode(library, time, 40f, 300f);
+        GraphNode multiplyNode = addShaderNode(library, multiply, 480f, 120f);
+        GraphNode outputNode = addShaderNode(library, outputType, 940f, 120f);
 
         shaderGraph.connect(colourNode.getOutputPorts().get(0), multiplyNode.getInputPorts().get(0));
         shaderGraph.connect(timeNode.getOutputPorts().get(0), multiplyNode.getInputPorts().get(1));
@@ -3168,9 +3170,9 @@ public class CgUiGalleryScene extends UiDocumentScene {
         // Left unconnected on purpose. These are the three nodes a preview system exists to show —
         // UV's red/green gradient on a quad, Position and Normal on a sphere — and none of them needs
         // to be wired to anything for its thumbnail to be the point.
-        addShaderNode(library, library.get("cg:Input/Geometry/uv"), 20f, 330f);
-        addShaderNode(library, library.get("cg:Input/Geometry/position"), 240f, 330f);
-        addShaderNode(library, library.get("cg:Input/Geometry/normal"), 460f, 330f);
+        addShaderNode(library, library.get("cg:Input/Geometry/uv"), 40f, 660f);
+        addShaderNode(library, library.get("cg:Input/Geometry/position"), 480f, 660f);
+        addShaderNode(library, library.get("cg:Input/Geometry/normal"), 920f, 660f);
 
         // Recompile whenever the graph's shape changes. Debounced only by the fact that a connection is
         // a discrete user action; a per-keystroke trigger would want real debouncing (6.3.8).
@@ -3244,7 +3246,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         Button fit = new Button("fit");
         fit.addClass("canvas-btn");
         fit.attachListener(() -> {
-            graph.fitToContent(24f);
+            graph.fitToContent(48f);
             updateGraphStatus();
         });
 
@@ -3331,26 +3333,26 @@ public class CgUiGalleryScene extends UiDocumentScene {
         // hand and the document can only file it as "authored as a widget", so a reload brings it back
         // as a placeholder with no controls. Which is exactly what this page did until it was noticed.
         GraphNode position = factory.create(library.get("shader.Position"),
-                library.get("shader.Position").create(20f, 30f));
+                library.get("shader.Position").create(40f, 60f));
         NodePort positionOut = position.getOutputPorts().get(0);
-        graph.addNode(position, 20f, 30f);
+        graph.addNode(position, 40f, 60f);
 
         GraphNode normal = factory.create(library.get("shader.NormalVector"),
-                library.get("shader.NormalVector").create(20f, 210f));
+                library.get("shader.NormalVector").create(40f, 420f));
         NodePort normalOut = normal.getOutputPorts().get(0);
-        graph.addNode(normal, 20f, 210f);
+        graph.addNode(normal, 40f, 420f);
 
         GraphNode noise = factory.create(library.get("shader.PerlinNoise3D"),
-                library.get("shader.PerlinNoise3D").create(250f, 200f));
+                library.get("shader.PerlinNoise3D").create(500f, 400f));
         NodePort noiseCoords = noise.getInputPorts().get(0);
         NodePort noiseValue = noise.getOutputPorts().get(0);
-        graph.addNode(noise, 250f, 200f);
+        graph.addNode(noise, 500f, 400f);
 
         GraphNode add = factory.create(library.get("shader.Add"),
-                library.get("shader.Add").create(480f, 40f));
+                library.get("shader.Add").create(960f, 80f));
         NodePort addA = add.getInputPorts().get(0);
         NodePort addB = add.getInputPorts().get(1);
-        graph.addNode(add, 480f, 40f);
+        graph.addNode(add, 960f, 80f);
 
         graph.connect(positionOut, addA);
         graph.connect(normalOut, noiseCoords);
@@ -3508,7 +3510,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
 
         Button open = new Button("open inspector");
         open.addClass("canvas-btn");
-        open.attachListener(() -> window.show().moveTo(40f, 90f));
+        open.attachListener(() -> window.show().moveTo(80f, 180f));
 
         // The window goes on the PANE, not in the row: a Dialog is position:absolute against its
         // containing block, so putting it in a flex row would have it float over the row's other child
@@ -3519,7 +3521,7 @@ public class CgUiGalleryScene extends UiDocumentScene {
         pane.append(row(slot("panel"), open));
         pane.append(row);
         pane.append(window);
-        window.show().moveTo(16f, 78f);
+        window.show().moveTo(32f, 156f);
     }
 
     /** Readable for a log line — arrays are the reason this is not just String.valueOf. */

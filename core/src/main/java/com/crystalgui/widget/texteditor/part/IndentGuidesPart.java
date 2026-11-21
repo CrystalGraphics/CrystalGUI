@@ -125,7 +125,7 @@ public final class IndentGuidesPart extends EditorViewPart {
                 else guide.removeClass(TextEditor.ACTIVE_GUIDE_CLASS);
                 StyleGroup.defaultPipeline(guide.getStyle().getLayoutGroup(),
                         l -> l.positionType(TaffyPosition.ABSOLUTE)
-                                .left(left).top(top).width(1f).height(height));
+                                .left(left).top(top).width(2f).height(height));
             }
         }
         pool.endPass();

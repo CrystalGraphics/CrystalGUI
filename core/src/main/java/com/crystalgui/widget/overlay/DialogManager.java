@@ -41,7 +41,7 @@ public final class DialogManager {
      * {@code UIDragController.DEFAULT_THRESHOLD_PX}, which is also a behavioural constant rather than
      * a visual one.</p>
      */
-    public static final float DEFAULT_CASCADE_STEP = 24f;
+    public static final float DEFAULT_CASCADE_STEP = 48f;
 
     /**
      * Base stacking index. Managed dialogs are raised from here upward, so they sit above ordinary

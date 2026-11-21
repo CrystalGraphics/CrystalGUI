@@ -77,7 +77,7 @@ public final class WindowPreviewRow extends UIElement {
     }
 
     /** Space kept between the row and the screen's edges, each side counted once. */
-    private static final float SCREEN_MARGIN = 8f;
+    private static final float SCREEN_MARGIN = 16f;
     /** The least a picture is squeezed to: the header's icon and close still need room, so cards stop shrinking here. */
     private static final float MIN_SQUEEZE = 0.2f;
 

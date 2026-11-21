@@ -286,7 +286,7 @@ public final class CueSelector {
                 @Override public boolean hasChildren(Node item) { return !item.children.isEmpty(); }
             });
             tree.addClass("cue-selector-tree");
-            tree.setItemHeight(22f);
+            tree.setItemHeight(44f);
             // Only the twisty folds: a double press on a cue is two plays, not a fold
             tree.setFoldsOnActivate(false);
             tree.setRenderer(new Rows(tree));

@@ -196,6 +196,28 @@ selectors, `~`/`+`, `@media`, `@import`.
 > **Sizes belong in CSS, not Java.** If you are typing a pixel value into a widget, it probably wants
 > to be a rule instead — that is what makes a theme possible later.
 
+### Scale: a `px` is a pixel at 100 %
+
+Lengths are written for a scale of 1: `font-size: 20px` is twenty real pixels on a display at 100 %. What a
+document actually draws at is three numbers multiplied, all owned by `UiScale`:
+
+| Part | Set by | Stored as |
+|---|---|---|
+| The screen | the operating system's display scaling, per monitor (`CgDisplayScale`) | nothing — read each frame |
+| The desktop | Settings › Appearance › Scale | `appearance.scale`, e.g. `"125%"` |
+| The application | Ctrl + / Ctrl − / Ctrl 0 inside it, in browser steps | `appearance.zoom.<app id>` |
+
+```java
+Connection follow = UiScale.bind(document, "mymod:inventory");   // follows all three
+float now = UiScale.of("mymod:inventory");
+```
+
+- Minecraft's GUI scale does not apply; only the HUD canvas keeps it.
+- A zoom never makes the desktop smaller than 1024 × 640 logical pixels.
+- Setting `boxes().setUiScale` by hand stops a document following; a fixed-scale screen does that on purpose.
+- Files written before this (`.cgui` format 1, graphs `v` 1, desktop sessions 2, workbench sessions 6) are read
+  at twice their lengths once, then saved in the new form.
+
 ---
 
 ## 4. A networked UI

@@ -1,11 +1,11 @@
 {
-  "cgui": 1,
+  "cgui": 2,
   "root": {
     "kind": "element",
     "style": {
       "flex-direction": "column",
-      "width": "160px",
-      "gap": "4px 4px"
+      "width": "320px",
+      "gap": "8px 8px"
     },
     "children": [
       {

@@ -603,7 +603,7 @@ public class ScrollerView extends UIElement {
     }
 
     /** One "line" — what a single scrollbar-arrow click moves. Matches the wheel's per-notch step. */
-    private static final float LINE_HEIGHT_PX = 40f;
+    private static final float LINE_HEIGHT_PX = 80f;
 
     /** Wheel deltas arrive already normalised to this engine's top-left-origin convention (same sign
      * as Y), so a positive notch is wheel-DOWN and increases scrollTop. */

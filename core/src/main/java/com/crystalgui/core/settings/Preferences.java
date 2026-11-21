@@ -20,13 +20,13 @@ import javax.annotation.Nullable;
  *
  * <pre>{@code
  * // Anyone, any thread
- * float scale = Preferences.current().uiScale();
+ * float desktop = Preferences.current().desktopScale();      // a document's scale is UiScale's, not this
  *
  * // An application's settings page: writing a desktop-wide setting is writing the preference
  * settings.set(SettingsLayer.USER, WorkbenchSettings.UI_THEME, "Crystal Light");
  *
  * // Directly
- * Preferences.update(p -> p.withUiScale(1.5f));
+ * Preferences.update(p -> p.withDesktopScale(1.5f).withZoom("crystalgui:editor", 1.25f));
  *
  * // A document hears every change on its own sequence
  * Preferences.PUBLISHED.changes().subscribe(() -> document.invalidateStyle());
@@ -43,8 +43,12 @@ public final class Preferences {
 
     public static final String THEME = "appearance.theme";
     public static final String SCHEME = "appearance.editorScheme";
-    public static final String UI_SCALE = "appearance.uiScale";
+    /** The desktop's scale, multiplied with the screen's. */
+    public static final String DESKTOP_SCALE = "appearance.scale";
     public static final String LOCALE = "appearance.locale";
+    /** {@code appearance.zoom.<application id>}: one application's zoom, multiplied with the desktop's scale. */
+    public static final String ZOOM_PREFIX = "appearance.zoom.";
+    private static final String LEGACY_UI_SCALE = "appearance.uiScale";
     private static final String OVERRIDE_PREFIX = "appearance.token.";
     private static final String KEYMAP_PREFIX = "keymap.";
     private static final String NOTIFICATIONS_PREFIX = "notifications.";
@@ -57,7 +61,7 @@ public final class Preferences {
     static {
         declare(THEME);
         declare(SCHEME);
-        declare(UI_SCALE);
+        declare(DESKTOP_SCALE);
         declare(LOCALE);
     }
 
@@ -88,7 +92,7 @@ public final class Preferences {
     /** Whether {@code key} is a desktop-wide preference. */
     public static boolean isDesktopWide(String key) {
         return DESKTOP_WIDE.contains(key) || key.startsWith(OVERRIDE_PREFIX) || key.startsWith(KEYMAP_PREFIX)
-                || key.startsWith(NOTIFICATIONS_PREFIX);
+                || key.startsWith(NOTIFICATIONS_PREFIX) || key.startsWith(ZOOM_PREFIX);
     }
 
     // ── Reading ─────────────────────────────────────────────────────────────────────────────────
@@ -123,14 +127,35 @@ public final class Preferences {
         return out;
     }
 
-    /** The UI scale; 2 where the user never chose one. */
-    public float uiScale() {
-        String held = values.get(UI_SCALE);
-        if (held == null) return 2f;
+    /** The desktop's scale, on top of the screen's; 1 where the user never chose one. */
+    public float desktopScale() {
+        return parse(values.get(DESKTOP_SCALE), 1f);
+    }
+
+    /** {@code app}'s zoom, on top of the desktop's scale; 1 where it was never zoomed. */
+    public float zoom(String app) {
+        return parse(values.get(ZOOM_PREFIX + app), 1f);
+    }
+
+    /** Every application someone zoomed, to its zoom. */
+    public Map<String, Float> zooms() {
+        Map<String, Float> out = new LinkedHashMap<>();
+        values.forEach((key, value) -> {
+            if (key.startsWith(ZOOM_PREFIX)) out.put(key.substring(ZOOM_PREFIX.length()), parse(value, 1f));
+        });
+        return out;
+    }
+
+    private static float parse(@Nullable String held, float otherwise) {
+        if (held == null) return otherwise;
         try {
-            return Float.parseFloat(held);
+            String number = held.trim();
+            boolean percent = number.endsWith("%");
+            float value = Float.parseFloat(percent ? number.substring(0, number.length() - 1).trim() : number);
+            if (percent) value /= 100f;
+            return value > 0f ? value : otherwise;
         } catch (NumberFormatException unreadable) {
-            return 2f;
+            return otherwise;
         }
     }
 
@@ -171,8 +196,33 @@ public final class Preferences {
         return values.equals(all) ? this : new Preferences(all);
     }
 
-    public Preferences withUiScale(float scale) {
-        return with(UI_SCALE, Float.toString(scale));
+    /** The desktop's scale; 1 is stored as no entry. */
+    public Preferences withDesktopScale(float scale) {
+        return with(DESKTOP_SCALE, scale == 1f ? null : percent(scale));
+    }
+
+    /** {@code app}'s zoom; 1 is stored as no entry, so the file lists only the applications someone zoomed. */
+    public Preferences withZoom(String app, float zoom) {
+        return with(ZOOM_PREFIX + app, zoom == 1f ? null : percent(zoom));
+    }
+
+    /**
+     * Before UI16 the one stored scale was real pixels per unit at lengths written for 2; it becomes the desktop's
+     * scale at half the value. A load from disk passes through here.
+     */
+    static Map<String, String> migrated(Map<String, String> loaded) {
+        String legacy = loaded.get(LEGACY_UI_SCALE);
+        if (legacy == null) return loaded;
+        Map<String, String> next = new LinkedHashMap<>(loaded);
+        next.remove(LEGACY_UI_SCALE);
+        float half = parse(legacy, 2f) / 2f;
+        if (half != 1f && !next.containsKey(DESKTOP_SCALE)) next.put(DESKTOP_SCALE, percent(half));
+        return next;
+    }
+
+    /** A scale as it is stored and shown, {@code "125%"}; read back by {@link #desktopScale} and {@link #zoom}. */
+    public static String percent(float scale) {
+        return Math.round(scale * 100f) + "%";
     }
 
     public Preferences withLocale(@Nullable Locale locale) {

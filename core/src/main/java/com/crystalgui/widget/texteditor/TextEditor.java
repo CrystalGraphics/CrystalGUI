@@ -1997,7 +1997,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
             if (viewLine < 0 || viewLine >= count) continue;
             ProjectedLines.ModelPosition model = modelAt(viewLine);
             float end = xOfView(viewLine, projectionAt(viewLine).maxColumn(model.viewLineInRow()));
-            widestSeen = Math.max(widestSeen, origin + end + 1f);
+            widestSeen = Math.max(widestSeen, origin + end + 2f);
         }
     }
 
@@ -5007,8 +5007,8 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
 
     /** Smallest and largest the editor will zoom to. Below 4 the glyphs are unreadable; above 96 one
      * screenful is a handful of words and every cached row measurement is being thrown away. */
-    public static final float MIN_FONT_SIZE = 4f;
-    public static final float MAX_FONT_SIZE = 96f;
+    public static final float MIN_FONT_SIZE = 8f;
+    public static final float MAX_FONT_SIZE = 192f;
 
     /**
      * Sets the editor's font size.
@@ -6207,7 +6207,7 @@ public class TextEditor extends ScrollerView implements UndoScope, DataProvider 
         // band both read it.
         LineProjection projection = projectionAt(viewLine);
         ProjectedLines.ModelPosition model = modelAt(viewLine);
-        final float width = xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 1f;
+        final float width = xOfView(viewLine, projection.maxColumn(model.viewLineInRow())) + 2f;
         StyleGroup.defaultPipeline(line.getStyle().getLayoutGroup(),
                 l -> l.positionType(TaffyPosition.ABSOLUTE)
                         .top(top).left(left).width(width).height(lineHeight()));

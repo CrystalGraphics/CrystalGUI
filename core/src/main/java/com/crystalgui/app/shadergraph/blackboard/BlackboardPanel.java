@@ -858,11 +858,11 @@ public class BlackboardPanel extends UIElement implements DataProvider {
         } else if (index < rows.size()) {
             Box row = rows.get(index).element().box();
             if (row == null) return;
-            top = row.y() - origin - 2f;
+            top = row.y() - origin - 4f;
         } else {
             Box last = rows.get(rows.size() - 1).element().box();
             if (last == null) return;
-            top = last.y() - origin + last.height() + 2f;
+            top = last.y() - origin + last.height() + 4f;
         }
         StyleGroup.inlinePipeline(dropLine.getStyle().getLayoutGroup(), l -> l.top(top));
     }

@@ -31,7 +31,7 @@ public final class SnapScene implements SnapTargets {
     public static final SnapScene EMPTY = new SnapScene(List.of(), List.of(), null);
 
     /** Anything thinner than this is not a gap. */
-    private static final float GAP_EPSILON = 0.5f;
+    private static final float GAP_EPSILON = 1.0f;
 
     /** A box in the solver's space. */
     public record Rect(float x, float y, float width, float height) {

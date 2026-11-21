@@ -69,7 +69,7 @@ public final class SnapZones {
      * rounding at a fractional {@code uiScale} and for the one frame of layout a live drag can lag by.
      * </p>
      */
-    public static final float EDGE = 2f;
+    public static final float EDGE = 4f;
 
     /**
      * How much of each end of a side edge is a CORNER rather than the edge proper.

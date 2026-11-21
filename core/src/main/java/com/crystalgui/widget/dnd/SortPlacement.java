@@ -44,10 +44,10 @@ public final class SortPlacement {
     public static final float DROP_AREA_RATIO = 0.8f;
 
     /** The band round that share, in the rects' pixels: never thinner than this... */
-    public static final float MIN_BAND = 1f;
+    public static final float MIN_BAND = 2f;
 
     /** ...and never thicker than this, so a large container's edge is not a wide dead zone. */
-    public static final float MAX_BAND = 15f;
+    public static final float MAX_BAND = 30f;
 
     private SortPlacement() {
     }

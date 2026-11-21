@@ -5,12 +5,15 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 import javax.annotation.Nullable;
 
 import com.google.gson.JsonArray;
 import com.google.gson.JsonElement;
 import com.google.gson.JsonObject;
+import com.google.gson.JsonPrimitive;
 import com.crystalgraphics.serialization.CgCodecException;
 import com.crystalgraphics.serialization.format.CgJsonOps;
 import com.crystalgraphics.util.io.CgIO;
@@ -112,6 +115,7 @@ public final class UiTemplates {
             throw new UiTemplateException(origin, null, "this document is format " + format
                     + " and this build reads " + UiTemplate.FORMAT + " -- update the mod");
         }
+        if (format < 2) document = atScaleOne(document);
 
         JsonElement root = document.get("root");
         if (root == null || !root.isJsonObject()) {
@@ -129,7 +133,7 @@ public final class UiTemplates {
             }
         }
 
-        UiTemplate template = new UiTemplate(origin, format, strings(document, "stylesheets"),
+        UiTemplate template = new UiTemplate(origin, UiTemplate.FORMAT, strings(document, "stylesheets"),
                 stringOr(document, "model"), stringOr(document, "package"), kindName,
                 TemplateParams.declare(document, origin), objectOr(document, "preview"),
                 root.getAsJsonObject());
@@ -209,6 +213,72 @@ public final class UiTemplates {
         String source = CgIO.loadSource(path);
         if (source == null) throw new UiTemplateException(assetId, null, "no such document at " + path);
         return source;
+    }
+
+    // ── Migration ───────────────────────────────────────────────────────────
+
+    private static final Pattern PX = Pattern.compile("(?<![\\w.#-])(-?)(\\d+(?:\\.\\d+)?|\\.\\d+)px\\b");
+
+    /**
+     * A format 1 document as format 2: written for a scale of 2, so every px length in a style and every preview
+     * size doubles. A copy; the caller's tree is untouched.
+     */
+    static JsonObject atScaleOne(JsonObject document) {
+        // Through text: JsonObject.deepCopy is newer than the Gson a Java 8 host ships.
+        JsonObject out = CgJsonOps.fromText(document.toString()).getAsJsonObject();
+        out.addProperty("cgui", UiTemplate.FORMAT);
+        doubleStyles(out);
+        JsonElement preview = out.get("preview");
+        JsonElement sizes = preview != null && preview.isJsonObject() ? preview.getAsJsonObject().get("sizes") : null;
+        if (sizes != null && sizes.isJsonArray()) {
+            // Rebuilt rather than set in place: JsonArray.set is newer than the Gson a Java 8 host ships.
+            JsonArray doubled = new JsonArray();
+            for (JsonElement each : sizes.getAsJsonArray()) {
+                if (!each.isJsonArray()) {
+                    doubled.add(each);
+                    continue;
+                }
+                JsonArray pair = new JsonArray();
+                for (JsonElement n : each.getAsJsonArray()) {
+                    pair.add(n.isJsonPrimitive() && n.getAsJsonPrimitive().isNumber() ? new JsonPrimitive(n.getAsFloat() * 2f) : n);
+                }
+                doubled.add(pair);
+            }
+            preview.getAsJsonObject().add("sizes", doubled);
+        }
+        return out;
+    }
+
+    private static void doubleStyles(JsonElement node) {
+        if (node.isJsonArray()) {
+            for (JsonElement each : node.getAsJsonArray()) doubleStyles(each);
+        } else if (node.isJsonObject()) {
+            for (Map.Entry<String, JsonElement> entry : node.getAsJsonObject().entrySet()) {
+                JsonElement value = entry.getValue();
+                if (entry.getKey().equals("style") && value.isJsonObject()) {
+                    for (Map.Entry<String, JsonElement> declaration : value.getAsJsonObject().entrySet()) {
+                        JsonElement text = declaration.getValue();
+                        if (text.isJsonPrimitive() && text.getAsJsonPrimitive().isString()) {
+                            declaration.setValue(new JsonPrimitive(doublePx(text.getAsString())));
+                        }
+                    }
+                } else {
+                    doubleStyles(value);
+                }
+            }
+        }
+    }
+
+    static String doublePx(String css) {
+        Matcher m = PX.matcher(css);
+        StringBuffer out = new StringBuffer();
+        while (m.find()) {
+            float doubled = Float.parseFloat(m.group(2)) * 2f;
+            String number = doubled == (int) doubled ? Integer.toString((int) doubled) : Float.toString(doubled);
+            m.appendReplacement(out, m.group(1) + number + "px");
+        }
+        m.appendTail(out);
+        return out.toString();
     }
 
     // ── Header helpers ──────────────────────────────────────────────────────

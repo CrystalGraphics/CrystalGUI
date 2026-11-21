@@ -26,7 +26,7 @@
      * A negative margin makes an item contribute nothing to its container's content size in this
      * layout engine, so a heading wider than every row could not widen the row it sits in: it painted
      * past the panel's right edge and was hard-clipped, with no ellipsis and nothing to scroll to.
-     * Measured on a 100px panel -- band 137px wide inside an 88px row.
+     * Measured on a 200px panel -- band 274px wide inside an 176px row.
      *
      * The inset lives on the row's PARTS instead (label's padding-left, control's padding-right), so a
      * band is full-bleed by having nothing to cancel. */
@@ -39,7 +39,7 @@
     overflow: auto;
 }
 
-/* The row. `align-items: center` is what puts a 14px control in the middle of an 18px row rather than
+/* The row. `align-items: center` is what puts a 28px control in the middle of an 36px row rather than
  * at its top — the two heights differ on purpose, and the gap is the rhythm. */
 .__configurator__ {
     flex-direction: row;
@@ -56,10 +56,10 @@
  * A FRACTION OF THE ROW, capped, and not a flat `--cfg-label-w`.
  *
  * The cap is what a wide panel gets, so nothing moves at the width this panel is usually docked at.
- * What the fraction buys is the narrow case. With a flat width the label column held its 114px however
+ * What the fraction buys is the narrow case. With a flat width the label column held its 228px however
  * little room the row had, and since the control column's basis is `width: 0` the whole shortfall landed
  * on the VALUE: a docked inspector dragged in showed "size" beside a column two characters wide, with
- * "COLUMN" broken across three lines and 80px of empty label column next to it. `flex-shrink` cannot
+ * "COLUMN" broken across three lines and 160px of empty label column next to it. `flex-shrink` cannot
  * reach that — a row whose bases already fit its container never shrinks anything, and a value that
  * WRAPS never reports wanting more — so the slack has to be given up by the declared width itself.
  *
@@ -69,7 +69,7 @@
  * `outline-of...`. Nothing in this panel truncates: the panel scrolls, so there is somewhere for a long
  * row to go, and an ellipsis only hides what the scrollbar was going to reach.
  *
- * A flat pixel floor was the first attempt and is what this replaced -- 48px, which is below every
+ * A flat pixel floor was the first attempt and is what this replaced -- 96px, which is below every
  * label in the panel, so it only ever bought ellipsis. It needs `overflow: visible` here (the default):
  * Taffy gives a scroll container an automatic minimum of ZERO, which is right for a box that clips and
  * would silently put the ellipsis back. */
@@ -77,12 +77,12 @@
     color: var(--cfg-label-text);
     /* ON `flex-basis`, NOT `width`, and that is the whole trick. CSS §4.5 computes the automatic minimum
      * as min(specified size suggestion, content size suggestion) — so an item with a definite `width`
-     * clamps its own content minimum away, and `width: 114px` with `min-width: auto` sat at 114px with
+     * clamps its own content minimum away, and `width: 228px` with `min-width: auto` sat at 228px with
      * `border-bottom-left-radius` painting straight over its value. `width` stays auto; the basis is
      * what sets the column, and §4.5 does not consult it.
      *
      * A FLAT WIDTH, not a fraction, which is what the token's own note argues for: Unity's column is
-     * ~114px in a 275px panel and ~114px in an 800px one. A `45%` basis capped by `max-width` was the
+     * ~228px in a 550px panel and ~228px in an 1600px one. A `45%` basis capped by `max-width` was the
      * previous shape and had the same overlap for a different reason -- `max-width` is applied after
      * `min-width` here, so the cap won and the content minimum it was supposed to lose to did not.
      * There is no cap now: `flex-grow: 0` is what stops the column growing with the panel, and
@@ -91,7 +91,7 @@
     /* THE PANEL'S LEFT INSET, carried here now that the panel has none -- see its own note. */
     padding-left: var(--cfg-pad-x);
     /* INSIDE the box, so the content minimum includes it: a column shrunk to its label still holds the
-     * label off its value. Without it a narrow panel read as "margin0.0 0.0" -- the gap alone is 4px and
+     * label off its value. Without it a narrow panel read as "margin0.0 0.0" -- the gap alone is 8px and
      * what used to separate them was the column's leftover slack, which is exactly what shrinking spends.
      */
     padding-right: var(--cfg-label-gutter);
@@ -107,15 +107,15 @@
  * closes a loop: the row is stretched to the panel's CONTENT width, that width is whatever the widest
  * row asked for, and an editable field inside is `flex-grow: 1` over a zero basis — so the field's width
  * is free space that depends on a width that depends on the field. Both answers are self-consistent (the
- * field fills its column at ~1364px, or the column is measured with no free space and the field sits at
- * its ~66px content size), the engine lays out ONCE, and whichever pass wrote the box last is what you
+ * field fills its column at ~2728px, or the column is measured with no free space and the field sits at
+ * its ~132px content size), the engine lays out ONCE, and whichever pass wrote the box last is what you
  * saw. Hovering forced another pass, so every field snapped narrow as the pointer entered the panel and
  * back as it left — with the computed `flex-grow: 1` and `width: 0` identical in both states.
  *
  * A definite basis removes the loop rather than damping it. `align-self: flex-start` with
  * `min-width: 100%` was tried first, to size a row by its own content instead of by its widest sibling,
  * and does NOT work: the percentage resolves against the scroll content box, so the row is stretched to
- * the same 1462px and the loop is untouched.
+ * the same 2924px and the loop is untouched.
  *
  * WHAT THE AUTO BASIS BOUGHT IS NOT LOST. The panel's scroll extent still reaches a long fact — measured
  * at 1462.5 with the rows at 315 — because it is the fact's own TEXT that overflows now rather than the
@@ -143,7 +143,7 @@
  * options bars fit a dozen numbers across by giving each exactly its digits. The cell is the bar's full
  * height, so its hint hangs from under the bar rather than over it. */
 .__configurator__.__compact__ {
-    gap: 2px;
+    gap: 4px;
     height: 100%;
     min-height: 0;
     padding-top: 0;
@@ -168,13 +168,13 @@
 }
 /* A leaf's field fills its control in a row, from a zero basis -- which, in a cell with no width of its
  * own, is nothing. So a cell says how wide each kind is. */
-.__configurator__.__compact__ .__config-control__.__number__ { width: 38px; }
+.__configurator__.__compact__ .__config-control__.__number__ { width: 76px; }
 .__configurator__.__compact__ .__config-control__.__text__,
-.__configurator__.__compact__ .__config-control__.__asset__ { width: 80px; }
+.__configurator__.__compact__ .__config-control__.__asset__ { width: 160px; }
 .__configurator__.__compact__ .__config-control__.__select__ dropdown {
     width: auto;
     flex-grow: 0;
-    min-width: 72px;
+    min-width: 144px;
 }
 .__configurator__.__compact__ .__config-control__.__anchor__ { height: 100%; }
 
@@ -186,7 +186,7 @@
 
 /* ── THE KIT ────────────────────────────────────────────────────────────────────────────────────
  * One height for every control kind, so a panel of unlike controls sits on one rhythm. Their base
- * rules disagree by design — a text field is 16px, a dropdown 14, a checkbox 12, each right on its own
+ * rules disagree by design — a text field is 32px, a dropdown 14, a checkbox 12, each right on its own
  * — and a form is where that stops being right. */
 .__config-control__ textfield,
 .__config-control__ dropdown,
@@ -220,19 +220,19 @@
 .__config-control__ textfield {
     background: var(--cfg-field);
     color: var(--cfg-value-text);
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--configkit-field-border, #343434);
     border-top-color: var(--cfg-field-border-top);
     border-bottom-color: var(--cfg-field-border-bottom);
-    border-radius: 4px;
+    border-radius: 8px;
 }
-/* A configurator textfield's border used to be bumped to 2px here (the base rule above stays 1px,
+/* A configurator textfield's border used to be bumped to 4px here (the base rule above stays 2px,
  * shared with the port-default editor) on the theory that the bigger inspector field needed a
  * proportionally thicker line to still read as framed. That asymmetry is what actually caused the
  * digit-clipping saga on `colorselector .__channel-row__ textfield`'s RGBA boxes — `box-sizing:
  * border-box` means a thicker border eats directly out of the content area on a box with zero size
  * slack, and no amount of retuning padding or radius changes that a THICKER border on the SAME box is a
- * SMALLER content area. Reverted: the configurator now shares the exact 1px border the shadergraph field
+ * SMALLER content area. Reverted: the configurator now shares the exact 2px border the shadergraph field
  * has, so both are the literal same rule with nothing to fall out of step. */
 .__config-control__ dropdown {
     background: var(--cfg-popup);
@@ -275,7 +275,7 @@
     height: var(--cfg-check);
     min-height: var(--cfg-check);
 }
-/* AN OUTLINED FACE AND A GREEN TICK — the same control the shell's buttons are, at 12px.
+/* AN OUTLINED FACE AND A GREEN TICK — the same control the shell's buttons are, at 24px.
  *
  * It was the kit's flat `--cfg-field`, on the reasoning that green is semantic and would read as a
  * VALUE on a panel where a colour swatch is itself a control. What that misses is that a field colour
@@ -289,9 +289,9 @@
 .__config-control__.__boolean__ checkbox .__mark__,
 .__config-control__.__boolean__ checkbox::part(mark) {
     background: #00000000;
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--button-border, #393B40);
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
 }
 .__config-control__.__boolean__ checkbox:checked .__mark__,
 .__config-control__.__boolean__ checkbox:checked::part(mark) {
@@ -311,8 +311,8 @@
     width: 100%;
     height: var(--cfg-ctrl-h);
     flex-direction: column;
-    border-radius: 2px;
-    outline: 1px var(--configkit-swatch-border, #1A1A1A);
+    border-radius: 4px;
+    outline: 2px var(--configkit-swatch-border, #1A1A1A);
     outline-offset: 0px;
     cursor: pointer;
 }
@@ -326,11 +326,11 @@
  * 40%-wide bar floating on nothing. */
 .__config-control__.__color__ .__alpha-bar__ {
     width: 100%;
-    height: 3px;
+    height: 6px;
     background: var(--configkit-alpha-bg, #14140F);
 }
 .__config-control__.__color__ .__alpha-fill__ {
-    height: 3px;
+    height: 6px;
     background: var(--configkit-alpha-fill, #FFFFFF);
 }
 /* The hex beside the swatch is a compact row's, and a panel that wants one shows it. */
@@ -346,8 +346,8 @@
 }
 /* THE SELECT'S ARROW: without it a mask read as a text field, and it opens a list just as a select does. */
 .__config-control__.__mask__ .__toggle__::part(post-icon) {
-    width: 8px;
-    height: 8px;
+    width: 16px;
+    height: 16px;
     flex-grow: 0;
     flex-shrink: 0;
     overlay: shape("chevron-down");
@@ -356,19 +356,19 @@
 .__config-control__.__suggests__ { position: relative; }
 .__config-control__.__suggests__ .__suggest-arrow__ {
     position: absolute;
-    right: 8px;
+    right: 16px;
     top: 0px;
-    width: 8px;
+    width: 16px;
     height: 100%;
     overlay: shape("chevron-down");
     overlay-size: contain;
     cursor: pointer;
 }
 /* Text stops short of the arrow rather than running under it. */
-.__config-control__.__suggests__ textfield { padding-right: 20px; }
+.__config-control__.__suggests__ textfield { padding-right: 40px; }
 .__config-control__.__mask__ .__mask-panel__ .__mask-row__ {
     width: 100%;
-    padding: 2px;
+    padding: 4px;
 }
 /* Same fix as `.__config-control__.__boolean__` above, and the same reason: the base sheet's
  * `checkbox:checked .__mark__` is semantic green, and a mask panel is exactly the place that reads
@@ -406,36 +406,36 @@
     flex-direction: row;
     flex-wrap: wrap;
     align-items: center;
-    gap: 3px;
+    gap: 6px;
     width: 100%;
     min-height: var(--cfg-ctrl-h);
-    padding: 2px;
+    padding: 4px;
     background: var(--cfg-field);
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--configkit-field-border, #343434);
     border-top-color: var(--cfg-field-border-top);
     border-bottom-color: var(--cfg-field-border-bottom);
-    border-radius: 4px;
+    border-radius: 8px;
 }
 .__config-control__.__classchips__ .__chip__ {
     flex-direction: row;
     align-items: center;
-    gap: 2px;
-    height: 14px;
-    padding-left: 5px;
-    padding-right: 2px;
-    border-radius: var(--radius-control, 3px);
+    gap: 4px;
+    height: 28px;
+    padding-left: 10px;
+    padding-right: 4px;
+    border-radius: var(--radius-control, 6px);
     background: var(--cfg-field);
-    outline: 1px var(--button-border, #393B40);
+    outline: 2px var(--button-border, #393B40);
 }
-.__config-control__.__classchips__ .__chip__.__flagged__ { outline: 1px var(--warning, #CCA700); }
+.__config-control__.__classchips__ .__chip__.__flagged__ { outline: 2px var(--warning, #CCA700); }
 .__config-control__.__classchips__ .__chip-label__ { color: var(--fg, #DFE1E5); }
 .__config-control__.__classchips__ .__chip-remove__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
-    padding: 2px;
-    border-radius: var(--radius-control, 3px);
+    padding: 4px;
+    border-radius: var(--radius-control, 6px);
     overlay: icon("crystalgui:x");
     overlay-size: contain;
     overlay-origin: content-box;
@@ -448,35 +448,35 @@
 }
 .__config-control__.__classchips__ .__chip-prompt__ {
     width: 0;
-    min-width: 40px;
+    min-width: 80px;
     flex-grow: 1;
-    height: 14px;
-    min-height: 14px;
+    height: 28px;
+    min-height: 28px;
     background: #00000000;
     border-width: 0px;
 }
 .__config-control__.__classchips__ .__chip-hint__ {
     position: absolute;
-    left: 6px;
-    top: 3px;
+    left: 12px;
+    top: 6px;
     color: var(--fg-hint, #7A7A7A);
 }
-.__chip-suggestions__ { padding: 2px; min-width: 120px; }
+.__chip-suggestions__ { padding: 4px; min-width: 240px; }
 .__chip-suggestions__ .__chip-suggestion__ {
-    padding: 2px 6px;
-    border-radius: var(--radius-control, 3px);
+    padding: 4px 12px;
+    border-radius: var(--radius-control, 6px);
     color: var(--fg, #DFE1E5);
 }
 .__chip-suggestions__ .__chip-suggestion__:hover,
 .__chip-suggestions__ .__chip-suggestion__.__active__ { background: var(--accent-soft, #2E436E); }
 /* A TEXT FIELD'S LIST SCROLLS rather than growing off the screen: an installed-font list runs to hundreds. */
-.__chip-suggestions__ scrollerview { max-height: 240px; }
+.__chip-suggestions__ scrollerview { max-height: 480px; }
 .__chip-suggestions__ .__suggestion-separator__ {
-    height: 1px;
-    margin-top: 4px;
-    margin-bottom: 4px;
-    margin-left: 6px;
-    margin-right: 6px;
+    height: 2px;
+    margin-top: 8px;
+    margin-bottom: 8px;
+    margin-left: 12px;
+    margin-right: 12px;
     /* THE HINT COLOR, not the divider token: against the list's own raised surface a divider-grey line all but
      * vanished. */
     background: var(--fg-hint, #7A7A7A);
@@ -485,8 +485,8 @@
 /* ── Matrix ─────────────────────────────────────────────────────────────────────────────────────
  * A grid: one row per `.__matrix-row__`, cells stretching evenly across it. Unlabelled by design —
  * see MatrixControl's javadoc on why it self-labels. */
-.__config-control__.__matrix__ { flex-direction: column; gap: 1px; }
-.__config-control__.__matrix__ .__matrix-row__ { flex-direction: row; gap: 1px; }
+.__config-control__.__matrix__ { flex-direction: column; gap: 2px; }
+.__config-control__.__matrix__ .__matrix-row__ { flex-direction: row; gap: 2px; }
 .__config-control__.__matrix__ .__matrix-cell__ { width: 0; flex-grow: 1; }
 
 /* ── Asset ──────────────────────────────────────────────────────────────────────────────────────
@@ -513,7 +513,7 @@
     flex-grow: 1;
     flex-direction: row;
     align-items: center;
-    gap: 2px;
+    gap: 4px;
 }
 /* THE AXIS LETTER NEEDS A COLOUR OF ITS OWN, and the reason it survived this long is that its absence
  * was invisible in dark. It had no `color` rule anywhere, so it fell through inheritance to the COLOR
@@ -538,10 +538,10 @@
  * than the column and the value is what gets pushed out — clipped at the panel edge under ore.css while
  * looking correct under default.css. The track is the part with slack to give. */
 .__config-control__.__slider__ slider { width: 0; flex-grow: 1; flex-shrink: 1; }
-/* WIDE ENOUGH FOR THE UNIT, which a slider row now keeps: 34px fitted a bare number and clipped
+/* WIDE ENOUGH FOR THE UNIT, which a slider row now keeps: 68px fitted a bare number and clipped
  * `13.1%` the moment one was shown. Five characters is the worst case a one-decimal value with a unit
- * reaches in practice -- 13.1%, 96px. */
-.__config-control__.__slider__ .__number__ { width: 38px; flex-grow: 0; flex-shrink: 0; }
+ * reaches in practice -- 13.1%, 192px. */
+.__config-control__.__slider__ .__number__ { width: 76px; flex-grow: 0; flex-shrink: 0; }
 
 /* ── Groups ─────────────────────────────────────────────────────────────────────────────────────
  * Indented, NOT bordered. A border per group turns a panel three levels deep into a stack of nested
@@ -559,9 +559,9 @@
  * bands are full-bleed and its insets live on the rows' own parts.
  *
  * It also cannot afford one. The control column has a floor (--cfg-ctrl-min), so the content has a
- * min-content width of its own: measured at 289.7 in a 293.4 panel, which is 3.8px of slack. A gutter
+ * min-content width of its own: measured at 289.7 in a 293.4 panel, which is 7.6px of slack. A gutter
  * wider than that overflows, and a full-bleed band drawn at the content width then runs UNDER the bar
- * -- which is why 6px, 7px and 10px all looked identical and all looked like touching.
+ * -- which is why 12px, 14px and 20px all looked identical and all looked like touching.
  *
  * So the panel takes none, and the band stops short of the bar itself. A POSITIVE margin is safe here;
  * the negative one the panel's note warns about is what stopped a heading widening its row. */
@@ -571,15 +571,15 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 
 /* THE BAND STOPS SHORT OF THE BAR, and this is the knob for it.
  *
- * The bar is `--scrollbar-size` (4px) of the panel's right edge, so anything up to 4 here still sits
- * under it and only the excess is visible gap: at 6 there are 2px of surface between the band and the
+ * The bar is `--scrollbar-size` (8px) of the panel's right edge, so anything up to 4 here still sits
+ * under it and only the excess is visible gap: at 6 there are 4px of surface between the band and the
  * bar. Only while a bar is showing, so a panel with nothing to scroll keeps the full-bleed band the
  * rule above it describes.
  *
  * Right only, deliberately: the left edge is where the band's own text column is measured from, and
  * moving it moves `Size` and `Text` out of line with the `width` and `color` labels underneath. */
 .__v-gutter__ .__configurator-group__ > .__head__ {
-    margin-right: 6px;
+    margin-right: 12px;
 }
 
 
@@ -601,11 +601,11 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     color: var(--cfg-label-text);
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
-    margin-top: 2px;
-    margin-bottom: 1px;
+    margin-top: 4px;
+    margin-bottom: 2px;
     /* Softened, like every other control the theme draws: the band is the one filled shape in a form and a
      * square one reads as a seam across the panel. Themeable through the same token the controls use. */
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
 }
 /* NEITHER wrap NOR ellipsis: one line, and the band gets wider. This clipped, on the reasoning that a
  * title too long for the band had nowhere to go — true when the panel did not scroll sideways. It does
@@ -620,8 +620,8 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     white-space: nowrap;
 }
 .__configurator-group__ > .__head__ > .__arrow__ {
-    width: 8px;
-    height: 8px;
+    width: 16px;
+    height: 16px;
     flex-grow: 0;
     flex-shrink: 0;
     align-items: center;
@@ -657,10 +657,10 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 }
 .__configurator-group__ .__configurator-group__ > .__content__ > .__configurator__ > .__label__,
 .__configurator-group__ .__configurator-group__ > .__content__ > .__configurator-group__ > .__head__ {
-    padding-left: 16px;
+    padding-left: 32px;
 }
 .__configurator-group__ .__configurator-group__ .__configurator-group__ > .__content__ > .__configurator__ > .__label__ {
-    padding-left: 24px;
+    padding-left: 48px;
 }
 /* Collapsed keeps no box at all — so every box inside one measures 0, the same trap a closed Dialog
  * sets. Worth knowing before asserting on anything inside a collapsed group. */
@@ -669,7 +669,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 /* ── Headers ────────────────────────────────────────────────────────────────────────────────────
  * The SAME band a group's head uses, and for the same reason — a change of surface is the only thing
  * that reads as "a section starts here" on a flat panel — but no arrow and nothing to click: a header
- * does not own content, so there is nothing to collapse. `-6px` bleeds it to the panel edge exactly like
+ * does not own content, so there is nothing to collapse. `-12px` bleeds it to the panel edge exactly like
  * the group head does, and for the same reason: a strip that stops short of the edge reads as a button. */
 /* FILLS ITS COLUMN, where it used to be content-sized so a long heading could carry its width out to the
  * row. The column's basis is definite now, so nothing is carried out of it and a content-sized band
@@ -691,7 +691,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     padding-right: var(--cfg-pad-x);
     /* THE OTHER BAND. A group's head and a header row are two widgets that draw the same strip, so a
      * radius on one of them alone is the mismatch a panel shows as "some are, some aren't". */
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
 }
 /* Same fix, same reason as the group head's title just above — a header IS full width, so there is no
  * label column to have already solved this the way an ordinary row's `.__label__` does. */
@@ -762,9 +762,9 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 
 /* A hairline between two runs of rows. */
 .__configurator-separator__ {
-    height: 1px;
-    margin-top: 3px;
-    margin-bottom: 3px;
+    height: 2px;
+    margin-top: 6px;
+    margin-bottom: 6px;
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
@@ -774,16 +774,16 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 .__config-control__.__anchor__ {
     flex-direction: column;
     justify-content: center;
-    gap: 1px;
+    gap: 2px;
     min-height: var(--cfg-ctrl-h);
 }
 .__config-control__.__anchor__ > .__anchor-line__ {
     flex-direction: row;
-    gap: 1px;
+    gap: 2px;
 }
 .__config-control__.__anchor__ .__anchor-cell__ {
-    width: 4px;
-    height: 4px;
+    width: 8px;
+    height: 8px;
     background-color: var(--border-strong, #55607A);
     cursor: pointer;
 }
@@ -823,8 +823,8 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 }
 .__config-control__.__array__ > .__body__ {
     background: var(--cfg-list-body);
-    padding-top: 1px;
-    padding-bottom: 1px;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 .__config-control__.__array__ > .__body__ { flex-direction: column; }
 .__config-control__.__array__ .__entry__ {
@@ -848,16 +848,16 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     flex-direction: row;
     justify-content: flex-end;
     align-self: flex-end;
-    gap: 1px;
-    min-height: 14px;
-    padding-left: 3px;
-    padding-right: 3px;
+    gap: 2px;
+    min-height: 28px;
+    padding-left: 6px;
+    padding-right: 6px;
     background: var(--cfg-list-body);
 }
 .__config-control__.__array__ > .__foot__ button {
-    width: 14px;
-    height: 12px;
-    min-height: 12px;
+    width: 28px;
+    height: 24px;
+    min-height: 24px;
     flex-grow: 0;
 }
 /* A LIST THAT IS ONE FIELD OF A SECTION: in its row's value column beside the label, with no band of its own and
@@ -865,7 +865,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 .__config-control__.__array__.__inline-list__ {
     flex-direction: row;
     align-items: flex-start;
-    gap: 3px;
+    gap: 6px;
 }
 .__config-control__.__array__.__inline-list__ > .__body__ {
     flex-basis: 0;
@@ -886,7 +886,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     align-self: flex-start;
     height: var(--cfg-row-h);
     align-items: center;
-    gap: 2px;
+    gap: 4px;
     padding-left: 0px;
     padding-right: 0px;
     background: #00000000;
@@ -898,10 +898,10 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     min-height: var(--cfg-ctrl-h);
 }
 /* The row holding one: its label against the FIRST entry, not centred down the whole list. A text draws at the top
- * of its box, so the label is let down to where the first entry's field centres: a 13px line beside an 18px field
+ * of its box, so the label is let down to where the first entry's field centres: a 26px line beside an 36px field
  * one pixel lower, measured. */
 .__configurator__.__list-row__ { align-items: flex-start; }
-.__configurator__.__list-row__ > .__label__ { margin-top: 4px; }
+.__configurator__.__list-row__ > .__label__ { margin-top: 8px; }
 
 /* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
  * The finished shader on a mesh, in a floating resizable panel. Functional geometry only — every
@@ -924,8 +924,8 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
  * Only the position differs: top-left, where Unity puts the board, against the preview's bottom-right.
  * `left`/`top` rather than `right`/`bottom`, and CanvasOverlayMove takes both over on the first drag. */
 .__blackboard__ {
-    left: 16px;
-    top: 16px;
+    left: 32px;
+    top: 32px;
 }
 
 /* THE HEAD IS TWO LINES, which is why it no longer shares the Main Preview's geometry rule above -- it
@@ -940,8 +940,8 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
      * measured on this exact panel once already. */
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-top: 6px;
+    padding-bottom: 6px;
     flex-grow: 0;
     flex-shrink: 0;
     cursor: move;
@@ -955,7 +955,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    gap: 3px;
+    gap: 6px;
 }
 .__blackboard__ .__titles__ > .__title__ {
     font-size: var(--cfg-font);
@@ -966,17 +966,17 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 /* The asset path. Dimmer and smaller, so the two lines are a heading and its caption rather than two
  * headings -- the colour is the theme's, in graph.css. */
 .__blackboard__ .__titles__ > .__subtitle__ {
-    font-size: 8px;
+    font-size: 16px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 /* The + button. A fixed square, so the head's height never depends on it. */
 .__blackboard__ > .__head__ > .__add__ {
-    width: 13px;
-    height: 13px;
-    min-width: 10px;
-    padding-right: -2px;
+    width: 26px;
+    height: 26px;
+    min-width: 20px;
+    padding-right: -4px;
     flex-grow: 0;
     flex-shrink: 0;
     overlay: shape("plus");
@@ -1007,11 +1007,11 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     /* The list breathes: a gap between rows and an inset from the panel edge, so the capsules read as
      * separate chips rather than a stack pressed together. `gap` IS a real layout shorthand, unlike
      * the `border-radius-all` that silently did nothing above. */
-    gap: 4px;
-    padding-top: 6px;
-    padding-bottom: 6px;
-    padding-left: 4px;
-    padding-right: 4px;
+    gap: 8px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+    padding-left: 8px;
+    padding-right: 8px;
 }
 /* NO SCROLLBARS, and the list is a PLAIN box rather than a ScrollerView to get that.
  *
@@ -1021,12 +1021,12 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
  * alone ignores the wheel, so BlackboardPanel wires that by hand. */
 /* NOWRAP, like every other row. The body is `align-items: start`, so this sizes to its own text and
  * scrolls with the rest -- without the nowrap it re-wraps at the panel's own width instead, which at the
- * 80px minimum broke "No properties yet" over three lines. */
+ * 160px minimum broke "No properties yet" over three lines. */
 .__blackboard__ .__empty__ {
     font-size: var(--cfg-font);
     color: var(--blackboard-empty-fg, #7A7A7A);
     padding-left: var(--cfg-pad-x);
-    padding-top: 4px;
+    padding-top: 8px;
     white-space: nowrap;
 }
 
@@ -1034,26 +1034,26 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
  * category entity, so there is nothing else for a rule to hang off.
  *
  * The whole row is the fold target, which is why the arrow and the label are both scenery: an arrow that
- * alone toggled would be a 7px target sitting beside a 200px row that looks equally clickable. */
+ * alone toggled would be a 14px target sitting beside a 400px row that looks equally clickable. */
 .__blackboard__ .__category__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     /* At least the full width, never less -- see the body's `align-items: start`. */
     min-width: 100%;
-    min-height: 16px;
-    padding-left: 2px;
-    padding-right: 6px;
-    padding-top: 2px;
+    min-height: 32px;
+    padding-left: 4px;
+    padding-right: 12px;
+    padding-top: 4px;
     /* Above its group and clear of the one before it, so a heading reads as opening a section rather
      * than as another row in the previous one. */
-    margin-top: 4px;
+    margin-top: 8px;
 }
 .__blackboard__ .__category__ > .__arrow__ {
-    font-size: 7px;
+    font-size: 14px;
     /* FIXED WIDTH, so the label does not shift sideways as the arrow swaps between two glyphs of
      * different advance -- a heading that jitters on every fold reads as a layout bug. */
-    width: 10px;
+    width: 20px;
     text-align: center;
 }
 .__blackboard__ .__category__ > .__name__ {
@@ -1068,9 +1068,9 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 .__blackboard__ .__drop-line__ {
     display: none;
     position: absolute;
-    left: 4px;
-    right: 4px;
-    height: 2px;
+    left: 8px;
+    right: 8px;
+    height: 4px;
 }
 .__blackboard__ .__drop-line__.__active__ {
     display: flex;
@@ -1087,9 +1087,9 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
      * the panel and become scrollable. This is the floor that keeps a SHORT row full width, so the type
      * column still has slack to right-align against and the rename field still has a row to fill. */
     min-width: 100%;
-    min-height: 18px;
-    padding-left: 6px;
-    padding-right: 6px;
+    min-height: 36px;
+    padding-left: 12px;
+    padding-right: 12px;
 }
 /* NO row-level fill or ring. Unity highlights the capsule alone, and it is the better read: the row is
  * the full width of the panel, so filling it makes the selection look like a table row while the thing
@@ -1099,13 +1099,13 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
 .__property-pill__ > .__capsule__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
     flex-grow: 0;
     flex-shrink: 1;
-    padding-left: 8px;
-    padding-right: 8px;
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-left: 16px;
+    padding-right: 16px;
+    padding-top: 6px;
+    padding-bottom: 6px;
     /* The only clickable part of the row -- see PropertyPill. */
     cursor: pointer;
     /* A real capsule: the radius is half the pill's height, so the ends are semicircles rather than
@@ -1120,7 +1120,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
      * KEEP THIS AT HALF THE CAPSULE'S HEIGHT. It is text height plus the vertical padding above, so
      * changing either without changing this turns the capsule back into a rounded rectangle -- which is
      * a slow drift rather than an obvious break. */
-    border-radius: 9px;
+    border-radius: 18px;
 }
 /* Hover, selected and both are stated together in graph.css, width and colour at once -- see there for
  * why the ORDER of those three rules is load-bearing. */
@@ -1133,8 +1133,8 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    height: 14px;
-    min-height: 14px;
+    height: 28px;
+    min-height: 28px;
     font-size: var(--cfg-font);
 }
 /* The capsule and the type step aside while the field is up, rather than being removed -- the row keeps
@@ -1151,13 +1151,13 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
  *
  * An OUTLINE rather than a fill, so it reads on top of the selection band instead of replacing it --
  * you can still see what you had selected while you carry it somewhere. The engine's outline is
- * inset by 1px on `*`, so it survives the panel's own clipping at the edges.
+ * inset by 2px on `*`, so it survives the panel's own clipping at the edges.
  *
  * Any tree edited through TreeEditing: into a row is outlined, before and after it a line along that
  * edge -- VS Code's drop-target-before/after. The line is an outline DRAWABLE, so it is layout-free and
  * paints over the row's children; a gradient's hard stop is what keeps it to one edge. */
 treeview .__drop-target__ {
-    outline: 1px var(--tree-drop-border, #4A90D9);
+    outline: 2px var(--tree-drop-border, #4A90D9);
 }
 treeview .__drop-before__ {
     outline: linear-gradient(to bottom, var(--tree-drop-border, #4A90D9) 0%, var(--tree-drop-border, #4A90D9) 9%, transparent 9%);
@@ -1171,14 +1171,14 @@ treeview .__cut__ {
     opacity: 0.5;
 }
 
-/* Round, not a square with soft corners -- at 4px a 1px radius still reads as a box. */
+/* Round, not a square with soft corners -- at 8px a 2px radius still reads as a box. */
 .__property-pill__ .__dot__ {
-    width: 4px;
-    height: 4px;
-    min-width: 4px;
+    width: 8px;
+    height: 8px;
+    min-width: 8px;
     flex-grow: 0;
     flex-shrink: 0;
-    border-radius: 2px;
+    border-radius: 4px;
 }
 .__property-pill__ .__name__ {
     font-size: var(--cfg-font);
@@ -1203,7 +1203,7 @@ treeview .__cut__ {
      * `Ve…` pinned against the panel edge, unreachable by the very scrollbar the long name had summoned.
      * Growing into slack is a separate axis and still works. */
     flex-shrink: 0;
-    font-size: 8px;
+    font-size: 16px;
     color: var(--pill-type-fg, #8C8C8C);
     text-align: right;
     white-space: nowrap;
@@ -1214,10 +1214,10 @@ treeview .__cut__ {
 .__main-preview__,
 .__blackboard__ {
     flex-direction: column;
-    width: 180px;
-    height: 196px;
-    min-width: 80px;
-    min-height: 100px;
+    width: 360px;
+    height: 392px;
+    min-width: 160px;
+    min-height: 200px;
     resize: both;
     /* Anchored to the VIEWPORT, which is where CanvasView.addOverlay puts these — so they hold station
      * while the graph pans underneath, exactly as Unity's do.
@@ -1230,8 +1230,8 @@ treeview .__cut__ {
      * The Blackboard overrides only `left`/`top`, below: Unity puts it in the opposite corner. All four
      * insets end up set on it, which is well-defined with a definite size -- Taffy resolves in favour of
      * the start edge -- and CanvasOverlayMove takes both over on the first drag. */
-    right: 16px;
-    bottom: 16px;
+    right: 32px;
+    bottom: 32px;
 }
 
 /* The header strip, copied from the configurator's group heading rather than derived.
@@ -1246,7 +1246,7 @@ treeview .__cut__ {
     gap: var(--cfg-gap);
     min-height: var(--cfg-row-h);
     /* The two long-hands, NOT `padding: 0px var(--cfg-pad-x)`. The shorthand silently produced zero
-     * padding — measured, not guessed: the title's inset went from 12px to 0. Whether it is the two-value
+     * padding — measured, not guessed: the title's inset went from 24px to 0. Whether it is the two-value
      * form or `var()` inside a shorthand that fails to substitute, the shorthand is not a safe place for
      * a custom property, and the configurator writes these as long-hands for the same reason. */
     padding-left: var(--cfg-pad-x);

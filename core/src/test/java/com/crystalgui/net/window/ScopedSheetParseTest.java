@@ -28,8 +28,8 @@ import org.junit.Test;
  */
 public class ScopedSheetParseTest extends UiDocumentTestBase {
 
-    /** The rule the whole scoping question turns on: {@code .machine-panel { width: 560px }}. */
-    private static final float PANEL_WIDTH = 560f;
+    /** The rule the whole scoping question turns on: {@code .machine-panel { width: 1120px }}. */
+    private static final float PANEL_WIDTH = 1120f;
 
     private static UIElement panel() {
         UIElement node = new UIElement();
@@ -63,7 +63,7 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
         document.append(stranger);
 
         document.styles().addStylesheet(StyleSheet.parse(MachineStyles.CSS), inScope);
-        document.update(800f, 600f);
+        document.update(1600f, 1200f);
 
         assertEquals("the panel root takes its width from the server's own sheet",
                 PANEL_WIDTH, inScope.box().width(), 0.5f);
@@ -99,7 +99,7 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
         });
 
         sheets.acquire("this is not css {{{", root);
-        document.update(800f, 600f);
+        document.update(1600f, 1200f);
 
         assertNotEquals("garbage cannot have styled the panel",
                 PANEL_WIDTH, root.box().width(), 0.5f);
@@ -142,7 +142,7 @@ public class ScopedSheetParseTest extends UiDocumentTestBase {
         assertTrue("both installations are the same parse", added.get(0) == added.get(1));
 
         sheets.release(MachineStyles.CSS, first);
-        document.update(800f, 600f);
+        document.update(1600f, 1200f);
 
         assertNotEquals("the closed window's panel is unstyled",
                 PANEL_WIDTH, first.box().width(), 0.5f);

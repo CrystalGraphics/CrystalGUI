@@ -696,8 +696,8 @@ public class MarkupView extends UIElement {
          * How wide a grid line is drawn, in LOGICAL pixels.
          *
          * <p>Thinner than the 1px a border would be. A stroke is not a border: it is centred on its line
-         * and feathered at both edges, so a width of 1 lands about two device pixels wide at the default
-         * scale and reads as a rule rather than as the hairline a table wants.</p>
+         * and feathered at both edges, so a width of 1 lands about two device pixels wide at a
+         * scale of 2 and reads as a rule rather than as the hairline a table wants.</p>
          */
         private static final float LINE = 0.6f;
 

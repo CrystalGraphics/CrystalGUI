@@ -241,7 +241,7 @@ public class StyleLabsTest {
         assertEquals("a circle's radius is never a percentage", "", shape.withCircle(true).size());
         Gradient.Radial circle = Gradient.Radial.ELLIPSE.withCircle(true).withExtent(Gradient.Radial.LENGTH);
         assertEquals("circle 30px", circle.withRadius(0, 30d).toString());
-        assertEquals("an ellipse doubles a circle's one length", "50px 50px", circle.withCircle(false).size());
+        assertEquals("an ellipse doubles a circle's one length", "100px 100px", circle.withCircle(false).size());
         assertEquals("closest-side at 10% 90%",
                 Gradient.Radial.ELLIPSE.withExtent("closest-side").withCentre(new double[]{0.1d, 0.9d}).toString());
         assertEquals("the middle is not written", "",

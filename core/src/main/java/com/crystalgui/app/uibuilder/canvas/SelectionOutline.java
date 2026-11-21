@@ -32,7 +32,7 @@ public final class SelectionOutline extends UIElement {
     /** The selection's stroke reads this element's {@code color}; the parent's reads its {@code border-color}. */
     public static final String OVERLAY_CLASS = "__selection-outline__";
 
-    private static final float THICKNESS = 1f;
+    private static final float THICKNESS = 2f;
 
     private final BuilderContext builder;
 

@@ -44,8 +44,11 @@ import com.crystalgui.ui.dom.UIElement;
  */
 public final class UiTemplate {
 
-    /** The format major this reader understands. A document declaring a higher one is refused. */
-    public static final int FORMAT = 1;
+    /**
+     * The format major this reader understands. A document declaring a higher one is refused; a lower one is
+     * migrated as it is read. Format 2 is UI16's: lengths written for a scale of 1, twice format 1's.
+     */
+    public static final int FORMAT = 2;
 
     /**
      * The document a {@code Networked} panel is laid out by.

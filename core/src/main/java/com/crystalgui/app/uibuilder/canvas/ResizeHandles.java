@@ -120,7 +120,7 @@ public final class ResizeHandles extends UIElement {
      * being reliably hittable, and the sheet rounds it fully so it reads as a small dot on the line
      * rather than as a block sitting over it.</p>
      */
-    private static final float SIZE = 6f;
+    private static final float SIZE = 12f;
 
     private final BuilderContext ctx;
 
@@ -428,7 +428,7 @@ public final class ResizeHandles extends UIElement {
     }
 
     /** One pixel, not zero: a box with no extent cannot be grabbed again to undo the drag. */
-    private static final float MIN_SIZE = 1f;
+    private static final float MIN_SIZE = 2f;
 
     /**
      * Keeps the edge OPPOSITE the handle where it was, by moving the node's own inset.

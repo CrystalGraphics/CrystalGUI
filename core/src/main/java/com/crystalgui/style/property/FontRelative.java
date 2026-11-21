@@ -39,7 +39,7 @@ public interface FontRelative<T> {
      * number rather than a private constant, because the two being different would make an unresolved
      * value wrong in a way nothing would report.</p>
      */
-    float REFERENCE_FONT_SIZE = 10f;
+    float REFERENCE_FONT_SIZE = 20f;
 
     /**
      * The {@code em} multiple in {@code raw}, or {@code NaN} if it is not an {@code em} length.

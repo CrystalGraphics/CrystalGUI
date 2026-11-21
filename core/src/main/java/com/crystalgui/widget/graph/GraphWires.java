@@ -219,7 +219,7 @@ final class GraphWires {
      * one and a half. A logical width compared against a physical reference is off by exactly the scale
      * factor, and looks merely "a bit heavy" rather than obviously wrong.</p>
      */
-    private static final float DEFAULT_WIDTH = 1f;
+    private static final float DEFAULT_WIDTH = 2f;
 
     private float baseWidth = DEFAULT_WIDTH;
 

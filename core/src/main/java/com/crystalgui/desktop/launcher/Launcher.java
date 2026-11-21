@@ -59,7 +59,7 @@ public class Launcher extends Popover {
     public static final String EMPTY_CLASS = "__app-none__";
 
     /** A row's height, a taskbar entry's, so an application is the same height wherever it appears. */
-    public static final float ROW_HEIGHT = 28f;
+    public static final float ROW_HEIGHT = 56f;
 
     /** Rows shown before the list scrolls. */
     public static final int VISIBLE_ROWS = 10;

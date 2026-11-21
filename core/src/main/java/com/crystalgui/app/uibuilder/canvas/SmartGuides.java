@@ -48,10 +48,10 @@ public final class SmartGuides extends UIElement {
     public static final String GAP_LABEL_CLASS = "__snap-gap-label__";
 
     /** Matched to {@code SelectionOutline}'s: the two mark the same edge and must read as one line. */
-    private static final float GUIDE_THICKNESS = 1f;
+    private static final float GUIDE_THICKNESS = 2f;
 
     /** Between a gap's bar and its label, in screen pixels. */
-    private static final float LABEL_GAP = 3f;
+    private static final float LABEL_GAP = 6f;
 
     @Nullable
     private UIElement space;

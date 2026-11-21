@@ -264,7 +264,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // close button minimises rather than destroys.
         welcome.setPolicy(WindowPolicy.HIDE_ON_CLOSE).setKey("desktop:welcome");
         welcome.setIcon("crystalgui:package");
-        welcome.moveTo(24, 24).resizeTo(250, 210);
+        welcome.moveTo(48, 48).resizeTo(500, 420);
         welcome.content().append(paragraph(
                 "CrystalOS — geometry, chrome, stacking.",
                 "",
@@ -304,7 +304,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         // at its default place every run.
         inspector.setKey("desktop:geometry");
         inspector.setIcon("crystalgui:code");
-        inspector.moveTo(150, 250).resizeTo(300, 150);
+        inspector.moveTo(300, 500).resizeTo(600, 300);
         readout = new UIText("");
         inspector.content().append(readout);
         // After layout, so the numbers are this frame's boxes
@@ -370,7 +370,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         if (GRAPH_COST && Boolean.getBoolean("crystalgui.harness.desktop.graphCost.viewer")) FrameProfiler.openOn(desktop);
         // A SIZE THIS SCENE CHOOSES, over whatever the arrangement record says: the whole exercise here
         // is watching the editor share a desktop, so it starts small enough to see the other windows.
-        editor.mainWindow().moveTo(300, 55).resizeTo(600, 400);
+        editor.mainWindow().moveTo(600, 110).resizeTo(1200, 800);
     }
 
     private UIElement paragraph(String... lines) {
@@ -420,7 +420,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
             dialog.showModal();
         });
         UIElement row = new UIElement();
-        row.layout(l -> l.flexDirection(FlexDirection.ROW).paddingTop(4));
+        row.layout(l -> l.flexDirection(FlexDirection.ROW).paddingTop(8));
         row.append(open);
         return row;
     }
@@ -428,7 +428,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
     /** Two focusable controls that do nothing but hold focus — which is the whole point of them. */
     private UIElement focusRow(String first, String second) {
         UIElement row = new UIElement();
-        row.layout(l -> l.flexDirection(FlexDirection.ROW).gapAll(4).paddingTop(4));
+        row.layout(l -> l.flexDirection(FlexDirection.ROW).gapAll(8).paddingTop(8));
         row.append(new Button(first));
         row.append(new Button(second));
         return row;
@@ -544,7 +544,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
                 if (!window.isMaximized() && window.box() != null) {
                     desktop.windowManager().activate(window);
                     // FROM ONE PLACE EVERY RUN: the session keeps where the last drag left it.
-                    window.moveTo(24f, 24f);
+                    window.moveTo(48f, 48f);
                     followWindow = window;
                     break;
                 }
@@ -2101,7 +2101,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         UIText note = new UIText("Opened without focus.\nThe editor kept the keyboard.");
         note.generalStyle(g -> g.color(0xFFB4B8BF));
         frame.content().append(note);
-        frame.resizeTo(220f, 110f).moveTo(40f + backgroundWindows * 16f, 340f);
+        frame.resizeTo(440f, 220f).moveTo(80f + backgroundWindows * 32f, 680f);
         // FALSE is the no-steal rule -- the second argument is whether to activate.
         desktop.addWindow(frame, false);
         // A REAL DURATION, ticked rather than set once: progress that is only ever written at the moment
@@ -2158,7 +2158,7 @@ public class CgUiDesktopScene implements InteractiveSceneLifecycle, CgSystemInpu
         spawned++;
         WindowFrame window = desktop.addWindow(new WindowFrame("Window " + spawned));
         window.setIcon("crystalgui:file-text");
-        window.resizeTo(200, 120);
+        window.resizeTo(400, 240);
         window.content().append(new UIText("Cascaded, not placed."));
         window.content().append(focusRow("One", "Two"));
     }

@@ -49,8 +49,8 @@ dockgroup {
     background: var(--dock-bg, #2B2B2B);
     /* HOW SMALL AN EDITOR GROUP MAY BE DRAGGED. A split's divider stops here, and a split of splits adds its
      * groups' floors up. @see SplitView#minimumSize */
-    min-width: 110px;
-    min-height: 70px;
+    min-width: 220px;
+    min-height: 140px;
 
     /* THE ISLAND. Rounding here is FREE, and the reason is worth stating because it is the whole
      * feasibility argument for this look: resolveOverflowClip() only reaches the FBO-mask path when
@@ -69,11 +69,11 @@ dockgroup {
  * pointer-events property, and an overlay that takes the pointer ends the drag on top of itself. */
 dockgroup .__drop-overlay__ {
     background: var(--dock-drop-overlay, #4A88C766);
-    border-radius: 2px;
+    border-radius: 4px;
 }
 
 /* The caret between two tabs during a reorder. Deliberately brighter than the overlay: it marks a
- * single boundary rather than an area, so it has to read at 2px wide. */
+ * single boundary rather than an area, so it has to read at 4px wide. */
 /* THE INSERTION PLACEHOLDER, shared by every list that can be reordered by dragging -- tab strips,
  * tool-window stripes. One widget (InsertionMarker), so one rule: it used to be per-consumer, which is how
  * the second one would have got a different colour for no reason anyone chose.
@@ -86,8 +86,8 @@ dockgroup .__drop-overlay__ {
  * since it tracks a pointer; only the paint is here. */
 .__insertion__ {
     background-color: var(--dock-insertion-bg, #7EB6FF30);
-    outline: 1px var(--dock-insertion-border, #7EB6FF);
-    border-radius: 2px;
+    outline: 2px var(--dock-insertion-border, #7EB6FF);
+    border-radius: 4px;
     flex-shrink: 0;
 }
 
@@ -95,14 +95,14 @@ dockgroup .__drop-overlay__ {
  * list closes up by two pixels the moment one opens, and every button below the gap shifts by that much
  * more than the gap actually accounts for. */
 workbench .__activity-bar__ .__insertion__ {
-    margin-bottom: 2px;
+    margin-bottom: 4px;
 }
 
 /* Which group commands act on. An outline rather than a background, so a panel's own colour is not
  * repainted every time focus moves. */
 dockgroup.__active__ {
     /* OFF BY DEFAULT. A ring around the pane you are working in is on screen permanently and says
-     * something you already know from the tab you clicked -- and at pane size a 1px stroke is the
+     * something you already know from the tab you clicked -- and at pane size a 2px stroke is the
      * largest single shape in the window. Neither reference draws one.
      *
      * The rule stays rather than being deleted, and so does the token: which group commands act on
@@ -146,10 +146,10 @@ dockgroup .__missing__ {
     border-radius: var(--radius-panel, 0px);
 
     /* HOW SMALL A TOOL WINDOW MAY BE, and it stated nothing at all until now -- the editor group beside
-     * it has said `min-height: 70px` since it was written. The same number the half around it takes, so
+     * it has said `min-height: 140px` since it was written. The same number the half around it takes, so
      * the inner box can never be the one that overflows the outer. @see RegionHost#minimumSize for how
      * either of them reaches a divider at all. */
-    min-height: var(--tool-window-min-h, 60px);
+    min-height: var(--tool-window-min-h, 120px);
 }
 
 /* KEYED ON THE HEADER, not on the container around it. `__header__` is shared by three widgets, so the
@@ -160,43 +160,43 @@ dockgroup .__missing__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    min-height: var(--panel-header-h, 22px);
+    min-height: var(--panel-header-h, 44px);
     /* NO VERTICAL PADDING — the row's height comes from --panel-header-h alone, and `align-items:
      * center` above places the content inside it. With padding here the header was
      * `max(22, content + 4)`, so the Problems panel — whose header carries TAB PILLS rather than a
-     * bare title — grew to 26px while every title-only header stayed at 22, and the band across the
+     * bare title — grew to 52px while every title-only header stayed at 22, and the band across the
      * window broke at exactly one panel. A minimum that anything taller than the padding can defeat
      * is not a shared height. */
-    padding: 0px 4px 0px 8px;
-    gap: 4px;
+    padding: 0px 8px 0px 16px;
+    gap: 8px;
 }
 
 /* ── ONE HEIGHT FOR EVERY PANEL'S CHROME ROW ─────────────────────────────────────────────────────
  *
  * A tool window's title row and an editor group's tab row are the same thing wearing different
  * content, and in IntelliJ they are exactly the same height — which is what makes a row of panels
- * read as one band across the window rather than as a ragged edge. They had drifted to 20px and
- * 18px respectively, because each grew out of its own content's padding and nothing tied them.
+ * read as one band across the window rather than as a ragged edge. They had drifted to 40px and
+ * 36px respectively, because each grew out of its own content's padding and nothing tied them.
  *
  * A local variable rather than a theme token: this is functional geometry, which is the user-agent
  * sheet's job, and a theme that wants taller chrome can still override the two rules below. */
 * {
-    --panel-header-h: 22px;
+    --panel-header-h: 44px;
 
     /* HOW SMALL A TOOL WINDOW MAY BE MADE, wherever it is. A half stated 40 and a container stated
      * nothing, so the two boxes that have to survive the same drag disagreed and the inner one
-     * overflowed the outer. 60px = the floating form's 80 (`.__window__.__tool-window__` in
-     * ua/desktop.css) less the 20px caption a window carries and a docked panel does not -- so one
+     * overflowed the outer. 120px = the floating form's 80 (`.__window__.__tool-window__` in
+     * ua/desktop.css) less the 40px caption a window carries and a docked panel does not -- so one
      * panel has ONE floor, docked or torn out. It also clears 2 x --radius-panel, below which an
      * island's top and bottom corners meet and it stops reading as rounded. */
-    --tool-window-min-h: 60px;
+    --tool-window-min-h: 120px;
 }
 
 /* ── THE RAIL FILLS ITS STRIP ────────────────────────────────────────────────────────────────────
  *
  * Give the strip a taller min-height and the rail keeps its own content height, leaving a dead band
- * between the last tab and the separator below. Two pixels of it, plus the 1px hairline, is what
- * read as "the editor's separator is much thicker than the other panels'" — the line was always 1px
+ * between the last tab and the separator below. Two pixels of it, plus the 2px hairline, is what
+ * read as "the editor's separator is much thicker than the other panels'" — the line was always 2px
  * and identical to theirs; what differed was the gap sitting on top of it.
  *
  * Centred rather than bottom-aligned, which is the other half: `flex-end` parks the tabs on the
@@ -210,8 +210,8 @@ dockgroup > tabview > .__strip__ > .__rail__,
 }
 
 /* THE TABS STAND OFF THE PANE'S EDGES, in both strips, as IntelliJ's are inset from its rounded border. In a panel
- * the start lines the tab's label up under the title: the header carries `padding-left: 8px` and a `tab` its own
- * `padding-left: 4px`.
+ * the start lines the tab's label up under the title: the header carries `padding-left: 16px` and a `tab` its own
+ * `padding-left: 8px`.
  *
  * ON THE STRIP, NOT THE RAIL, at both ends. The group is a rounded island that does not clip -- that is what makes
  * its rounding free -- so the rail's square clip is the only edge an overflowing tab meets. A scroller's padding
@@ -219,35 +219,35 @@ dockgroup > tabview > .__strip__ > .__rail__,
  * end painted over the rounded corner. */
 dockgroup > tabview > .__strip__,
 .__view-content__ tabview > .__strip__ {
-    padding-left: 3px;
-    padding-right: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
 }
 
 /* AN EDITOR GROUP'S ⋮ -- IntelliJ's, at the end of its tab row, always shown. The strip reserves its width
- * (3px either side of a 14px button), so the rail and its fade end before it and a tab never scrolls under it. */
+ * (6px either side of a 28px button), so the rail and its fade end before it and a tab never scrolls under it. */
 dockgroup > tabview > .__strip__ {
-    padding-right: 20px;
+    padding-right: 40px;
 }
 dockgroup > tabview > .__strip__ > .__strip-actions__ {
-    right: 3px;
+    right: 6px;
 }
 /* THE END FADE SITS AT THE RAIL'S END, not the strip's: an absolute box is placed against the padding edge, which is
  * past the padding reserved above -- so at `right: 0` it lay under the ⋮ and never showed. Each strip's own padding,
  * less a pixel: the rail's clip is quantised to device pixels and the fade is not, so flush they could leave a
  * column of the last tab showing past the fade. */
 dockgroup > tabview > .__strip__ > .__strip-fade__.__end__ {
-    right: 19px;
+    right: 38px;
 }
 .__view-content__ tabview > .__strip__ > .__strip-fade__.__end__ {
-    right: 2px;
+    right: 4px;
 }
 dockgroup > tabview > .__strip__ > .__strip-actions__ .__action-button__ {
-    width: 14px;
-    height: 14px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
     min-height: 0px;
-    padding: 2px;
-    border-radius: var(--radius-control, 3px);
+    padding: 4px;
+    border-radius: var(--radius-control, 6px);
     background: none;
     background-color: transparent;
     overlay-origin: content-box;
@@ -266,14 +266,14 @@ dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__rail__ {
 }
 /* EACH ROW WHERE A SINGLE ROW SITS: centred in a header-high band. A lone row is centred by the rail's
  * `align-items`; rows that size the rail would start at its top edge, a couple of pixels above where one row sat.
- * 2.5px either side of a 17px tab is the 22px header's band. */
+ * 5px either side of a 34px tab is the 44px header's band. */
 dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__rail__ > tab {
-    margin-top: 2.5px;
-    margin-bottom: 2.5px;
+    margin-top: 5px;
+    margin-bottom: 5px;
 }
 dockgroup > tabview.__tabs-wrap__ > .__strip__ > .__strip-actions__ {
     bottom: auto;
-    height: var(--panel-header-h, 22px);
+    height: var(--panel-header-h, 44px);
 }
 
 /* THE STRIPS ARE TRANSPARENT, so a clipped tab fades into the panel behind them -- written per context,
@@ -321,7 +321,7 @@ dockgroup > tabview > .__strip__ > .__strip-fade__.__end__ {
  * other. */
 dockgroup > tabview > .__strip__,
 .__view-content__ tabview > .__strip__ {
-    min-height: var(--panel-header-h, 22px);
+    min-height: var(--panel-header-h, 44px);
 }
 
 .__view-container__ > .__view-content__,
@@ -331,7 +331,7 @@ dockgroup > tabview > .__panes__,
      * width from `border().left` ALONE and colours the edges separately, so `border-top-width` on
      * its own resolves, lays out, and paints nothing — which is why every bottom-only hairline in
      * this sheet, `.__dock-banner__`'s included, has been silently invisible. */
-    border-width: 1px;
+    border-width: 2px;
     border-color: #00000000;
     border-bottom-color: #00000000;
     border-top-color: var(--panel-header-sep, #00000000);
@@ -349,7 +349,7 @@ dockgroup > tabview > .__panes__,
     /* NEVER SHRINKS. With the title growing, ellipsis was its own protection; once it stopped growing it
      * became the first thing flex took space from, and "Problems" rendered as "Pr" beside its own tabs. */
     flex-shrink: 0;
-    font-size: 10px;
+    font-size: 20px;
     font-weight: bold;
     color: var(--panel-header-fg, #A0A0A0);
     white-space: nowrap;
@@ -373,18 +373,18 @@ dockgroup > tabview > .__panes__,
  * grey chip in the corner of every header — read as a control that was already pressed. */
 /* ...AND WHEREVER THAT HEADER'S TRAILING ROW HAS BEEN ADOPTED TO. A floating tool window moves the row
  * into its caption's button strip (WindowChrome.captionActions), and every rule here is scoped through
- * `.__panel-header__`, which it is then no longer inside: the buttons lost their 14px box, their padding
+ * `.__panel-header__`, which it is then no longer inside: the buttons lost their 28px box, their padding
  * and their glyph fitting all at once and came out as a squashed huddle. Widened rather than copied --
  * two definitions of a control's size is how the two drift. */
 .__panel-header__ .__hide__,
 .__panel-header__ .__action-button__,
 .__title-trailing__.__caption-adopted__ .__action-button__ {
-    width: 14px;
-    height: 14px;
+    width: 28px;
+    height: 28px;
     flex-shrink: 0;
     min-height: 0px;
-    padding: 2px;
-    border-radius: var(--radius-control, 3px);
+    padding: 4px;
+    border-radius: var(--radius-control, 6px);
     background: none;
     background-color: transparent;
     overlay-origin: content-box;
@@ -394,7 +394,7 @@ dockgroup > tabview > .__panes__,
     transition: opacity 120ms ease;
 }
 
-/* THE MINUS IS WIDER THAN ITS NEIGHBOURS, as IntelliJ's is: a bar reads short at the glyphs' 10px. NO
+/* THE MINUS IS WIDER THAN ITS NEIGHBOURS, as IntelliJ's is: a bar reads short at the glyphs' 20px. NO
  * PADDING at all, because a shape draws in the square min(width, height) of its box -- trimming only the
  * sides leaves the height, and so the bar, where it was. */
 .__panel-header__ .__hide__ {
@@ -403,8 +403,8 @@ dockgroup > tabview > .__panes__,
 }
 
 /* TITLE ACTIONS, right-aligned before ⋮ and Hide -- IntelliJ's ToolWindowHeader. All of them share one
- * trailing row with no gap of its own: the 14px boxes around 10px glyphs are the spacing, IntelliJ's pitch
- * relative to its font, so the icons sit evenly and tight against the edge. Hide's minus fills its 14px box.
+ * trailing row with no gap of its own: the 28px boxes around 20px glyphs are the spacing, IntelliJ's pitch
+ * relative to its font, so the icons sit evenly and tight against the edge. Hide's minus fills its 28px box.
  * The dropdown gutter still spans the whole box, so it sits in the button's corner rather than the glyph's. */
 .__panel-header__ .__title-trailing__,
 .__panel-header__ .__title-actions__,
@@ -427,7 +427,7 @@ dockgroup > tabview > .__panes__,
     opacity: 1;
 }
 
-/* Centred in the caption strip. The window's own buttons stretch to its full height; these keep the 14px
+/* Centred in the caption strip. The window's own buttons stretch to its full height; these keep the 28px
  * box they have in a header, so they are centred against them rather than stretched to match. */
 .__title-trailing__.__caption-adopted__ {
     align-self: center;
@@ -487,11 +487,11 @@ dockgroup > tabview > .__panes__,
  * without a visible boundary the rail looks like one list that refuses to be rearranged. See
  * StripeView.SEPARATOR_CLASS. */
 workbench .__activity-bar__ .__stripe-separator__ {
-    width: 12px;
-    height: 1px;
+    width: 24px;
+    height: 2px;
     flex-shrink: 0;
-    margin-top: 3px;
-    margin-bottom: 5px;
+    margin-top: 6px;
+    margin-bottom: 10px;
     background-color: var(--activitybar-separator, #4E5157);
 }
 
@@ -504,18 +504,18 @@ workbench .__activity-bar__ .__stripe-separator__ {
 /* The count over a rail icon. */
 .__activity-bar__ .__activity-item__::part(badge),
 .__activity-bar__ .__badge__ {
-    font-size: 9px;
+    font-size: 18px;
     color: var(--activitybar-badge-fg, #FFFFFF);
 }
 
 /* THE DOT FORM — IntelliJ's unread mark on the bell, in the icon's top-right corner.
  *
- * Absolutely positioned so it OVERLAPS the icon rather than taking a slot beside it: the rail is 20px wide
+ * Absolutely positioned so it OVERLAPS the icon rather than taking a slot beside it: the rail is 40px wide
  * and a badge in flow would push the glyph out of the button. Taffy resolves an absolute child against its
  * parent, which is the rail button itself, so `right`/`top` are the corner of the button.
  *
  * The drawing is JetBrains' own `general/modified` — a filled blue circle, which is exactly this mark. It
- * carries its own colour, so nothing here tints it; the size is what makes a 16px source read as a dot.
+ * carries its own colour, so nothing here tints it; the size is what makes a 32px source read as a dot.
  *
  * THERE IS NO LONGER A `_dark` VARIANT to select, and the note that used to sit here -- that `icon()` in a
  * stylesheet has no variant machinery, and that the two drawings of a blue dot did not differ anyway --
@@ -527,11 +527,11 @@ workbench .__activity-bar__ .__stripe-separator__ {
     position: absolute;
     right: -0px;
     /* NEGATIVE, so it sits against the glyph's top-right rather than inside the button's box. IntelliJ's
-     * mark overhangs the icon slightly, and the rail button is a couple of pixels taller than the 16px
+     * mark overhangs the icon slightly, and the rail button is a couple of pixels taller than the 32px
      * drawing it centres — so a `top` of 0 still lands below the bell's shoulder. */
-    top: -2px;
-    width: 10px;
-    height: 10px;
+    top: -4px;
+    width: 20px;
+    height: 20px;
     overlay: icon("crystalgui:general/modified");
     /* ITS OWN COLOUR, and it must be stated: the rail button around it now sets a grey `color` for its
      * glyph, and this drawing is currentColor, so without this the unread dot would inherit that grey
@@ -580,27 +580,27 @@ workbench .__activity-bar__ .__stripe-separator__ {
 .__dock-banner__ {
     flex-direction: row;
     align-items: center;
-    gap: 8px;
-    padding: 4px 8px;
+    gap: 16px;
+    padding: 8px 16px;
     flex-shrink: 0;
     /* A UNIFORM WIDTH, and the other three edges transparent -- the spelling `search.css` names as
        the reference and `.__view-content__` above uses. The rounded-background path takes its stroke
        width from `border().left` ALONE, so `border-bottom-width` on its own resolves, lays out and
        paints nothing; the property is not even registered, so it was skipped with a warning nobody
        was reading a log to see. */
-    border-width: 1px;
+    border-width: 2px;
     border-color: #00000000;
     border-bottom-color: var(--banner-border, #00000040);
 }
 
 .__dock-banner__ .__message__ {
     flex-grow: 1;
-    font-size: 11px;
+    font-size: 22px;
 }
 
 .__dock-banner__ .__action__ {
-    padding: 2px 8px;
-    font-size: 11px;
+    padding: 4px 16px;
+    font-size: 22px;
     flex-shrink: 0;
 }
 
@@ -622,8 +622,8 @@ workbench .__activity-bar__ .__stripe-separator__ {
 
 floatingdock {
     background: var(--dock-floating-bg, #1E1E1EF0);
-    min-width: 160px;
-    min-height: 120px;
+    min-width: 320px;
+    min-height: 240px;
 }
 
 /* An empty group, which only the central one can be. It is the guarantee that the work area still exists
@@ -656,8 +656,8 @@ dockgroup.__empty__ .__strip__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    height: 22px;
-    padding-left: 24px;
+    height: 44px;
+    padding-left: 48px;
     background-color: var(--menubar-bg, #3C3F41);
 }
 
@@ -665,9 +665,9 @@ dockgroup.__empty__ .__strip__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    height: 22px;
-    padding-left: 4px;
-    padding-right: 4px;
+    height: 44px;
+    padding-left: 8px;
+    padding-right: 8px;
     color: var(--menubar-fg, #BBBBBB);
     cursor: pointer;
 }
@@ -690,7 +690,7 @@ dockgroup.__empty__ .__strip__ {
  * the rows it opens it competed with the panel titles beside it. Both references set the bar below
  * their menu body for the same reason. The rows stay at 10 -- nothing about this rule reaches them. */
 .__menu-bar__ .__menu-title__ text {
-    font-size: 8px;
+    font-size: 16px;
 }
 
 /* NOT THE EMPTY ONES. A hover fill is a promise that pressing does something, and `menutitle:disabled`
@@ -723,7 +723,7 @@ dockgroup.__empty__ .__strip__ {
     /* NO font-size HERE, and not by oversight: a highlight takes only properties that cannot affect
      * layout (CSS Pseudo-Elements 4), so that marking a range can never reflow the text it marks --
      * this engine warns and ignores. The rule follows the ORIGINATING text's metrics, so it is already
-     * an 8px underline the moment `.__menu-title__ text` is 8px. Size the word, not the mark. */
+     * an 16px underline the moment `.__menu-title__ text` is 16px. Size the word, not the mark. */
 }
 
 /* THE BURGER — the collapsed bar, drawn as an ICON.
@@ -735,17 +735,17 @@ dockgroup.__empty__ .__strip__ {
  * proportions -- four 11x1.2 bars, 1.6 apart, in a 16 box -- live in the file rather than in four rules
  * that have to agree.
  *
- * 16px, DOWN FROM 22, and the caption is why: `.__window__ > .__title-bar__` is `min-height: 20px`, so a
- * 22px button was the tallest thing in the row and grew the caption around itself -- the bar was setting
- * the height of the window chrome it was adopted into. 16 leaves 2px above and below. The BOX is the
+ * 32px, DOWN FROM 22, and the caption is why: `.__window__ > .__title-bar__` is `min-height: 40px`, so a
+ * 44px button was the tallest thing in the row and grew the caption around itself -- the bar was setting
+ * the height of the window chrome it was adopted into. 16 leaves 4px above and below. The BOX is the
  * hover target, not the mark: the icon's own ink is 11 wide inside a 16 viewBox, so what reads on screen
- * is narrower than the window's 14px tile beside it, which is the right way round -- a tile is artwork
+ * is narrower than the window's 28px tile beside it, which is the right way round -- a tile is artwork
  * and this is a mark. */
 .__menu-bar__ .__burger__ {
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    border-radius: var(--radius-control, 3px);
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-control, 6px);
     cursor: pointer;
     overlay: icon("crystalgui:menu");
     overlay-size: contain;
@@ -769,9 +769,9 @@ dockgroup.__empty__ .__strip__ {
  */
 quickpick {
     background: var(--palette-bg, #252526);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--palette-border, #454545);
-    padding: 4px;
+    padding: 8px;
     /* AND THE POPUP CLIPS TOO, not only the content box inside it. That one's own comment says why the
      * guard is worth having -- rows painted past a popup's edge sit over the editor and are still
      * hit-testable -- but it can only catch what overflows ITSELF. A content box taller than the popup
@@ -786,20 +786,20 @@ quickpick > .__content__ {
 }
 
 quickpick .__search__ {
-    margin-bottom: 4px;
+    margin-bottom: 8px;
 }
 
 /* Taller, rounded, and ringed on focus -- VS Code's quick input. The height is the palette's most-read
- * control and 16px left the text sitting tight against both edges; 22px gives the caret room without
+ * control and 32px left the text sitting tight against both edges; 44px gives the caret room without
  * making the box the loudest thing in the popup. The ring is a focus affordance rather than decoration:
  * this field holds focus for the whole life of the palette, so "where do my keystrokes go" has to be
  * answerable at a glance. */
 quickpick .__search__ textfield {
-    height: 22px;
-    border-radius: 3px;
-    padding-left: 6px;
-    padding-right: 6px;
-    outline-width: 1px;
+    height: 44px;
+    border-radius: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
+    outline-width: 2px;
     outline-color: var(--palette-field-border, #3C3C3C);
     background: var(--palette-field-bg, #1E1E1E);
 }
@@ -834,7 +834,7 @@ quickpick .__results__ {
  * division.
  *
  * `min-height` with no vertical padding, copied deliberately rather than a fixed `height`: padding here
- * makes the row `max(22, content + padding)`, which is how the Problems panel once grew to 26px while
+ * makes the row `max(22, content + padding)`, which is how the Problems panel once grew to 52px while
  * every title-only header stayed at 22 and the band across the window broke at exactly one panel. */
 /* CLIPS, and that is a guard rather than a look. `flex-shrink` defaults to 0 in this engine, so anything
  * inside a box whose height the user has fixed keeps its own size and spills out of it -- and a popup that
@@ -866,8 +866,8 @@ quickpick .__qp-header__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    min-height: var(--panel-header-h, 22px);
-    padding: 0px 4px 0px 8px;
+    min-height: var(--panel-header-h, 44px);
+    padding: 0px 8px 0px 16px;
 }
 
 quickpick .__qp-header-spacer__ {
@@ -877,14 +877,14 @@ quickpick .__qp-header-spacer__ {
 /* Dimmer than the title, and the same grey every other piece of provenance here uses -- it is a note
  * about the list rather than a warning about it. */
 quickpick .__qp-truncated__ {
-    font-size: 10px;
+    font-size: 20px;
     color: var(--palette-category-fg, #9D9D9D);
     white-space: nowrap;
     flex-shrink: 0;
 }
 
 quickpick .__qp-title__ {
-    font-size: 10px;
+    font-size: 20px;
     font-weight: bold;
     color: var(--panel-header-fg, #A0A0A0);
     white-space: nowrap;
@@ -905,17 +905,17 @@ quickpick {
 quickpick .__row__ {
     flex-direction: row;
     align-items: center;
-    height: 22px;
+    height: 44px;
     /* A ROUNDED BAR, as the file tree's band is -- on the row, so hover and selection are one shape. */
-    border-radius: var(--radius-control, 4px);
-    padding-left: 8px;
-    /* CLEAR OF THE SCROLLBAR. The bar is 8px and absolutely positioned over the right edge, so a row
-     * padded to 6px ran its accelerator underneath it -- the keys were sliced in half by a bar that has
+    border-radius: var(--radius-control, 8px);
+    padding-left: 16px;
+    /* CLEAR OF THE SCROLLBAR. The bar is 16px and absolutely positioned over the right edge, so a row
+     * padded to 12px ran its accelerator underneath it -- the keys were sliced in half by a bar that has
      * no idea they are there. 14 is the bar plus the padding the left side already has. */
-    padding-right: 14px;
+    padding-right: 28px;
     /* NO `gap`, and that is the point. It applies between EVERY pair of children, so once the row grew
      * an icon and a trailing description it was ADDING to the margin each of those already wanted -- a
-     * 4px icon margin drew as 10px, which is what "the gap between the icon and the name is too big"
+     * 8px icon margin drew as 20px, which is what "the gap between the icon and the name is too big"
      * looked like. The engine has paid for this once already in the completion popup, where it put a
      * space inside a signature.
      *
@@ -952,7 +952,7 @@ quickpick .__row__.__qp-disabled__ {
 quickpick .__qp-category__ {
     color: var(--palette-category-fg, #9D9D9D);
     /* What the row's `gap` used to provide, in the one place it was ever visible. */
-    margin-right: 6px;
+    margin-right: 12px;
 }
 
 quickpick .__qp-label__ {
@@ -968,7 +968,7 @@ quickpick .__qp-label__ {
  * int)` read as two controls rather than one name. */
 quickpick .__qp-description__ {
     color: var(--palette-category-fg, #9D9D9D);
-    margin-left: 6px;
+    margin-left: 12px;
     /* IT MUST BE ABLE TO GIVE WAY. This engine defaults flex-shrink to 0, so in a packed row exactly one
      * child absorbs every squeeze -- and if it is not this one it is the NAME, which is the thing the row
      * exists to show. A package is the losable half. */
@@ -986,13 +986,13 @@ quickpick .__qp-description__ {
 
 /* The kind glyph. Sized here and not by SymbolIcon, which writes structure and no geometry.
  *
- * 12px, matching the completion popup rather than the artwork's native 16: JetBrains draws these for a
- * ~13px UI font and ours is 10px, so 16 reads as 1.6x the text beside it. The two popups are held beside
+ * 24px, matching the completion popup rather than the artwork's native 16: JetBrains draws these for a
+ * ~26px UI font and ours is 20px, so 16 reads as 1.6x the text beside it. The two popups are held beside
  * each other in the same session, so they have to agree. */
 quickpick .__qp-icon__,
 quickpick .__qp-file-icon__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     /* TIGHTER THAN THE OTHER GAPS. An icon and the name it labels are one thing -- the glyph is not a
      * separate column, it is the first character of the row -- so it sits closer than the name sits to
      * its location. Both references draw it this way. */
@@ -1008,7 +1008,7 @@ quickpick .__qp-spacer__ {
 quickpick .__qp-accelerator__ {
     flex-direction: row;
     align-items: center;
-    gap: 3px;
+    gap: 6px;
     flex-shrink: 0;
 }
 
@@ -1022,13 +1022,13 @@ quickpick .__qp-key__ {
     justify-content: center;
     flex-shrink: 0;
     background-color: var(--palette-key-bg, #3C3C3C);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--palette-key-border, #4A4A4A);
-    border-radius: 3px;
-    padding-left: 5px;
-    padding-right: 5px;
-    height: 16px;
-    min-width: 16px;
+    border-radius: 6px;
+    padding-left: 10px;
+    padding-right: 10px;
+    height: 32px;
+    min-width: 32px;
 }
 
 quickpick .__qp-key__ text {
@@ -1058,7 +1058,7 @@ quickpick .__row__:hover .__qp-key__ text {
  * need measuring at all, and stating the width means there is no first pass to get wrong. */
 quickpick .__qp-key-sep__ {
     color: var(--palette-key-sep-fg, #8A8A8A);
-    width: 8px;
+    width: 16px;
     flex-shrink: 0;
     text-align: center;
 }
@@ -1081,7 +1081,7 @@ quickpick ::highlight(quickpick-match) {
  * constant under a note saying the sheet must not own it for exactly that reason -- which was true only
  * while the part WROTE it. One read, two uses, and they cannot disagree. */
 .__squiggle__ {
-    height: 1px;
+    height: 2px;
     z-index: -1;
 }
 
@@ -1144,7 +1144,7 @@ scroller::part(error-stripe-information) {
  * `right` IS A FIXED LENGTH AND MUST STAY ONE. It was tempting to derive it from the vertical bar's own
  * thickness; that term is 0 or 8 depending on whether the content currently overflows, so a widget
  * positioned by it jumps sideways the moment a document grows past one screenful — the same flick
- * ZoomIndicatorPart records chasing. 8px clears the bar outright and sits the readout AGAINST the groove;
+ * ZoomIndicatorPart records chasing. 16px clears the bar outright and sits the readout AGAINST the groove;
  * it was 14 once, which left the widget floating in the middle of nothing with the scrollbar visibly
  * beyond it, unmissable now that there is no panel edge behind it to explain the gap.
  *
@@ -1160,14 +1160,14 @@ scroller::part(error-stripe-information) {
  * The padding stays: it is the clearance between the arrows and the scrollbar beside them, not the
  * inset of a box that no longer exists. */
 .__inspection__ {
-    top: 2px;
-    right: 8px;
+    top: 4px;
+    right: 16px;
     flex-direction: row;
     align-items: center;
-    padding-left: 6px;
-    padding-right: 4px;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-left: 12px;
+    padding-right: 8px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     z-index: 2;
 }
 
@@ -1183,20 +1183,20 @@ scroller::part(error-stripe-information) {
 .__inspection-count__ {
     flex-direction: row;
     align-items: center;
-    margin-right: 5px;
+    margin-right: 10px;
 }
 
 /* Inside a chip the two parts are one unit, so the space between them is smaller than between chips. */
 .__inspection-icon__ {
-    width: 9px;
-    height: 9px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
     overlay-size: contain;
-    margin-right: 2px;
+    margin-right: 4px;
 }
 
 .__inspection-number__ {
-    font-size: 7px;
+    font-size: 14px;
 }
 
 /* The same three glyphs and the same three colours as the Problems rows. A severity that looked
@@ -1232,10 +1232,10 @@ scroller::part(error-stripe-information) {
  * advance — so a tick spelled as text is an empty box that reads as a layout bug. The arrows below carry
  * the same note for the same reason. */
 .__inspection-ok__ {
-    width: 9px;
-    height: 9px;
+    width: 18px;
+    height: 18px;
     flex-shrink: 0;
-    margin-right: 5px;
+    margin-right: 10px;
     overlay: shape("checkmark");
     overlay-size: contain;
     color: var(--inspection-clean-fg, #6A9955);
@@ -1244,15 +1244,15 @@ scroller::part(error-stripe-information) {
 /* Drawn shapes, never glyphs: MinecraftRegular.otf has no U+25B2/U+25BC and a missing glyph renders as
  * a blank advance, so a text arrow would be an empty button that reads as a layout bug. */
 .__inspection-previous__, .__inspection-next__ {
-    width: 11px;
-    height: 11px;
+    width: 22px;
+    height: 22px;
     /* BOTH PROPERTIES, and `min-height`, and a colour — the three ways a `button` restyled into a bare
      * glyph goes wrong, all present here at once and each one silent on its own.
      *
      *   `background: none` drops the DRAWABLE and leaves `background-color` untouched, because they are
      *   separate properties — so the base button fill stayed and drew a chip behind each arrow.
      *
-     *   `min-height` is a different property from `height`, so `button`'s 14px minimum beat the 11px
+     *   `min-height` is a different property from `height`, so `button`'s 28px minimum beat the 22px
      *   above and stretched an 11-wide button to 14 tall. That is what made the pair read as two dark
      *   capsules rather than two arrows: they were the right width and the wrong height, filled.
      *
@@ -1330,15 +1330,15 @@ problemspanel .__problems-body__ {
     flex-direction: row;
     flex-shrink: 0;
     align-items: center;
-    padding-left: 6px;
+    padding-left: 12px;
     /* NO VERTICAL PADDING. This row is a CONTRIBUTOR to a panel header, not a strip of its own, so
-     * its height has to come from --panel-header-h like every other header's — 4px here added
-     * straight onto the tallest pill and pushed the Problems header to 26px while every title-only
+     * its height has to come from --panel-header-h like every other header's — 8px here added
+     * straight onto the tallest pill and pushed the Problems header to 52px while every title-only
      * header sat at 22, which is the one panel that broke the band across the window. Vertical
      * placement is `align-items: center` above, and the header's own centring, not padding. */
     padding-top: 0px;
     padding-bottom: 0px;
-    gap: 4px;
+    gap: 8px;
 }
 
 /* ONLY WHAT IS THE PROBLEMS PANEL'S OWN. The pill — shape, padding, fill, border, hover and
@@ -1348,13 +1348,13 @@ problemspanel .__problems-body__ {
 .__problem-tab__ {
     /* SIZED LIKE THE ROWS BELOW, not like the title. A scope tab is a control on a header, and at the
      * title's weight it competes with the name of the panel it sits on. */
-    font-size: 7px;
-    gap: 4px;
+    font-size: 14px;
+    gap: 8px;
     cursor: pointer;
 }
 
 .__problem-tab__ .__tab-count__ {
-    font-size: 7px;
+    font-size: 14px;
     color: var(--problems-tab-count-fg, #7A7D85);
     flex-shrink: 0;
 }
@@ -1366,19 +1366,19 @@ problemspanel .__problems-body__ {
 /* PADDED TO MEET THE FIRST ROW. The gutter's icon and the tree's first row are read as a pair, and four
  * pixels of difference between them reads as one of the two being misplaced. */
 problemspanel .__problems-head__ {
-    width: 24px;
+    width: 48px;
     flex-shrink: 0;
     align-items: center;
-    padding-top: 4px;
-    gap: 6px;
+    padding-top: 8px;
+    gap: 12px;
 }
 
 /* THE EYE. Opens the view menu — Show Errors / Warnings / Infos, then Show Active File Only, which is
  * VS Code's filter menu in IntelliJ's affordance. Quiet at rest and lit on hover, because it is chrome
  * that is used rarely and sits beside content that is read constantly. */
 problemspanel .__view-options__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     min-height: 0px;
     padding: 0px;
     flex-shrink: 0;
@@ -1396,18 +1396,18 @@ problemspanel .__view-options__:active {
     color: var(--problems-options-hover-fg, #D5D7DB);
 }
 
-/* THE CORNER MARK a pixel past the eye's own 12px box, where IntelliJ draws it against the glyph. */
+/* THE CORNER MARK a pixel past the eye's own 24px box, where IntelliJ draws it against the glyph. */
 problemspanel .__view-options__::part(dropdown-gutter) {
     left: 0px;
     top: 0px;
-    width: 13px;
-    height: 13px;
+    width: 26px;
+    height: 26px;
 }
 
 /* THE ROWS START LEVEL WITH THE EYE. The tree is absolutely positioned inside the content box, so the
  * offset goes here rather than as padding on a parent it does not measure against. */
 problemspanel .__problem-list__ {
-    padding-top: 4px;
+    padding-top: 8px;
 }
 
 /* STILL A CHILD COMBINATOR, just one level lower: the content moved inside `__problems-body__` when the
@@ -1435,7 +1435,7 @@ problemspanel .__problems-empty__ {
     left: 0;
     top: 0;
     width: 100%;
-    padding: 8px;
+    padding: 16px;
     color: var(--problems-empty-fg, #8A8A8A);
 }
 
@@ -1475,7 +1475,7 @@ shadergrapheditor .__shader-graph__ {
  *
  * `height: 0; flex-grow: 1` is the shape that used to hang. A TextEditor whose height came from its
  * parent made scrollbar sizing circular -- a bar changes the viewport, the viewport decides the bar --
- * and this rule read `height: 300px` as the workaround. The real cause was elsewhere and is fixed:
+ * and this rule read `height: 600px` as the workaround. The real cause was elsewhere and is fixed:
  * rebindRealisedLines re-dirtied the tree on every settled pass, so the loop had no fixed point to reach.
  * EditorIndefiniteHeightTest pins both indefinite shapes, and UIWindow now bounds the settle loop and
  * names the culprit rather than hanging. */
@@ -1483,7 +1483,7 @@ texteditor.__shader-source__ {
     width: 100%;
     height: 0;
     flex-grow: 1;
-    font-size: 7px;
+    font-size: 14px;
 }
 
 /* THE GRAPH INSPECTOR -- the tabbed frame, and what its two tabs need to fill it.
@@ -1542,13 +1542,13 @@ shadergraphsettingspanel {
 workbench button.__labelled__,
 workbench dropdown {
     background: #00000000;
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--button-border, #393B40);
-    /* The engine's 2px is what a FILLED control needs -- its edge is a colour change, and the label can
+    /* The engine's 4px is what a FILLED control needs -- its edge is a colour change, and the label can
      * sit close to it. An outline is a line, and a label against a line reads as cramped at the same
      * number, so the inset goes up with the change of instrument. */
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
 }
 
 /* AND IT STILL HAS TO ANSWER THE POINTER. The rule above is a compound of two types and a class, so it
@@ -1579,10 +1579,10 @@ workbench dropdown:disabled {
 workbench .__config-toolbar__ .__config-control__ button.__labelled__,
 workbench .__config-toolbar__ .__config-control__ dropdown {
     background: #00000000;
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--button-border, #393B40);
-    padding-left: 6px;
-    padding-right: 6px;
+    padding-left: 12px;
+    padding-right: 12px;
 }
 workbench .__config-toolbar__ .__config-control__ button.__labelled__:hover,
 workbench .__config-toolbar__ .__config-control__ dropdown:hover {
@@ -1595,7 +1595,7 @@ workbench .__config-toolbar__ .__config-control__ dropdown:active {
 
 /* ── AND A CHECKBOX IS THE SAME CONTROL, SMALLER ─────────────────────────────────────────────────
  *
- * The mark is a 12px button: the same empty face, the same border, the same two pointer states. It was
+ * The mark is a 24px button: the same empty face, the same border, the same two pointer states. It was
  * a filled grey square, which is the engine's default and reads as a control from a different toolkit
  * the moment it sits in a row beside one of the outlined ones above.
  *
@@ -1620,9 +1620,9 @@ workbench .__config-toolbar__ .__config-control__ dropdown:active {
 workbench checkbox .__mark__,
 workbench checkbox::part(mark) {
     background: #00000000;
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--button-border, #393B40);
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
 }
 workbench checkbox:checked .__mark__,
 workbench checkbox:checked::part(mark) {
@@ -1666,10 +1666,10 @@ workbench .__workbench-content__ {
 }
 
 /* A REGION HAS A FLOOR, which is the whole reason the frame is a SplitView rather than a dock tree --
- * "setPaneSizeLimits gives a real minimum in pixels, which is what 'the sidebar is at least 150px wide'
+ * "setPaneSizeLimits gives a real minimum in pixels, which is what 'the sidebar is at least 300px wide'
  * means and what a flex weight is structurally unable to say".
  *
- * SMALL, THOUGH. This was 120px on the argument that a floor should make "narrow" bottom out at "narrow"
+ * SMALL, THOUGH. This was 240px on the argument that a floor should make "narrow" bottom out at "narrow"
  * rather than at "useless" -- names truncated to a letter, a header wrapped, a panel nominally open and
  * showing nothing. That reasoning decides what is USEFUL, and it is not the floor's job: the reference
  * lets a tool window go down to a sliver and trusts you meant it. Measured against IntelliJ, ours stopped
@@ -1681,11 +1681,11 @@ workbench .__workbench-content__ {
  * On the CROSS axis of each region -- width for the columns, height for the strip -- because that is the
  * axis its divider moves along. */
 workbench .__region-sidebar__, workbench .__region-auxiliary__ {
-    min-width: 24px;
+    min-width: 48px;
 }
 
 workbench .__region-panel__ {
-    min-height: 24px;
+    min-height: 48px;
 }
 
 /* AND THE EDITOR KEEPS ONE, which it never needed while the percentage clamp was doing this job.
@@ -1697,7 +1697,7 @@ workbench .__region-panel__ {
  * hard RIGHT squeezes the editor to nothing, which no reference permits and which leaves the divider
  * against the far edge with no content to aim at. */
 workbench .__dock__ {
-    min-width: 120px;
+    min-width: 240px;
 }
 
 /* ── The gutters between islands ───────────────────────────────────────────────────────────────
@@ -1724,12 +1724,12 @@ workbench .__dock__ {
  * puts a bright bar through the gap the Islands look exists to keep quiet, and IntelliJ does not
  * draw one either. The divider is a gap you can grab, not a control that lights up. */
 workbench splitview > .__divider__ {
-    width: var(--panel-gap, 4px);
+    width: var(--panel-gap, 8px);
     background: none;
 }
 
 /* Specificity 22 against the base rule's 21 — enough to win, and it has to, or a stacked split's
- * divider keeps the base 4px instead of the theme's gap. */
+ * divider keeps the base 8px instead of the theme's gap. */
 /* Suppressing the rest state is NOT enough — the generic `:hover` and `:active` rules in
  * ua/widgets.css weigh 21 against this scope's 12, so they kept lighting the gap up while the
  * divider sat correctly invisible at rest. Restating both states here at 22 is what actually turns
@@ -1744,7 +1744,7 @@ workbench splitview.__vertical__ > .__divider__:active {
 
 workbench splitview.__vertical__ > .__divider__ {
     width: auto;
-    height: var(--panel-gap, 4px);
+    height: var(--panel-gap, 8px);
 }
 
 
@@ -1755,7 +1755,7 @@ workbench splitview.__vertical__ > .__divider__ {
  * carries either of them out to the frame's divider, and until it existed neither did anything. */
 .__region-half__ {
     min-width: 0px;
-    min-height: var(--tool-window-min-h, 60px);
+    min-height: var(--tool-window-min-h, 120px);
 }
 
 /* A region's two halves and the split between them. Both are pane children, so both fill by height --
@@ -1775,26 +1775,26 @@ workbench splitview.__vertical__ > .__divider__ {
  * is what makes GhostAnchor.GRAB work at a window edge: the box never grows, so the icon stays exactly
  * under the point you grabbed, and it is the LABEL that moves aside. Putting the label in flow and
  * clamping the box was the first attempt -- it slid the icon out from under the cursor. */
-/* THE SIZE OF THE THING BEING CARRIED, which is the rail button: 16px square with a 12px glyph, the
+/* THE SIZE OF THE THING BEING CARRIED, which is the rail button: 32px square with a 24px glyph, the
  * same numbers `workbench .__activity-item__` and its `pre-icon` state below. It was 20/14 -- visibly
  * larger than what you picked up, which reads as the button having grown on the way out of the rail
  * rather than as a stand-in for it. Deliberate at 16: a ghost that is an exact copy of its source is
  * the strongest statement that this IS the thing, and the tinted background is what says it is in
  * flight. */
 .__drag-ghost__ {
-    width: 16px;
-    height: 16px;
+    width: 32px;
+    height: 32px;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
     background-color: var(--ghost-bg, #2F5F9EC0);
-    border-radius: 2px;
+    border-radius: 4px;
 }
 
 .__drag-ghost__ .__pre-icon__,
 .__drag-ghost__::part(pre-icon) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     overlay-size: contain;
 }
@@ -1805,13 +1805,13 @@ workbench splitview.__vertical__ > .__divider__ {
 .__drag-ghost__::part(label) {
     position: absolute;
     left: 100%;
-    margin-left: 6px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    padding-left: 6px;
-    padding-right: 6px;
+    margin-left: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 12px;
+    padding-right: 12px;
     background-color: var(--ghost-label-bg, #3C3F41F0);
-    border-radius: 3px;
+    border-radius: 6px;
     color: var(--ghost-label-fg, #FFFFFF);
     white-space: nowrap;
 }
@@ -1825,7 +1825,7 @@ workbench splitview.__vertical__ > .__divider__ {
     left: auto;
     right: 100%;
     margin-left: 0px;
-    margin-right: 6px;
+    margin-right: 12px;
 }
 
 /* NO ICON means no icon box: the label alone, flush beside the pointer. A tinted square with nothing in it
@@ -1854,13 +1854,13 @@ workbench splitview.__vertical__ > .__divider__ {
     height: auto;
     flex-direction: row;
     align-items: center;
-    gap: 5px;
-    padding-left: 6px;
-    padding-right: 8px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    border-radius: var(--radius-control, 3px);
-    border-width: 1px;
+    gap: 10px;
+    padding-left: 12px;
+    padding-right: 16px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    border-radius: var(--radius-control, 6px);
+    border-width: 2px;
     border-color: var(--accent, #3574F0);
     background-color: var(--ghost-row-bg, #191A1CA0);
 }
@@ -1889,7 +1889,7 @@ workbench splitview.__vertical__ > .__divider__ {
 
 .__region-drop-preview__ {
     background-color: var(--region-drop-bg, #3574F055);
-    outline: 1px var(--region-drop-border, #3574F0);
+    outline: 2px var(--region-drop-border, #3574F0);
 }
 
 /* ── Activity bar ──────────────────────────────────────────────────────────────────────────────
@@ -1910,16 +1910,16 @@ workbench splitview.__vertical__ > .__divider__ {
  * geometry is the user-agent sheet's job, and the parts share one variable scope (see the file
  * header), so a definition here is visible to every part after it in the manifest. */
 * {
-    --activity-bar-w: 20px;
+    --activity-bar-w: 40px;
     /* The labelled rail, which is a different piece of functional geometry rather than a scale of the
-     * icon-only one: it is as wide as a tool window's NAME needs, not as wide as its glyph. At 6px a
+     * icon-only one: it is as wide as a tool window's NAME needs, not as wide as its glyph. At 12px a
      * nine-letter name is about thirty of these, so this is the name plus its tile's inset -- anything
      * wider is width the editor loses for nothing, which is the complaint the New UI's stripe answers.
      * `width: auto` still lets a genuinely long name push it out; this is where the ordinary case sits. */
-    --activity-bar-named-w: 44px;
+    --activity-bar-named-w: 88px;
 }
 workbench .__activity-bar__ {
-    width: var(--activity-bar-w, 20px);
+    width: var(--activity-bar-w, 40px);
     height: 100%;
     flex-shrink: 0;
     align-items: center;
@@ -1927,13 +1927,13 @@ workbench .__activity-bar__ {
      *
      * The rail holds two runs anchored to opposite edges: the top group starts at the content box's top,
      * and __stripe-spacer__ eats the slack so the bottom group ends at its foot. Padding therefore moves
-     * them TOWARDS each other — 2px off the top pushes the top group down, 2px off the bottom pulls the
+     * them TOWARDS each other — 4px off the top pushes the top group down, 4px off the bottom pulls the
      * bottom group up — which is a different operation from an offset on the buttons themselves. A `top`
      * on `.__activity-item__` moves all four groups the same way and slides the whole rail instead.
      *
-     * Base 2px, plus 2px of tightening on each edge. Change either number alone to move one group. */
-    padding-top: 4px;
-    padding-bottom: -1px;
+     * Base 4px, plus 4px of tightening on each edge. Change either number alone to move one group. */
+    padding-top: 8px;
+    padding-bottom: -2px;
     background: var(--activitybar-bg, #2B2B2B);
 }
 
@@ -1972,20 +1972,20 @@ workbench .__workbench-regions__ {
 }
 
 workbench .__activity-item__ {
-    width: 16px;
-    height: 16px;
+    width: 32px;
+    height: 32px;
     /* THE ICONS TAKE THIS, now that CgUiSvg follows text colour when it carries no tint of its own.
      * Before that they were painted against a hard white context colour whatever any sheet said. */
     color: var(--activitybar-item-fg, #9A9A9A);
     flex-shrink: 0;
-    margin-bottom: 2px;
+    margin-bottom: 4px;
     /* NO `top` OFFSET HERE, deliberately — see the rail's padding above. A relative offset on the button
      * reaches every button, which is right for "move the icons" and exactly wrong for "close the gap":
      * it slid the bottom group down along with the top one, so the column travelled instead of tightening. */
     justify-content: center;
     align-items: center;
     background: none;
-    border-radius: 2px;
+    border-radius: 4px;
 }
 
 /* MORE TOOL WINDOWS -- IntelliJ's overflow, listing the buttons that have been hidden. Sized as an item
@@ -1993,17 +1993,17 @@ workbench .__activity-item__ {
  * a rail. The glyph is the ⋮ asset given a quarter turn, which is the honest way to get ⋯ rather than a
  * second nearly-identical file; the button is square, so rotating it moves no edge and no hit box. */
 workbench .__activity-bar__ .__more__ {
-    width: 16px;
-    height: 16px;
+    width: 32px;
+    height: 32px;
     flex-shrink: 0;
-    margin-bottom: 2px;
-    padding: 2px;
+    margin-bottom: 4px;
+    padding: 4px;
     color: var(--activitybar-item-fg, #9A9A9A);
     /* NO background-color HERE. It is a TINT over the drawable, not a fill beside it, so `transparent`
      * multiplies the :hover fill below away and the button never lights up. `background: none` is the one
      * that clears the resting fill. Same trap as the labelled items, one rule apart. */
     background: none;
-    border-radius: 2px;
+    border-radius: 4px;
     overlay-origin: content-box;
     overlay-size: contain;
     border-width: 0px;
@@ -2012,13 +2012,13 @@ workbench .__activity-bar__ .__more__ {
 
 /* THE ITEM'S OWN HOVER, not a paler version of it -- the ⋯ sits in the same column and any difference
  * reads as one of them being broken. */
-/* AND ITS GLYPH, without which the button is a 16px hole: applyIcon hands the icon to the button as its
+/* AND ITS GLYPH, without which the button is a 32px hole: applyIcon hands the icon to the button as its
  * `pre-icon` PART, and a part has no size of its own -- the item's own rule sizes the items' icons and
  * reaches nothing here, so ⋯ hit-tested, tooltipped and drew nothing at all. */
 workbench .__activity-bar__ .__more__::part(pre-icon),
 workbench .__activity-bar__ .__more__ .__pre-icon__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     overlay-size: contain;
     overlay-origin: content-box;
@@ -2039,12 +2039,12 @@ workbench .__activity-bar__ .__more__.__menu-open__ {
  * on is a style change over a tree that already holds the words, rather than a rebuild of the rail. */
 workbench .__activity-bar__.__with-names__ {
     width: auto;
-    min-width: var(--activity-bar-named-w, 44px);
-    padding-left: 2px;
-    padding-right: 2px;
-    /* The icon-only rail's 4px is measured against a 16px glyph; against a two-line tile it reads as the
+    min-width: var(--activity-bar-named-w, 88px);
+    padding-left: 4px;
+    padding-right: 4px;
+    /* The icon-only rail's 8px is measured against a 32px glyph; against a two-line tile it reads as the
      * column having been nudged down. */
-    padding-top: 2px;
+    padding-top: 4px;
 }
 
 workbench .__activity-bar__.__with-names__ .__activity-item__ {
@@ -2057,12 +2057,12 @@ workbench .__activity-bar__.__with-names__ .__activity-item__ {
      * buttons look like a rail of six -- IntelliJ's labelled stripe is a dense column and reads as one
      * control per row rather than as separated cards. The label's own line box carries most of the
      * height, so these are the gap AROUND it rather than the gap it needs. */
-    padding-top: 2px;
-    padding-bottom: 2px;
-    margin-bottom: 1px;
-    gap: 1px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    margin-bottom: 2px;
+    gap: 2px;
     /* NOT `background`, and NOT `background-color`. A name makes a Button `__labelled__`, which is what
-     * `workbench button.__labelled__` dresses as an outlined control -- so every rail button grew the 1px
+     * `workbench button.__labelled__` dresses as an outlined control -- so every rail button grew the 2px
      * border that rule's own comment warns about ("an outline around each turns the frame into a grid of
      * empty boxes"). Only the border is taken back: its transparent fill is what the rail wants at rest,
      * and :hover and :checked are more specific than it, so their fills still land.
@@ -2070,17 +2070,17 @@ workbench .__activity-bar__.__with-names__ .__activity-item__ {
      * background-color was tried and is a TINT over the drawable, not a fill beside it -- transparent
      * multiplied the hover and checked fills away and left the rail looking dead. */
     border-width: 0px;
-    /* Rounder than the icon-only rail's 2px: the highlight is a tile the size of a word now, not a square
-     * the size of a glyph, and a 2px corner on a 50px box reads as an accident. */
-    border-radius: 6px;
+    /* Rounder than the icon-only rail's 4px: the highlight is a tile the size of a word now, not a square
+     * the size of a glyph, and a 4px corner on a 100px box reads as an accident. */
+    border-radius: 12px;
 }
 
-/* 7px: the names are a reminder of what the glyph is, not a column of body text,
+/* 14px: the names are a reminder of what the glyph is, not a column of body text,
  * and IntelliJ sets them a step below the UI font for the same reason. Never wrapped -- a two-line entry
  * would move every button below it, so a long name is clipped as the tab strip's are. */
 workbench .__activity-bar__.__with-names__ .__activity-item__::part(label),
 workbench .__activity-bar__.__with-names__ .__activity-item__ .__label__ {
-    font-size: 6px;
+    font-size: 12px;
     text-align: center;
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -2095,17 +2095,17 @@ workbench .__activity-item__::part(pre-icon),
 workbench .__activity-item__ .__pre-icon__ {
     /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
      *
-     * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
-     * 1px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 10px that
-     * stroke becomes 0.625px -- thinner than a pixel, so it can never fully light one however it is
+     * The file-type set is authored at 32px with every stroke centreline on a HALF-integer, so a
+     * 2px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 20px that
+     * stroke becomes 1.25px -- thinner than a pixel, so it can never fully light one however it is
      * placed -- and every centreline lands mid-pixel. The result is the soft, unevenly-weighted
      * outline that made these icons look muddy next to the same files in IntelliJ.
      *
-     * 16px and 8px are the only crisp sizes for this set; between them sharpness falls off (97%%
-     * sharp pixels at 16px, 89%% at 8px, 67%% at 12px, 56%% at 10px). The row is 20px, which is what
-     * both references pair with a 16px icon. */
-    width: 12px;
-    height: 12px;
+     * 32px and 16px are the only crisp sizes for this set; between them sharpness falls off (97%%
+     * sharp pixels at 32px, 89%% at 16px, 67%% at 24px, 56%% at 20px). The row is 40px, which is what
+     * both references pair with a 32px icon. */
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     overlay-size: contain;
 }
@@ -2177,17 +2177,17 @@ workbench .__activity-item__.__panel-focused__:hover {
     flex-grow: 1;
     align-items: center;
     justify-content: center;
-    gap: 4px;
+    gap: 8px;
     background-color: var(--surface-editor, #1E1E1E);
 }
 
 .__binary-file-name__ {
-    font-size: 13px;
+    font-size: 26px;
     color: var(--fg, #CCCCCC);
 }
 
 .__binary-file-detail__ {
-    font-size: 10px;
+    font-size: 20px;
     color: var(--fg-secondary, #888888);
 }
 
@@ -2258,7 +2258,7 @@ projectfiletree {
      * surface in its own right — it is content ON one. A theme that genuinely wants a distinct
      * well behind its file list still can, by setting --tree-bg. */
     background: var(--tree-bg, #00000000);
-    padding: 4px;
+    padding: 8px;
 
     /* THE TREE'S TEXT COLOUR, and like the container's background above it did not exist until a light
      * theme asked for it: nothing in this file set `color` on a row, so every file name and every fold
@@ -2282,12 +2282,12 @@ projectfiletree .__project-tree__ {
     width: 100%;
     flex-grow: 1;
     flex-basis: 0;
-    font-size: 7px;
+    font-size: 14px;
 }
 
 /* NO height here, deliberately. A virtualised list positions its rows from its own size strategy, so the
  * row height is the strategy's to decide -- setItemHeight, not CSS. Declaring one here used to win the
- * cascade and paint a 12px row inside a 16px slot, leaving a dead band between every pair that quietly
+ * cascade and paint a 24px row inside a 32px slot, leaving a dead band between every pair that quietly
  * swallowed clicks. Padding is what belongs here: it sits inside the row rather than shrinking it. */
 projectfiletree .__project-row__ {
     /* A ROW container now, so ALIGN-ITEMS does the vertical centring.
@@ -2299,9 +2299,9 @@ projectfiletree .__project-row__ {
      * from the other direction. */
     flex-direction: row;
     align-items: center;
-    height: 20px;
+    height: 40px;
 
-    /* NO padding-left. It used to be 2px, and that quietly outranked the indent.
+    /* NO padding-left. It used to be 4px, and that quietly outranked the indent.
      *
      * TreeView writes `padding-left: depth * indentPerDepth` at DEFAULT origin, and this sheet is
      * USER_AGENT -- which is higher -- so a constant here pins every row at the same inset however deep
@@ -2310,14 +2310,14 @@ projectfiletree .__project-row__ {
      * Deleting the text prefix, which is the correct thing to do once TreeView owns the indent, made the
      * whole tree go flat at once. Any rule that wants inset on these rows has to say `margin-left`, or
      * put it on the tree's content box instead. */
-    padding-right: 4px;
+    padding-right: 8px;
 }
 
 /* Fixed width and flex-shrink: 0 on both leading slots. A long file name must ellipsize in the LABEL,
  * never squeeze the icon. */
 projectfiletree .__project-row__ .__twisty__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     /* Quieter than the label it sits beside — both references draw the fold arrow as chrome rather
      * than as content. It tints a `shape()` overlay, so this IS the chevron's colour. */
@@ -2345,19 +2345,19 @@ projectfiletree .__project-row__.__leaf__ .__twisty__ {
 projectfiletree .__project-row__ .__pre-icon__ {
     /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
      *
-     * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
-     * 1px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 10px that
-     * stroke becomes 0.625px -- thinner than a pixel, so it can never fully light one however it is
+     * The file-type set is authored at 32px with every stroke centreline on a HALF-integer, so a
+     * 2px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 20px that
+     * stroke becomes 1.25px -- thinner than a pixel, so it can never fully light one however it is
      * placed -- and every centreline lands mid-pixel. The result is the soft, unevenly-weighted
      * outline that made these icons look muddy next to the same files in IntelliJ.
      *
-     * 16px and 8px are the only crisp sizes for this set; between them sharpness falls off (97%%
-     * sharp pixels at 16px, 89%% at 8px, 67%% at 12px, 56%% at 10px). The row is 20px, which is what
-     * both references pair with a 16px icon. */
-    width: 12px;
-    height: 12px;
+     * 32px and 16px are the only crisp sizes for this set; between them sharpness falls off (97%%
+     * sharp pixels at 32px, 89%% at 16px, 67%% at 24px, 56%% at 20px). The row is 40px, which is what
+     * both references pair with a 32px icon. */
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
-    margin-right: 2px;
+    margin-right: 4px;
     overlay-size: contain;
 }
 
@@ -2385,7 +2385,7 @@ projectfiletree .__project-row__ {
      *
      * On the ROW rather than on `.__selected__`, so the active and inactive fills and any future state
      * are one shape. A row with no fill draws nothing, so this costs an unselected row nothing. */
-    border-radius: var(--radius-control, 4px);
+    border-radius: var(--radius-control, 8px);
 }
 
 /* UNLESS THE LIST SCROLLS SIDEWAYS, in which case the label must NOT give way — it is the thing being
@@ -2418,7 +2418,7 @@ projectfiletree .__h-scroll__ .__project-row__ {
  * to. It also made the row's measured content width equal to its own width, so the label could never be
  * seen to stick out past it and there was nothing to scroll to in the first place. */
 projectfiletree .__h-scroll__ .__project-row__ .__badge__ {
-    margin-left: 4px;
+    margin-left: 8px;
 }
 
 /* The badge is pushed to the trailing edge and never shrinks -- it is one or two characters and the
@@ -2426,7 +2426,7 @@ projectfiletree .__h-scroll__ .__project-row__ .__badge__ {
 projectfiletree .__project-row__ .__badge__ {
     margin-left: auto;
     flex-shrink: 0;
-    padding-left: 4px;
+    padding-left: 8px;
 }
 
 /* SELECTION IS THE ONLY HIGHLIGHT, and there is deliberately no :hover rule beside it.
@@ -2519,7 +2519,7 @@ application > .__editor-content__ {
  * it a right-align rather than a centring -- auto margins SHARE free space between every claimant, the trap
  * the activity bar's groups already spent a session on.
  *
- * The 24px moved to PADDING because an auto margin contributes nothing to min-content: as a margin it
+ * The 48px moved to PADDING because an auto margin contributes nothing to min-content: as a margin it
  * stopped reserving the gap while the menu was being measured, so the widest row -- the one with no free
  * space left to push with -- would have had its label touching its shortcut. */
 /* THE TWIN NAMES THE PART THAT EXISTS. A MenuItem is a Button and hands its accelerator to
@@ -2532,7 +2532,7 @@ menuitem .__accelerator__,
 menuitem::part(post-icon) {
     color: var(--menu-accelerator, #8A8A8A);
     margin-left: auto;
-    padding-left: 24px;
+    padding-left: 48px;
     white-space: nowrap;
 }
 
@@ -2569,13 +2569,13 @@ dialog.__placing__ {
 }
 
 popover.__prompt__ {
-    width: 280px;
+    width: 560px;
     flex-direction: column;
     background: var(--prompt-bg, #2E2E2E);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--prompt-border, #4A4A4A);
-    padding: 10px;
-    gap: 6px;
+    padding: 20px;
+    gap: 12px;
 }
 
 /* Centred, because it is a caption rather than a label for the field beside it. */
@@ -2591,11 +2591,11 @@ popover.__prompt__ .__prompt-caption__ {
  * rule through the middle of a surface the reference deliberately keeps unbroken. */
 popover.__prompt__ textfield {
     width: 100%;
-    height: 16px;
+    height: 32px;
     background: var(--prompt-field-bg, #2E2E2E);
     border-width: 0px;
     color: var(--prompt-field-fg, #DDDDDD);
-    padding-left: 2px;
+    padding-left: 4px;
 }
 
 /* ── New Java Class (the explorer's New ▸ Java Class) ────────────────────────────────────────────
@@ -2612,23 +2612,23 @@ popover.__prompt__ textfield {
 popover.__new-class__ {
     background: var(--surface-base, #26282B);
     /* SIZED AGAINST OUR OWN COMPLETION POPUP, not measured off a screenshot. That list is the one
-     * surface in this engine already tuned row by row against IntelliJ's -- 16px rows, a 12px icon, the
-     * 10px UI font -- so matching it is how this prompt gets IntelliJ's density without a second set of
-     * numbers arrived at by eye. Built at 20px rows it sat nearer the command palette's 22, which is a
+     * surface in this engine already tuned row by row against IntelliJ's -- 32px rows, a 24px icon, the
+     * 20px UI font -- so matching it is how this prompt gets IntelliJ's density without a second set of
+     * numbers arrived at by eye. Built at 40px rows it sat nearer the command palette's 22, which is a
      * full-width surface where air is wanted; here it read as bulky. */
-    width: 160px;
+    width: 320px;
     /* NO PADDING ON THE POPUP, so the selected row can run edge to edge. The padding the prompt would
      * have applied moves onto the caption and the name row, which are the two things that want it --
-     * a selection band inset by 10px on each side reads as a chip rather than as a selected row, which
+     * a selection band inset by 20px on each side reads as a chip rather than as a selected row, which
      * is the single loudest difference from the reference. */
     padding: 0px;
     gap: 0px;
-    padding-top: 6px;
-    /* AND 3 UNDER THE LAST ROW, which is the 4px gutter the band already has on its left and right
-     * minus the 1px border. With the list sized to exactly six rows there is nothing between the band
+    padding-top: 12px;
+    /* AND 3 UNDER THE LAST ROW, which is the 8px gutter the band already has on its left and right
+     * minus the 2px border. With the list sized to exactly six rows there is nothing between the band
      * and the popup's edge, so a selected Exception drew hard against it -- which reads as the band
      * overflowing rather than as the list ending. Even air on three sides is what stops it. */
-    padding-bottom: 4px;
+    padding-bottom: 8px;
 }
 
 /* ON THE TEXT, NEVER ON THE ROW, for every size below: `* { font-size: 10 }` in ua/core.css is a
@@ -2636,8 +2636,8 @@ popover.__new-class__ {
  * candidate at any origin -- so a size declared on a container computes to 10 on the text inside it and
  * changes nothing. The same rule `menuitem` records about its own label. */
 popover.__new-class__ .__prompt-caption__ {
-    padding-bottom: 4px;
-    font-size: 8px;
+    padding-bottom: 8px;
+    font-size: 16px;
     font-weight: bold;
 }
 
@@ -2646,9 +2646,9 @@ popover.__new-class__ .__new-class-name__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    height: 18px;
-    padding-left: 8px;
-    padding-right: 8px;
+    height: 36px;
+    padding-left: 16px;
+    padding-right: 16px;
     /* ON THE ROW, so the strip behind the name is the popup's surface end to end. Setting it on the
      * field alone leaves the row transparent and the field inset by this padding, which draws exactly
      * the dark band under the icon that the recessed well did. */
@@ -2662,7 +2662,7 @@ popover.__new-class__ .__new-class-name__ {
 popover.__new-class__ .__new-class-name__ textfield,
 popover.__new-class__ .__new-class-name__ textfield:focus-visible {
     width: 100%;
-    height: 16px;
+    height: 32px;
     /* THE POPUP'S SURFACE, not the recessed one an InputDialog field sits in. There the field is the
      * only control and a well tells you where to type; here it is one of two stacked regions, and a
      * well under the top one draws a box the reference does not have. */
@@ -2670,7 +2670,7 @@ popover.__new-class__ .__new-class-name__ textfield:focus-visible {
     border-width: 0px;
     outline-width: 0px;
     padding-left: 0px;
-    font-size: 8px;
+    font-size: 16px;
 }
 
 /* EDGE TO EDGE, unlike a menu's separator, and for the same reason that one is inset: a rule reads as
@@ -2679,15 +2679,15 @@ popover.__new-class__ .__new-class-name__ textfield:focus-visible {
  * inset, it would float above rows wider than itself. */
 popover.__new-class__ .__new-class-divider__ {
     width: 100%;
-    height: 1px;
-    min-height: 1px;
+    height: 2px;
+    min-height: 2px;
     flex-grow: 0;
     flex-shrink: 0;
-    /* EVEN AIR EITHER SIDE. The name row centres a 16px field in 20px, so it already carries two of its
+    /* EVEN AIR EITHER SIDE. The name row centres a 32px field in 40px, so it already carries two of its
      * own above the rule; matching margins keep the rule looking placed between the halves rather than
      * hung off the bottom of the field. */
-    margin-top: 3px;
-    margin-bottom: 3px;
+    margin-top: 6px;
+    margin-bottom: 6px;
     background: var(--border-base, #4A4A4A);
 }
 
@@ -2699,26 +2699,26 @@ popover.__new-class__ .__new-class-kinds__ {
      * list turns an index into an offset in Java and cannot read the cascade. */
     /* EXACTLY SIX ROWS -- 6 x NewJavaClassPrompt.ROW_HEIGHT and not a pixel more, or the list draws a
      * strip of empty substrate under the last kind that reads as stray bottom padding on the popup. */
-    height: 96px;
+    height: 192px;
     padding: 0px;
     /* THE BAND STOPS SHORT OF THE BORDER. Inset on the LIST rather than as a margin on each row, so the
      * gutter belongs to the column and every row -- selected or not -- starts at the same x. A margin
      * per row would move the band and leave the labels where they were. */
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 8px;
+    padding-right: 8px;
     /* The popup's own surface, not a panel of its own. A darker well under the list makes it read as a
      * second widget dropped into the prompt rather than as the prompt's own rows. */
     background: var(--surface-base, #26282B);
 }
 
 .__new-class-kind__ {
-    height: 16px;
+    height: 32px;
     flex-direction: row;
     align-items: center;
-    /* 4, not 8: the list's own 4px gutter above supplies the rest, so the icon still sits 8px from the
+    /* 4, not 8: the list's own 8px gutter above supplies the rest, so the icon still sits 16px from the
      * popup's edge and only the band moved. */
-    padding-left: 4px;
-    padding-right: 4px;
+    padding-left: 8px;
+    padding-right: 8px;
     overflow: hidden;
 }
 
@@ -2729,21 +2729,21 @@ popover.__new-class__ .__new-class-kinds__ {
     background-color: var(--list-selected-bg, #2E436E);
 }
 
-/* 10px, DOWN FROM THE COMPLETION LIST'S 12, because the text here is 8px rather than 10.
+/* 20px, DOWN FROM THE COMPLETION LIST'S 12, because the text here is 16px rather than 10.
  *
  * That rule sized its icon to hold roughly a 1.2x icon-to-text ratio -- JetBrains draws these for a
- * ~13px UI font, so the native 16 reads 1.6x against ours and stops being a hint. The ratio is what
- * matters, not the number: at 8px text a 12px icon is 1.5x and the loudness comes straight back. 10
+ * ~26px UI font, so the native 16 reads 1.6x against ours and stops being a hint. The ratio is what
+ * matters, not the number: at 16px text a 24px icon is 1.5x and the loudness comes straight back. 10
  * restores it, and it is a whole number of logical pixels so the raster still lands on the grid. */
 popover.__new-class__ .__completion-icon__,
 popover.__new-class__ ::part(pre-icon).__completion-icon__ {
-    width: 10px;
-    height: 10px;
+    width: 20px;
+    height: 20px;
 }
 
 .__new-class-label__ {
     color: var(--prompt-field-fg, #DDDDDD);
-    font-size: 8px;
+    font-size: 16px;
 }
 
 /* ── Conflict dialog (5.5) ────────────────────────────────────────────────────────
@@ -2753,7 +2753,7 @@ popover.__new-class__ ::part(pre-icon).__completion-icon__ {
  * GEOMETRY ONLY, as everywhere in the user-agent sheet: no left/top, because a dialog is positioned by
  * the engine and hand-writing a position is what stops window-scoped modality retargeting it later. */
 dialog.__conflict__ {
-    width: 340px;
+    width: 680px;
 }
 
 dialog.__conflict__ .__conflict-message__ {
@@ -2776,8 +2776,8 @@ dialog.__conflict__ .__conflict-actions__ {
     flex-direction: row;
     justify-content: flex-end;
     align-items: center;
-    gap: 6px;
-    margin-top: 4px;
+    gap: 12px;
+    margin-top: 8px;
 }
 
 /* A dialog's button row, for ANY dialog.
@@ -2791,8 +2791,8 @@ dialog.__conflict__ .__conflict-actions__ {
     flex-direction: row;
     justify-content: flex-end;
     align-items: center;
-    gap: 6px;
-    margin-top: 4px;
+    gap: 12px;
+    margin-top: 8px;
 }
 
 /* -- Merge (Phase 6.7) ---------------------------------------------------------
@@ -2801,16 +2801,16 @@ dialog.__conflict__ .__conflict-actions__ {
  * the view is reading two versions against each other, and a dialog that fits the conflict count but not
  * the code is the shape people close again immediately. */
 .__merge__ {
-    width: 900px;
-    height: 520px;
+    width: 1800px;
+    height: 1040px;
 }
 
 .__merge__ .__merge-toolbar__ {
     width: 100%;
     flex-direction: row;
     align-items: center;
-    gap: 6px;
-    padding-bottom: 6px;
+    gap: 12px;
+    padding-bottom: 12px;
 }
 
 /* THE ROW FILL IDIOM -- width: 0 with flex-grow, never flex-grow alone. It is what pushes the actions
@@ -2826,7 +2826,7 @@ dialog.__conflict__ .__conflict-actions__ {
 .__merge__ .__merge-actions__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
 }
 
 /* THE COLUMN FILL IDIOM, and it never touches flex-shrink: the 0 default is what stops the panes being
@@ -2849,11 +2849,11 @@ dialog.__conflict__ .__conflict-actions__ {
 .__merge__ .__merge-pane-title__ {
     width: 100%;
     /* Explicit, so the divider's margin-top can match it. @see .__diff-pane-title__ */
-    height: 16px;
-    font-size: 10px;
+    height: 32px;
+    font-size: 20px;
     color: var(--fg-secondary, #9A9A9A);
-    padding-left: 4px;
-    padding-bottom: 2px;
+    padding-left: 8px;
+    padding-bottom: 4px;
 }
 
 .__merge__ .__merge-editor__ {
@@ -2869,8 +2869,8 @@ dialog.__conflict__ .__conflict-actions__ {
  * window would come up with an unstyled title bar. One scrolling list of groups, which is VS Code's
  * settings editor rather than IntelliJ's category tree. */
 dialog.__preferences__ {
-    width: 720px;
-    height: 480px;
+    width: 1440px;
+    height: 960px;
     /* NO TRANSITION OF ITS OWN ANY MORE. This restated the base `dialog` fade purely to be slower than
      * it; the default is 240ms now, which is the number this window wanted, so the override would say
      * nothing and would be one more place to forget when the default moves. @see ua/overlays.css
@@ -2883,8 +2883,8 @@ dialog.__preferences__ {
      * for every language. `resize` is a real CSS property here and Dialog already routes its handles
      * through its own position, so this is the whole of it. */
     resize: both;
-    min-width: 480px;
-    min-height: 320px;
+    min-width: 960px;
+    min-height: 640px;
 }
 
 dialog.__preferences__ .__configurator-panel__ {
@@ -2899,8 +2899,8 @@ dialog.__preferences__ .__configurator-panel__ {
  * shared token cannot serve both, which is the same argument the configurator's own comment makes for
  * not sharing one scale with the graph. */
 dialog.__preferences__ .__configurator__ > .__label__ {
-    width: 170px;
-    min-width: 170px;
+    width: 340px;
+    min-width: 340px;
 }
 
 /* ── NavigatorView ─────────────────────────────────────────────────────────────
@@ -2923,8 +2923,8 @@ navigatorview > splitview {
 navigatorview .__nav-sidebar__ {
     width: 100%;
     height: 100%;
-    padding: 4px;
-    gap: 4px;
+    padding: 8px;
+    gap: 8px;
     background: var(--nav-sidebar-bg, #252526);
 }
 
@@ -2958,23 +2958,23 @@ navigatorview .__nav-sidebar__ treeview {
 navigatorview .__nav-detail__ {
     width: 100%;
     height: 100%;
-    padding: 6px;
-    gap: 4px;
+    padding: 12px;
+    gap: 8px;
 }
 
 navigatorview .__nav-header__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    height: 18px;
-    gap: 4px;
+    height: 36px;
+    gap: 8px;
     flex-shrink: 0;
 }
 
 navigatorview .__nav-back__,
 navigatorview .__nav-forward__ {
-    width: 18px;
-    height: 16px;
+    width: 36px;
+    height: 32px;
     flex-shrink: 0;
     padding: 0px;
 }
@@ -2983,7 +2983,7 @@ navigatorview .__nav-forward__ {
 navigatorview .__nav-header__ breadcrumbs {
     flex-direction: row;
     align-items: center;
-    gap: 3px;
+    gap: 6px;
     width: 0px;
     flex-grow: 1;
 }
@@ -2991,23 +2991,23 @@ navigatorview .__nav-header__ breadcrumbs {
 /* A TRAIL IS A ROW, and this rule was missing entirely — the only breadcrumbs in the engine lived in a
  * navigator header, which set the direction itself, so the widget had never been asked to stand alone.
  * The engine's flex-direction default is COLUMN (see TaffyBridge), so the status bar's trail came out
- * stacked vertically: `harness:scratch` over `>` over `README.md`, clipped by a 22px bar. A widget's own
+ * stacked vertically: `harness:scratch` over `>` over `README.md`, clipped by a 44px bar. A widget's own
  * axis is not a host's decision. */
 breadcrumbs {
     flex-direction: row;
     align-items: center;
-    gap: 3px;
+    gap: 6px;
 }
 
 /* The glyph in front of a crumb. Sized like the file tree's, and `contain` rather than a fixed scale so
- * a 16px source icon lands in a 10px slot without being cropped. Hidden when the crumb supplied none, so
+ * a 32px source icon lands in a 20px slot without being cropped. Hidden when the crumb supplied none, so
  * a settings trail pays nothing for the slot existing. */
 breadcrumbs .__crumb-icon__ {
-    width: 10px;
-    height: 10px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
     overlay-size: contain;
-    margin-right: 1px;
+    margin-right: 2px;
 }
 
 breadcrumbs .__crumb__ {
@@ -3024,8 +3024,8 @@ breadcrumbs .__crumb__.__crumb-current__ {
 /* The chevron between two crumbs. A shape rather than a character — see Breadcrumbs for why a glyph in
  * Java is both unthemeable and at the mercy of the font having the codepoint. */
 breadcrumbs .__crumb-sep__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     color: var(--breadcrumb-sep-fg, #7A7A7A);
     overlay: shape("chevron-right");
@@ -3044,7 +3044,7 @@ pagestack .__page__ {
 
 pagestack .__page-placeholder__ {
     width: 100%;
-    padding: 8px;
+    padding: 16px;
     color: var(--pagestack-empty-fg, #8A8A8A);
 }
 
@@ -3057,8 +3057,8 @@ navigatorview .__nav-node__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    height: 18px;
-    gap: 2px;
+    height: 36px;
+    gap: 4px;
 }
 
 /* Sized to its TEXT, not stretched: NavigatorView measures these to decide how wide the sidebar has to
@@ -3072,8 +3072,8 @@ navigatorview .__nav-label__ {
  * sheet's business and the renderer never picks a character. A leaf keeps the box so its label lines up
  * with a sibling that has one. */
 navigatorview .__nav-arrow__ {
-    width: 10px;
-    height: 10px;
+    width: 20px;
+    height: 20px;
     flex-shrink: 0;
     align-items: center;
     justify-content: center;
@@ -3095,7 +3095,7 @@ navigatorview .__nav-node__.__expanded__ > .__nav-arrow__ {
 /* EVERY TREE ROW, not just the project's -- the band is the same object wherever a tree is. Scoped to
  * `treeview` so it reaches a tree in any panel and nothing that merely borrows `__row__`. */
 treeview .__row__ {
-    border-radius: var(--radius-control, 4px);
+    border-radius: var(--radius-control, 8px);
 }
 
 /* ── A RUN OF SELECTED ROWS IS ONE BLOCK ────────────────────────────────────────────────────────
@@ -3116,24 +3116,24 @@ treeview .__row__.__selected__ {
 }
 
 treeview .__row__.__selected__.__run-top__ {
-    border-top-left-radius: var(--radius-control, 4px);
-    border-top-right-radius: var(--radius-control, 4px);
+    border-top-left-radius: var(--radius-control, 8px);
+    border-top-right-radius: var(--radius-control, 8px);
 }
 
 treeview .__row__.__selected__.__run-bottom__ {
-    border-bottom-left-radius: var(--radius-control, 4px);
-    border-bottom-right-radius: var(--radius-control, 4px);
+    border-bottom-left-radius: var(--radius-control, 8px);
+    border-bottom-right-radius: var(--radius-control, 8px);
 }
 
-/* A TREE KEEPS A TIGHTER GUTTER THAN THE SHARED ONE. The shared 7px is right for the inspector, whose
+/* A TREE KEEPS A TIGHTER GUTTER THAN THE SHARED ONE. The shared 14px is right for the inspector, whose
  * bands run the full width of the panel; a tree's rows are already indented and against that the same
- * clearance reads loose. 6px, measured.
+ * clearance reads loose. 12px, measured.
  *
  * ALL THREE SELECTORS ARE NEEDED to outrank `.__scroll-view__.__v-gutter__` in ua/editor.css: that is
  * two classes (20), so a tag plus one class (11) would lose however late this file comes. Tag plus both
  * classes is 21. @see ScrollerView#V_GUTTER_CLASS */
 treeview.__scroll-view__.__v-gutter__ {
-    padding-right: 6px;
+    padding-right: 12px;
 }
 
 navigatorview treeview .__row__:hover {
@@ -3157,7 +3157,7 @@ navigatorview treeview .__row__.__selected__ {
 
 /* ── THE EDITOR TAB STRIP'S SCROLLBAR ───────────────────────────────────────────────────────────
  *
- * OVER THE STRIP'S FOOT, as IntelliJ's is, rather than a row of its own. In flow it took 3 of the header's 22px, and
+ * OVER THE STRIP'S FOOT, as IntelliJ's is, rather than a row of its own. In flow it took 3 of the header's 44px, and
  * the tabs rode up by that much whenever there was something to scroll -- and a layout that wrapped kept the shift.
  * Pinned to the bottom it cannot move anything, and it stays inside the strip, which the first in-flow version (laid
  * out BELOW the strip, under the editor) did not. It runs the strip's full width, under the ⋮ too, as IntelliJ's does:
@@ -3173,13 +3173,13 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
 
 /* ── A TAB'S DRAG GHOST ─────────────────────────────────────────────────────────────────────────
  *
- * The default ghost is a 20px chip with its label in a separate box to the right, which is right for
- * the thing it was written for: a rail button IS a 20px icon, and its name appears nowhere else, so
+ * The default ghost is a 40px chip with its label in a separate box to the right, which is right for
+ * the thing it was written for: a rail button IS a 40px icon, and its name appears nowhere else, so
  * the label has to be produced beside it. A tab is a pill with its icon and label inline and its name
  * already visible -- so the same ghost over a tab strip reads as a different kind of object entirely,
  * about twice the size of the thing it is standing in for.
  *
- * So it takes the tab's own shape: one box, row direction, the icon at a tab's 12px, and the label
+ * So it takes the tab's own shape: one box, row direction, the icon at a tab's 24px, and the label
  * back IN FLOW beside it rather than out of flow in a box of its own. Coloured as a selected tab,
  * because that is what the thing under the cursor is about to become wherever it lands. */
 .__drag-ghost__.__tab-ghost__ {
@@ -3187,21 +3187,21 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
     height: auto;
     flex-direction: row;
     align-items: center;
-    gap: 4px;
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 1px;
-    padding-bottom: 1px;
-    border-radius: var(--radius-control, 3px);
-    border-width: 1px;
+    gap: 8px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 2px;
+    padding-bottom: 2px;
+    border-radius: var(--radius-control, 6px);
+    border-width: 2px;
     border-color: var(--tab-active-border, #4A4A4A);
     background-color: var(--tab-active-bg, #3A3A3A);
 }
 
 .__drag-ghost__.__tab-ghost__ .__pre-icon__,
 .__drag-ghost__.__tab-ghost__::part(pre-icon) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
 }
 
 /* BACK IN FLOW. The base rule takes the label out of it and anchors it at `left: 100%`, which is what
@@ -3224,16 +3224,16 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
  * because the two widgets answer different questions and will drift apart -- a diff will grow a
  * commit header and a merge will not. */
 .__diff__ {
-    width: 900px;
-    height: 520px;
+    width: 1800px;
+    height: 1040px;
 }
 
 .__diff__ .__diff-toolbar__ {
     width: 100%;
     flex-direction: row;
     align-items: center;
-    gap: 6px;
-    padding-bottom: 6px;
+    gap: 12px;
+    padding-bottom: 12px;
 }
 
 .__diff__ .__diff-status__ {
@@ -3247,7 +3247,7 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
 .__diff__ .__diff-actions__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
 }
 
 .__diff__ .__diff-panes__ {
@@ -3265,11 +3265,11 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
 .__diff__ .__diff-pane-title__ {
     width: 100%;
     /* Explicit, so the divider's margin-top above can match it. */
-    height: 16px;
-    font-size: 10px;
+    height: 32px;
+    font-size: 20px;
     color: var(--fg-secondary, #9A9A9A);
-    padding-left: 4px;
-    padding-bottom: 2px;
+    padding-left: 8px;
+    padding-bottom: 4px;
 }
 
 .__diff__ .__diff-editor__ {
@@ -3280,7 +3280,7 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
 
 /* -- The diff and merge divider: draggable, invisible ---------------------------
  *
- * THE RESIZER STAYS, ONLY ITS BAR GOES. The divider keeps its 4px, so the grab target and the drag are
+ * THE RESIZER STAYS, ONLY ITS BAR GOES. The divider keeps its 8px, so the grab target and the drag are
  * exactly as they were; what is removed is the painted strip.
  *
  * Between two panes whose gutters already meet in the middle, that strip is a third vertical line in a
@@ -3310,11 +3310,11 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
      * heading. This must equal the title's own height below; the two are stated twice because a divider
      * cannot ask a sibling how tall it is.
      *
-     * 15 rather than the title's full 16: the title carries `padding-bottom: 2px`, which is empty space,
+     * 15 rather than the title's full 16: the title carries `padding-bottom: 4px`, which is empty space,
      * so the divider can reach into it without touching the heading. Stopping at the full height left a
      * notch at the top of the strip where the header colour showed through -- a gap that reads as the
      * divider being broken rather than as it being clipped. */
-    margin-top: 15px;
+    margin-top: 30px;
 }
 
 .__diff-panes__ > .__divider__:hover,
@@ -3348,11 +3348,11 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
 
 /* ── The Crystal Editor's window frame ───────────────────────────────────────────────────────────
  * Hung on the class every window of an application wears (WindowFrame#applicationClass), so the starting
- * window and the loaded one share the editor's caption height: the 22px its adopted menu bar brings.
+ * window and the loaded one share the editor's caption height: the 44px its adopted menu bar brings.
  * The starting window keeps the desktop's glass; once the workbench is in (`__adopted__`), the frame and
  * caption fade to the editor's opaque look. */
 .__window__.__app-crystalgui-editor__ > .__title-bar__ {
-    min-height: 22px;
+    min-height: 44px;
     transition: background-color 250ms ease-out;
 }
 

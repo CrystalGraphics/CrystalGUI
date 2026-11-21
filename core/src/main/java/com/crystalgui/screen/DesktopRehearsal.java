@@ -8,7 +8,6 @@ import com.crystalgraphics.render.stage.CgStageFrame;
 import com.crystalgui.core.CrystalGuiCore;
 import com.crystalgui.desktop.Desktop;
 import com.crystalgui.desktop.window.WindowFrame;
-import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.style.theme.UiThemeManager;
 import com.crystalgui.ui.dom.UIDocument;
 import com.crystalgui.viewport.CgUiViewport;
@@ -91,7 +90,7 @@ final class DesktopRehearsal {
 
     private static Desktop build() {
         UIDocument document = new UIDocument();
-        document.boxes().setUiScale(Preferences.current().uiScale());
+        document.boxes().setUiScale(UiScale.desktop());
         UiThemeManager.getInstance().installInto(document.styles());
         Desktop desktop = Desktop.of(document);
         desktop.addWindow(new WindowFrame("Warm-up"));

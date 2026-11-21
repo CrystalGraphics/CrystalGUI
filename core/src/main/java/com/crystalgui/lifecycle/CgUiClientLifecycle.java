@@ -1,6 +1,7 @@
 package com.crystalgui.lifecycle;
 
 import com.crystalgui.screen.CgUiScreen;
+import com.crystalgui.screen.UiScale;
 import com.crystalgraphics.gauntlet.CgGauntlet;
 import com.crystalgraphics.lifecycle.CgLifecycleListener;
 import com.crystalgraphics.loading.task.CgLoadPlan;
@@ -53,7 +54,7 @@ public final class CgUiClientLifecycle implements CgLifecycleListener, CgReloadL
     /** The paint preload, then the desktop built and rehearsed behind the loading screen. */
     @Override
     public void onLoad(CgLoadPlan plan) {
-        UiPaintWarmup preload = UiPaintWarmup.preload();
+        UiPaintWarmup preload = UiPaintWarmup.preload(UiScale.desktop());
         plan.task("crystalgui:paint").render(task -> {
             // Behind the start: a paint class initialising beside its style classes could deadlock on one.
             if (!CgUiStart.done()) {

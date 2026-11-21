@@ -17,15 +17,15 @@ projectfiletree .__row-editor__ {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
-    height: 16px;
-    padding-left: 2px;
-    padding-right: 2px;
+    height: 32px;
+    padding-left: 4px;
+    padding-right: 4px;
     margin-left: 0px;
-    font-size: 10px;
+    font-size: 20px;
     background-color: var(--tree-editor-bg, #1E1F22);
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--tree-editor-border, #4A88C7);
-    border-radius: 2px;
+    border-radius: 4px;
 }
 
 /* TextField's conflict edge, restated here only because the rule above outranks `textfield.__conflict__`. */
@@ -54,7 +54,7 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
      * all, whatever flex property was tried. The row was never short of a rule; it was short of a parent. */
     width: 100%;
     flex-shrink: 0;
-    /* CLIPS ITS OWN CHILDREN. At a narrow panel the row genuinely does not fit -- measured at 112px wide
+    /* CLIPS ITS OWN CHILDREN. At a narrow panel the row genuinely does not fit -- measured at 224px wide
      * with the mode button laid out at x=146 and the close at x=162, both past the bar's right edge of 144,
      * and both still painting. That is what "the count overlaps the buttons" actually was: not a text
      * overflow, but the whole row spilling out of a box that never clipped it. A control drawn outside its
@@ -63,20 +63,20 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
      * A backstop rather than the fix -- the floor below is what keeps the row fitting in the first place. */
     overflow: hidden;
     /* SMALL, because the row is now icons rather than words and every gap is space the box cannot have.
-     * At 6px the children plus the gaps came to ~2px MORE than the panel, so the box shrank to its
+     * At 12px the children plus the gaps came to ~4px MORE than the panel, so the box shrank to its
      * min-width and stayed there however wide the panel got -- a two-pixel overflow reading as "the search
      * box never grows". */
-    gap: 4px;
-    height: 20px;
-    padding-left: 6px;
-    padding-right: 4px;
+    gap: 8px;
+    height: 40px;
+    padding-left: 12px;
+    padding-right: 8px;
     background-color: var(--findbar-bg, #2F3033);
-    border-bottom-width: 1px;
+    border-bottom-width: 2px;
     border-bottom-color: var(--findbar-border, #3C3F41);
 }
 
 .__find-bar__ text {
-    font-size: 10px;
+    font-size: 20px;
     color: var(--findbar-fg, #D0D2D6);
     white-space: nowrap;
 }
@@ -101,7 +101,7 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     overflow: hidden;
     /* SHRINKS, and it is the only thing in the row that may. flex-shrink defaults to 0 here (not 1, as on
      * the web), so in a narrow host every sibling is rigid and the input -- the one element that does
-     * shrink -- collapsed to about 40px in the Preferences sidebar, with four characters of query showing
+     * shrink -- collapsed to about 80px in the Preferences sidebar, with four characters of query showing
      * as "nt". The count is the one part that can be lost without losing the control. */
     flex-shrink: 1;
     min-width: 0px;
@@ -113,8 +113,8 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
  * never grow past its minimum however wide the panel was -- the close button quietly took all of it. The
  * box grows instead, which puts the close at the right edge anyway in every panel narrower than its cap. */
 .__find-bar__ .__find-close__ {
-    width: 12px;
-    height: 10px;
+    width: 24px;
+    height: 20px;
     min-height: 0px;
     padding: 0px;
     flex-shrink: 0;
@@ -124,7 +124,7 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     overlay-size: contain;
     color: var(--findbar-button-fg, #8A8A8A);
     background: none;
-    border-radius: 2px;
+    border-radius: 4px;
 }
 
 .__find-bar__ .__find-close__:hover {
@@ -135,12 +135,12 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 /* A GLYPH, not a word. See TreeSearch's note: the words cost about fifty pixels of a bar that is as narrow
  * as its panel, which left the box pinned at its minimum with the count truncated to an ellipsis. */
 .__find-bar__ .__find-mode__ {
-    width: 12px;
-    height: 10px;
+    width: 24px;
+    height: 20px;
     min-height: 0px;
     padding: 0px;
     flex-shrink: 0;
-    border-radius: 3px;
+    border-radius: 6px;
     overlay: icon("crystalgui:general/search/filter");
     overlay-size: contain;
     background: none;
@@ -162,12 +162,12 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 
 .__find-bar__ .__find-prev__,
 .__find-bar__ .__find-next__ {
-    width: 11px;
-    height: 10px;
+    width: 22px;
+    height: 20px;
     min-height: 0px;
     padding: 0px;
     flex-shrink: 0;
-    border-radius: 3px;
+    border-radius: 6px;
     overlay-size: contain;
     background: none;
     background-color: transparent;
@@ -268,11 +268,11 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    /* LOW ENOUGH THAT THE REST STILL FITS. At 100px the box alone exceeded what a squeezed panel had to
-     * give -- 112px of bar against 100 + two 12px buttons + 20 of gaps + 10 of padding -- so the row
+    /* LOW ENOUGH THAT THE REST STILL FITS. At 200px the box alone exceeded what a squeezed panel had to
+     * give -- 224px of bar against 100 + two 24px buttons + 20 of gaps + 10 of padding -- so the row
      * overflowed however far it was dragged. A search box needs to show a few characters, not a query. */
-    min-width: 52px;
-    max-width: 320px;
+    min-width: 104px;
+    max-width: 640px;
 }
 
 /* The Problems panel's bar sits in the panel's own column, between the tabs and the body — see
@@ -296,16 +296,16 @@ problemspanel > .__find-bar__ {
 .__search-field__ {
     flex-direction: row;
     align-items: center;
-    height: 16px;
-    gap: 3px;
-    padding-left: 4px;
-    padding-right: 3px;
-    /* FROM THE THEME, not a literal. This was a hardcoded 2px while `textfield` beside it already read
+    height: 32px;
+    gap: 6px;
+    padding-left: 8px;
+    padding-right: 6px;
+    /* FROM THE THEME, not a literal. This was a hardcoded 4px while `textfield` beside it already read
      * `var(--radius-control)`, so the two most similar controls in the engine rounded differently and a
      * theme could only reach one of them — which is the exact rot the token pass exists to stop. */
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
     background: var(--searchfield-bg, #1B1B1B);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--searchfield-border, #3C3C3C);
 }
 
@@ -315,8 +315,8 @@ problemspanel > .__find-bar__ {
 
 .__search-field__ .__icon__,
 .__search-field__::part(icon) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     overlay: icon("crystalgui:general/search/search");
     overlay-size: contain;
@@ -328,10 +328,10 @@ problemspanel > .__find-bar__ {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
-    height: 14px;
+    height: 28px;
     background: none;
     outline-width: 0px;
-    font-size: 10px;
+    font-size: 20px;
     color: var(--searchfield-fg, #D0D2D6);
 }
 
@@ -349,8 +349,8 @@ problemspanel > .__find-bar__ {
  * field and tucks it against the option group. */
 .__search-field__ .__clear__,
 .__search-field__::part(clear) {
-    width: 6px;
-    height: 6px;
+    width: 12px;
+    height: 12px;
     flex-shrink: 0;
     overlay: icon("crystalgui:x");
     overlay-size: contain;
@@ -363,15 +363,15 @@ problemspanel > .__find-bar__ {
     background-color: var(--searchfield-clear-hover-bg, #393b40);
 }
 
-/* ROOM TO BREATHE. At 1px the three glyphs ran together into one shape; IntelliJ spaces them by about a
+/* ROOM TO BREATHE. At 2px the three glyphs ran together into one shape; IntelliJ spaces them by about a
  * third of their own width, which is what makes them read as three controls. */
 .__search-field__ .__options__,
 .__search-field__::part(options) {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    gap: 2px;
-    margin-left: 2px;
+    gap: 4px;
+    margin-left: 4px;
 }
 
 /* NO FILL AT REST. `button` gives every button a background, and inherited here it drew each toggle as a
@@ -382,23 +382,23 @@ problemspanel > .__find-bar__ {
  * space above and below so the blue is obviously ON THE GLYPH. Width stays wider than height for the same
  * reason: `.*` and `Cc` are wide glyphs and a square would crop them. */
 .__search-option__ {
-    width: 12px;
-    height: 10px;
-    /* MIN-HEIGHT, NOT HEIGHT, is what was holding these open. `button` sets `min-height: 14px` plus its own
+    width: 24px;
+    height: 20px;
+    /* MIN-HEIGHT, NOT HEIGHT, is what was holding these open. `button` sets `min-height: 28px` plus its own
      * padding, and a minimum is a different property from a size -- so every `height` written here lost to
      * it silently and the chip stayed exactly as tall as the field's interior however small the number got.
      * Clearing both is what lets the lit background sit INSIDE the border with space above and below. */
     min-height: 0px;
-    /* 1:1 WITH THE ARTWORK (16px), which is the sharpest this can be -- and it is still not sharp.
+    /* 1:1 WITH THE ARTWORK (32px), which is the sharpest this can be -- and it is still not sharp.
      *
      * These three are LETTERFORMS, not pictograms, and that is the whole difference. `folder.svg` is
-     * crisp at 16px because its edges are straight and sit on half-integers, so a 1px outline lands
+     * crisp at 32px because its edges are straight and sit on half-integers, so a 2px outline lands
      * exactly on a pixel row; a `C` is a curve and cannot be put on a grid at any size. Measured with an
-     * ideal rasterizer at 16px, sharp pixels as a fraction of all pixels touched: javaScript 97%, folder
+     * ideal rasterizer at 32px, sharp pixels as a fraction of all pixels touched: javaScript 97%, folder
      * 72%, and these -- exactWords 22%, matchCase 18%, regex 16%. Four times softer than the icons
      * beside them, before the renderer is involved at all.
      *
-     * So this is the ceiling, not a bug, and it does not move: it is the same at 12px, the same through
+     * So this is the ceiling, not a bug, and it does not move: it is the same at 24px, the same through
      * a native rasterizer, and the same in IntelliJ at 1x with these same files. The only real cure is
      * to stop drawing letterforms as paths -- a font rasterizer HINTS glyphs, which is precisely the
      * machinery an outline renderer does not have, so `Cc`/`W`/`.*` as UIText would be crisper than any
@@ -406,7 +406,7 @@ problemspanel > .__find-bar__ {
      * that are text anyway. Not done here; recorded so the next person does not re-measure it. */
     padding: 0px;
     flex-shrink: 0;
-    border-radius: 3px;
+    border-radius: 6px;
     overlay-size: contain;
     background: none;
     background-color: transparent;
@@ -419,7 +419,7 @@ problemspanel > .__find-bar__ {
 }
 
 /* ON IS BLUE, not a lighter grey. It is the one state that has to be readable at a glance across three
- * adjacent 13px glyphs, and grey-on-grey is not. An explicit class rather than `:checked` -- see
+ * adjacent 26px glyphs, and grey-on-grey is not. An explicit class rather than `:checked` -- see
  * TreeSearch.addOption. */
 .__search-option__.__on__ {
     color: var(--searchfield-option-on-fg, #FFFFFF);
@@ -447,14 +447,14 @@ problemspanel > .__find-bar__ {
     width: 0;
     flex-grow: 1;
     flex-shrink: 1;
-    gap: 3px;
+    gap: 6px;
 }
 
 /* SAME WIDTH ON BOTH ROWS, which is the whole reason it exists — see SearchReplaceBar. Wide enough for
  * Replace / Replace All / Exclude, and the find row simply leaves the remainder empty. */
 /* CONTENT-SIZED, with the matching done in Java — see SearchReplaceBar.syncTrailingWidths.
  *
- * This used to be a hard 210px on both rows, to line the two boxes up. The number could only ever be
+ * This used to be a hard 420px on both rows, to line the two boxes up. The number could only ever be
  * wrong in one direction or the other, and it was wrong in BOTH at once: Replace / Replace All /
  * Exclude measure well past it, so the replace row's group overflowed its own declared width, while the
  * find row reserved the full 210 for a count and two arrows and left most of it empty. That empty
@@ -463,28 +463,28 @@ problemspanel > .__find-bar__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
-    gap: 4px;
+    gap: 8px;
 }
 
 .__find-bar__ .__find-row__ {
     flex-direction: row;
     align-items: center;
     width: 100%;
-    gap: 4px;
+    gap: 8px;
 }
 
 /* THE CHEVRON, which is the only affordance for the replace row. Vertically centred against the FIRST row
  * rather than the pair, so it does not drift downward when the second appears -- IntelliJ's sits beside the
  * search box in both states. */
 .__find-bar__ .__find-chevron__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     min-height: 0px;
     padding: 0px;
     flex-shrink: 0;
     align-self: flex-start;
-    margin-top: 2px;
-    border-radius: 3px;
+    margin-top: 4px;
+    border-radius: 6px;
     background: none;
     background-color: transparent;
     overlay: shape("chevron-right");
@@ -505,17 +505,17 @@ problemspanel > .__find-bar__ {
 /* Replace / Replace All / Exclude. Text buttons rather than glyphs -- there is no icon for "replace all"
  * that anyone reads correctly, and IntelliJ spells them out for the same reason. */
 .__find-bar__ .__find-action__ {
-    height: 16px;
-    /* MIN-HEIGHT, NOT HEIGHT, is what holds these open: `button` sets `min-height: 14px`, and a minimum
+    height: 32px;
+    /* MIN-HEIGHT, NOT HEIGHT, is what holds these open: `button` sets `min-height: 28px`, and a minimum
      * is a different property from a size — so every `height` written here loses to it silently and the
-     * chip stays 14px however small the number gets. The search toggles paid for this rule twice. */
+     * chip stays 28px however small the number gets. The search toggles paid for this rule twice. */
     min-height: 0px;
-    padding-left: 5px;
-    padding-right: 5px;
+    padding-left: 10px;
+    padding-right: 10px;
     padding-top: 0px;
     padding-bottom: 0px;
     flex-shrink: 0;
-    border-radius: var(--radius-control, 3px);
+    border-radius: var(--radius-control, 6px);
     background: none;
     background-color: var(--findbar-action-bg, #3C3F41);
     /* OUTLINED AS WELL AS FILLED. Every surface in the dark palette sits within a few points of every
@@ -523,13 +523,13 @@ problemspanel > .__find-bar__ {
      * as three buttons — which is exactly how they looked. The border is what carries the affordance,
      * and it is also what survives the disabled state once the fill goes.
      *
-     * LONGHANDS, not `outline: 1px var(...)`: a var() inside a shorthand silently resolves to nothing
+     * LONGHANDS, not `outline: 2px var(...)`: a var() inside a shorthand silently resolves to nothing
      * in this engine, the same trap that produced zero padding on the main preview's header.
      *
      * The cost is that `outline` IS the focus ring here — one property, as `menu:focus-visible` records
      * — so a focused action no longer gains a ring it did not already have. Acceptable for a labelled
      * button in a bar reached by mouse; the alternative is a ring that cannot be told from the chrome. */
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--findbar-action-border, #4A4D50);
 }
 
@@ -537,7 +537,7 @@ problemspanel > .__find-bar__ {
  * only applies where there is no candidate at any origin — so a size written on the button computes
  * correctly on the button and the label inside it still renders at 10. */
 .__find-bar__ .__find-action__ text {
-    font-size: 9px;
+    font-size: 18px;
     color: var(--findbar-action-fg, #C8C8C8);
 }
 
@@ -600,11 +600,11 @@ problemspanel > .__find-bar__ {
 .__editor-find__ {
     height: auto;
     align-items: flex-start;
-    padding-top: 4px;
-    padding-bottom: 4px;
-    padding-left: 6px;
-    padding-right: 6px;
-    gap: 4px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+    padding-left: 12px;
+    padding-right: 12px;
+    gap: 8px;
     background-color: var(--editorfind-bg, #303235);
     /* SQUARE, because this bar is FULL-BLEED. It is laid out `left: 0; width: 100%` against the editor's
      * top edge, so all four of its corners abut something rather than floating clear of it — and the
@@ -634,18 +634,18 @@ problemspanel > .__find-bar__ {
      * THE OTHER THREE ARE PAINTED IN THE BAR'S OWN GROUND rather than left transparent, and that is the
      * half this got wrong. A scroll container's text is drawn THROUGH its `padding-top` strip once the
      * document is scrolled — the padding reserves the space, it does not mask it — and this bar is the
-     * only thing covering that strip. So a transparent edge here is not a spacer, it is a 1px window
+     * only thing covering that strip. So a transparent edge here is not a spacer, it is a 2px window
      * onto the document: the file's own glyph tops showed as a hairline between the tab separator and
-     * the bar, which reads as the bar sitting 2px too low rather than as its border being see-through.
+     * the bar, which reads as the bar sitting 4px too low rather than as its border being see-through.
      * Nudging it upward would have tucked it under the tabs and left the same hole at the left and
-     * right edges, where the same 1px shows the same text. */
-    border-width: 1px;
+     * right edges, where the same 2px shows the same text. */
+    border-width: 2px;
     border-color: var(--editorfind-bg, #303235);
     border-bottom-color: var(--editorfind-border, #00000000);
     z-index: 20;
 }
 
-/* THE COUNT AND ITS ARROWS SIT 2px IN from the box beside them.
+/* THE COUNT AND ITS ARROWS SIT 4px IN from the box beside them.
  *
  * On the COUNT rather than on `.__find-trailing__`, which is the group that holds them: both rows carry
  * that class, so padding there would walk Replace / Replace All / Exclude along with it. The count is the
@@ -653,11 +653,11 @@ problemspanel > .__find-bar__ {
  * moves that run and nothing else — the arrows follow ecause they are laid out after it.
  *
  * Scoped to the editor's bar. `.__find-count__` is a tree find bar's count too, and that one is packed
- * against a panel edge where 2px it does not have is 2px off the query. */
+ * against a panel edge where 4px it does not have is 4px off the query. */
 /* A FLOOR THAT CLEARS THE BOX'S OWN CONTENTS.
  *
- * The shared 52px floor above is deliberately low and must stay low — it is sized for a tree's bar
- * squeezed into a 112px panel, where the whole row overflows if the box asks for more. The editor's bar
+ * The shared 104px floor above is deliberately low and must stay low — it is sized for a tree's bar
+ * squeezed into a 224px panel, where the whole row overflows if the box asks for more. The editor's bar
  * is never that narrow, and its box carries more: a magnifier, a clear button and three toggles, none of
  * which shrink. Below about this width the box is smaller than the things inside it, so they lay out
  * past its border and go on painting — `Cc` half outside the field, `W` and `.*` on top of the count.
@@ -669,16 +669,16 @@ problemspanel > .__find-bar__ {
  * rather than the text, cutting off the controls instead of the thing they control, and the box is
  * rounded — so clipping also moves it onto resolveOverflowClip()'s FBO layer for no gain. */
 .__editor-find__ .__find-input__ {
-    min-width: 96px;
+    min-width: 192px;
 }
 
 .__editor-find__ .__find-count__ {
-    margin-left: 3px;
+    margin-left: 6px;
 }
 
 /* The close sits against the FIRST row rather than centred on the pair, so it does not drift downward when
  * the replace row appears -- the same reason the chevron is top-aligned. */
 .__editor-find__ .__find-close__ {
     align-self: flex-start;
-    margin-top: 2px;
+    margin-top: 4px;
 }

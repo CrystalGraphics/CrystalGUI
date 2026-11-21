@@ -8,7 +8,7 @@
  *   - The #dddddd tint belongs to :active (LDLib2's `pressed-background: BTN_PRESSED color(#dddddd)`),
  *     applied here via background-color, which UIElement.paintSelf multiplies into the background
  *     drawable (ctx.setColor(backgroundColor) -> CgUiSprite folds it into every quad).
- *   - Asymmetric padding (2/2/2/4) matches the sprites' 4px bottom 9-slice inset.
+ *   - Asymmetric padding (2/2/2/4) matches the sprites' 8px bottom 9-slice inset.
  *   - Checking a checkbox swaps the BOX sprite to the green variant AND reveals the check glyph.
  *
  * Structural note: LDLib2's Toggle nests its mark icon inside an inner toggle-button element.
@@ -30,17 +30,17 @@
 
 /* Font and its vertical correction belong together — the second only makes sense for the first.
  *
- * Minecraft.otf declares a line box with roughly 1px of space above the ink and 3px below at these
- * sizes. Vertical centring centres that BOX, so the ink lands ~1px high in every widget that centres
+ * Minecraft.otf declares a line box with roughly 2px of space above the ink and 6px below at these
+ * sizes. Vertical centring centres that BOX, so the ink lands ~2px high in every widget that centres
  * a label — which is all of them. `text-offset-y` nudges the glyphs back down at paint time without
  * touching layout, so nothing reflows and no click target moves.
  *
- * Measured, not guessed: in a 14px button the ink sat 1px from the top of the visible face and 5px
+ * Measured, not guessed: in a 28px button the ink sat 2px from the top of the visible face and 10px
  * (physical, at uiScale 2) from the bottom. Swap the font and this number changes with it. */
 * {
     font-family: "crystalgui:ui/fonts/MinecraftRegular.otf";
-    font-size: 10px;
-    text-offset: 0 1px;
+    font-size: 20px;
+    text-offset: 0 2px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════════
@@ -68,7 +68,7 @@
  * ────────────────────────────────────────────────────────────────────────────────────────────────── */
 
 /* ── border-radius ── Ore's corners are drawn INTO the sprites, already at the right shape. An SDF
- * radius on top rounds off finished art and shaves the corner pixels off the 1px outlines.
+ * radius on top rounds off finished art and shaves the corner pixels off the 2px outlines.
  *
  * A bare `tab` covers default.css's four per-side rules too: StyleSlot.compareTo weighs ORIGIN before
  * specificity, so any STYLESHEET rule beats any USER_AGENT one at any specificity. `slider` (the root)
@@ -96,7 +96,7 @@ scroller::part(thumb) {
 }
 
 /* ── border-width ── The one non-radius border default.css sets, and the worst bleed of the lot: an
- * SDF border doesn't sit ON the sprite, it REPLACES the outer 2px of it
+ * SDF border doesn't sit ON the sprite, it REPLACES the outer 4px of it
  * (`mix(_BorderColor, fillColor, innerCoverage)`), erasing exactly the bevel rows Ore's art draws. It
  * also feeds Taffy and flips the element onto the rounded-rect path entirely, so the thumb stops going
  * through CgUiSprite's CPU 9-slice and starts going through the shader's — where `background-color`
@@ -109,7 +109,7 @@ slider::part(thumb) {
     border-width: 0;
 }
 
-/* ── outline-offset ── default.css insets its SDF ring by 1px so the stroke stays inside the border box
+/* ── outline-offset ── default.css insets its SDF ring by 2px so the stroke stays inside the border box
  * and survives an ancestor's scissor. Ore's ring is a nine-slice sprite drawn AT the border box, so the
  * same inset just eats into it. Reset for every widget Ore rings; per-widget rules further down can
  * still tune it (`tab:checked:focus-visible` does, and wins on both specificity and source order). */
@@ -184,11 +184,11 @@ button, dropdown {
     background: asset("crystalgui:ore", "button");
     color: #222222;
     text-shadow: none;
-    min-height: 14px;
-    padding-left: 2px;
-    padding-top: 2px;
-    padding-right: 2px;
-    padding-bottom: 4px;
+    min-height: 28px;
+    padding-left: 4px;
+    padding-top: 4px;
+    padding-right: 4px;
+    padding-bottom: 8px;
     justify-content: center;
     align-items: center;
 }
@@ -276,18 +276,18 @@ navigatorview .__nav-search__ {
  * the clickable area equal to what's actually drawn (box + gap + label). */
 checkbox {
     align-self: flex-start;
-    height: 14px;
-    padding: 1px;
+    height: 28px;
+    padding: 2px;
     padding-bottom: 0px;
-    gap: 2px;
+    gap: 4px;
     align-items: center;
     color: #222222;
     text-shadow: none;
 }
 checkbox .__mark__,
 checkbox::part(mark) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     background: asset("crystalgui:ore", "checkbox-box");
 }
 checkbox:hover .__mark__,
@@ -336,9 +336,9 @@ checkbox:disabled::part(mark) {
  * Both flex-grow endpoints must be explicit numbers: the interpolator binary-snaps at the halfway
  * point when the two values differ in unit (e.g. auto vs a length), which reads as a jump. */
 switch {
-    width: 25px;
-    height: 14px;
-    /* Zero, not the 2px LDLib2 sets in Java — its own ore.lss overrides that to 0, which is what
+    width: 50px;
+    height: 28px;
+    /* Zero, not the 4px LDLib2 sets in Java — its own ore.lss overrides that to 0, which is what
      * makes the knob fill the switch's full height instead of sitting inset. */
     padding: 0;
     align-items: center;
@@ -385,7 +385,7 @@ switch:focus-visible::part(knob) {
  * under the cursor, and a transition on the flex weights would make it lag behind by the duration.
  *
  * Discrete sliders read identically to continuous ones — only the value snaps. That is intended at
- * this scale, not an omission: a ~150px track split into a handful of segments gives ~1px separators
+ * this scale, not an omission: a ~300px track split into a handful of segments gives ~2px separators
  * that vanish at uiScale 1 and shimmer at 2.
  *
  * NOTE: there is no CSS hook to change that even if a theme wanted one. An earlier version of this
@@ -402,22 +402,22 @@ switch:focus-visible::part(knob) {
  *     matters because hit-testing uses the root — an overhanging thumb would have dead edges.
  * Change the thumb's width and you must change all three numbers together. */
 slider {
-    width: 150px;
-    height: 20px;
-    padding-left: 10px;
-    padding-right: 10px;
+    width: 300px;
+    height: 40px;
+    padding-left: 20px;
+    padding-right: 20px;
     align-items: center;
 }
 /* The bar is real atlas art, not flat hex — these are Ore's own BTN_DEFAULT_SMALL_GREEN (#3C8527)
  * and BTN_PRESSED_SMALL (#B1B2B5), so the slider carries the same bevel as every other control. */
 slider .__fill__,
 slider::part(fill) {
-    height: 6px;
+    height: 12px;
     background: asset("crystalgui:ore", "slider-fill");
 }
 slider .__spacer__,
 slider::part(spacer) {
-    height: 6px;
+    height: 12px;
     background: asset("crystalgui:ore", "slider-track");
 }
 /* Square, and exactly the root's height — the root is sized to the thumb precisely so the whole
@@ -425,10 +425,10 @@ slider::part(spacer) {
  * neighbour, burying their end caps; see the convention note on `slider` above. */
 slider .__thumb__,
 slider::part(thumb) {
-    width: 20px;
-    height: 20px;
-    margin-left: -10px;
-    margin-right: -10px;
+    width: 40px;
+    height: 40px;
+    margin-left: -20px;
+    margin-right: -20px;
     /* Required, not cosmetic: painter's order is insertion order, so __spacer__ (added last) would
      * otherwise draw over the half of the thumb the negative right margin pulls underneath it. */
     z-index: 1;
@@ -460,11 +460,11 @@ slider:disabled::part(thumb) {
 
 .panel {
     background: asset("crystalgui:ore", "panel");
-    padding-left: 5px;
-    padding-top: 5px;
-    padding-right: 5px;
-    padding-bottom: 7px;
-    gap: 4px;
+    padding-left: 10px;
+    padding-top: 10px;
+    padding-right: 10px;
+    padding-bottom: 14px;
+    gap: 8px;
 }
 
 /* Split view. The two panes carry no styling of their own — they're content hosts, and whatever a
@@ -483,10 +483,10 @@ slider:disabled::part(thumb) {
  * — i.e. the same default -> pressed-sprite -> pressed-sprite-plus-#ddd-tint triple the buttons above
  * use. `divider`/`divider-hover` are Ore's BTN_DEFAULT_SMALL/BTN_PRESSED_SMALL: the SMALL variants
  * specifically, because they're symmetric (border 2 on all sides) and so 9-slice correctly at
- * divider thickness in BOTH orientations. The full-size BTN_DEFAULT has a 4px bottom inset, which
- * needs at least 6px of height and would collapse on a horizontal divider.
+ * divider thickness in BOTH orientations. The full-size BTN_DEFAULT has a 8px bottom inset, which
+ * needs at least 12px of height and would collapse on a horizontal divider.
  *
- * LDLib2's `borderSize` default is 2, but 2px can't 9-slice a border-2 sprite (2+2 > 2) and is a
+ * LDLib2's `borderSize` default is 2, but 4px can't 9-slice a border-2 sprite (2+2 > 2) and is a
  * painfully thin grab target without their hover cursor to advertise it, so this uses 4.
  *
  * The divider stretches on the cross axis for free (flex default `align-items: stretch`), so each
@@ -500,7 +500,7 @@ splitview {
      * who wants it to flex can add flex-grow themselves. */
 }
 splitview > .__divider__ {
-    width: 4px;
+    width: 8px;
     background: asset("crystalgui:ore", "divider");
 }
 splitview > .__divider__:hover {
@@ -515,7 +515,7 @@ splitview > .__divider__:active {
  * split), so Tab-traversal lands on it and needs to say so.
  *
  * A sprite swap rather than an `outline:` ring like every other widget here, because the divider is
- * 4px: `focus-ring` is a nine-slice with 2px borders, and at 4px it is nothing but border — the
+ * 8px: `focus-ring` is a nine-slice with 4px borders, and at 8px it is nothing but border — the
  * centre never gets drawn and it renders as a solid block. Same nine-slicing size limit called out
  * for the tab strip's hairline scrollbar below. */
 splitview > .__divider__:focus-visible {
@@ -525,7 +525,7 @@ splitview > .__divider__:focus-visible {
 /* SplitView adds `__vertical__` to itself when the orientation flips, purely so this rule can match. */
 splitview.__vertical__ > .__divider__ {
     width: auto;
-    height: 4px;
+    height: 8px;
 }
 
 /* TextField. The forward-prep names above turned out correct — `textfield` is the tag and the widget
@@ -544,8 +544,8 @@ textfield {
      * was Ore's green, so until now every theme inherited Ore's accent whether it wanted it or not.
      * Declaring it here is what lets the other themes stop doing that. */
     selection-color: #43912C80;
-    height: 14px;
-    padding: 3px;
+    height: 28px;
+    padding: 6px;
     align-items: center;
 }
 textfield:focus-visible {
@@ -572,8 +572,8 @@ textfield:disabled {
  * Ported from LDLib2's ore.lss:282-313. The sprites were always in our atlas (it is byte-identical
  * to LDLib's ore_styles.png); ore.json just never declared them.
  *
- * TWO SPRITES, NOT ONE RECOLOUR. `tab-off` keeps 4px of border at the BOTTOM because an unselected
- * tab draws its own bottom edge; `tab-on` keeps 4px at the TOP because a selected tab's bottom is
+ * TWO SPRITES, NOT ONE RECOLOUR. `tab-off` keeps 8px of border at the BOTTOM because an unselected
+ * tab draws its own bottom edge; `tab-on` keeps 8px at the TOP because a selected tab's bottom is
  * meant to dissolve into the pane below it. Swap them and everything looks right until you select
  * something. */
 
@@ -583,9 +583,9 @@ tabview .__panes__ {
 
 tab {
     background: asset("crystalgui:ore", "tab-off");
-    height: 18px;
-    padding: 3px;
-    padding-bottom: 5px;
+    height: 36px;
+    padding: 6px;
+    padding-bottom: 10px;
     /* ore.lss writes `tab:host:not(tab:selected) label { text-color: #222 }`. We have no `:not()`,
      * so the same result comes from darkening every tab here and lightening the selected one below. */
     color: #222222;
@@ -602,9 +602,9 @@ tab:checked {
      *
      * ore.lss also pulls its strip down with `margin-bottom: -4` to overlap the content container.
      * Not needed here — the padding shift closes the seam on its own, and a negative margin would
-     * fight the 3px the strip reserves for its hairline scrollbar. */
-    padding-top: 5px;
-    padding-bottom: 3px;
+     * fight the 6px the strip reserves for its hairline scrollbar. */
+    padding-top: 10px;
+    padding-bottom: 6px;
     color: #FFFFFF;
 }
 tab:checked:hover {
@@ -627,7 +627,7 @@ tab:focus-visible {
 }
 /* The selected tab needs the ring pulled IN by a pixel, because `tab-on`'s top 2 texel rows are
  * transparent — that is what makes a selected tab sit higher without changing its height. Its border
- * box therefore starts 2px above anything visible, and a zero-offset ring floats in that empty band
+ * box therefore starts 4px above anything visible, and a zero-offset ring floats in that empty band
  * along the top edge while hugging every other side. `tab-off` is fully opaque, so the unselected
  * ring above is already flush and must NOT get this.
  *
@@ -636,11 +636,11 @@ tab:focus-visible {
  * edges are already flush, and pulling them in too would just trade a gap at the top for a gap
  * everywhere else. */
 tab:checked:focus-visible {
-    outline-offset: -2px 0 0 0;
+    outline-offset: -4px 0 0 0;
 }
 
-/* The strip's hairline gets FLAT COLOURS, not Ore's scroller sprites. At 3px a 5x5 nine-slice with
- * 2px borders is nothing but border — the centre never gets drawn — so the sprited thumb renders as
+/* The strip's hairline gets FLAT COLOURS, not Ore's scroller sprites. At 6px a 5x5 nine-slice with
+ * 4px borders is nothing but border — the centre never gets drawn — so the sprited thumb renders as
  * a solid white line. This is a size limit of nine-slicing, not a bug to chase.
  *
  * Deliberately scoped to `.__strip__`, so a theme that thickens the bar and turns the step buttons
@@ -692,19 +692,19 @@ scroller::part(thumb):active {
     background-tint: #DDDDDD;
 }
 
-/* Bar thickness and pinning. 8px — which is also what LDLib2's ore.lss uses for the scrollers
- * embedded in its text area (it reserves 14px for a standalone one). An overlay bar sits on top of
+/* Bar thickness and pinning. 16px — which is also what LDLib2's ore.lss uses for the scrollers
+ * embedded in its text area (it reserves 28px for a standalone one). An overlay bar sits on top of
  * the content rather than displacing it, so the slimmer of the two is the right pick. */
 scrollerview .__v-scroller__,
 scrollerview::part(v-scroller) {
-    width: 8px;
+    width: 16px;
     top: 0;
     right: 0;
     bottom: 0;
 }
 scrollerview .__h-scroller__,
 scrollerview::part(h-scroller) {
-    height: 8px;
+    height: 16px;
     left: 0;
     right: 0;
     bottom: 0;
@@ -725,7 +725,7 @@ scrollerview::part(h-scroller) {
  * transparent fill a link needs would be no fill change at all. */
 texteditor .__zoom-indicator__ {
     background: #22252CDD;
-    border-radius: 3px;
+    border-radius: 6px;
 }
 texteditor .__zoom-reset__ {
     background: #00000000;
@@ -754,7 +754,7 @@ texteditor .__zoom-reset__:active {
  * survives: default.css is USER_AGENT and this sheet is STYLESHEET, so a theme rule beats it at ANY
  * specificity — that is the whole point of the origin order, and it means a bare `slider` here
  * outranks `colorselector .__channel-row__ slider` there. The picker's channel rows came out with
- * 20px sprite thumbs on 6px green bevelled bars inside a 9px row.
+ * 40px sprite thumbs on 12px green bevelled bars inside a 18px row.
  *
  * These selectors are all deeper than the generic ones above, so within this one sheet specificity
  * settles it and the values below win.
@@ -769,9 +769,9 @@ texteditor .__zoom-reset__:active {
 colorselector .__channel-row__ slider {
     width: 0;
     flex-grow: 1;
-    height: 9px;
-    padding-left: 1.5px;
-    padding-right: 1.5px;
+    height: 18px;
+    padding-left: 3px;
+    padding-right: 3px;
 }
 /* Transparent, and at the row's full height: the slider's BACKGROUND is the gradient, so a fill and a
  * spacer that paint anything at all paint over the only thing the control is for. */
@@ -780,23 +780,23 @@ colorselector .__channel-row__ slider .__spacer__,
 colorselector .__channel-row__ slider::part(fill),
 colorselector .__channel-row__ slider::part(spacer) {
     background: #00000000;
-    height: 9px;
+    height: 18px;
 }
 /* Kept in step with the same rule in default.css — see the note there on why width, border-width and
  * the margins have to be restated as a set. */
 colorselector .__channel-row__ slider .__thumb__,
 colorselector .__channel-row__ slider::part(thumb) {
-    width: 3px;
-    height: 9px;
-    margin-left: -1.5px;
-    margin-right: -1.5px;
-    border-width: 1px;
+    width: 6px;
+    height: 18px;
+    margin-left: -3px;
+    margin-right: -3px;
+    border-width: 2px;
     border-color: #C1C2C2;
-    border-radius: 1.5px;
+    border-radius: 3px;
     background: #FFFFFF;
 }
 /* The state sprites, cancelled. Ore swaps the thumb's texture on hover, press and disable; each swap
- * would put a 20px bevelled button back on top of a 3px mark, so the hairline has to restate its own
+ * would put a 40px bevelled button back on top of a 6px mark, so the hairline has to restate its own
  * background for every state the theme reacts to. */
 colorselector .__channel-row__ slider:hover .__thumb__,
 colorselector .__channel-row__ slider:active .__thumb__,
@@ -807,7 +807,7 @@ colorselector .__channel-row__ slider:disabled::part(thumb) {
     background: #FFFFFF;
     background-color: #FFFFFF;
 }
-/* Ore rings the THUMB rather than the root, which is right for a 20px knob and wrong for a hairline —
+/* Ore rings the THUMB rather than the root, which is right for a 40px knob and wrong for a hairline —
  * the ring is wider than the thing it rings. The row's track carries a dark edge of its own, so the
  * focused slider is still legible with nothing here. */
 colorselector .__channel-row__ slider:focus-visible .__thumb__,
@@ -815,52 +815,52 @@ colorselector .__channel-row__ slider:focus-visible::part(thumb) {
     outline: none;
 }
 
-/* Ore's textfield is 14px tall with 3px of padding, sized for a form. Four of these sit in 11px rows
+/* Ore's textfield is 28px tall with 6px of padding, sized for a form. Four of these sit in 22px rows
  * beside a colour bar, so they take the picker's own metrics back. The dark fill comes from graph.css,
  * which is deeper than Ore's bare `textfield` and wins on specificity. */
 colorselector .__channel-row__ textfield,
 colorselector .__hex-row__ textfield {
-    height: 9px;
-    padding: 2px;
+    height: 18px;
+    padding: 4px;
 }
 
-/* `button, dropdown` gives every dropdown a 14px min-height — a floor, so the mode button cannot be
+/* `button, dropdown` gives every dropdown a 28px min-height — a floor, so the mode button cannot be
  * shortened by height alone and stands half again as tall as the fields it is aligned with. */
 colorselector .__side__ dropdown {
-    height: 9px;
-    min-height: 9px;
-    padding-left: 3px;
-    padding-right: 3px;
+    height: 18px;
+    min-height: 18px;
+    padding-left: 6px;
+    padding-right: 6px;
     padding-top: 0px;
     padding-bottom: 0px;
 }
 
 /* The picker's TYPE, and this is the one Ore declaration that cannot be beaten by specificity from the
- * other side. Line 40 of this sheet is `* { font-family: Minecraft; font-size: 10; text-offset-y: 1px }` —
+ * other side. Line 40 of this sheet is `* { font-family: Minecraft; font-size: 10; text-offset-y: 2px }` —
  * a UNIVERSAL selector at STYLESHEET origin, so it outranks every user-agent rule no matter how deep,
  * and it hands EVERY element its own specified font-size. graph.css setting `colorselector { font-size: 6 }`
  * cannot help: font-size inherits, and a specified value beats an inherited one, so the picker's root
- * was 6 and every single thing inside it was 10 — in a 9px row.
+ * was 6 and every single thing inside it was 10 — in a 18px row.
  *
  * `colorselector text` is specificity 2 against the universal rule's 0, which is all it takes. One
  * selector covers the channel labels, the hex label, the mode button's label AND the menu items,
  * because a promoted menu keeps its DOM parent and still matches as a descendant.
  *
- * text-offset-y goes back to 0 with it: Ore's 1px nudge is measured against a 14px button, and at this
+ * text-offset-y goes back to 0 with it: Ore's 2px nudge is measured against a 28px button, and at this
  * size it drops the glyphs onto the box's lower edge. */
 colorselector text,
 colorselector textfield {
-    font-size: 6px;
+    font-size: 12px;
     text-offset: 0 0px;
 }
 
-/* Ore's focus ring is nine-slice ART, and its border rows are ~3px of a sprite drawn AT the border box.
- * On a 14px button that is a hairline against the bevel; on this 9px one it is a third of the control
+/* Ore's focus ring is nine-slice ART, and its border rows are ~6px of a sprite drawn AT the border box.
+ * On a 28px button that is a hairline against the bevel; on this 18px one it is a third of the control
  * from each side, and the label is what it takes — the ring closes over the text it is pointing at.
  *
  * A flat SDF ring instead. It is the one place in this sheet a picker part takes a colour rather than a
  * sprite, for the same reason the tracks do: at this size the art IS the whole box. */
 colorselector .__side__ dropdown:focus-visible {
-    outline: 1px #C1C2C2;
+    outline: 2px #C1C2C2;
     outline-offset: 0px;
 }

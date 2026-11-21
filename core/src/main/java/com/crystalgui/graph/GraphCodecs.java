@@ -124,5 +124,7 @@ public final class GraphCodecs {
      * A graph document, its version under {@code "v"}: a newer one is refused rather than read on a best effort, and a
      * change to the shape raises {@link GraphDocument#SCHEMA_VERSION} with a step that reads the old one.
      */
-    public static final CgCodec<GraphDocument> DOCUMENT = CgCodecs.versioned("v", GraphDocument.SCHEMA_VERSION, BODY);
+    public static final CgCodec<GraphDocument> DOCUMENT = CgCodecs.versioned("v", GraphDocument.SCHEMA_VERSION, BODY)
+            // UI16: lengths written for a scale of 2, so a node sits twice as far out at a scale of 1.
+            .from(1, tree -> tree.each("nodes", node -> node.map("x", v -> v.asDouble() * 2).map("y", v -> v.asDouble() * 2)));
 }

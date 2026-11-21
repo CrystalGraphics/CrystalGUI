@@ -639,8 +639,8 @@ public class WidgetBatchPortTest extends UiDocumentTestBase {
 
         Box box = icon.box();
         assertNotNull("the icon has a box", box);
-        assertEquals("the sheet's size reaches it through ::part()", 12f, box.width(), 0.5f);
-        assertEquals("the sheet's size reaches it through ::part()", 12f, box.height(), 0.5f);
+        assertEquals("the sheet's size reaches it through ::part()", 24f, box.width(), 0.5f);
+        assertEquals("the sheet's size reaches it through ::part()", 24f, box.height(), 0.5f);
     }
 
     /**

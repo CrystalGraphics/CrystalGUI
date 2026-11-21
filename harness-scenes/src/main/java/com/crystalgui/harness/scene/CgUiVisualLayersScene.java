@@ -137,7 +137,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
     private UIElement createDemo() {
         UIElement root = new UIElement()
                 .layout(l -> l
-                        .paddingAll(20)
+                        .paddingAll(40)
                         .flexDirection(FlexDirection.COLUMN)
                         .alignItems(AlignItems.CENTER)
                 );
@@ -146,7 +146,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
         maskRow.addClass("row");
         root.append(maskRow);
 
-        UIElement maskOn = new UIElement().layout(l -> l.width(48).height(48));
+        UIElement maskOn = new UIElement().layout(l -> l.width(96).height(96));
         maskOn.addClass("mask-box");
         maskOn.addClass("mask-on");
         UIElement maskOnChild = new UIElement();
@@ -154,7 +154,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
         maskOn.append(maskOnChild);
         maskRow.append(maskOn);
 
-        UIElement maskOff = new UIElement().layout(l -> l.width(48).height(48));
+        UIElement maskOff = new UIElement().layout(l -> l.width(96).height(96));
         maskOff.addClass("mask-box");
         UIElement maskOffChild = new UIElement();
         maskOffChild.addClass("mask-child");
@@ -190,7 +190,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
         scissorRow.addClass("row");
         root.append(scissorRow);
 
-        UIElement scissorOn = new UIElement().layout(l -> l.width(48).height(48));
+        UIElement scissorOn = new UIElement().layout(l -> l.width(96).height(96));
         scissorOn.addClass("scissor-box");
         scissorOn.addClass("scissor-on");
         UIElement scissorOnChild = new UIElement();
@@ -198,7 +198,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
         scissorOn.append(scissorOnChild);
         scissorRow.append(scissorOn);
 
-        UIElement scissorOff = new UIElement().layout(l -> l.width(48).height(48));
+        UIElement scissorOff = new UIElement().layout(l -> l.width(96).height(96));
         scissorOff.addClass("scissor-box");
         UIElement scissorOffChild = new UIElement();
         scissorOffChild.addClass("scissor-child");
@@ -211,7 +211,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
 
         // Left: explicit `mask:` override (a dim, mostly-transparent white) — should visibly darken/fade
         // everything inside, unlike the default (mask = background reused, fully opaque, no fade at all).
-        UIElement maskOverrideOn = new UIElement().layout(l -> l.width(48).height(48));
+        UIElement maskOverrideOn = new UIElement().layout(l -> l.width(96).height(96));
         maskOverrideOn.addClass("mask-override-box");
         maskOverrideOn.addClass("mask-override-on");
         UIElement maskOverrideOnChild = new UIElement();
@@ -221,7 +221,7 @@ public class CgUiVisualLayersScene extends UiDocumentScene {
 
         // Right: no explicit `mask:` — default mask re-renders the background fill (Item 5), fully
         // opaque green, so nothing inside gets faded; only shape clipping applies.
-        UIElement maskOverrideOff = new UIElement().layout(l -> l.width(48).height(48));
+        UIElement maskOverrideOff = new UIElement().layout(l -> l.width(96).height(96));
         maskOverrideOff.addClass("mask-override-box");
         UIElement maskOverrideOffChild = new UIElement();
         maskOverrideOffChild.addClass("mask-child");

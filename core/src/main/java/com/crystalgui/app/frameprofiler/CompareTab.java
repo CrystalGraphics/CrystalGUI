@@ -74,22 +74,22 @@ public class CompareTab extends UIElement {
         append(summary);
 
         table.addColumn(TableColumn.<ProfilerModel.CompareRow>of("Zone", ProfilerModel.CompareRow::name)
-                .flexible(2f).minWidth(120f).sortable());
+                .flexible(2f).minWidth(240f).sortable());
         table.addColumn(TableColumn.<ProfilerModel.CompareRow>of("A ms/frame", row -> millis(row.aMillis()))
-                .width(80f).sortable(Comparator.comparingDouble(ProfilerModel.CompareRow::aMillis)));
+                .width(160f).sortable(Comparator.comparingDouble(ProfilerModel.CompareRow::aMillis)));
         table.addColumn(TableColumn.<ProfilerModel.CompareRow>of("B ms/frame", row -> millis(row.bMillis()))
-                .width(80f).sortable(Comparator.comparingDouble(ProfilerModel.CompareRow::bMillis)));
+                .width(160f).sortable(Comparator.comparingDouble(ProfilerModel.CompareRow::bMillis)));
         // TWO COLOURS, on the change alone: slower in the error colour, faster in the success one. The
         // whole row coloured would make the zone name read as the finding.
         table.addColumn(TableColumn.<ProfilerModel.CompareRow>of("Change", CompareTab::change)
-                .width(80f).sortable(Comparator.comparingDouble(ProfilerModel.CompareRow::delta))
+                .width(160f).sortable(Comparator.comparingDouble(ProfilerModel.CompareRow::delta))
                 .cells(new DeltaCell(CompareTab::change)));
         table.addColumn(TableColumn.<ProfilerModel.CompareRow>of("%", CompareTab::percent)
-                .width(56f).sortable(Comparator.comparingDouble(CompareTab::ratio))
+                .width(112f).sortable(Comparator.comparingDouble(CompareTab::ratio))
                 .cells(new DeltaCell(CompareTab::percent)));
         table.addColumn(TableColumn.<ProfilerModel.CompareRow>of("Source",
                         row -> row.source() == null ? "" : FlameChart.shortSource(row.source()))
-                .flexible(1f).minWidth(90f).sortable());
+                .flexible(1f).minWidth(180f).sortable());
         append(table);
     }
 

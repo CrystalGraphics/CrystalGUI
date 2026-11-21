@@ -597,7 +597,7 @@ public final class TransformGesture {
 
     /** The nine anchor points, which is where a pivot most often wants to be. */
     private void snapToAnchor(Vector2f point) {
-        float tolerance = Math.max(4f, Math.min(width, height) * 0.08f);
+        float tolerance = Math.max(8f, Math.min(width, height) * 0.08f);
         for (int i = -1; i <= 1; i++) {
             for (int j = -1; j <= 1; j++) {
                 float ax = width * (i + 1) * 0.5f;

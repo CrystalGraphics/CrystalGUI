@@ -15,20 +15,20 @@
  * inheritance is invisible to the cascade. Without this a dropdown laid out at ZERO HEIGHT, since
  * min-height is where a Button gets its box from. Same trap `tab` avoids by having its own block. */
 button, dropdown {
-    min-height: 14px;
-    padding-left: 2px;
-    padding-top: 1px;
-    padding-right: 2px;
-    padding-bottom: 2px;
+    min-height: 28px;
+    padding-left: 4px;
+    padding-top: 2px;
+    padding-right: 4px;
+    padding-bottom: 4px;
     justify-content: center;
     align-items: center;
     background: var(--button-bg, #9A9A9A);
     color: var(--button-fg, #222222);
     text-shadow: none;
-    /* THEMEABLE now, where it was a flat 2px: "Islands" is this token plus a palette, and a flat
+    /* THEMEABLE now, where it was a flat 4px: "Islands" is this token plus a palette, and a flat
      * theme is the same structure with it zeroed. IntelliJ's own themes set Button.arc for exactly
      * this reason. The fallback keeps the unthemed look identical. */
-    border-radius: var(--radius-control, 2px);
+    border-radius: var(--radius-control, 4px);
 }
 /* THE ROOT CAUSE, once: this is the one label every `Button`/`Dropdown` in the engine has (Button
  * gives it no class of its own, hence the tag selector), so a config-kit dropdown squeezed to
@@ -101,8 +101,8 @@ button::part(dropdown-gutter) {
  * align-self: flex-start is load-bearing, not cosmetic — see the matching note in ore.css. The root
  * paints nothing, so a stretched root would hit-test far to the right of the visible content. */
 
-/* NO `height`, and this was the mark's number on the whole control: 12px, with `padding: 1px`
- * inside it, so a 12px mark filled the root and spilled over the padding, and a 13px LABEL sat at
+/* NO `height`, and this was the mark's number on the whole control: 24px, with `padding: 2px`
+ * inside it, so a 24px mark filled the root and spilled over the padding, and a 26px LABEL sat at
  * y = -0.5 and overflowed the control top and bottom. A labelled checkbox has been drawing its text
  * outside itself since it was written.
  *
@@ -110,17 +110,17 @@ button::part(dropdown-gutter) {
  * padding. The config kit pins both axes on its own checkboxes (`--cfg-check`) and is unaffected. */
 checkbox {
     align-self: flex-start;
-    padding: 1px;
-    gap: 2px;
+    padding: 2px;
+    gap: 4px;
     align-items: center;
     text-shadow: none;
 }
 checkbox .__mark__,
 checkbox::part(mark) {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     background: var(--checkbox-mark-bg, #9A9A9A);
-    border-radius: 2px;
+    border-radius: 4px;
 }
 checkbox:hover .__mark__,
 checkbox:hover::part(mark) {
@@ -145,13 +145,13 @@ checkbox:disabled::part(mark) {
  * numbers: the interpolator binary-snaps at the halfway point when the two differ in unit. */
 
 switch {
-    width: 25px;
-    height: 12px;
+    width: 50px;
+    height: 24px;
     padding: 0;
     align-items: center;
     background: var(--switch-bg, #6E6E6E);
     /* Half the height — a pill. Tied to `height` above; change one and change both. */
-    border-radius: 7px;
+    border-radius: 14px;
 }
 switch:checked {
     background: var(--switch-checked-bg, #3C8527);
@@ -186,37 +186,37 @@ switch:disabled::part(knob) {
  * in ore.css. No transition here on purpose: during a drag the thumb must track the cursor exactly. */
 
 slider {
-    width: 150px;
-    height: 20px;
-    padding-left: 5px;
-    padding-right: 5px;
+    width: 300px;
+    height: 40px;
+    padding-left: 10px;
+    padding-right: 10px;
     align-items: center;
     /* Shapes the FOCUS RING and nothing else — the root paints no background, so there is no fill for
      * this to round. `paintOutline` derives the ring's corners from `border-radius` whatever the
      * element draws, and without this the slider's ring is a hard rectangle where every other widget's
      * is softened. Note this is only safe at all because `resolveRoundedFill` stopped treating "no
      * background" as opaque white; before that, this line painted a white slab. */
-    border-radius: 4px;
+    border-radius: 8px;
 }
-/* 3px is half of the 6px bar height, so fill and track read as one rounded rail. */
+/* 6px is half of the 12px bar height, so fill and track read as one rounded rail. */
 slider .__fill__,
 slider::part(fill) {
-    height: 6px;
+    height: 12px;
     background: var(--slider-fill, #3C8527);
-    border-radius: 3px;
+    border-radius: 6px;
 }
 slider .__spacer__,
 slider::part(spacer) {
-    height: 6px;
+    height: 12px;
     background: var(--slider-track, #6E6E6E);
-    border-radius: 3px;
+    border-radius: 6px;
 }
 slider .__thumb__,
 slider::part(thumb) {
-    width: 10px;
-    height: 10px;
-    margin-left: -5px;
-    margin-right: -5px;
+    width: 20px;
+    height: 20px;
+    margin-left: -10px;
+    margin-right: -10px;
     /* Required: painter's order is insertion order, so __spacer__ would otherwise draw over the half
      * of the thumb its negative right margin pulls underneath. */
     z-index: 1;
@@ -226,9 +226,9 @@ slider::part(thumb) {
     /* Separates the thumb from the fill it sits on. border-color has NO currentColor equivalent here
      * and defaults to black, so it must be stated alongside the width or the ring comes out dark.
      *
-     * Sizing is unaffected: box-sizing is border-box engine-wide, so the outer box stays 10px and the
+     * Sizing is unaffected: box-sizing is border-box engine-wide, so the outer box stays 20px and the
      * padding/margin pairing above still holds. */
-    border-width: 2px;
+    border-width: 4px;
     border-color: var(--slider-thumb-ring, #FFFFFF);
 }
 slider:hover .__thumb__,
@@ -262,7 +262,7 @@ splitview {
  *
  * Only shows up once a split is nested in a split, which is why it survived until the dock did it. */
 splitview > .__divider__ {
-    width: 4px;
+    width: 8px;
     background: var(--splitter-bg, #777777);
 }
 splitview > .__divider__:hover {
@@ -273,7 +273,7 @@ splitview > .__divider__:active {
 }
 splitview.__vertical__ > .__divider__ {
     width: auto;
-    height: 4px;
+    height: 8px;
 }
 
 /* ── ContextToolbar ─────────────────────────────────────────────────────────────────────────────
@@ -283,7 +283,7 @@ splitview.__vertical__ > .__divider__ {
 
 contexttoolbar {
     width: 100%;
-    height: var(--panel-header-h, 22px);
+    height: var(--panel-header-h, 44px);
     flex-direction: row;
     align-items: center;
     overflow: clip;
@@ -299,14 +299,14 @@ contexttoolbar > .__context-page__ {
 }
 
 contexttoolbar > .__context-overflow__ {
-    margin-left: 2px;
+    margin-left: 4px;
 }
 
 .__context-overflow-panel__ {
     flex-direction: column;
     align-items: flex-start;
-    gap: 4px;
-    padding: 4px;
+    gap: 8px;
+    padding: 8px;
     /* THE BAR'S OWN GROUND, RESTATED HERE. The panel is a popover, so it lives in the top layer and no
      * descendant selector in the sheet that themes the toolbar can reach it -- it took `popover`'s menu
      * background instead, and the group hairlines, which are the status bar's divider token, disappeared
@@ -341,14 +341,14 @@ contexttoolbar .__config-control__ text,
 contexttoolbar .__config-control__ textfield,
 .__context-overflow-panel__ .__config-control__ text,
 .__context-overflow-panel__ .__config-control__ textfield {
-    font-size: 8px;
+    font-size: 16px;
 }
 
 /* A HAIRLINE BETWEEN A PAGE'S GROUPS, Photoshop's. The spacing is inside its own width rather than in
  * margins, so the width the bar folds against is exactly the room it takes. The status bar's divider
  * token, because it is the same mark in the same kind of strip. */
 .__context-separator__ {
-    width: 7px;
+    width: 14px;
     height: 100%;
     flex-direction: row;
     justify-content: center;
@@ -356,8 +356,8 @@ contexttoolbar .__config-control__ textfield,
 }
 
 .__context-separator-line__ {
-    width: 1px;
-    height: 14px;
+    width: 2px;
+    height: 28px;
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
@@ -372,13 +372,13 @@ contexttoolbar .__config-control__ textfield,
     width: auto;
     align-self: stretch;
     align-items: stretch;
-    height: 7px;
+    height: 14px;
     flex-direction: column;
 }
 
 .__context-overflow-panel__ > .__context-separator__ > .__context-separator-line__ {
     width: auto;
-    height: 1px;
+    height: 2px;
 }
 
 /* ── TabView ────────────────────────────────────────────────────────────────────────────────────
@@ -425,12 +425,12 @@ tabview.__right__ .__rail__ {
 }
 /* The strip's scrollbar is a REAL FLEX ITEM (see TabView), sitting after the rail — beneath a row of
  * tabs, beside a column of them. That is why there is no reserved padding here and no absolute
- * positioning to undo: it takes its own 2px and the tabs keep their edge against the panes.
+ * positioning to undo: it takes its own 4px and the tabs keep their edge against the panes.
  *
- * 2px is deliberately below the size at which step buttons are usable; they stay `display: none`
+ * 4px is deliberately below the size at which step buttons are usable; they stay `display: none`
  * from the scroller rules above. A theme wanting them thickens the bar and turns them on together. */
 tabview .__strip-bar__ {
-    height: 2px;
+    height: 4px;
 }
 
 /* A CLIPPED TAB FADES OUT rather than being sliced, as IntelliJ's does: a fade over each end of the rail,
@@ -440,7 +440,7 @@ tabview .__strip-fade__ {
     position: absolute;
     top: 0;
     bottom: 0;
-    width: 16px;
+    width: 32px;
     display: none;
 }
 tabview .__strip-fade__.__start__ {
@@ -472,7 +472,7 @@ tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab {
     flex-grow: 1;
     flex-shrink: 1;
     flex-basis: 0;
-    min-width: 24px;
+    min-width: 48px;
     max-width: max-content;
 }
 tabview.__tabs-squeeze__ > .__strip__ > .__rail__ > tab::part(label) {
@@ -519,7 +519,7 @@ tabview.__right__ > .__strip__ > .__strip-fade__ {
     left: 0;
     right: 0;
     width: auto;
-    height: 16px;
+    height: 32px;
 }
 tabview.__left__ > .__strip__ > .__strip-fade__.__start__,
 tabview.__right__ > .__strip__ > .__strip-fade__.__start__ {
@@ -535,24 +535,24 @@ tabview.__right__ > .__strip__ > .__strip-fade__.__end__ {
 }
 tabview.__left__ .__strip-bar__,
 tabview.__right__ .__strip-bar__ {
-    width: 2px;
+    width: 4px;
     height: auto;
 }
 
 tabview .__panes__ {
     background: var(--tab-pane-bg, #3A3A3A);
 }
-/* NO INSET AROUND A TAB'S CONTENT — and this is the third and last value it has had. It was 4px,
- * then 2px, on the reasoning that a document should not sit flush against the panel's edge; the
+/* NO INSET AROUND A TAB'S CONTENT — and this is the third and last value it has had. It was 8px,
+ * then 4px, on the reasoning that a document should not sit flush against the panel's edge; the
  * right number is 0, and the two retreats were the same discovery arriving in instalments.
  *
  * A tab's content IS THE ISLAND'S FACE. Whatever the inset, it exposes the island around the
  * content, and the two are different surfaces exactly when a scheme paints its own paper — so it
  * reads as a border nobody authored, in a colour nobody chose for it. Measured before removing it:
- * the pane sat 3px inside the group on the left, right and bottom, which at uiScale 2 is the 6
+ * the pane sat 6px inside the group on the left, right and bottom, which at uiScale 2 is the 6
  * physical pixels this was reported as.
  *
- * The remaining 1px of that 3 is NOT here and does not go away: `__panes__` carries a 1px border
+ * The remaining 2px of that 3 is NOT here and does not go away: `__panes__` carries a 2px border
  * whose only coloured edge is the top (the one separator every panel draws — see ua/workbench.css).
  * Border width is uniform because the paint path reads `border().left` alone, so the other three
  * edges are the price of that hairline rather than a second inset with its own opinion.
@@ -607,17 +607,17 @@ tabview .__pane__ > canvasview {
 tab,
 .__problem-tab__ {
     /* NO FIXED HEIGHT — the pill is sized by its own padding, exactly as `.__problem-tab__` is.
-     * A hard 12px was shorter than the text's line box, so the highlight hugged the glyphs and the
+     * A hard 24px was shorter than the text's line box, so the highlight hugged the glyphs and the
      * editor's tabs read as cramped next to the Problems panel's, which had never had one. It was a
-     * leftover of the browser-tab shape above, where the selected tab grew to 16px to meet the pane;
+     * leftover of the browser-tab shape above, where the selected tab grew to 32px to meet the pane;
      * with a pill there is nothing for a fixed height to coordinate with.
      *
-     * SYMMETRIC vertical padding for the same reason: the old 1px/2px split leaned the label toward
+     * SYMMETRIC vertical padding for the same reason: the old 2px/4px split leaned the label toward
      * the top edge because the bottom edge was the one that met the content. */
-    padding-left: 4px;
-    padding-right: 4px;
-    padding-top: 1px;
-    padding-bottom: 1px;
+    padding-left: 8px;
+    padding-right: 8px;
+    padding-top: 2px;
+    padding-bottom: 2px;
     justify-content: center;
     align-items: center;
     /* ROW, and it belongs on the SHARED rule rather than on whichever tab happens to need it. This
@@ -637,10 +637,10 @@ tab,
     text-shadow: none;
 
     /* A TRANSPARENT BORDER AT REST, coloured only when selected (see `tab:checked`). It has to exist
-     * in BOTH states or the tab grows by 2px the moment it becomes current and every tab beside it
+     * in BOTH states or the tab grows by 4px the moment it becomes current and every tab beside it
      * shifts — a whole row twitching on each click. Reserving the space always and changing only the
      * colour is the standard fix, and the same reason the radius lives here rather than on :checked. */
-    border-width: 1px;
+    border-width: 2px;
     border-color: #00000000;
 }
 
@@ -650,7 +650,7 @@ tab,
  * selected tab's seam against the pane disappeared and it read as "raised into" the content: a
  * browser's metaphor, and it needed one rule per strip side (`__top__`/`__bottom__`/`__left__`/
  * `__right__`) because which edge faces the pane depends on where the strip sits. The selected tab
- * also grew from 12px to 16px to complete the illusion.
+ * also grew from 24px to 32px to complete the illusion.
  *
  * Every modern IDE has abandoned that. A tab is a LABEL on a strip and the selection is a pill drawn
  * behind it — which is why the shape is now uniform, constant in size, and needs no per-side rules
@@ -668,19 +668,19 @@ tab .__pre-icon__,
 tab::part(pre-icon) {
     /* 1:1 WITH THE ARTWORK, and this one is not a taste decision.
      *
-     * The file-type set is authored at 16px with every stroke centreline on a HALF-integer, so a
-     * 1px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 10px that
-     * stroke becomes 0.625px -- thinner than a pixel, so it can never fully light one however it is
+     * The file-type set is authored at 32px with every stroke centreline on a HALF-integer, so a
+     * 2px outline spans exactly one pixel row and needs no antialiasing at all. Drawn at 20px that
+     * stroke becomes 1.25px -- thinner than a pixel, so it can never fully light one however it is
      * placed -- and every centreline lands mid-pixel. The result is the soft, unevenly-weighted
      * outline that made these icons look muddy next to the same files in IntelliJ.
      *
-     * 16px and 8px are the only crisp sizes for this set; between them sharpness falls off (97%%
-     * sharp pixels at 16px, 89%% at 8px, 67%% at 12px, 56%% at 10px). The row is 20px, which is what
-     * both references pair with a 16px icon. */
-    width: 11px;
-    height: 11px;
+     * 32px and 16px are the only crisp sizes for this set; between them sharpness falls off (97%%
+     * sharp pixels at 32px, 89%% at 16px, 67%% at 24px, 56%% at 20px). The row is 40px, which is what
+     * both references pair with a 32px icon. */
+    width: 22px;
+    height: 22px;
     flex-shrink: 0;
-    margin-right: 3px;
+    margin-right: 6px;
     overlay-size: contain;
 }
 
@@ -697,20 +697,20 @@ tab::part(pre-icon) {
  * the pointer on the tab, and that is exactly what makes it appear — there is no state in which a user
  * can press a button they cannot see.
  *
- * MIN-HEIGHT AND PADDING ARE CLEARED, and neither is optional. `button { min-height: 14px }` is a
+ * MIN-HEIGHT AND PADDING ARE CLEARED, and neither is optional. `button { min-height: 28px }` is a
  * DIFFERENT PROPERTY from the height below, so it does not compete with it — it simply wins whenever it
- * is the larger number, and at 14px around a 9px box it is. The base button padding is the same story
- * one property along: left at 4px either side, an 9px glyph sits in a 17px box and the tab grows by the
+ * is the larger number, and at 28px around a 18px box it is. The base button padding is the same story
+ * one property along: left at 8px either side, an 18px glyph sits in a 34px box and the tab grows by the
  * difference. This is the third time that pair has cost a round; see the menu-bar and search-toggle
  * notes for the other two. */
 tab .__close__,
 tab::part(close) {
-    width: 11px;
-    height: 11px;
+    width: 22px;
+    height: 22px;
     min-height: 0;
     min-width: 0;
     padding: 0;
-    margin-left: 3px;
+    margin-left: 6px;
     flex-shrink: 0;
     flex-grow: 0;
     opacity: 0;
@@ -719,7 +719,7 @@ tab::part(close) {
     background: none;
     background-color: #00000000;
     /* `shape("cross")` rather than an icon file, as `searchfield .__clear__` already draws: it is
-     * procedural, so it stays crisp at 9px where a rasterised 16px glyph would not, and it takes its
+     * procedural, so it stays crisp at 18px where a rasterised 32px glyph would not, and it takes its
      * colour from the element instead of from artwork. */
     overlay: shape("cross");
     cursor: pointer;
@@ -847,7 +847,7 @@ tab:disabled {
 markupview {
     flex-direction: column;
     width: 100%;
-    gap: 6px;
+    gap: 12px;
 }
 
 markupview .__markup-paragraph__ {
@@ -881,9 +881,9 @@ markupview .__markup-bullet__::highlight(markup-code) {
      *
      * Vertical padding is not permitted at all -- a band is as tall as its line box, and inflating that
      * overlaps the line above. @see HighlightStyle */
-    padding-left: 3px;
-    padding-right: 3px;
-    border-radius: 3px;
+    padding-left: 6px;
+    padding-right: 6px;
+    border-radius: 6px;
 }
 
 markupview .__markup-paragraph__::highlight(markup-strong),
@@ -932,15 +932,15 @@ markupview .__markup-heading__ {
     white-space: normal;
     font-weight: bold;
     color: var(--markup-heading-fg, #DFE1E5);
-    margin-top: 2px;
+    margin-top: 4px;
 }
 
-markupview .__markup-h1__ { font-size: 13px; }
-markupview .__markup-h2__ { font-size: 12px; }
-markupview .__markup-h3__ { font-size: 11px; }
-markupview .__markup-h4__ { font-size: 10px; }
-markupview .__markup-h5__ { font-size: 10px; }
-markupview .__markup-h6__ { font-size: 10px; }
+markupview .__markup-h1__ { font-size: 26px; }
+markupview .__markup-h2__ { font-size: 24px; }
+markupview .__markup-h3__ { font-size: 22px; }
+markupview .__markup-h4__ { font-size: 20px; }
+markupview .__markup-h5__ { font-size: 20px; }
+markupview .__markup-h6__ { font-size: 20px; }
 
 /* A `<pre>` SAMPLE. Its own box, so the background covers the whole block including the ends of short
  * lines — a highlight band would stop at the glyphs, which is right for a word and wrong for a sample.
@@ -954,13 +954,13 @@ markupview .__markup-code__ {
     flex-direction: column;
     width: 100%;
     background-color: var(--markup-pre-bg, #2B2B2B);
-    padding: 6px;
-    border-radius: 3px;
+    padding: 12px;
+    border-radius: 6px;
     overflow: auto;
     /* AN OUTLINE, not a border. A one-sided `border-width-*` in this engine either draws all four edges or
      * none depending on which edge is named, so a uniform frame is spelled with `outline` -- which is what
      * the popup around this uses for its own hairline. */
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--markup-pre-border, #393B40);
 }
 
@@ -980,17 +980,17 @@ markupview .__markup-code__ > text {
 markupview .__markup-list__ {
     flex-direction: column;
     width: 100%;
-    gap: 2px;
+    gap: 4px;
     /* INDENTED AS A BLOCK, which is the whole visual job of a list: the marker column has to start inside
      * the prose's left edge or the items read as more paragraphs that happen to begin with a number.
      * On the list rather than the item, so a nested list indents against its parent for free. */
-    padding-left: 14px;
+    padding-left: 28px;
 }
 
 markupview .__markup-item__ {
     flex-direction: row;
     width: 100%;
-    gap: 4px;
+    gap: 8px;
 }
 
 markupview .__markup-bullet__ {
@@ -1002,7 +1002,7 @@ markupview .__markup-item-body__ {
     flex-direction: column;
     width: 0;
     flex-grow: 1;
-    gap: 4px;
+    gap: 8px;
 }
 
 /* A `<blockquote>`. The rule down its left is an ELEMENT, because a one-sided `border-width-*` in this
@@ -1012,11 +1012,11 @@ markupview .__markup-item-body__ {
 markupview .__markup-quote__ {
     flex-direction: row;
     width: 100%;
-    gap: 6px;
+    gap: 12px;
 }
 
 markupview .__markup-quote-rule__ {
-    width: 2px;
+    width: 4px;
     flex-shrink: 0;
     background-color: var(--markup-quote-rule, #4A4D52);
 }
@@ -1028,7 +1028,7 @@ markupview .__markup-quote-rule__ {
 markupview .__markup-definitions__ {
     flex-direction: column;
     width: 100%;
-    gap: 4px;
+    gap: 8px;
 }
 
 /* The label column is given ONE SHARED WIDTH after layout, by `MarkupView.alignTerms` -- a grid would be
@@ -1038,7 +1038,7 @@ markupview .__markup-definitions__ {
 markupview .__markup-definition__ {
     flex-direction: row;
     width: 100%;
-    gap: 8px;
+    gap: 16px;
 }
 
 /* Quieter than the value it introduces: the label is how you find the row, the value is what you came
@@ -1050,7 +1050,7 @@ markupview .__markup-term__ {
     white-space: normal;
     /* CAPPED, so `Implementation Requirements:` wraps rather than pushing the value column off the box.
      * Below the cap the measured width decides, and every label lines up with no gap to spare. */
-    max-width: 132px;
+    max-width: 264px;
     color: var(--markup-term-fg, #9DA0A8);
 }
 
@@ -1060,7 +1060,7 @@ markupview .__markup-detail__ {
     flex-direction: column;
     width: 0;
     flex-grow: 1;
-    gap: 3px;
+    gap: 6px;
 }
 
 
@@ -1078,13 +1078,13 @@ markupview .__markup-detail__ {
 markupview .__markup-table__ {
     flex-direction: column;
     width: 100%;
-    gap: 2px;
+    gap: 4px;
 }
 
 /* Above the rows and quieter than them: a caption names the table, the rows are what you came for. */
 markupview .__markup-caption__ {
     white-space: normal;
-    padding-bottom: 2px;
+    padding-bottom: 4px;
     color: var(--markup-term-fg, #9DA0A8);
 }
 
@@ -1105,10 +1105,10 @@ markupview .__markup-cell__ {
     /* INSIDE the cell, so the grid line never touches a glyph and the column measurement includes the
      * space it needs. A gap on the row could not do the second half: it separates boxes without giving
      * either of them room. */
-    padding-left: 6px;
-    padding-right: 6px;
-    padding-top: 2px;
-    padding-bottom: 2px;
+    padding-left: 12px;
+    padding-right: 12px;
+    padding-top: 4px;
+    padding-bottom: 4px;
     /* NO `max-width`. It was here so one long cell wrapped instead of pushing the row off the box, and
      * it was a stand-in for a column algorithm: 240 is not a property of any table, it capped the header
      * of a narrow column as readily as the prose of a wide one, and `alignTables` then wrote a

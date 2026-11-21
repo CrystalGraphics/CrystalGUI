@@ -88,7 +88,7 @@ public final class TransformBox extends UIElement {
      * between the two, at the same size and shape. No ring of its own: a white one was tried and reads
      * as a third kind of chrome rather than as the same dot filled in.</p>
      */
-    private static final float HANDLE_SIZE = 6f;
+    private static final float HANDLE_SIZE = 12f;
 
     /**
      * How close a pointer has to be to a handle to scale by it — <b>a target, not the dot's own radius.</b>

@@ -2955,6 +2955,7 @@ com/crystalgui/core/async/Broadcast
   method public name ()Ljava/lang/String;
   method public post (Ljava/lang/Object;)V
   method public subscribe (Ljava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
+  method public subscribe (Ljava/util/concurrent/Executor;Ljava/lang/Runnable;)Lcom/crystalgui/core/signal/Connection;
   method public subscribe (Ljava/util/function/Consumer;)Lcom/crystalgui/core/signal/Connection;
   method public subscriberCount ()I
   method public toString ()Ljava/lang/String;
@@ -4218,28 +4219,33 @@ com/crystalgui/core/search/SearchQuery$Options
 com/crystalgui/core/settings/Preferences
   access public,final
   extends java/lang/Object
+  field public,static,final DESKTOP_SCALE Ljava/lang/String;
   field public,static,final LOCALE Ljava/lang/String;
   field public,static,final PUBLISHED Lcom/crystalgui/core/async/Published;
   field public,static,final SCHEME Ljava/lang/String;
   field public,static,final THEME Ljava/lang/String;
-  field public,static,final UI_SCALE Ljava/lang/String;
+  field public,static,final ZOOM_PREFIX Ljava/lang/String;
   method public asMap ()Ljava/util/Map;
+  method public desktopScale ()F
   method public keymap ()Ljava/util/Map;
   method public locale ()Ljava/util/Locale;
   method public raw (Ljava/lang/String;)Ljava/lang/String;
   method public scheme ()Ljava/lang/String;
   method public theme ()Ljava/lang/String;
   method public tokenOverrides ()Ljava/util/Map;
-  method public uiScale ()F
   method public with (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/settings/Preferences;
   method public withAll (Ljava/util/Map;)Lcom/crystalgui/core/settings/Preferences;
+  method public withDesktopScale (F)Lcom/crystalgui/core/settings/Preferences;
   method public withKeys (Ljava/lang/String;Ljava/util/List;)Lcom/crystalgui/core/settings/Preferences;
   method public withLocale (Ljava/util/Locale;)Lcom/crystalgui/core/settings/Preferences;
   method public withTokenOverride (Ljava/lang/String;Ljava/lang/String;)Lcom/crystalgui/core/settings/Preferences;
-  method public withUiScale (F)Lcom/crystalgui/core/settings/Preferences;
+  method public withZoom (Ljava/lang/String;F)Lcom/crystalgui/core/settings/Preferences;
+  method public zoom (Ljava/lang/String;)F
+  method public zooms ()Ljava/util/Map;
   method public,static current ()Lcom/crystalgui/core/settings/Preferences;
   method public,static declare (Ljava/lang/String;)V
   method public,static isDesktopWide (Ljava/lang/String;)Z
+  method public,static percent (F)Ljava/lang/String;
   method public,static update (Ljava/util/function/UnaryOperator;)Lcom/crystalgui/core/settings/Preferences;
 com/crystalgui/core/settings/PreferencesStore
   access public,final
@@ -8661,7 +8667,7 @@ com/crystalgui/render/UiPaintWarmup
   extends java/lang/Object
   implements com/crystalgraphics/loading/task/CgLoadStep
   method public step (Lcom/crystalgraphics/loading/task/CgLoadTask;)Z
-  method public,static preload ()Lcom/crystalgui/render/UiPaintWarmup;
+  method public,static preload (F)Lcom/crystalgui/render/UiPaintWarmup;
 com/crystalgui/render/image/CgUiImage
   access public,abstract,interface
   extends java/lang/Object
@@ -9043,7 +9049,6 @@ com/crystalgui/screen/CgUiScreen
   field public,static,final DEFAULT_THEME Ljava/lang/String;
   field public,static,final ORDER I
   field public,static,final ROOT_CLASS Ljava/lang/String;
-  field public,static,final UI_SCALE F
   method public,static application ()Lcom/crystalgui/desktop/app/Application;
   method public,static close ()V
   method public,static closeScreen ()V
@@ -9160,6 +9165,28 @@ com/crystalgui/screen/ScreenKind$Builder
   access public,abstract,interface
   extends java/lang/Object
   method public,abstract build (Lcom/crystalgui/screen/ScreenContext;)V
+com/crystalgui/screen/UiScale
+  access public,final
+  extends java/lang/Object
+  field public,static,final MIN_DESKTOP_HEIGHT I
+  field public,static,final MIN_DESKTOP_WIDTH I
+  field public,static,final ZOOM_STEPS [F
+  method public,static appOf (Lcom/crystalgui/ui/dom/UIDocument;)Ljava/lang/String;
+  method public,static bind (Lcom/crystalgui/ui/dom/UIDocument;Ljava/lang/String;)Lcom/crystalgui/core/signal/Connection;
+  method public,static desktop ()F
+  method public,static of (Ljava/lang/String;)F
+  method public,static poll ()V
+  method public,static resetZoom (Ljava/lang/String;)V
+  method public,static screen ()F
+  method public,static zoomIn (Ljava/lang/String;)V
+  method public,static zoomOut (Ljava/lang/String;)V
+com/crystalgui/screen/ZoomCommands
+  access public,final
+  extends java/lang/Object
+  field public,static,final ZOOM_IN Ljava/lang/String;
+  field public,static,final ZOOM_OUT Ljava/lang/String;
+  field public,static,final ZOOM_RESET Ljava/lang/String;
+  method public,static register ()V
 com/crystalgui/serialization/style/ImageParts
   access public,final
   extends java/lang/Object
@@ -19203,6 +19230,7 @@ com/crystalgui/workbench/WorkbenchSettings
   field public,static,final AUTO_REVEAL Lcom/crystalgui/core/settings/Setting;
   field public,static,final CARET_BLINK Lcom/crystalgui/core/settings/Setting;
   field public,static,final CONFIRM_DELETE Lcom/crystalgui/core/settings/Setting;
+  field public,static,final DESKTOP_SCALE Lcom/crystalgui/core/settings/Setting;
   field public,static,final EDITED_AT Lcom/crystalgui/core/settings/SettingsLayer;
   field public,static,final EDITOR_SCHEME Lcom/crystalgui/core/settings/Setting;
   field public,static,final EDITOR_TABS_PAGE Ljava/lang/String;

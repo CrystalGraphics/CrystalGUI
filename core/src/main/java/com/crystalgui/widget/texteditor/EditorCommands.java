@@ -390,15 +390,15 @@ public final class EditorCommands {
                 .enabledWhen(when(editor -> !editor.diagnostics().isEmpty())));
 
         // ── View ────────────────────────────────────────────────────────────────────────────────
-        registry.register(Command.of(PREFIX + "zoomIn", "Zoom In")
+        registry.register(Command.of(PREFIX + "zoomIn", "Editor Font Zoom In")
                 .menu(MenuId.MAIN_VIEW, "3_editor", 10)
                 .run(on(editor -> editor.zoomBy(1)))
                 .enabledWhen(when(editor -> editor.getFontSize() < TextEditor.MAX_FONT_SIZE)));
-        registry.register(Command.of(PREFIX + "zoomOut", "Zoom Out")
+        registry.register(Command.of(PREFIX + "zoomOut", "Editor Font Zoom Out")
                 .menu(MenuId.MAIN_VIEW, "3_editor", 20)
                 .run(on(editor -> editor.zoomBy(-1)))
                 .enabledWhen(when(editor -> editor.getFontSize() > TextEditor.MIN_FONT_SIZE)));
-        registry.register(editorCommand(PREFIX + "zoomReset", "Reset Zoom")
+        registry.register(editorCommand(PREFIX + "zoomReset", "Editor Font Zoom Reset")
                 .icon(ActionIcons.RESET)
                 .menu(MenuId.MAIN_VIEW, "3_editor", 30)
                 .run(on(TextEditor::resetZoom)));
@@ -531,12 +531,9 @@ public final class EditorCommands {
             keymap.bind("Mod+Shift+" + level, PREFIX + "foldLevel" + level);
         }
 
-        // VS Code's chords. Both spellings of each, because the numeric keypad is a different key code
-        // and a laptop without one is the common case -- and one call rather than two, so the pair cannot
-        // drift apart when somebody edits only the line they were looking at.
-        keymap.bindAll("Mod+WheelUp, Mod+Equals, Mod+Add", PREFIX + "zoomIn");
-        keymap.bindAll("Mod+WheelDown, Mod+Minus, Mod+Subtract", PREFIX + "zoomOut");
-        keymap.bindAll("Mod+0, Mod+Numpad0", PREFIX + "zoomReset");
+        // The wheel only, as VS Code's editor.mouseWheelZoom: Ctrl + / − / 0 zoom the application (ZoomCommands).
+        keymap.bind("Mod+WheelUp", PREFIX + "zoomIn");
+        keymap.bind("Mod+WheelDown", PREFIX + "zoomOut");
 
         // Undo is deliberately NOT re-bound here. UndoCommands declares its own chords, so Mod+Z reaches
         // edit.undo everywhere including inside an editor, and both routes end at UndoScope.nearest --

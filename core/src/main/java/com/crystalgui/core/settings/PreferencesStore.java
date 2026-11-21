@@ -31,7 +31,7 @@ public final class PreferencesStore {
         if (storage != null || target == null) return;
         storage = target;
         SettingsModel loaded = SettingsCodec.fromJson(target.read(FILE));
-        Preferences.update(p -> p.withAll(loaded.asMap()));
+        Preferences.update(p -> p.withAll(Preferences.migrated(loaded.asMap())));
     }
 
     /** Writes {@code preferences} if a storage is attached: called by {@link Preferences#update} after each change. */

@@ -98,12 +98,12 @@ public class CgUiTimelineScene extends UiDocumentScene {
 
     private UIElement buildTree() {
         UIElement root = new UIElement()
-                .layout(l -> l.flexDirection(FlexDirection.COLUMN).gapAll(8))
+                .layout(l -> l.flexDirection(FlexDirection.COLUMN).gapAll(16))
                 .setFocusPolicy(FocusPolicy.NONE);
         root.addClass("timeline-scene");
 
         strip = new FrameStripTrack();
-        strip.setRowHeight(56f);
+        strip.setRowHeight(112f);
         strip.onSelected(index -> {
             selection = "frame " + index;
             drawcalls.showSelected(index);
@@ -130,7 +130,7 @@ public class CgUiTimelineScene extends UiDocumentScene {
 
         axis = new TimelineAxis();
         spans = new SpanTrack(axis);
-        spans.setRowHeight(13f);
+        spans.setRowHeight(26f);
         spans.onSelected(span -> selection = String.format("%s  %.3fms  %s",
                 span.name(), span.millis(), span.source() == null ? "" : span.source()));
         root.append(spans);
@@ -214,8 +214,8 @@ public class CgUiTimelineScene extends UiDocumentScene {
 
     @Override
     protected void paintOver(CgUiPaintContext paint) {
-        paint.text().at(0, 0).text(status).font(paint.getFont().atSize(13)).submit();
-        paint.text().at(0, 16).text(selection).font(paint.getFont().atSize(13)).submit();
+        paint.text().at(0, 0).text(status).font(paint.getFont().atSize(26)).submit();
+        paint.text().at(0, 16).text(selection).font(paint.getFont().atSize(26)).submit();
     }
 
     @Override

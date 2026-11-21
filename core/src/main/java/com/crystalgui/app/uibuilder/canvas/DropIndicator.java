@@ -49,7 +49,7 @@ public final class DropIndicator extends UIElement {
     private static final float CAP = 6f;
 
     /** How far inside an empty container its line sits. */
-    private static final float EMPTY_INSET = 4f;
+    private static final float EMPTY_INSET = 8f;
 
     @Nullable
     private DropResolver.Drop drop;

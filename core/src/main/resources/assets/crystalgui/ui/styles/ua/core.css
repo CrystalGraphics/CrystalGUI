@@ -11,7 +11,7 @@
 /* CrystalGUI's user-agent stylesheet — the browser analogue.
  *
  * WHY THIS EXISTS: no widget sets any size in Java (only UIText, from measured text). Slider's
- * 150x20, Switch's 25x14, Checkbox's 12x12 mark, SplitView's 4px divider — all of it lived only in
+ * 150x20, Switch's 25x14, Checkbox's 12x12 mark, SplitView's 8px divider — all of it lived only in
  * a theme. Without one, a Slider is 0x0, a Switch is invisible and a SplitView's divider is 0px wide
  * and literally ungrabbable. Everything below is what a widget needs to FUNCTION, not to look good.
  *
@@ -68,9 +68,9 @@ top-layer {
  * These are inheritable, so setting them on the widgets reaches their labels. */
 
 * {
-    font-size: 10px;
-    outline-offset: -1px;
-    /*border-radius: 2px;*/
+    font-size: 20px;
+    outline-offset: -2px;
+    /*border-radius: 4px;*/
 }
 
 /* ── Corners ────────────────────────────────────────────────────────────────────────────────────
@@ -111,17 +111,17 @@ top-layer {
  * switch, slider, textfield, and SplitView's divider. A theme that rings a widget's CHILD instead must
  * turn this off on the root with `outline: none`, or both rings draw — see ore.css.
  *
- * 1px, where the web's default ring is 2px: measured in cgui-gallery at uiScale 2 rather than
- * assumed, and 2px was proportionally enormous against this engine's 10px default text (same reason
+ * 2px, where the web's default ring is 4px: measured in cgui-gallery at uiScale 2 rather than
+ * assumed, and 4px was proportionally enormous against this engine's 20px default text (same reason
  * font-size is set to 10 above).
  *
- * The offset is INWARD (-1px), set once on `*` at the top of this file rather than here. The web's
+ * The offset is INWARD (-2px), set once on `*` at the top of this file rather than here. The web's
  * ring is often offset outward; that was worse twice over — it made adjacent checkboxes' rings
  * collide, and it draws beyond the border box, where any ancestor with `overflow: hidden` scissors
  * it away (a focused row inside a ScrollerView would lose the edge of its own ring). Pulling the
  * stroke inside the border box instead means it always survives the clip. */
 :focus-visible {
-    outline: 1px var(--focus-ring, #0060df);
+    outline: 2px var(--focus-ring, #0060df);
 }
 
 /* ── ...EXCEPT ON ANYTHING PANE-SIZED ────────────────────────────────────────────────────────────
@@ -164,7 +164,7 @@ top-layer {
  * `dialog` is `window` again, one for one, and it was missed because a dialog does not look pane-sized
  * until you notice it is a window with less furniture. It is focusable so focus has somewhere to land
  * when its content has nowhere to put it, and `Dialog.show` focuses it PROGRAMMATICALLY on every open
- * -- which rings by definition. So every dialog drew a 1px ring round its whole self from the moment it
+ * -- which rings by definition. So every dialog drew a 2px ring round its whole self from the moment it
  * appeared, and that ring is what the close control's hover fill was terminating against: the reports
  * were about the focus ring the entire time, not about the dialog's own edge. Which dialog you are in
  * is not a question anybody has: there is one, and it is in front of everything. */

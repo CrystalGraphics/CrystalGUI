@@ -1,6 +1,6 @@
 /* The README's FurnacePanel on the Ore theme (crystalgui:ore, listed first), the panel being #furnace.
  * Colours are #RRGGBBAA. */
-#furnace { padding-left: 8px; padding-right: 8px; padding-top: 7px; padding-bottom: 9px; gap: 6px; }
+#furnace { padding-left: 16px; padding-right: 16px; padding-top: 14px; padding-bottom: 18px; gap: 12px; }
 
 /* Minecraft's own GUI label colours on the light panel. */
 #furnace text { color: #3F3F3F; text-shadow: none; }
@@ -8,12 +8,12 @@
 #furnace #status { color: #2F7A26; }
 
 .row { flex-direction: row; justify-content: space-between; align-items: center; }
-.divider { height: 1px; background-color: #8B8B8B; }
+.divider { height: 2px; background-color: #8B8B8B; }
 
 /* Ore has no progress bar: its slider track, filled in flat flame bands as Minecraft draws fire:
- * a 1px yellow highlight, an orange body and a 1px red base, the same at any fill. */
+ * a 2px yellow highlight, an orange body and a 2px red base, the same at any fill. */
 #burn {
-    height: 7px;
+    height: 14px;
     border-radius: 0;
     background: asset("crystalgui:ore", "slider-track");
 }
@@ -24,5 +24,5 @@
 }
 
 /* Side by side, sharing the width. */
-#actions { gap: 4px; }
+#actions { gap: 8px; }
 #actions button { width: 0; flex-grow: 1; }

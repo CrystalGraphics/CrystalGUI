@@ -297,8 +297,8 @@ public final class TaskbarDesigner {
         // The floors say what a missing size means; a null box means the same. The designer opens
         // from a command, so the island it is measuring may not have been laid out on that frame.
         Box islandBox = island.box();
-        islandWidth = Math.max(80f, islandBox == null ? 0f : islandBox.width());
-        islandHeight = Math.max(12f, islandBox == null ? 0f : islandBox.height());
+        islandWidth = Math.max(160f, islandBox == null ? 0f : islandBox.width());
+        islandHeight = Math.max(24f, islandBox == null ? 0f : islandBox.height());
         // THE RADIUS IS THE SHEET'S, NEVER THE FIELD'S DEFAULT. applyGeometry() below writes every
         // geometry value at IMPORTANT, so anything this method does not seed is imposed on the bar the
         // moment the tuner opens -- the exact failure the javadoc above warns about, reached without

@@ -65,7 +65,7 @@ public final class ErrorStripePart extends EditorViewPart {
     private static final float SNAP_PERCENT = 1.2f;
 
     /** …with a floor, because that percentage is a couple of pixels in a short editor. */
-    private static final float MIN_SNAP_PX = 5f;
+    private static final float MIN_SNAP_PX = 10f;
 
     /**
      * What a mark is drawn at before the sheet has been matched — <b>not</b> the styling.

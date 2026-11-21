@@ -45,7 +45,7 @@ import java.util.Map;
 public final class SnapSolver {
 
     /** How close counts, in screen pixels — tldraw's and Excalidraw's eight. */
-    public static final float SCREEN_TOLERANCE = 8f;
+    public static final float SCREEN_TOLERANCE = 16f;
 
     /** Takes only what the box is already on. @see #remeasure */
     private static final float EXACT = 0.01f;

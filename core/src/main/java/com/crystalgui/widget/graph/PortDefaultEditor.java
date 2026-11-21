@@ -69,7 +69,7 @@ final class PortDefaultEditor {
     /** World-space gap between the dot's centre and the real port's own dot — the same every zoom, like
      * every other plane-space measurement in this view. Wide enough for the stub to read as a real line
      * between two distinct dots rather than two dots touching with nothing visible between them. */
-    private static final float GAP = 16f;
+    private static final float GAP = 32f;
 
     /**
      * How far {@link #paintStub} reaches LEFT of the node that draws it — what {@link GraphNode}
@@ -85,7 +85,7 @@ final class PortDefaultEditor {
     /** How far LEFT of the box's own right edge the dot's centre sits — how much of the dot visually
      * overlaps the box, Unity's own "the dot is part of the widget" look rather than a mark floating in
      * open canvas beside it. */
-    private static final float DOT_OVERLAP = 7f;
+    private static final float DOT_OVERLAP = 14f;
 
     /**
      * The z-index {@link #box} and {@link #dot} paint at — always above any node, however many times it

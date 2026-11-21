@@ -2,7 +2,6 @@ package com.crystalgui.screen;
 
 import com.crystalgraphics.platform.service.CgScreens;
 import com.crystalgui.core.CrystalGuiCore;
-import com.crystalgui.core.settings.Preferences;
 import com.crystalgui.core.signal.Connection;
 import com.crystalgui.desktop.app.ApplicationKind;
 import com.crystalgui.desktop.dialog.FailureWindow;
@@ -84,8 +83,7 @@ final class GameScreen {
         viewport = CgUiViewport.open(document, kind.threading() == ApplicationKind.Threading.INLINE
                 ? CgUiViewport.Threading.INLINE : CgUiViewport.Threading.fromFlags(), "screen:" + kind.id());
         context = new ScreenContext(this, kind, document, root);
-        scale = kind.uiScale() > 0f ? null : Preferences.PUBLISHED.changes().subscribe(
-                () -> document.execute(() -> document.boxes().setUiScale(Preferences.current().uiScale())));
+        scale = kind.uiScale() > 0f ? null : UiScale.bind(document, kind.id());
         if (kind.uiScale() > 0f) document.execute(() -> document.boxes().setUiScale(kind.uiScale()));
         viewport.onFault(this::fault);
         content = new CgUiViewport.Content() {

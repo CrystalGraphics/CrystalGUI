@@ -79,13 +79,13 @@ texteditor {
     overflow: auto;
     line-height: 1.4;
 
-    /* Text must not sit flush against the editor's own edge. At uiScale 2 a 1px border is two physical
+    /* Text must not sit flush against the editor's own edge. At uiScale 2 a 2px border is two physical
      * pixels, and a Minecraft-font `l` is about that wide of actual ink -- so a flush first glyph is
      * painted over by the border and the line reads as ".ine 0" instead of "line 0". This is geometry,
      * not taste, which is why it is in the user-agent sheet; TextEditor derives its text origin, its
      * caret and its hit testing from exactly this padding. */
-    padding-left: 1px;
-    padding-right: 3px;
+    padding-left: 2px;
+    padding-right: 6px;
 
     /* THE DOCUMENT'S OWN SURFACE AND TEXT COLOUR, and the reason they are here at all: until the light
      * theme was built, this widget declared NEITHER. Its text was the `color` property's initial value
@@ -130,7 +130,7 @@ texteditor .__line__ {
  * here -- TextEditor sizes and positions the element from it so it can straddle the character boundary
  * rather than start at it. Colour and stacking remain a theme's business. */
 texteditor {
-    caret-width: 1px;
+    caret-width: 2px;
     /* THE STACK ABOVE IS THE EDITOR'S OWN, and without a context of its own every one of those z-indices is
      * ordered against the whole document instead. A positioned box that is not a stacking context lends its
      * z-ordered descendants upward, so the gutter painted over the dock's drop overlay -- an editor's line
@@ -176,7 +176,7 @@ texteditor .__selection__ {
  * the editor was zoomed. TextEditor used to paper over it by caching the font size it FIRST ever saw and
  * scaling these three by the ratio since — an em with no name, no way for a sheet to opt out of, and a
  * reference value that depended on when the editor happened to be constructed. They are 0.4/1.4/0.7 of
- * 10px, which is what they were before, and now they say so.
+ * 20px, which is what they were before, and now they say so.
  *
  * The editor pushes its own font-size onto the gutter each frame (refreshGutterMetrics) because
  * font-size does NOT effectively inherit here — ua/core.css's `* { font-size: 10 }` is a candidate on
@@ -784,11 +784,11 @@ texteditor .__zoom-indicator__ {
     flex-direction: row;
     align-items: center;
     justify-content: center;
-    gap: 6px;
-    padding-left: 8px;
-    padding-right: 8px;
+    gap: 12px;
+    padding-left: 16px;
+    padding-right: 16px;
     background-color: var(--editor-zoom-bg, #2B303B);
-    border-radius: 3px;
+    border-radius: 6px;
     z-index: 7;
     opacity: 0;
     transition: opacity 0.45s;
@@ -800,9 +800,9 @@ texteditor .__zoom-indicator__.__shown__ {
 
 /* FIXED SIZE, declared here rather than inherited. font-size is inheritable, so without a specified
  * value these would take the editor's — which zoom rewrites at IMPORTANT — and the indicator would shrink
- * to unreadable at 4px and balloon at 40. It describes the text; it is not part of it. */
+ * to unreadable at 8px and balloon at 40. It describes the text; it is not part of it. */
 texteditor .__zoom-label__ {
-    font-size: 10px;
+    font-size: 20px;
     color: var(--editor-zoom-fg, #C8CDD4);
     white-space: nowrap;
 }
@@ -821,7 +821,7 @@ texteditor .__zoom-label__ {
  * this is trying not to look like. text-decoration-line is inheritable, so it reaches the Button's own
  * UIText without a descendant selector. */
 texteditor .__zoom-reset__ {
-    font-size: 10px;
+    font-size: 20px;
     background: #00000000;
     color: var(--editor-zoom-link, #4A9EFF);
     white-space: nowrap;
@@ -867,7 +867,7 @@ tableview .__header-cell__ {
 }
 
 tableview .__divider__ {
-    width: 3px;
+    width: 6px;
     cursor: ew-resize;
 }
 
@@ -885,12 +885,12 @@ tableview .__cell__ {
  * this engine has no calc(): the pairing has to be maintained by hand, so it is stated in one place
  * where the two are visibly next to each other rather than 90 lines apart. */
 * {
-    --scrollbar-size: 4px;
+    --scrollbar-size: 8px;
     /* THE ROOM RESERVED FOR IT, which is deliberately MORE than the bar is wide: at exactly the bar's
      * width a selection band ends where the bar begins and the two read as touching. The bar keeps its
      * own thickness; this is the column the content stays out of. @see `.__scroll-view__.__v-gutter__` */
-    --scrollbar-gutter: 7px;
-    --scrollbar-radius: 3px;
+    --scrollbar-gutter: 14px;
+    --scrollbar-radius: 6px;
 }
 
 scroller .__track__,
@@ -904,10 +904,10 @@ scroller .__thumb__,
 scroller::part(thumb) {
     height: 100%;
     background: var(--scrollbar-thumb, #6E6E6E);
-    /* HALF THE BAR'S THICKNESS, derived rather than restated: a fixed 4px against the old 8px bar
-     * was already a pill, and it stayed 4px when the bar narrowed — which turns a pill into a
+    /* HALF THE BAR'S THICKNESS, derived rather than restated: a fixed 8px against the old 16px bar
+     * was already a pill, and it stayed 8px when the bar narrowed — which turns a pill into a
      * lozenge with flat sides. Both now come from --scrollbar-size. */
-    border-radius: var(--scrollbar-radius, 3px);
+    border-radius: var(--scrollbar-radius, 6px);
 }
 scroller.__vertical__ .__thumb__,
 scroller.__vertical__::part(thumb) {
@@ -934,12 +934,12 @@ scroller::part(head),
 scroller::part(tail) {
     display: none;
     background: var(--scrollbar-tail, #4A4A4A);
-    /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 8px
+    /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 16px
      * WIDE and full height; the vertical rule below swaps that. Getting this wrong is why a
      * `height`-only rule collapses the horizontal bar's buttons to nothing. Kept here rather than in
      * a theme so enabling them stays a pure `display: flex`.
      * 8 matches the bar's thickness, so a button comes out square. */
-    width: 8px;
+    width: 16px;
     height: 100%;
 }
 scroller.__vertical__ .__head__,
@@ -947,7 +947,7 @@ scroller.__vertical__ .__tail__,
 scroller.__vertical__::part(head),
 scroller.__vertical__::part(tail) {
     width: 100%;
-    height: 8px;
+    height: 16px;
 }
 scroller .__head__:hover,
 scroller .__tail__:hover,
@@ -1003,14 +1003,14 @@ texteditor .__corner__ {
  * to go stale. */
 .__v-scroller__,
 ::part(v-scroller) {
-    width: var(--scrollbar-size, 6px);
+    width: var(--scrollbar-size, 12px);
     top: 0;
     right: 0;
     bottom: 0;
 }
 .__h-scroller__,
 ::part(h-scroller) {
-    height: var(--scrollbar-size, 6px);
+    height: var(--scrollbar-size, 12px);
     left: 0;
     right: 0;
     bottom: 0;
@@ -1024,7 +1024,7 @@ texteditor .__corner__ {
  * belongs here beside the width it reserves rather than in each widget that noticed.
  *
  * PADDING ON THE HOST, and it needs no compensation: measured, this engine resolves an absolute inset
- * against the BORDER box, so a scroller with 20px of right padding still had its bar flush at the right
+ * against the BORDER box, so a scroller with 40px of right padding still had its bar flush at the right
  * edge while the content box shrank to 180. In a CSS engine that resolved against the padding box the
  * bar would have come in with the content and this would need undoing again.
  *
@@ -1042,7 +1042,7 @@ texteditor .__corner__ {
  * constructor for exactly this: it is what "every scroller, whatever it calls itself" is spelled as. The
  * same reasoning as the hostless `::part(v-scroller)` above, which needs no list of subclasses either. */
 .__scroll-view__.__v-gutter__ {
-    padding-right: var(--scrollbar-gutter, 7px);
+    padding-right: var(--scrollbar-gutter, 14px);
 }
 
 /* ── AN EDITOR OPENED AS A DOCUMENT FILLS ITS PANE ───────────────────────────────────────────────
@@ -1100,26 +1100,26 @@ completionpopup {
      * case where `left`/`top` are a position rather than a nudge that reflows its siblings. */
     resize: both;
     background: var(--palette-bg, #252526);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--palette-border, #454545);
-    padding: 2px;
+    padding: 4px;
     z-index: 900;
 }
 
-/* 16px, tighter than the 18 it replaced. IntelliJ's rows have the text nearly filling the box; ours had
+/* 32px, tighter than the 18 it replaced. IntelliJ's rows have the text nearly filling the box; ours had
  * visible air above and below, which is what made the list read as a menu rather than as code. Paired with
  * CompletionPopup.ROW_HEIGHT -- a virtualised list needs the number in Java to turn an index into a scroll
  * offset and cannot read the cascade, so the duplication is forced rather than sloppy. */
 .__completion-row__ {
-    height: 16px;
+    height: 32px;
     flex-direction: row;
     align-items: center;
-    padding-left: 4px;
+    padding-left: 8px;
     /* Clears the scrollbar. The bar is an absolute OVERLAY -- it takes no layout width -- so a row whose
      * padding merely matched --scrollbar-size left the type column running exactly up to it and, once the
      * list scrolled, underneath it. Reserving the bar's width plus a little air is what the overlay model
      * needs from anything drawing to the right edge. */
-    padding-right: 12px;
+    padding-right: 24px;
     overflow: hidden;
 }
 
@@ -1129,7 +1129,7 @@ completionpopup {
  * there instead. Everything else is separated by the grow-only spacer. */
 .__completion-icon__,
 ::part(pre-icon).__completion-icon__ {
-    margin-right: 4px;
+    margin-right: 8px;
 }
 
 /* IntelliJ's selection indigo rather than the workbench's VS Code navy. A deliberate divergence from the
@@ -1140,22 +1140,22 @@ completionpopup {
     background-color: var(--completion-selected-bg, #2E436E);
 }
 
-/* 12px, NOT the artwork's native 16.
+/* 24px, NOT the artwork's native 16.
  *
- * JetBrains draws these for a ~13px UI font; ours is 10px, so a 16px icon reads 1.6x the text where
+ * JetBrains draws these for a ~26px UI font; ours is 20px, so a 32px icon reads 1.6x the text where
  * IntelliJ's reads 1.2x — the icon stops being a hint and starts being the loudest thing in the row. 12
  * restores the ratio, and it is chosen over 13 because at uiScale 2 it is 24 device px against a 16-unit
  * viewBox: an exact 1.5x, which is the half-integer CgUiSvg's pixel-grid snapping is looking for.
  *
- * The marks below MUST carry the same number. They are full-size layers, so a mark left at 16 in a 12px
+ * The marks below MUST carry the same number. They are full-size layers, so a mark left at 16 in a 24px
  * icon does not overflow -- it silently draws its corner glyph a third larger and in the wrong corner.
  *
  * A fixed box so every label starts at the same x -- a ragged left edge is what makes a list of
  * identifiers hard to scan. The DRAWING comes from the kind class below; this only reserves the space. */
 .__completion-icon__,
 ::part(pre-icon).__completion-icon__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
 }
 
 /* Modifier marks: full-size layers over the icon, not badges in a corner box.
@@ -1171,8 +1171,8 @@ completionpopup {
     position: absolute;
     left: 0;
     top: 0;
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
 }
 
 .__completion-mark-static__,
@@ -1199,7 +1199,7 @@ completionpopup {
  *
  * Both references truncate a long name and keep the type pinned at the edge, in that order. */
 .__completion-label__ {
-    font-size: 10px;
+    font-size: 20px;
     font-weight: bold;
     color: var(--completion-label, #D4D4D4);
     /* SECOND. @see .__completion-params__ */
@@ -1212,7 +1212,7 @@ completionpopup {
 /* The parameter list, abutting the name and dimmed -- IntelliJ's "tail text". Regular weight, so the eye
  * lands on the name; same size, so the row reads as one string rather than two controls. */
 .__completion-params__ {
-    font-size: 10px;
+    font-size: 20px;
     color: var(--completion-params, #808080);
     /* GIVES FIRST, and the number says so. flex-shrink is a RATIO, not an order -- every shrinkable item
      * gives at once, in proportion -- so "params, then the label, then the type" is spelled as three
@@ -1223,7 +1223,7 @@ completionpopup {
     text-overflow: ellipsis;
 }
 
-/* The SAME size as the label, distinguished by colour alone -- which is what IntelliJ does. At 9px it read
+/* The SAME size as the label, distinguished by colour alone -- which is what IntelliJ does. At 18px it read
  * as a footnote rather than as the type it is.
  *
  * RIGID, and this reverses what was here before.
@@ -1231,8 +1231,8 @@ completionpopup {
  * It used to be the one thing in the row that gave, on the reasoning that a truncated identifier is
  * unreadable while a truncated return type is merely less informative. The reasoning is sound and the
  * arrangement was not, because it was the ONLY thing that could give: the label was not shrinkable, so a
- * tight row put the entire squeeze onto the type. Measured in a 140px row, `String` came out 26.5px on one
- * row and 7.7px on another -- three characters, which is exactly the reported `Str`.
+ * tight row put the entire squeeze onto the type. Measured in a 280px row, `String` came out 53px on one
+ * row and 15.4px on another -- three characters, which is exactly the reported `Str`.
  *
  * So the choice was never between a short name and a short type. It was between a readable type and a
  * type shaved to a stub, on rows picked by whichever name happened to be longest. The order is now:
@@ -1242,7 +1242,7 @@ completionpopup {
  * A column that is a different width on every row is worse than a narrow one -- the eye reads the right
  * edge as a column, and this was not one. */
 .__completion-detail__ {
-    font-size: 10px;
+    font-size: 20px;
     color: var(--completion-detail, #808080);
     /* LAST, NOT NEVER -- and that one word is the fix.
      *
@@ -1273,7 +1273,7 @@ completionpopup {
      *
      * The case it was written for survives without it. The factors above already spend a squeeze on the
      * tail, then the name, and only then the type -- and a name short enough to be crowded is also short
-     * enough to survive, because a 5px label cannot give up much before the type has to start giving
+     * enough to survive, because a 10px label cannot give up much before the type has to start giving
      * instead. A pixel cap is the other tempting answer and is worse: this popup is resizable, so one is
      * either pointless at its widest or crippling at its narrowest. */
     white-space: nowrap;
@@ -1381,21 +1381,21 @@ completionpopup text::highlight(completion-match) {
  * CompletionPopup.ACCEPT_KEYS, the same list the key handler reads, so it cannot promise a binding that is
  * not there.
  *
- * 16px, paired with CompletionPopup.HINT_HEIGHT -- the flip-above-or-below decision is computed from the
+ * 32px, paired with CompletionPopup.HINT_HEIGHT -- the flip-above-or-below decision is computed from the
  * popup's total height in Java and cannot read the cascade. */
 /* The drag handle: pressing it and moving takes the popup with you. `cursor` says so before the press,
  * which is the only thing that makes a drag target discoverable. */
 .__completion-hint__ {
     cursor: move;
-    height: 16px;
+    height: 32px;
     flex-direction: row;
     align-items: center;
-    padding-left: 6px;
-    padding-right: 4px;
+    padding-left: 12px;
+    padding-right: 8px;
 }
 
 .__completion-hint-text__ {
-    font-size: 9px;
+    font-size: 18px;
     color: var(--completion-hint, #6E7681);
 }
 
@@ -1406,8 +1406,8 @@ completionpopup text::highlight(completion-match) {
  * `background: none` as well as a colour: they are separate properties, and a rule setting only the colour
  * is painted over by whatever drawable won. */
 .__completion-options__ {
-    width: 14px;
-    height: 14px;
+    width: 28px;
+    height: 28px;
     min-height: 0;
     min-width: 0;
     padding: 0;
@@ -1434,10 +1434,10 @@ documentationpopup {
     overflow: hidden;
     resize: both;
     background: var(--doc-bg, #191A1C);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--doc-border, #393B40);
-    padding: 9px;
-    gap: 3px;
+    padding: 18px;
+    gap: 6px;
     /* THE LINE BOX, which is most of the vertical looseness and is not a gap at all.
      *
      * `line-height` defaults to `normal` -- the font's OWN line box -- and JetBrains Mono's is generous,
@@ -1448,7 +1448,7 @@ documentationpopup {
     /* SIZED TO CONTENT, AND DELIBERATELY NOT max-width CAPPED.
      *
      * A fixed width made every popup as wide as the widest might need — hovering `System` gave a two-word
-     * definition in a 420px box with 300px of nothing after it. A `max-width` fixed that and broke
+     * definition in a 840px box with 600px of nothing after it. A `max-width` fixed that and broke
      * something worse: **it made the box unresizable past the cap**. A user drag writes `width` at INLINE,
      * and max-width is applied after width whatever origin it came from, so the cap silently won and the
      * popup simply refused to be dragged wider. Same shape as a base rule's min-height beating a height
@@ -1459,7 +1459,7 @@ documentationpopup {
      * without anything capping it. Height still caps, because a documentation body is unbounded in a way
      * a declaration is not, and the body band is the part that scrolls.
      *
-     * AND THE HEIGHT BOUND IS ON THE BAND, NOT HERE -- see `.__doc-scroll__`. It was `max-height: 320px`
+     * AND THE HEIGHT BOUND IS ON THE BAND, NOT HERE -- see `.__doc-scroll__`. It was `max-height: 640px`
      * on this rule, which is the very trap the paragraph above records, one axis over: `max-height` is
      * applied after `height` whatever origin the height came from, so a vertical drag was silently capped
      * and the handle looked dead going down. Moving the bound to the content leaves the box free, and the
@@ -1483,7 +1483,7 @@ documentationpopup {
      * popup below this width is unreadable. That is true of a box that arrived narrow by accident and
      * false of one somebody deliberately dragged: the height already resizes to nothing and nobody
      * minds, because pulling an edge is a statement about what you want. */
-    min-width: 250px;
+    min-width: 500px;
     /* AND A CEILING, for the same reason as the floor and with the same escape hatch.
      *
      * The long comment above rejects `max-width` on the reasoning that the widest LINE is short by
@@ -1491,7 +1491,7 @@ documentationpopup {
      * the documentation BODY -- one prose string with no break the layout has to honour, so its
      * max-content width is the whole paragraph on a single line. An auto-width box takes the space that
      * asks for, so the popup opened as wide as the window; `left` then clamped to 0, because a box that
-     * wide no longer fits beside its anchor. Measured: 1200x86 in a 1200-wide viewport, against 60px for
+     * wide no longer fits beside its anchor. Measured: 1200x86 in a 1200-wide viewport, against 120px for
      * a plain popover in the same frame.
      *
      * The trap that comment records is real -- a cap applied to a box somebody has dragged makes the
@@ -1504,14 +1504,14 @@ documentationpopup {
      * `DocumentationHtmlUtil`, and their comment is the reason to take them rather than invent a pair --
      * "these values were calculated based on experiments with varied content and manual resizing to
      * comfortable width". But what those numbers encode is a MEASURE, in characters per line, and they
-     * are set against a ~13px body font. This sheet's body inherits `* { font-size: 10 }`, so 500px here
-     * is about 120 characters where 500px there is about 90 -- past the width prose stops being
+     * are set against a ~26px body font. This sheet's body inherits `* { font-size: 10 }`, so 1000px here
+     * is about 120 characters where 1000px there is about 90 -- past the width prose stops being
      * comfortable to read, which is what a popup at the ceiling looked like.
      *
      * Scaling theirs by 10/13 lands near 230 and 385; these are 250 and 350, settled by looking at
      * real symbols in the harness rather than by finishing the arithmetic. The pair before this was 420
      * and 720, which had the ratio the wrong way round -- a bigger box for a smaller font. */
-    max-width: 350px;
+    max-width: 700px;
     /* Over the completion popup's 900 -- Ctrl+Q with a list open should read over it, not under it. */
     z-index: 910;
 }
@@ -1553,9 +1553,9 @@ documentationpopup .__doc-problem__ {
     gap: 0px;
     /* FULL BLEED: the popup's own padding would leave both grounds short of the box's edges and the band
      * would read as a panel floating inside a panel rather than as the header of one. */
-    margin-top: -9px;
-    margin-left: -9px;
-    margin-right: -9px;
+    margin-top: -18px;
+    margin-left: -18px;
+    margin-right: -18px;
     /* THE MESSAGE'S GROUND IS PAINTED HERE, not on the message.
      *
      * The message is a UIText with forceSelfSizeWidth -- it reports its own measured width so the popup
@@ -1563,11 +1563,11 @@ documentationpopup .__doc-problem__ {
      * background on it ended where the text did, and the header read as a grey label floating on the
      * popup's paper with the fix row full width beneath it. The band is the element that spans, so the
      * band is what paints, and its padding is the MESSAGE's padding for the same reason. */
-    padding-top: 5px;
-    padding-left: 9px;
-    padding-right: 9px;
+    padding-top: 10px;
+    padding-left: 18px;
+    padding-right: 18px;
     background-color: var(--doc-problem-bg, #26282B);
-    border-width: 1px;
+    border-width: 2px;
     border-color: #00000000;
     border-bottom-color: var(--doc-border, #393B40);
 }
@@ -1599,16 +1599,16 @@ documentationpopup .__doc-problem__.__no-message__ {
 }
 
 documentationpopup .__doc-problem-message__ {
-    font-size: 8px;
-    padding-bottom: -3px;
+    font-size: 16px;
+    padding-bottom: -6px;
     color: var(--editor-fg, #BCBEC4);
     white-space: normal;
     /* THE SAME MEASURE THE BODY USES, and for the same reason: the popup is sized by its widest band, so a
      * message wider than the prose beside it decides the box on its own. At 360 it did -- with the type
      * declaration stacked one interface per line, this line became the widest thing in the popup and held
-     * it 50px past what its own content needed. A quick-fix message is a sentence, so it takes a
+     * it 100px past what its own content needed. A quick-fix message is a sentence, so it takes a
      * sentence's measure. @see .__doc-body__ */
-    max-width: 300px;
+    max-width: 600px;
     flex-shrink: 0;
 }
 
@@ -1617,25 +1617,25 @@ documentationpopup .__doc-problem-message__ {
 documentationpopup .__doc-problem-actions__ {
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     /* THE POPUP'S OWN PAPER, so the fix row reads as continuous with the content below rather than as the
      * bottom of the header. --doc-bg rather than a literal: it is the same token the box itself paints. */
     background-color: var(--doc-bg, #191A1C);
     /* OUT THROUGH THE BAND'S PADDING, which is the message's. Without the negative pair this row's ground
-     * would stop 9px short on each side and sit as an inset strip inside the header. */
-    margin-top: 7px;
-    margin-left: -9px;
-    margin-right: -9px;
-    padding-top: 2px;
-    padding-bottom: 2px;
-    padding-left: 9px;
-    padding-right: 9px;
+     * would stop 18px short on each side and sit as an inset strip inside the header. */
+    margin-top: 14px;
+    margin-left: -18px;
+    margin-right: -18px;
+    padding-top: 4px;
+    padding-bottom: 4px;
+    padding-left: 18px;
+    padding-right: 18px;
 }
 
 /* THE LINK COLOUR, because these behave like links -- one click, no state, and the accelerator beside
  * them is the keyboard equivalent rather than a second control. */
 documentationpopup .__doc-problem-action__ {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--link, #548AF7);
     flex-shrink: 0;
     cursor: pointer;
@@ -1656,7 +1656,7 @@ documentationpopup .__doc-problem-action__:hover {
 /* The accelerator is a caption, not a control: dimmer, never the link colour, and it must not look
  * pressable or it becomes the thing people click instead of the action it names. */
 documentationpopup .__doc-problem-shortcut__ {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--editor-line-number, #6B6B6B);
     flex-shrink: 0;
 }
@@ -1677,8 +1677,8 @@ menu.__code-actions__ .__preferred-action__ {
  * about -- which also settles the question of whether it should read as a warning: upstream already
  * decided, and matching it is what makes it recognisable. */
 texteditor .__quick-fix-bulb__ {
-    width:  12px;
-    height: 12px;
+    width:  24px;
+    height: 24px;
     overlay: icon("crystalgui:general/action/intentionBulb");
     /* NO `color`. This icon carries its own palette -- amber glass, grey base, hard-coded -- exactly like
      * the filetype icons, so a tint here would be a declaration that does nothing. Its light/dark pair is
@@ -1707,24 +1707,24 @@ documentationpopup.__problem-only__ .__doc-problem__ {
 documentationpopup .__doc-owner__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
-    /* The band is 16px of icon beside ~11px of text, so without this the row is as tall as the icon and
+    gap: 8px;
+    /* The band is 32px of icon beside ~22px of text, so without this the row is as tall as the icon and
      * the text floats in it. Matching the icon to the text closes a gap that reads as a margin. */
-    height: 14px;
+    height: 28px;
 }
 
-/* ONE rule. There were briefly two — mine at 14px above the existing 11px one — and the later won, so
+/* ONE rule. There were briefly two — mine at 28px above the existing 22px one — and the later won, so
  * the first looked like it did nothing. Two rules for one element on the same properties is a coin toss
  * decided by file order, which is the trap the sheet's own header warns about for `:disabled` after
  * `:hover`. */
 documentationpopup .__doc-owner-icon__ {
-    width: 11px;
-    height: 11px;
+    width: 22px;
+    height: 22px;
     flex-shrink: 0;
 }
 
 documentationpopup .__doc-owner-text__ {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--doc-owner-fg, #7A7A7A);
 }
 
@@ -1790,7 +1790,7 @@ documentationpopup .__doc-definition-box__ {
  * It also beat the `.__syntax__` rule above on specificity (0,10,1 against 0,10,0), so setting the ink there
  * -- the right place, since it covers every code surface -- changed nothing here until this line agreed. */
 documentationpopup .__doc-definition__ {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--editor-fg, #DFE1E5);
     white-space: nowrap;
 }
@@ -1817,16 +1817,16 @@ documentationpopup .__doc-definition__::highlight(doc-name) {
  * and a growing child with a zero basis resolves to zero -- a popup with an invisible body. QuickPick
  * records the same trap. A max-height of its own gives it somewhere to scroll inside instead. */
 /* A RULE, AND IT IS AN ELEMENT. A one-sided `border-width-*` draws all four edges or none, never the
- * one named -- so a divider is a 1px-tall box, which is what `.__status-sep__` already spells.
+ * one named -- so a divider is a 2px-tall box, which is what `.__status-sep__` already spells.
  *
  * Full width and zero-shrink: in a column the cross axis stretches by default, and `flex-shrink` is 0
  * here anyway, but the height is the thing a stretch could eat. */
 documentationpopup .__doc-separator__ {
     width: 100%;
-    height: 1px;
+    height: 2px;
     flex-shrink: 0;
-    margin-top: 3px;
-    margin-bottom: 4px;
+    margin-top: 6px;
+    margin-bottom: 8px;
     background-color: var(--doc-border, #393B40);
 }
 
@@ -1839,8 +1839,8 @@ documentationpopup .__doc-separator__ {
  * worse in both directions: a short signature would squeeze the prose into a sliver, and a long one
  * would still leave it unreadably wide.
  *
- * 300px, AND THE NUMBER IT REPLACED IS THE WHOLE LESSON. This said 440px and claimed that was "about 65
- * characters at this size". It is not: 440px at font-size 9 is about **107**, because the estimate
+ * 600px, AND THE NUMBER IT REPLACED IS THE WHOLE LESSON. This said 880px and claimed that was "about 65
+ * characters at this size". It is not: 880px at font-size 9 is about **107**, because the estimate
  * assumed a monospace advance and this band is set in the proportional UI font, whose average advance is
  * nearer 0.46em than 0.6em. So the rule that existed to bound the measure was itself derived from a
  * measure that was never taken, and the popup read as a wall of text with a correct-looking rule sitting
@@ -1856,7 +1856,7 @@ documentationpopup .__doc-separator__ {
  * answer for "take the slack" and it needs a parent with a DEFINITE size to take slack from -- the popup
  * is sized by its content and carries a max-height rather than a height, so there is no free space to
  * distribute and the scroller sat at its basis of zero. The popup collapsed to the quick-fix band alone,
- * measured at 58px tall with 480px of documentation inside a box with no height.
+ * measured at 116px tall with 960px of documentation inside a box with no height.
  *
  * So the cap goes here: the region grows to its content and then scrolls, and the popup's own max-height
  * is the backstop rather than the mechanism.
@@ -1872,15 +1872,15 @@ documentationpopup .__doc-scroll__ {
      * NOT scaled to this sheet's smaller font: a measure in characters per line is what font size
      * changes, while a height is how much of the editor a popup is allowed to cover. 260 covered most of
      * it and spilled past the bottom. Released on a vertical drag by the rule below. */
-    max-height: 200px;
+    max-height: 400px;
     overflow: auto;
-    gap: 3px;
+    gap: 6px;
 }
 
 /* ONCE THE USER HAS TAKEN THE HEIGHT, the band FILLS instead of capping itself.
  *
  * The cap above is what makes a long document scroll inside a sensible box before anybody has an opinion.
- * It is also what made a vertical drag look broken: the frame grew and the band stayed 260px, so the popup
+ * It is also what made a vertical drag look broken: the frame grew and the band stayed 520px, so the popup
  * gained empty space below its own content. The fill idiom needs a parent with a DEFINITE height and the
  * popup only has one once the drag has written it -- `max-height` does not make a box definite, which is
  * why writing this unconditionally collapsed the band to zero instead. */
@@ -1905,15 +1905,15 @@ documentationpopup .__doc-body__ {
      * same paragraphs reported their whole unwrapped length and dragged the box out to the full width of
      * the surface.
      *
-     * That was answered here, with `max-width: 402px` on this band -- derived as the popup's 420 floor
-     * less its 9px padding a side, so a body that stopped there could not push the box past the floor.
+     * That was answered here, with `max-width: 804px` on this band -- derived as the popup's 420 floor
+     * less its 18px padding a side, so a body that stopped there could not push the box past the floor.
      * It worked, and it stopped being true the moment the popup got a width of its OWN: the width now
      * comes from the content-length ramp, and an explicit width cannot be widened by content, so there is
      * nothing left for a cap on the prose to prevent.
      *
-     * What the cap did instead was the failure the paragraph below already records about the 300px one
+     * What the cap did instead was the failure the paragraph below already records about the 600px one
      * before it -- the box grew and the text did not, leaving a widening empty margin beside every
-     * paragraph. Measured in the harness: a 645px popup with its body pinned at 402, filling only when a
+     * paragraph. Measured in the harness: a 1290px popup with its body pinned at 402, filling only when a
      * drag released the cap. So the prose takes its measure from the box, which is what `width: 100%`
      * has always said here. @see DocumentationPopup#sizeToContentLength */
     width: 100%;
@@ -1935,7 +1935,7 @@ documentationpopup .__doc-body__ {
 documentationpopup .__markup-paragraph__,
 documentationpopup .__markup-bullet__,
 documentationpopup .__markup-code__ > text {
-    font-size: 9px;
+    font-size: 18px;
     line-height: 1.45;
 }
 
@@ -1951,20 +1951,20 @@ documentationpopup .__markup-code__ > text {
 documentationpopup .__doc-footer__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
+    gap: 8px;
 }
 
 /* THE FILE, not the action. This briefly carried the pencil's own icon, which made the row read as two
  * buttons with a filename between them. */
 documentationpopup .__doc-footer-icon__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     background: icon("crystalgui:file-text");
 }
 
 documentationpopup .__doc-footer-text__ {
-    font-size: 8px;
+    font-size: 16px;
     color: var(--doc-footer-fg, #7A7E85);
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1974,12 +1974,12 @@ documentationpopup .__doc-footer-text__ {
     flex-grow: 1;
 }
 
-/* 12px, MATCHING THE FILE ICON at the other end of the row. At 14 it was the largest thing in the
+/* 24px, MATCHING THE FILE ICON at the other end of the row. At 14 it was the largest thing in the
  * footer and read as the row's subject rather than as its action -- which is backwards, since the
  * subject is the file name between them. */
 documentationpopup .__doc-footer-edit__ {
-    width: 12px;
-    height: 12px;
+    width: 24px;
+    height: 24px;
     flex-shrink: 0;
     cursor: pointer;
     background: icon("crystalgui:general/action/edit");

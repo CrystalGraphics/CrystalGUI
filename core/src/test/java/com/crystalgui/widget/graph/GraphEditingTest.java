@@ -302,9 +302,9 @@ public class GraphEditingTest extends UiDocumentTestBase {
      */
     @Test
     public void aTouchedNodeRisesAndStaysRisen() {
-        GraphNode under = node("Under", 40f, 40f);
-        GraphNode over = node("Over", 60f, 60f);   // added later, so it starts on top
-        GraphNode elsewhere = node("Elsewhere", 260f, 40f);
+        GraphNode under = node("Under", 80f, 80f);
+        GraphNode over = node("Over", 120f, 120f);   // added later, so it starts on top
+        GraphNode elsewhere = node("Elsewhere", 80f, 240f);
         frame();
 
         // Derived from `over`'s own (later, on-top) bounds rather than a hardcoded point: `graphnode`'s

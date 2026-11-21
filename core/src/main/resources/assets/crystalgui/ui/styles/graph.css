@@ -30,7 +30,7 @@
  *
  *     canvas          #202020      header / input panel / controls row   #393939
  *     output panel    #2B2B2B      preview (opaque)                      #313131
- *     every 1px seam  #232323
+ *     every 2px seam  #232323
  *
  * Header, input panel and controls row are the SAME colour; the layering comes from the output panel
  * being darker and the preview lighter.
@@ -70,7 +70,7 @@
     --node-canvas: var(--graph-canvas, #202020);
     --node-header: var(--graph-header, #393939);    /* header, input panel, controls row — the "raised" surfaces */
     --node-panel: var(--graph-panel, #2B2B2B);     /* output panel */
-    --node-seam: var(--graph-seam, #232323);      /* every 1px separator between regions */
+    --node-seam: var(--graph-seam, #232323);      /* every 2px separator between regions */
     --node-edge: var(--graph-edge, #1A1A1A);      /* the node's own outer border */
 
     /* The hairline that rings a control. #282828, NOT black: a line's apparent weight is contrast as
@@ -100,11 +100,11 @@ graphview {
  * below rather than left to inherit. */
 graphnode {
     background: #00000000;
-    border-radius: 5px;
-    border-width: 1px;
+    border-radius: 10px;
+    border-width: 2px;
     border-color: var(--node-edge);
     color: var(--node-text);
-    font-size: 8px;
+    font-size: 16px;
 
     /* IT CLIPS, so the radius reaches the REGIONS and not just the border. A radius alone rounds the
      * element's own fill, and this node deliberately has none -- so every region inside it (the port
@@ -126,7 +126,7 @@ graphnode {
 /* Three ring states, ADDITIVE, sampled off the reference. Hover alone is a dimmer colour so it does not
  * compete with a real selection; hover on top of one adds only width.
  *
- *     hover 1px #327090      selected 2px #44C0FF      both 3px #44C0FF
+ *     hover 2px #327090      selected 4px #44C0FF      both 6px #44C0FF
  *
  * An OUTLINE, not a recoloured `border-color`: that would replace the node's own edge colour, so a selected
  * node lost its outline exactly when it gained emphasis.
@@ -134,21 +134,21 @@ graphnode {
  * ORDER IS LOAD-BEARING. `:hover` and `:checked` both weigh 11, so source order decides between them and
  * `:checked` has to come second. */
 graphnode:hover {
-    outline: 1px var(--graph-node-hover-ring, #327090);
-    outline-offset: 1px;
+    outline: 2px var(--graph-node-hover-ring, #327090);
+    outline-offset: 2px;
 }
 graphnode:checked {
-    outline: 2px var(--graph-selection-ring, #44C0FF);
-    outline-offset: 1px;
+    outline: 4px var(--graph-selection-ring, #44C0FF);
+    outline-offset: 2px;
 }
 graphnode:checked:hover {
-    outline: 3px var(--graph-selection-ring, #44C0FF);
-    outline-offset: 1px;
+    outline: 6px var(--graph-selection-ring, #44C0FF);
+    outline-offset: 2px;
 }
 
 /* The title bar carries the node's top corners itself, because the root no longer paints a background
  * to round. Without this a square bar sits over a rounded border and the two disagree at exactly the
- * two corners a user looks at first. 4px, not 5: it is inset by the 1px border.
+ * two corners a user looks at first. 8px, not 5: it is inset by the 2px border.
  *
  * `>`, not a bare descendant combinator — see default.css's own `graphnode > .__title-bar__` note.
  * `Dialog` reuses the exact same `__title-bar__` class, and a popup opened from this node (a
@@ -157,10 +157,10 @@ graphnode:checked:hover {
 graphnode > .__title-bar__ {
     background: var(--graph-title-bg, #56565676);
     color: var(--node-text-bright);
-    border-top-left-radius: 4px;
-    border-top-right-radius: 4px;
+    border-top-left-radius: 8px;
+    border-top-right-radius: 8px;
 }
-graphnode .__title__ { font-size: 9px; }
+graphnode .__title__ { font-size: 18px; }
 /* Hidden until the node itself is hovered — NOT `:checked`/selected, which is a held state a node can
  * sit in for the whole session, while the chevron is a hover affordance like a window's own close button.
  * Tying it to selection would leave it permanently on for whatever you clicked last and permanently off
@@ -174,7 +174,7 @@ graphnode .__collapse__:hover { color: var(--graph-collapse-hover-fg, #E0E0E0); 
 graphnode .__inputs__ { background-color: var(--graph-inputs-bg, #53535376); }
 graphnode .__outputs__ { background-color: var(--graph-outputs-bg, #35353576); }
 
-/* The band shows through the three 1px separators default.css opens up (under the title bar, above the
+/* The band shows through the three 2px separators default.css opens up (under the title bar, above the
  * section below, between the columns). Darker than either panel so the seams read as seams. */
 graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
 
@@ -182,9 +182,9 @@ graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
  * property (only the 4-edge `border-width` shorthand and its own `border-width-{edge}` longhands), so a
  * `border-top-width`/`border-bottom-width` declaration is silently unrecognized and paints nothing. The
  * real mechanism is: the CONTAINER (`.__controls__`) is the darker tone, each ROW gets its own lighter
- * fill, and `.__controls__`'s `padding-top`/`padding-bottom` (default.css) plus its 1px `gap`
+ * fill, and `.__controls__`'s `padding-top`/`padding-bottom` (default.css) plus its 2px `gap`
  * (already there, for the multi-row case) expose the darker tone as a frame around them — exactly how
- * `.__ports__`'s own 1px-darker-than-its-columns band reads as a seam. Before this, `.__controls__` and
+ * `.__ports__`'s own 2px-darker-than-its-columns band reads as a seam. Before this, `.__controls__` and
  * `.__control-row__` were the SAME flat colour, so there was nothing for that padding to expose: touching
  * a differently-coloured preview read as a bare colour jump ("kissing") rather than a framed line. */
 graphnode .__controls__ { background: var(--graph-ports-bg, #26262676); }
@@ -203,15 +203,15 @@ graphnode .__preview__ {
      * `border-*-width` property, only the 4-edge `border-width` shorthand and `border-width-{edge}`
      * longhands, so it silently parsed to a no-op. Left as history in the sibling comment, not repeated
      * here. */
-    border-bottom-left-radius: 4px;
-    border-bottom-right-radius: 4px;
+    border-bottom-left-radius: 8px;
+    border-bottom-right-radius: 8px;
 }
 
-/* The rubber band. Drawn in the VIEWPORT rather than the plane, so this 1px border stays 1px at any
+/* The rubber band. Drawn in the VIEWPORT rather than the plane, so this 2px border stays 2px at any
  * zoom — a band inside the transform would be four physical pixels at 4x and invisible at 0.25x. */
 graphview .__marquee__ {
     background-color: var(--graph-marquee-bg, #2C79C433);
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--graph-marquee-border, #44C0FF);
 }
 
@@ -269,13 +269,13 @@ nodeport .__dot__ { background-color: var(--graph-dot-bg, #212121); }
 
 /* The core. Sits centred inside the gap (`NodePort` adds it as `.__dot-core__`, a plain internal child —
  * see that class's own javadoc for why this dot gets a real child element instead of the flat
- * three-layer stack `PortDefaultEditor`'s floating dot uses). Small enough, against a 7px outer dot with
- * a 1px ring, to leave the gap visible as its own ring rather than touching the border — that gap is
+ * three-layer stack `PortDefaultEditor`'s floating dot uses). Small enough, against a 14px outer dot with
+ * a 2px ring, to leave the gap visible as its own ring rather than touching the border — that gap is
  * what turns this into Unity's ring-hole-core "target" instead of a smaller solid dot. */
 nodeport .__dot-core__ {
-    width: 3px;
-    height: 3px;
-    min-height: 3px;
+    width: 6px;
+    height: 6px;
+    min-height: 6px;
     border-radius: 50%;
     flex-grow: 0;
     flex-shrink: 0;
@@ -350,31 +350,31 @@ nodeport.type-sampler:hover .__dot-core__ { background-color: var(--graph-port-s
 graphview .__editor__ {
     flex-direction: row;
     align-items: center;
-    gap: 4px;
-    /* NOT a fixed height — auto, sized to its own content (the field's 11px plus this padding). A fixed
-     * height here once clamped the box to exactly the field's own 11px with nothing left over for the
-     * padding below, so the rounded corners clipped to an 11px band while the field inside — still
-     * demanding its own 11px, from INSIDE that padding — visibly overflowed past the bottom edge. Auto
+    gap: 8px;
+    /* NOT a fixed height — auto, sized to its own content (the field's 22px plus this padding). A fixed
+     * height here once clamped the box to exactly the field's own 22px with nothing left over for the
+     * padding below, so the rounded corners clipped to an 22px band while the field inside — still
+     * demanding its own 22px, from INSIDE that padding — visibly overflowed past the bottom edge. Auto
      * is what every other sized-to-its-children container in this stylesheet already does. */
-    /* 2px, not 3 — small enough that two ports stacked in the same node (their editors necessarily
+    /* 4px, not 3 — small enough that two ports stacked in the same node (their editors necessarily
      * stacked too, one per row) keep a sliver of visible gap between boxes rather than nearly touching. */
-    padding-top: 2px;
-    padding-bottom: 2px;
-    /* Symmetric, unlike the field's own narrow padding — 4px more than the vertical sides so the axis
+    padding-top: 4px;
+    padding-bottom: 4px;
+    /* Symmetric, unlike the field's own narrow padding — 8px more than the vertical sides so the axis
      * label and the field read as centred inside the box rather than hugging its left edge. Right is
      * wider still: the box's own trailing edge, which is what the dot overlaps and the stub leaves
      * from, needs room for both without either crowding the field. */
-    padding-left: 7px;
-    padding-right: 17px;
+    padding-left: 14px;
+    padding-right: 34px;
     /* Translucent, matching the SAME composited "header" surface the node's own title bar and control
      * row use on the canvas — `#393939` composited at this engine's one shared alpha (0x76) over
      * `--node-canvas` solves to `#565656` — see this file's own alpha-solving note near the top. A flat
      * opaque `var(--node-header)` looked like a different material entirely sitting on the same canvas
      * every other translucent surface shares. */
     background: var(--graph-inline-editor-bg, #56565676);
-    border-width: 1px;
+    border-width: 2px;
     border-color: var(--node-edge);
-    border-radius: 4px;
+    border-radius: 8px;
 }
 /* The axis prefix. Deliberately plain — no field chrome of its own — because it reads as part of the
  * box the way Unity's does, and only the value field inside it is the thing you type into. Same dim
@@ -382,7 +382,7 @@ graphview .__editor__ {
  * same thing from the outside. */
 graphview .__editor__ .__editor-label__ {
     color: var(--node-text);
-    font-size: 7px;
+    font-size: 14px;
 }
 /* `PortDefaultEditor`'s dot, three concentric layers, dark to coloured — a TOP-LEVEL rule, not a
  * descendant of `.__editor__`, because it genuinely is not one in the tree; see `.__editor__`'s own
@@ -396,10 +396,10 @@ graphview .__editor__ .__editor-label__ {
  * three concentric rings read as only two. `--node-edge` is the same dark the node's OWN border uses,
  * so the ring stays legible against the canvas without introducing a fourth colour into the dot. */
 graphview .__editor-dot__ {
-    width: 8px;
-    height: 8px;
-    min-height: 8px;
-    border-radius: 4px;
+    width: 16px;
+    height: 16px;
+    min-height: 16px;
+    border-radius: 8px;
     background: var(--node-edge);
     flex-direction: row;
     align-items: center;
@@ -411,10 +411,10 @@ graphview .__editor-dot__ {
  * is what keeps the centre from reading as a coloured dot floating with a dark halo, rather than a
  * deliberate three-layer target. */
 graphview .__editor-dot-ring__ {
-    width: 6px;
-    height: 6px;
-    min-height: 6px;
-    border-radius: 3px;
+    width: 12px;
+    height: 12px;
+    min-height: 12px;
+    border-radius: 6px;
     background: var(--graph-editor-dot-ring-bg, #2B2B2B);
     flex-direction: row;
     align-items: center;
@@ -426,10 +426,10 @@ graphview .__editor-dot-ring__ {
  * `NodePort.typeColor()` the stub and the port's own dot read, one number for all three rather than a
  * fourth copy of the per-type palette living in this file. */
 graphview .__editor-dot-core__ {
-    width: 4px;
-    height: 4px;
-    min-height: 4px;
-    border-radius: 2px;
+    width: 8px;
+    height: 8px;
+    min-height: 8px;
+    border-radius: 4px;
     flex-grow: 0;
     flex-shrink: 0;
 }
@@ -439,14 +439,14 @@ graphview .__editor-dot-core__ {
  * legitimately wider than a scalar one. */
 graphview .__editor__ textfield,
 graphview .__editor__ dropdown {
-    min-width: 24px;
-    height: 11px;
-    min-height: 11px;
-    padding: 2px;
+    min-width: 48px;
+    height: 22px;
+    min-height: 22px;
+    padding: 4px;
     background: var(--node-field);
-    border-radius: 2px;
+    border-radius: 4px;
     color: var(--node-text-bright);
-    font-size: 7px;
+    font-size: 14px;
 }
 /* VECTOR's own components collapse to literal ZERO width here, not merely narrow — the bug the
  * `min-width` above cannot reach on its own. `.__config-control__.__vector__ .__number__` (and
@@ -456,23 +456,23 @@ graphview .__editor__ dropdown {
  * of it. `.__editor__` is not — it is `position: absolute`, sized to its OWN content — so a
  * `flex-grow: 1` item inside it has nothing to grow into. In real CSS a flex item's default
  * `min-width` is `auto`, which floors it at its own content's minimum size regardless (the textfield's
- * `min-width: 24px` above would still win). This engine's `min-size` default is `0`, not `auto` — a
+ * `min-width: 48px` above would still win). This engine's `min-size` default is `0`, not `auto` — a
  * deliberate divergence recorded in AGENTS.md's own "Taffy defaults diverge from CSS" table — so
  * nothing stops the collapse here the way it would in a browser. Scoped to `graphview .__editor__`
  * rather than fixed on the base `.__vector__` rule itself: nowhere else a vector control is used is
  * missing the bounded ancestor this depends on, so a global floor would be defending against a bug
  * that cannot occur there. */
-graphview .__editor__ .__vector__ .__vector-cell__ { min-width: 30px; }
-graphview .__editor__ .__vector__ .__number__ { min-width: 24px; }
+graphview .__editor__ .__vector__ .__vector-cell__ { min-width: 60px; }
+graphview .__editor__ .__vector__ .__number__ { min-width: 48px; }
 /* Cells size to their OWN content instead of stretching to whatever height the box currently has, and
  * this is a correctness fix rather than a cosmetic one.
  *
  * This engine's flex `align-items` default is STRETCH, so without this a `__vector-cell__` takes the
  * cross size of the `__vector__` row — which takes it from the box. The box is `position: absolute`
  * with an auto height, and on the pass right after it is mounted (before `reposition()`'s inline
- * left/top have been applied) it is laid out against the whole plane, so the cells were briefly ~550px
+ * left/top have been applied) it is laid out against the whole plane, so the cells were briefly ~1100px
  * tall. Their own `align-items: center` then parked the axis label and the number field at y≈269 —
- * exactly (550-12)/2 — and when the box settled back to its real ~18px, Taffy repositioned the cells
+ * exactly (550-12)/2 — and when the box settled back to its real ~36px, Taffy repositioned the cells
  * but NOT the grandchildren inside them, so those two kept the centred-in-550 offset for good. That is
  * the whole "the X/Y boxes render hundreds of pixels below their own frame" bug: the label and field
  * were correct in x, correct in size, and correctly parented — just vertically centred in a box that
@@ -483,14 +483,14 @@ graphview .__editor__ .__vector__ .__number__ { min-width: 24px; }
  * two-level dependency entirely, so no intermediate box height can reach the grandchildren at all. */
 graphview .__editor__ .__vector__ { align-items: center; }
 /* BOOLEAN: same "square, and smaller than the row" exception the inspector and the control row both
- * make — `--cfg-check` (13px, from the config kit's OWN unscoped rule) would otherwise win here too,
+ * make — `--cfg-check` (26px, from the config kit's OWN unscoped rule) would otherwise win here too,
  * same specificity trap `everyKind()` already caught for the control row. */
 graphview .__editor__ checkbox,
 graphview .__editor__ checkbox .__mark__,
 graphview .__editor__ checkbox::part(mark) {
-    width: 11px;
-    height: 11px;
-    min-height: 11px;
+    width: 22px;
+    height: 22px;
+    min-height: 22px;
 }
 /* COLOR: a vec3/vec4 input CAN carry an inline literal (widgetKindFor maps both to COLOR), so this is
  * reachable even though Unity itself rarely puts a colour picker inline on a port — a swatch this
@@ -498,10 +498,10 @@ graphview .__editor__ checkbox::part(mark) {
  * inspector's `.__swatch__` sizing (`--cfg-ctrl-h`) or the control row's (`--graph-ctrl-h`) — a THIRD
  * scale, because a port editor is tighter than either. */
 graphview .__editor__ .__color__ .__swatch__ {
-    width: 40px;
-    height: 11px;
-    min-height: 11px;
-    outline: 1px var(--node-hairline);
+    width: 80px;
+    height: 22px;
+    min-height: 22px;
+    outline: 2px var(--node-hairline);
     outline-offset: 0px;
 }
 /* `ColorControl` itself needs somewhere to be that size — same "FULL_WIDTH_CLASS has no sizing of its
@@ -509,7 +509,7 @@ graphview .__editor__ .__color__ .__swatch__ {
  * separate label to skip — the axis prefix above is not it), so this reaches the control directly
  * instead. A real descendant selector now that the control sits one level inside the row — see this
  * section's opening note. */
-graphview .__editor__ .__color__ { width: 40px; }
+graphview .__editor__ .__color__ { width: 80px; }
 
 /* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
  * No bare `colorselector { ... }` rule here any more. There used to be one — background, border,
@@ -529,7 +529,7 @@ colorselector .__hex-row__ text     { color: var(--colorpicker-channel-fg, #9A9A
  * the colour is brightest, which is where it is most often dragged. */
 colorselector .__ring-handle__,
 colorselector .__square-handle__{
-    outline: 1px var(--colorpicker-handle-shadow, #00000080);
+    outline: 2px var(--colorpicker-handle-shadow, #00000080);
     outline-offset: 0px;
 }
 
@@ -537,8 +537,8 @@ colorselector .__channel-row__ textfield,
 colorselector .__hex-row__ textfield {
     background: var(--node-field);
     color: var(--node-text-bright);
-    border-radius: 2px;
-    font-size: 6px;
+    border-radius: 4px;
+    font-size: 12px;
 }
 
 /* Unity outlines every channel track and its thumb. It is not decoration: a track is a gradient that
@@ -551,7 +551,7 @@ colorselector .__hex-row__ textfield {
  * pixels, which is correct and is not the stylesheet disagreeing with itself. */
 /* The ring colour is `--node-hairline`; the reasoning for that value lives with the token. */
 colorselector .__channel-row__ slider {
-    outline: 1px var(--node-hairline);
+    outline: 2px var(--node-hairline);
     outline-offset: 0px;
 }
 /* The pair is ringed as ONE object, not as two — the outline goes on the container, so no line falls
@@ -565,9 +565,9 @@ colorselector .__channel-row__ slider {
  * tone to hide the mismatch, and an obvious squared-off corner poking out past the pill the moment
  * that background changed. */
 colorselector .__swatches__{
-    outline: 1px var(--node-hairline);
+    outline: 2px var(--node-hairline);
     outline-offset: 0px;
-    border-radius: 3px;
+    border-radius: 6px;
 }
 
 /* ── The Color node's field ─────────────────────────────────────────────────────────────────────
@@ -577,16 +577,16 @@ colorselector .__swatches__{
  * (`graphnode .__config-control__.__color__ .__swatch__`). The one thing worth restating here is this
  * THEME's own hairline colour, `--node-hairline`, in place of the inspector's `#1A1A1A`. */
 graphnode .__config-control__.__color__ .__swatch__ {
-    outline: 1px var(--node-hairline);
+    outline: 2px var(--node-hairline);
     outline-offset: 0px;
     /* `Color` has no preview to lean on for width the way a previewed node does, but its swatch is
      * real content the same way a long port label is — `width: 100%` alone contributes nothing to the
      * node's own max-content sizing (it's a zero flex basis, same trap `graphnode`'s own comment
-     * documents), so without an explicit min-width here `Color` would shrink to the bare 40px floor
+     * documents), so without an explicit min-width here `Color` would shrink to the bare 80px floor
      * along with every other preview-less node. It should not: it has a control, `Time`/`Split` do not. */
-    min-width: 133px;
+    min-width: 266px;
 }
-/* NO outline on the thumb. An outline is stroked on BOTH sides, so a 1px edge on a 1px thumb is 3px of
+/* NO outline on the thumb. An outline is stroked on BOTH sides, so a 2px edge on a 2px thumb is 6px of
  * apparent width — the outline was the whole of what remained after the thumb itself was already a
  * single pixel. A hairline cannot afford one, and it does not need it here: the track carries its own
  * dark edge, so a white mark on it stays legible. */
@@ -614,13 +614,13 @@ graphnode.__property-node__ {
      * property node above the ordinary ones on purpose: it is a reference rather than a computation, and
      * the extra lift is what separates it from the canvas at a glance without a border. */
     background: var(--graph-property-node-bg, #565656);
-    border-radius: 13px;
-    min-height: 26px;
+    border-radius: 26px;
+    min-height: 52px;
     /* SYMMETRIC. Both edges frame a dot -- the green exposed dot on the left, the port dot on the right
      * -- so equal padding reads as equal. It was 10/8 on the assumption the port needed less room, which
      * only made the right side look tighter. */
-    padding-left: 10px;
-    padding-right: 10px;
+    padding-left: 20px;
+    padding-right: 20px;
 }
 
 /* Every region paints its own background normally -- the node paints none -- so these have to be cleared
@@ -651,7 +651,7 @@ graphnode.__property-node__ .__inputs__ {
 graphnode.__property-node__ .__title-bar__ {
     flex-direction: row;
     align-items: center;
-    gap: 6px;
+    gap: 12px;
     flex-grow: 0;
     flex-shrink: 0;
     padding-left: 0;
@@ -659,7 +659,7 @@ graphnode.__property-node__ .__title-bar__ {
 }
 /* The gap between the name and its port dot. On the NODE, since the two are siblings there. */
 graphnode.__property-node__ {
-    gap: 6px;
+    gap: 12px;
 }
 graphnode.__property-node__ .__ports__ {
     flex-direction: row;
@@ -709,33 +709,33 @@ graphnode.__property-node__ nodeport {
  * SELECTION ALWAYS READS BLUE. It is the more urgent state: linkage says where a property is used,
  * selection says what the next keystroke acts on. */
 graphnode.__property-node__.__property-linked__ {
-    outline: 2px var(--graph-exposed-ring, #7BD64B);
-    outline-offset: 1px;
+    outline: 4px var(--graph-exposed-ring, #7BD64B);
+    outline-offset: 2px;
 }
 graphnode.__property-node__.__property-linked__:hover {
-    outline: 3px var(--graph-exposed-ring, #7BD64B);
-    outline-offset: 1px;
+    outline: 6px var(--graph-exposed-ring, #7BD64B);
+    outline-offset: 2px;
 }
 graphnode.__property-node__.__property-linked__:checked {
-    outline: 2px var(--graph-selection-ring, #44C0FF);
-    outline-offset: 1px;
+    outline: 4px var(--graph-selection-ring, #44C0FF);
+    outline-offset: 2px;
 }
 graphnode.__property-node__.__property-linked__:checked:hover {
-    outline: 3px var(--graph-selection-ring, #44C0FF);
-    outline-offset: 1px;
+    outline: 6px var(--graph-selection-ring, #44C0FF);
+    outline-offset: 2px;
 }
 
 /* EXPOSED. The same green dot the Blackboard pill carries, and drawn the same way -- a plain element
  * with a full corner radius, exactly as NodePort draws its own. Whether a property is exposed is
  * otherwise invisible once it is on the graph. */
 graphnode.__property-node__ .__exposed-dot__ {
-    width: 5px;
-    height: 5px;
-    min-width: 5px;
+    width: 10px;
+    height: 10px;
+    min-width: 10px;
     flex-grow: 0;
     flex-shrink: 0;
     background: var(--graph-exposed-dot, #7BD64B);
-    border-radius: 3px;
+    border-radius: 6px;
 }
 
 /* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
@@ -753,9 +753,9 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__blackboard__ {
     background: var(--node-canvas);
     border-color: var(--node-edge);
-    outline-width: 1px;
+    outline-width: 2px;
     outline-color: var(--node-edge);
-    border-radius: 3px;
+    border-radius: 6px;
 }
 
 /* The NODE palette's header colours, not the configurator's band. Reverted deliberately: --cfg-band
@@ -810,7 +810,7 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__property-pill__ > .__capsule__ {
     background: var(--node-header);
 }
-/* THE NODE'S OWN THREE STATES, values and all: hover 1px #327090, selected 2px #44C0FF, both 3px
+/* THE NODE'S OWN THREE STATES, values and all: hover 2px #327090, selected 4px #44C0FF, both 6px
  * #44C0FF. A pill and a node are the same idea -- a thing you hover, select and act on -- so they say it
  * the same way; a second vocabulary for one concept is what makes an editor feel assembled rather than
  * designed.
@@ -819,13 +819,13 @@ graphnode.__property-node__ .__exposed-dot__ {
  * `.__selected__ > .__capsule__` weigh the same (30 each), so source order alone decides between them
  * and selected has to come second. The combined rule outweighs both at 40 and wins outright. */
 .__property-pill__ > .__capsule__:hover {
-    outline: 1px var(--graph-node-hover-ring, #327090);
+    outline: 2px var(--graph-node-hover-ring, #327090);
 }
 .__property-pill__.__selected__ > .__capsule__ {
-    outline: 2px var(--graph-selection-ring, #44C0FF);
+    outline: 4px var(--graph-selection-ring, #44C0FF);
 }
 .__property-pill__.__selected__ > .__capsule__:hover {
-    outline: 3px var(--graph-selection-ring, #44C0FF);
+    outline: 6px var(--graph-selection-ring, #44C0FF);
 }
 .__property-pill__ .__dot__ {
     background: var(--graph-exposed-dot, #7BD64B);

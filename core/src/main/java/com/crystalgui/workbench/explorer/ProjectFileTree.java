@@ -259,7 +259,7 @@ public class ProjectFileTree extends UIElement
         // sanctioned place for the number: row height belongs to the size STRATEGY rather than to
         // CSS (a virtualised list positions rows from it), which is why ListView documents
         // setItemHeight as the way to say it and the sheet deliberately declares no height.
-        tree.setItemHeight(14f);
+        tree.setItemHeight(28f);
         // A DEEP TREE IS THE CASE horizontal scrolling exists for: every level of nesting spends indent
         // the name then has to fit inside, so the panel width a name has to survive shrinks as you go
         // down. Truncating alone left a name unreadable with no way to reach the rest of it.

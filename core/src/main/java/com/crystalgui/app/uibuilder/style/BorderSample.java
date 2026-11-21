@@ -184,11 +184,11 @@ final class BorderSample {
     }
 
     /** The sample's box, in px: the swatch less room for an outline round it. @see #BOX_CLASS */
-    private static final float SAMPLE_WIDTH = 18f;
-    private static final float SAMPLE_HEIGHT = 8f;
+    private static final float SAMPLE_WIDTH = 36f;
+    private static final float SAMPLE_HEIGHT = 16f;
 
     /** How far an offset is drawn either way. */
-    private static final float MAX_OFFSET = 2f;
+    private static final float MAX_OFFSET = 4f;
 
     /** On the box when the shape is the row's subject: the sheet lights its fill. */
     static final String LIT_CLASS = "__lit__";

@@ -72,7 +72,7 @@ public final class TaskbarPreviews {
     private static final long TRAVEL_NANOS = 150L * 1_000_000L;
 
     /** The gap between the panel and the bar's top edge, in logical pixels. The rise itself is the sheet's. */
-    private static final float GAP = 1f;
+    private static final float GAP = 2f;
 
     /**
      * How long the pointer may be over neither the entry nor the panel before the preview goes.

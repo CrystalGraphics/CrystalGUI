@@ -69,10 +69,10 @@ public class ApplicationInputEndToEndTest extends UiDocumentTestBase {
         animationsWere = WindowAnimator.isEnabled();
         WindowAnimator.setEnabled(false);
         withDefaultStyles();
-        document.boxes().setUiScale(2f);
+        document.boxes().setUiScale(1f);
         Desktop desktop = Desktop.of(document);
         own = new UIDocument();
-        own.boxes().setUiScale(2f);
+        own.boxes().setUiScale(1f);
         own.styles().addStylesheet(StyleSheet.parse(ClientRoot.SHEET + PopupLayer.SHEET));
         own.useTopLayer(new PopupLayer());
         live = new Live();

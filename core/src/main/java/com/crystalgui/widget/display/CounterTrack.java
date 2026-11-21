@@ -56,7 +56,7 @@ public class CounterTrack extends FrameSeriesTrack {
 
     public CounterTrack() {
         super(NAME);
-        setRowHeight(28f);
+        setRowHeight(56f);
     }
 
     /** One value per frame, oldest first; {@link #ABSENT} where nothing was recorded. */
@@ -142,7 +142,7 @@ public class CounterTrack extends FrameSeriesTrack {
     protected void paintSeries(CgUiPaintContext ctx, Box box) {
         // THE LABEL HAS A BAND OF ITS OWN, above the bars rather than over them: drawn over the series
         // it collided with the first spike on every row that had one near the start, which is most.
-        float bottom = box.height() - 1f;
+        float bottom = box.height() - 2f;
         float usable = bottom - LABEL_BAND;
         int fill = computedStyle().get(StylePropertyRegistry.COLOR);
         int columns = columnCount();
@@ -154,7 +154,7 @@ public class CounterTrack extends FrameSeriesTrack {
             if (value == ABSENT) continue;      // a gap, not a zero
             // A FLOOR OF ONE PIXEL only for a value that is genuinely non-zero: a real zero draws
             // nothing, or every counter reads as a solid bar the whole width of the ring.
-            float barHeight = value == 0L ? 0f : Math.max(1f, (float) value / ceiling * usable);
+            float barHeight = value == 0L ? 0f : Math.max(2f, (float) value / ceiling * usable);
             if (barHeight <= 0f) continue;
             int colour = isComparable(at) ? fill : washed(fill);
             float[] bar = barOf(column);
@@ -177,8 +177,8 @@ public class CounterTrack extends FrameSeriesTrack {
             shownValue = "   " + (at == ABSENT ? "none this frame" : format(at));
         }
         label(ctx, font, label + shownValue + "   peak " + format(peak) + (note.isEmpty() ? "" : "   " + note),
-                6f, 1f, LABEL_BAND - 1f,
-                box.width() - 12f, text);
+                12f, 2f, LABEL_BAND - 2f,
+                box.width() - 24f, text);
     }
 
     // ── Only the bars pick a frame ───────────────────────────────────────────────────────────
@@ -204,7 +204,7 @@ public class CounterTrack extends FrameSeriesTrack {
     }
 
     /** The height of the label's own band, above the bars. */
-    private static final float LABEL_BAND = 13f;
+    private static final float LABEL_BAND = 26f;
 
     private static int mix(int from, int to, float t) {
         int r = (int) (((from >> 16) & 0xFF) + (((to >> 16) & 0xFF) - ((from >> 16) & 0xFF)) * t);

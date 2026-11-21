@@ -248,25 +248,25 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
         Slider slider = new Slider();
         slider.setRange(0f, 100f);
         slider.setValue(35f);
-        StyleGroup.inlinePipeline(slider.getStyle().getLayoutGroup(), l -> l.width(220f));
+        StyleGroup.inlinePipeline(slider.getStyle().getLayoutGroup(), l -> l.width(440f));
         column.append(section("Slider (drag it)", row(slider)));
 
         determinate = new ProgressBar();
         determinate.setFraction(0.4f);
-        StyleGroup.inlinePipeline(determinate.getStyle().getLayoutGroup(), l -> l.width(180f).height(6f));
+        StyleGroup.inlinePipeline(determinate.getStyle().getLayoutGroup(), l -> l.width(360f).height(12f));
         ProgressBar indeterminate = new ProgressBar();
         indeterminate.setFraction(-1f);
-        StyleGroup.inlinePipeline(indeterminate.getStyle().getLayoutGroup(), l -> l.width(180f).height(6f));
+        StyleGroup.inlinePipeline(indeterminate.getStyle().getLayoutGroup(), l -> l.width(360f).height(12f));
         column.append(section("ProgressBar — determinate (animates) and indeterminate (sweeps)",
                 row(determinate, indeterminate)));
 
         TextField field = new TextField();
         field.setText("Type in me");
-        StyleGroup.inlinePipeline(field.getStyle().getLayoutGroup(), l -> l.width(220f));
+        StyleGroup.inlinePipeline(field.getStyle().getLayoutGroup(), l -> l.width(440f));
         column.append(section("TextField", row(field)));
 
         SearchField search = new SearchField();
-        StyleGroup.inlinePipeline(search.getStyle().getLayoutGroup(), l -> l.width(240f));
+        StyleGroup.inlinePipeline(search.getStyle().getLayoutGroup(), l -> l.width(480f));
         column.append(section("SearchField (icon, field, clear)", row(search)));
 
         Dropdown dropdown = new Dropdown("Pick one");
@@ -411,7 +411,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(8f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(16f));
         box.append(controls);
         box.append(stack);
         return box;
@@ -452,7 +452,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(8f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(16f));
         box.append(controls);
         box.append(stage);
         return box;
@@ -554,7 +554,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(8f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(16f));
         box.append(panel);
         box.append(log);
         return box;
@@ -593,9 +593,9 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
             public void bind(String item, int index, UIElement template) {
                 ((UIText) template.children().get(0)).setText(item);
             }
-        }).setItemHeight(22f).setSelectionMode(SelectionMode.MULTIPLE);
+        }).setItemHeight(44f).setSelectionMode(SelectionMode.MULTIPLE);
         StyleGroup.inlinePipeline(list.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).height(180f));
+                l -> l.widthPercent(100f).height(360f));
 
         UIText counter = hint("");
         document().animation().every(list, delta -> {
@@ -608,7 +608,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(6f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(12f));
         box.append(list);
         box.append(counter);
         return box;
@@ -667,7 +667,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
         });
         tree.setExpanded("src", true);
         StyleGroup.inlinePipeline(tree.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).height(200f));
+                l -> l.widthPercent(100f).height(400f));
         return tree;
     }
 
@@ -687,11 +687,11 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
         TableView<String> table = new TableView<>(model);
         table.addColumn(TableColumn.<String>of("Name", s -> s).flexible().sortable());
         table.addColumn(TableColumn.<String>of("Chars", s -> String.valueOf(s.length()))
-                .width(70f).sortable());
+                .width(140f).sortable());
         table.addColumn(TableColumn.<String>of("Kind",
-                s -> s.contains("glass") || s.contains("blur") ? "effect" : "draw").width(90f));
+                s -> s.contains("glass") || s.contains("blur") ? "effect" : "draw").width(180f));
         StyleGroup.inlinePipeline(table.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).height(180f));
+                l -> l.widthPercent(100f).height(360f));
         return table;
     }
 
@@ -724,7 +724,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(6f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(12f));
         box.append(bar);
         box.append(log);
         return box;
@@ -786,7 +786,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
     private UIElement graphView() {
         GraphView graph = new GraphView();
         StyleGroup.inlinePipeline(graph.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).height(320f));
+                l -> l.widthPercent(100f).height(640f));
 
         PortType number = new BasicPortType("float", 1);
         PortType colour = new BasicPortType("vec4", 4);
@@ -824,7 +824,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(6f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(12f));
         box.append(graph);
         box.append(status);
         // THE SECOND INPUT IS LEFT FREE so the replace rule is reachable by hand: drag `Time`'s output
@@ -845,14 +845,14 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
     private UIElement canvasView() {
         CanvasView canvas = new CanvasView();
         StyleGroup.inlinePipeline(canvas.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).height(200f));
+                l -> l.widthPercent(100f).height(400f));
 
         List<UIElement> tiles = new ArrayList<>();
         for (int i = 0; i < 60; i++) {
             UIElement tile = new UIElement().addClass("canvas-tile");
             tile.append(hint("#" + i));
             StyleGroup.inlinePipeline(tile.getStyle().getLayoutGroup(),
-                    l -> l.width(70f).height(44f));
+                    l -> l.width(140f).height(88f));
             canvas.addNode(tile, (i % 10) * 90f, (i / 10) * 60f);
             tiles.add(tile);
         }
@@ -872,7 +872,7 @@ public class CgUiNewEngineGalleryScene extends UiDocumentScene {
 
         UIElement box = new UIElement();
         StyleGroup.inlinePipeline(box.getStyle().getLayoutGroup(),
-                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(6f));
+                l -> l.widthPercent(100f).flexDirection(FlexDirection.COLUMN).gapAll(12f));
         box.append(canvas);
         box.append(status);
         return box;

@@ -152,7 +152,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
     }
 
     /** How far a press may wander and still count as a click, in track pixels. */
-    private static final float CLICK_SLOP = 3f;
+    private static final float CLICK_SLOP = 6f;
 
     private boolean pressed;
     private boolean travelled;
@@ -246,7 +246,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
     @Override
     public Size measure(Constraints constraints) {
         float width = constraints.hasKnownWidth() ? constraints.knownWidth()
-                : constraints.hasAvailableWidth() ? constraints.availableWidth() : 256f;
+                : constraints.hasAvailableWidth() ? constraints.availableWidth() : 512f;
         return new Size(width, trackHeight());
     }
 
@@ -332,7 +332,7 @@ public abstract class TimelineTrack extends UIElement implements Measurable {
     private int nextTextStyle;
 
     /** Below this a label is not worth the draw call. */
-    private static final float MIN_LABEL_WIDTH = 14f;
+    private static final float MIN_LABEL_WIDTH = 28f;
 
     /**
      * A monospaced face's advance, as a fraction of its size.

@@ -51,8 +51,9 @@ public final class GraphDocument implements SettingsScope {
 
     /** Bumped when the encoded shape changes in a way a reader must know about. Version 1 is the first
      * written form; a document is saved to disk and outlives the code that wrote it, which is exactly
-     * why this exists here and not in {@code UIDescriptionCodec} (regenerated from live code every time). */
-    public static final int SCHEMA_VERSION = 1;
+     * why this exists here and not in {@code UIDescriptionCodec} (regenerated from live code every time).
+     * Version 2 is UI16's: node positions in units twice version 1's. */
+    public static final int SCHEMA_VERSION = 2;
 
     /** Insertion-ordered: it is what makes the encoded form byte-stable, and byte-stability is what makes
      * {@code ContentHash} mean anything at all. */

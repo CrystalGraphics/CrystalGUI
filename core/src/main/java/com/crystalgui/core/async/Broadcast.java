@@ -77,6 +77,21 @@ public final class Broadcast<T> {
         return subscribe(ignored -> listener.run());
     }
 
+    /**
+     * Heard through {@code where} rather than on the subscribing sequence: for an owner that is not running when it
+     * subscribes, such as a document built on another thread.
+     *
+     * <pre>{@code
+     * Connection follow = Preferences.PUBLISHED.changes().subscribe(document::execute, () -> apply(document));
+     * }</pre>
+     */
+    public Connection subscribe(Executor where, Runnable listener) {
+        Objects.requireNonNull(listener, "listener");
+        Subscriber<T> subscriber = new Subscriber<>(this, ignored -> listener.run(), Objects.requireNonNull(where, "where"));
+        subscribers.add(subscriber);
+        return subscriber;
+    }
+
     /** Tells every subscriber, each on its own sequence. Any thread. */
     public void post(T event) {
         for (Subscriber<T> subscriber : subscribers) subscriber.deliver(event);

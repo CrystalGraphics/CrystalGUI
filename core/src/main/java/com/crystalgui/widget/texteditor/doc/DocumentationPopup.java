@@ -200,7 +200,7 @@ public final class DocumentationPopup extends Popover {
     public static final String PROBLEM_SHORTCUT_CLASS = "__doc-problem-shortcut__";
 
     /** Clear of the groove, so the box does not sit against the scrollbar it is describing. */
-    private static final float STRIPE_GAP = 1f;
+    private static final float STRIPE_GAP = 2f;
 
     /**
      * On the popup while it is showing a problem and nothing else.
@@ -939,7 +939,7 @@ public final class DocumentationPopup extends Popover {
 
         // THE OFFSET WITHIN THE HOST, never `worldX`. A world coordinate is in SURFACE pixels with the
         // root transform baked in, and `moveTo` writes LOGICAL left/top which are scaled again -- so
-        // at the default uiScale of 2 the popup would jump to twice its own distance down the page on
+        // at a uiScale of 2 the popup would jump to twice its own distance down the page on
         // the first pixel of the drag. `Box.x()` is already the space moveTo writes in.
         float startLeft = self.x();
         float startTop = self.y();

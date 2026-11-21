@@ -159,6 +159,12 @@ public final class WorkbenchSettings {
 
     public static final Setting<String> EDITOR_SCHEME = schemeSetting();
 
+    /** The desktop's scale, as the operating system's display setting is written. */
+    public static final Setting<String> DESKTOP_SCALE = Setting.select(Preferences.DESKTOP_SCALE, "Scale",
+                    List.of("75%", "100%", "125%", "150%", "175%", "200%", "250%", "300%"), "100%")
+            .description("The size of everything on the desktop, on top of the display's own scaling. "
+                    + "An application's zoom (Ctrl + and Ctrl −, Ctrl 0 to reset) multiplies it.");
+
     private static Setting<String> themeSetting() {
         ThemeRegistry.registerBuiltins();
         return Setting.select("appearance.theme", "Theme",
@@ -233,6 +239,7 @@ public final class WorkbenchSettings {
         registry.register(RESTORE_VIEW_STATE);
         registry.register(UI_THEME);
         registry.register(EDITOR_SCHEME);
+        registry.register(DESKTOP_SCALE);
     }
 
     /**

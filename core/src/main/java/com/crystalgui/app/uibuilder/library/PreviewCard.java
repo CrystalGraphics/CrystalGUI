@@ -63,7 +63,7 @@ public final class PreviewCard extends UIElement implements DataProvider {
     public static final String SELECTED_CLASS = "__selected__";
 
     /** The margin a sample keeps from the clip's edges, in logical pixels: 5 from the stage's, less the clip's own inset. */
-    static final float INSET = 3f;
+    static final float INSET = 6f;
 
     /** Below this a sample's text stops reading, so it is cropped from its top-left instead of shrunk further. */
     static final float MIN_SCALE = 0.5f;

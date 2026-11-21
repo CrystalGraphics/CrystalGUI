@@ -96,7 +96,7 @@ public final class StyleLab {
     public static final String PRESETS_CLASS = "__lab-presets__";
 
     /** Between the row and the lab, so the value being edited is still readable beside it. */
-    private static final float LAB_GAP = 8f;
+    private static final float LAB_GAP = 16f;
 
     /**
      * What a window's labs share: the plate a person picked, {@link #DARK_CLASS} or {@link #LIGHT_CLASS}, or "" before

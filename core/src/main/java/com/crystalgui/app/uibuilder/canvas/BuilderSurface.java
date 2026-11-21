@@ -67,7 +67,7 @@ public final class BuilderSurface extends SurfaceEditor implements BuilderContex
     private float[] blankPress;
 
     /** How far a blank press may travel and still be a click rather than a marquee, in surface pixels. */
-    private static final float CLICK_SLOP = 3f;
+    private static final float CLICK_SLOP = 6f;
 
     BuilderSurface(UiBuilderDocument document, Artboard artboard, ShownTree shownTree, @Nullable List<String> enabled) {
         super(NAME, new TreePolicy(artboard), enabled);

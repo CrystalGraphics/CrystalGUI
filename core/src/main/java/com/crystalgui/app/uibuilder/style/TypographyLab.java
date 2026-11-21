@@ -54,8 +54,8 @@ public final class TypographyLab {
             "crystalgui:ui/fonts/Minecraft.otf");
 
     /** The size slider's reach, in px — the Style tab's font-size row slides over the same. */
-    static final float MIN_SIZE = 6f;
-    static final float MAX_SIZE = 96f;
+    static final float MIN_SIZE = 12f;
+    static final float MAX_SIZE = 192f;
 
     /** What the line-height row offers: the keyword, then the multipliers a type scale reaches for. */
     static final List<String> LINE_HEIGHTS = List.of("normal", "1", "1.2", "1.4", "1.5", "2");

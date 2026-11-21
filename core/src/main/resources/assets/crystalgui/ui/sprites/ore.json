@@ -2,6 +2,8 @@
   "_comment": "Coordinates come from LDLib2's OreSprites.java. Our ore_styles.png is byte-identical to theirs, so any region named there is already present here and only needs declaring — no artwork required. Note: only unknown ROOT keys are ignored by the loader; a comment inside 'elements' would be parsed as an element and throw.",
   "_comment_tabs": "Two tab sets exist in the atlas. The GREEN set (x=72 light / x=83 green) is the one Ore actually uses and the one LDLib's ore.lss selects — it has real contrast between states. The GREY set (x=50 / x=61) is nearly useless: sampling the art shows selected and unselected are the SAME grey (90,91,92), so a theme built on it has no visible selection. The green set only has default and hover rows (y=7, y=14); y=21 and y=28 are blank, hence no green disabled sprite.",
   "texture": "crystalgui:textures/gui/ore_styles.png",
+  "_comment_scale": "Two UI pixels a texel, as the art was drawn for: the slices and the frames they make keep their size at a scale of 1.",
+  "borderScale": 2,
   "textureSize": [256, 256],
   "elements": {
     "button":         { "sprite": [0, 0, 5, 7],    "border": [2, 2, 2, 4] },

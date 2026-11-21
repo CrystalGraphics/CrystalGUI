@@ -237,8 +237,8 @@ final class DeclarationList extends UIElement {
      * must not capture and blur the surface behind it to draw nothing — so there was no value to write and the pick
      * failed outright. It starts where the glass lab starts.</p>
      */
-    private static final Map<String, String> STARTERS = Map.of(StyleFields.TEXT_STROKE, "1px #000000",
-            StyleFields.BORDER_RADIUS, "4px", StyleFields.BORDER_WIDTH, "1px", StyleFields.OUTLINE_OFFSET, "2px",
+    private static final Map<String, String> STARTERS = Map.of(StyleFields.TEXT_STROKE, "2px #000000",
+            StyleFields.BORDER_RADIUS, "8px", StyleFields.BORDER_WIDTH, "2px", StyleFields.OUTLINE_OFFSET, "4px",
             "backdrop-filter", GlassLab.DEFAULT);
     // `outline` had a width-and-colour entry here and could never reach it -- the registry holds `outline` itself,
     // as the drawable slot, whose parser reads no such value. It starts at its own initial, as it always did.

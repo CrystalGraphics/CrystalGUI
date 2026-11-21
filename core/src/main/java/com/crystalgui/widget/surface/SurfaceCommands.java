@@ -47,10 +47,10 @@ public final class SurfaceCommands {
     public static final String DUPLICATE = "surface.duplicate";
 
     /** World units between a duplicate and its original, so the copy is visible rather than exact. */
-    private static final float PASTE_OFFSET = 24f;
+    private static final float PASTE_OFFSET = 48f;
 
     /** Breathing room when framing. World units, because framing is a view operation. */
-    private static final float FRAME_PADDING = 24f;
+    private static final float FRAME_PADDING = 48f;
 
     private SurfaceCommands() {
     }

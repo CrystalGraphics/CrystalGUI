@@ -80,7 +80,7 @@ theme {
     /* THE TICK'S colour, where --checkbox-checked-bg is the FACE's — the shell draws a green checkmark
      * in the same empty box an unticked one has, rather than filling the mark (@see ua/workbench.css).
      * `--success-icon` and not `--success`: the icon role is the full-strength green, defined for a
-     * drawn mark rather than for a word on a background, and a 12px stroke needs every bit of it. */
+     * drawn mark rather than for a word on a background, and a 24px stroke needs every bit of it. */
     --checkbox-checked-fg: var(--success-icon);
     --checkbox-disabled-bg: var(--surface-raised);
     --checkbox-mark-bg: var(--surface-raised);
@@ -366,7 +366,7 @@ theme {
 
     --menubar-bg: var(--surface-base);
     /* FULL STRENGTH, not the secondary tier. A menu bar is a row of NAMES you read and aim at, not a
-     * caption about something else -- and at 8px, a step down from the body size, the dimmer tier read
+     * caption about something else -- and at 16px, a step down from the body size, the dimmer tier read
      * as disabled rather than as chrome. --menubar-open-fg stays as the knob for a theme that wants the
      * open one to separate again. */
     --menubar-fg: var(--fg);
@@ -501,7 +501,7 @@ theme {
      * a `--syntax-link` it has no opinion about. */
     --run-link-fg: var(--link);
     /* The icon-tier green, not `--success`: that is the body colour for a completed thing and too dark to
-     * read as a 10px mark. Read by the activity bar's dot AND by the file tree's row, from this one name,
+     * read as a 20px mark. Read by the activity bar's dot AND by the file tree's row, from this one name,
      * so the two greens cannot drift apart again — which they had, having been chosen weeks apart. */
     --run-live-fg: var(--success-icon);
     /* A panel's empty-state note. The SAME hint tone as the Run console's eviction notice: both are a
@@ -523,7 +523,7 @@ theme {
     --run-boundary-fg: var(--accent);
     /* The line the reader typed. `--success` rather than `--success-icon`: this is a SENTENCE on the
      * console's surface, and the icon tier is tuned to read as a small mark rather than as text — the
-     * same distinction --run-live-fg makes from the other side, where a 10px dot needed the brighter
+     * same distinction --run-live-fg makes from the other side, where a 20px dot needed the brighter
      * one. Green because it is what IntelliJ's own input echo uses. */
     --run-input-fg: var(--success);
     --run-notice-fg: var(--fg-hint);
@@ -541,7 +541,7 @@ theme {
     /* The controls' stripe. The rail's surface, because they are the same kind of thing -- chrome framing
      * the transcript on either side -- and a third grey between them would read as a third region. */
     --run-stripe-bg: var(--surface-panel);
-    /* The ICON tier for both, not the body colour: these are 6px dots, and --error/--warning are darkened
+    /* The ICON tier for both, not the body colour: these are 12px dots, and --error/--warning are darkened
      * until a SENTENCE in them reads on the surface. The same distinction --run-live-fg makes. */
     --run-rail-failed: var(--error-icon);
     --run-rail-stopped: var(--warning-icon);

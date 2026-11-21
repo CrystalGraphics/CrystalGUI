@@ -38,15 +38,15 @@ public final class IsolationApps implements ApplicationKinds {
 
     public static final ApplicationKind DROP_PAD = ApplicationKind.of("harness:drop-pad", "Drop Pad")
             .keywords("drop", "drag", "files", "isolation")
-            .windowSize(360, 280).standalone().separateDocument().launch(DropPad::new);
+            .windowSize(720, 560).standalone().separateDocument().launch(DropPad::new);
 
     public static final ApplicationKind FREEZER = ApplicationKind.of("harness:freezer", "Freezer")
             .keywords("hang", "freeze", "not responding", "isolation")
-            .windowSize(380, 300).standalone().separateDocument().launch(Freezer::new);
+            .windowSize(760, 600).standalone().separateDocument().launch(Freezer::new);
 
     public static final ApplicationKind CRASHER = ApplicationKind.of("harness:crasher", "Crasher")
             .keywords("crash", "fault", "stopped working", "isolation")
-            .windowSize(380, 340).standalone().separateDocument().launch(Crasher::new);
+            .windowSize(760, 680).standalone().separateDocument().launch(Crasher::new);
 
     public static final ApplicationKind WONT_START = ApplicationKind.of("harness:wont-start", "Won't Start")
             .keywords("couldn't start", "launch", "isolation")
