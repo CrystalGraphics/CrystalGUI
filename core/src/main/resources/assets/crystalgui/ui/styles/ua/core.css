@@ -1,60 +1,13 @@
 /* ua/core.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
- *
- * The user-agent sheet's contract (the header essay), base text metrics, corner policy, and the focus ring.
- *
- * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
- * one sheet the engine loads — rule order across files is as load-bearing as within one
- * (:disabled after :hover ties), so files split at section boundaries and never reorder.
- * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
- * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
-
-/* CrystalGUI's user-agent stylesheet — the browser analogue.
- *
- * WHY THIS EXISTS: no widget sets any size in Java (only UIText, from measured text). Slider's
- * 150x20, Switch's 25x14, Checkbox's 12x12 mark, SplitView's 8px divider — all of it lived only in
- * a theme. Without one, a Slider is 0x0, a Switch is invisible and a SplitView's divider is 0px wide
- * and literally ungrabbable. Everything below is what a widget needs to FUNCTION, not to look good.
- *
- * Apply it explicitly — it is never injected automatically:
- *     window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
- *
- * CASCADE: this sheet is applied at StyleOrigin.USER_AGENT, one step below STYLESHEET. Origin is the
- * first thing StyleSlot.compareTo weighs, so ANY author rule beats anything here at ANY specificity,
- * and the order you register the sheets in doesn't matter.
- *
- * THREE RULES FOR EDITING THIS FILE:
- *   1. Never use !important. It escalates to StyleOrigin.IMPORTANT, jumping above every author sheet
- *      and defeating the point of the file.
- *   2. Never reference asset()/sprite(). This must stand alone with no texture pack loaded, so
- *      backgrounds here are flat colours only. Themes supply the art.
- *   3. Fill with `background:`, NEVER `background-color:`. They are not interchangeable here:
- *      `background:` is the drawable (a theme's `background: asset(...)` replaces it outright),
- *      while `background-color:` is a multiplicative TINT over whatever drawable is present, whose
- *      unset value is white — the identity. Setting a grey background-color here therefore does not
- *      paint grey over a theme, it MULTIPLIES the theme's sprite darker. Caught exactly that way:
- *      the first draft used background-color and visibly darkened every Ore sprite in cgui-ore-theme.
+ * Base text metrics, the top layer, corner policy and the focus ring.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
  */
 
-/* ── The new engine's own two rules (M6.0) ────────────────────────────────────────────────────
- *
- * Both exist so the ENGINE never writes into the cascade. The old one spelled these from Java at
- * IMPORTANT origin -- `setDisplayed` did it from 74 call sites and the top layer did it on every
- * promotion -- which outranks every author sheet and is what EngineBoundaryTest now forbids
- * outright. A user-agent rule says the same thing one origin BELOW an author, so a theme that wants
- * `visibility` instead of `display`, or a collapse animation, can still have it. */
+/* The user-agent sheet: what a widget needs to function, never how it looks. Not injected: add StyleSheet.DEFAULT. */
 
-/* NOTE there is no `[hidden] { display: none }` rule, which is what HTML uses and what plan/engine-port.md
- * D5 assumed: THIS SELECTOR ENGINE HAS NO ATTRIBUTE SELECTORS (AGENTS.md lists them with :nth-child
- * and the sibling combinators as deliberately absent). So `Attribute.HIDDEN` is STRUCTURAL instead --
- * BoxTree gives a hidden node no box at all, exactly as it gives none to `display: none` -- which is
- * smaller than teaching the parser a new selector kind for one rule, and is closer to what the old
- * engine did anyway: its IMPORTANT-origin `display` could not be overridden by a theme either. */
+/* No [hidden] rule: there are no attribute selectors, and BoxTree gives a hidden node no box. */
 
-/* The top layer -- CSS Position 4's, and the reason a tooltip can escape an `overflow: hidden`
- * ancestor. A zero-sized, out-of-flow layer over everything the document holds: it must take NO
- * space, or an empty one covers the whole surface and swallows every click that misses a popup.
- * Promotion itself is imperative (`box().setHost(document.topLayer())`), exactly as the web promotes
- * with `showPopover()` rather than a declaration. */
+/* It takes no space, or an empty top layer covers the surface and swallows every click. */
 top-layer {
     position: absolute;
     left: 0;
@@ -63,116 +16,21 @@ top-layer {
     height: 0;
 }
 
-/* ── Text ──────────────────────────────────────────────────────────────────────────────────────
- * font-size defaults to 16 in the property registry, which is huge next to Minecraft's own UI.
- * These are inheritable, so setting them on the widgets reaches their labels. */
-
 * {
     font-size: 20px;
     outline-offset: -2px;
-    /*border-radius: 4px;*/
 }
 
-/* ── Corners ────────────────────────────────────────────────────────────────────────────────────
- * Rounding is applied PER WIDGET below, never on `*` — which is why the `border-radius` in the `*`
- * rule above stays commented out. Two reasons, and the second is the real one:
- *
- *   1. resolveOverflowClip() picks the FBO MASK path over a cheap GL_SCISSOR_TEST rect whenever corner
- *      radii are non-zero, since a rectangle can't clip a rounded shape. On `*` that silently drags
- *      every scroll viewport and clipped pane onto the FBO path for corners nobody can see. Per-widget,
- *      only `textfield` (which clips its own text) crosses over.
- *   2. A `*` rule claims the property for every element in every consumer's tree, so a theme wanting
- *      square corners has to fight it back with another `*` rule — and that second rule then squashes
- *      radii the APP set on its own elements. Rounding only what this sheet actually draws keeps both
- *      the theme's and the app's own declarations intact.
- *
- * Each value is tied to its widget's geometry: 50% on a square part is a circle, and a pill's radius is
- * half its height. Change a widget's size and its radius moves with it. */
+/* Rounding is per widget, never on *: non-zero radii move every clip onto the mask path. */
 
-/* ── Focus ──────────────────────────────────────────────────────────────────────────────────────
- * The browser analogue: whatever holds focus gets a visible ring, so a themeless UI is navigable by
- * keyboard at all. #0060df is Firefox's accent. Flat colour, not asset() — see rule 2 above.
- *
- * This is the SDF path (outline-width + outline-color), which already follows border-radius and
- * expands it, so a rounded widget gets a rounded ring for free. It needs no Java support.
- *
- * A bare `:focus-visible` is a complete selector here (a lone pseudo-class needs no `*`), and
- * `*:focus-visible` would compute to the identical specificity of 10 — so the shorter form is the one
- * to use.
- *
- * `:focus-visible`, NOT `:focus` — the web's rule. An earlier version of this comment argued the
- * opposite, on the grounds that hiding rings from mouse users inverts in a mouse-first UI. Trying it
- * settled it: a ring on every click is noise, while a slider you tabbed to needs to say so. The
- * pseudo-class is true for keyboard and programmatic focus and false after a click — except on
- * elements that take text input, which always ring (see UIInputHandler's FocusSource). So: tab to a
- * slider and it rings, click it and it doesn't, and a text field rings either way.
- *
- * The seven things this can match are the only focusable elements in core/: button, tab, checkbox,
- * switch, slider, textfield, and SplitView's divider. A theme that rings a widget's CHILD instead must
- * turn this off on the root with `outline: none`, or both rings draw — see ore.css.
- *
- * 2px, where the web's default ring is 4px: measured in cgui-gallery at uiScale 2 rather than
- * assumed, and 4px was proportionally enormous against this engine's 20px default text (same reason
- * font-size is set to 10 above).
- *
- * The offset is INWARD (-2px), set once on `*` at the top of this file rather than here. The web's
- * ring is often offset outward; that was worse twice over — it made adjacent checkboxes' rings
- * collide, and it draws beyond the border box, where any ancestor with `overflow: hidden` scissors
- * it away (a focused row inside a ScrollerView would lose the edge of its own ring). Pulling the
- * stroke inside the border box instead means it always survives the clip. */
 :focus-visible {
     outline: 2px var(--focus-ring, #0060df);
 }
 
-/* ── ...EXCEPT ON ANYTHING PANE-SIZED ────────────────────────────────────────────────────────────
- *
- * A focus ring answers "where will my typing go" for a CONTROL. Around a whole editor, canvas or
- * tree it answers a question nobody asked, in the loudest way available — a rectangle the width of
- * the window — and these are exactly the widgets you sit focused in for hours, so it is not a
- * transient hint but permanent furniture.
- *
- * Neither reference outlines a pane. IntelliJ and VS Code both mark the active editor through its
- * TAB: a mark you are already looking at, which costs nothing when it is not needed.
- *
- * The rule above is untouched for real controls — a slider you tabbed to still rings, and a text
- * FIELD rings whether you tabbed or clicked. This is a carve-out for containers, listed by tag
- * rather than inferred, because "is this pane-sized" is a judgement about what the widget is FOR
- * and not something the engine can measure.
- *
- * `window` is the largest of them and joins for a second reason as well as its size: a frame is
- * focusable so that focus has somewhere to land when a window's content has nowhere to put it, and
- * activation focuses it PROGRAMMATICALLY (which rings by definition) on every open. Without this a
- * window would outline its whole self the moment it was opened. Which window is active is said by
- * its title bar — `window.__active__` in ua/desktop.css — exactly as IntelliJ and VS Code mark the
- * active editor through its tab rather than by drawing a rectangle round the pane.
- *
- * `viewcontainer` is a tool window's whole body, and it joins for BOTH of those reasons at once. It is
- * pane-sized by definition — it IS the panel — and it is focused programmatically every time the panel
- * is shown, because opening a tool window puts you in it (which is what makes the rail usable from the
- * keyboard). So without this every Project, Problems and Inspector rang its own outline on open. Flush
- * against a region's edge that is easy to miss; in a WINDOW it is a blue rectangle just inside the
- * frame's own border tracing the caption's underside, which is where it was finally reported. Which
- * panel has the focus is already said by its rail button's `__panel-focused__` mark.
- *
- * `dockarea` and `dockgroup` are the same shape of thing a third time, and they were reported in the
- * same words as viewcontainer: a blue line under a torn-out window's caption. Both are focusable only
- * so that dock COMMANDS have something to resolve against, both are pane-sized by definition, and a
- * window activation focuses programmatically, which rings. The real repair is that focus should never
- * have stopped on them -- see WindowFrame.focusDelegate -- and this stays regardless, because an empty
- * dock with nothing focusable inside it still legitimately ends up holding focus itself.
- *
- * `dialog` is `window` again, one for one, and it was missed because a dialog does not look pane-sized
- * until you notice it is a window with less furniture. It is focusable so focus has somewhere to land
- * when its content has nowhere to put it, and `Dialog.show` focuses it PROGRAMMATICALLY on every open
- * -- which rings by definition. So every dialog drew a 2px ring round its whole self from the moment it
- * appeared, and that ring is what the close control's hover fill was terminating against: the reports
- * were about the focus ring the entire time, not about the dialog's own edge. Which dialog you are in
- * is not a question anybody has: there is one, and it is in front of everything. */
+/* No ring on a pane-sized widget: an editor, canvas or tree is marked by its tab, as in IntelliJ and VS Code. */
 texteditor:focus-visible,
 dialog:focus-visible,
 window:focus-visible,
-/* An application's own document shown in a window: the portal is focusable so keys have somewhere to land, and the
- * application is not the window's controls. Which window is active is its title bar's to say. */
 clientportal:focus-visible,
 clientroot:focus-visible,
 popupportal:focus-visible,
@@ -182,15 +40,10 @@ dockgroup:focus-visible,
 graphview:focus-visible,
 canvasview:focus-visible,
 vfxviewport:focus-visible,
-/* A Name is per class and a subclass that declares one does not answer to its parent's, so a surface
- * is not caught by `canvasview` however plainly it is one. Both tags, since either can be the pane. */
+/* A Name is per class: a subclass does not answer to its parent's tag, so both are listed. */
 surface:focus-visible,
 buildersurface:focus-visible,
 scrollerview:focus-visible,
-/* A ConfiguratorPanel IS a ScrollerView and does not answer to that tag — the same per-class Name trap
- * as `surface` just above. It is pane-sized three times over: the inspector's body, a preferences page
- * and a lab's form, all of them CLICK_NOT_TABBABLE and so focusable by a click anywhere in them. Closing
- * a colour selector over the inspector rang the whole panel. */
 configuratorpanel:focus-visible,
 listview:focus-visible,
 treeview:focus-visible,

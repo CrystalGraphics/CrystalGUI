@@ -1,9 +1,11 @@
-/* The cue picker (app.cues.CueSelector): a filter box, a chip per kit, a panel per open kit with its cues as a compacted tree, a status line. */
+/* ua/cues.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ * The cue picker (app.cues.CueSelector): filter, kit chips, a panel per open kit, a status line.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
+ */
 .cue-selector { width: 100%; height: 100%; flex-direction: column; padding: 24px; gap: 20px; }
 .cue-selector-search { width: 100%; }
 .cue-selector-hidden { display: none; }
 
-/* Kit switches: a pressed chip is a column. One line that scrolls sideways when the kits outgrow the window. */
 .cue-selector-chip-scroll { width: 100%; height: 60px; flex-shrink: 0; overflow-x: auto; overflow-y: hidden; }
 .cue-selector-chips { flex-direction: row; gap: 12px; height: 48px; }
 .cue-selector-chip { flex-direction: row; align-items: center; gap: 12px; height: 48px; padding: 0 20px; border-radius: 24px;
@@ -16,16 +18,14 @@
 .cue-selector-chip-count { font-size: 20px; color: var(--fg-secondary, #9DA0A8); }
 
 .cue-selector-columns { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; gap: 20px; }
-/* Panels are surfaces with a hairline, so a column reads as a card on the glass. */
 .cue-selector-panel { width: 0px; flex-grow: 1; height: 100%; flex-direction: column; border-radius: 20px;
     background-color: var(--surface-recessed, #131416); border-width: 2px; border-color: var(--border-base, #2B2D31); }
 .cue-selector-header { width: 100%; padding: 20px 28px 12px 28px; color: var(--accent, #4C8DFF); font-size: 24px; }
-/* Three rows at the window's smallest (48px each, inside its 8px padding): a picker showing no cue is no picker. */
+/* Three rows at the window's smallest: a picker showing no cue is no picker. */
 .cue-selector-tree { width: 100%; height: 0px; flex-grow: 1; min-height: 160px; background: none; padding: 8px 12px 12px 12px; }
 .cue-selector-row { flex-direction: column; height: 48px; color: var(--fg, #DFE1E5); font-size: 24px; cursor: pointer; border-radius: 12px; }
 .cue-selector-line { width: 100%; height: 0px; flex-grow: 1; flex-direction: row; align-items: center; gap: 8px; padding-left: 8px; }
 .cue-selector-row:hover { background-color: var(--hover-bg, #2E3033); }
-/* Accent is for what plays; the folders over it only warm. A folder that is no cue recedes. */
 .cue-selector-row.cue-selector-folder { color: var(--fg-secondary, #9DA0A8); }
 .cue-selector-row.cue-selector-lit { color: var(--warning, #CCA700); }
 .cue-selector-row.cue-selector-current { color: var(--warning-icon, #FFAF0F); background-color: var(--accent-soft, #2E436E); }
@@ -35,6 +35,6 @@
 .cue-selector-row.__expanded__ .__twisty__ { overlay: shape("chevron-down"); }
 .cue-selector-prefix { color: var(--fg-secondary, #9DA0A8); }
 .cue-selector-count { margin-left: auto; margin-right: 12px; color: var(--fg-secondary, #9DA0A8); font-size: 20px; }
-/* One line: narrowed, it elides rather than wrapping, so the window's smallest height does not depend on its width. */
+/* Elides rather than wraps, so the window's smallest height does not depend on its width. */
 .cue-selector-status { color: var(--fg-secondary, #9DA0A8); font-size: 22px; align-self: center; max-width: 100%; white-space: nowrap;
     text-overflow: ellipsis; }

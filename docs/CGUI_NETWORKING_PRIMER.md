@@ -1,61 +1,34 @@
 # CrystalGUI Networking — A Lecture
 
-> **Who this is for.** Anyone about to touch `core/net/`, `core/fs/`, or a loader's networking, who
-> wants to know what the words mean before reading the code. It is deliberately intuitive first and
-> precise second. Every claim here was read out of the source; where the code and its own naming
-> disagree, this says so rather than smoothing it over.
->
-> **Companion reference:** `docs/CGUI_SERVER_AND_SERIALIZATION.md` (the same ground, written as a
-> reference rather than a lecture). **Worked example:** `com.crystalgui.example.machine`, which is
-> ~600 lines of runnable code doing everything below — `./gradlew :core:runExample`.
-
----
+> **For** anyone about to touch `net/`, `fs/` or a loader's networking who wants the words before the code:
+> intuitive first, precise second. The reference form is `CGUI_SERVER_AND_SERIALIZATION.md`; the worked example is
+> `com.crystalgui.app.machine` (`./gradlew :core:runExample`).
 
 ## 0. The one idea
 
-A dedicated Minecraft server has **no OpenGL, no fonts, no textures**. It cannot draw anything. But
-it is the only place that knows what is *true* — what's in the chest, who owns the machine, what the
-file on disk says.
-
-So we split it:
+A dedicated server has no OpenGL, fonts or textures, but it is the only place that knows what is true. So:
 
 - The **server** builds a tree of ordinary widgets and **describes** it.
-- The **client** rebuilds that description into its own tree and **draws** it.
-- After that, the two halves talk about elements *by number*, and **neither ever sends a picture**.
-
-Everything in this document is machinery in service of that sentence.
-
----
+- The **client** rebuilds the description into its own tree and **draws** it.
+- From then on the two talk about elements **by number**, and neither sends a picture.
 
 ## 1. The five words, before anything else
 
-Read these once. The rest of the lecture is these five things, elaborated.
-
 | Word | ELI5 | In one line |
 |---|---|---|
-| **Frame** | One envelope that fits through the letterbox | A `byte[]` small enough for Minecraft to carry — about **32 KB** |
-| **Message** | A whole letter, which may need several envelopes | One logical payload, split across frames and reassembled |
-| **Envelope** *(the type)* | The four things a letter can *be* | ask / answer / tell / take-it-back — and nothing else, ever |
-| **Connection** | One open phone line to one other person | `CgProtocolConnection` — a router, a transport, and who's on the far end |
-| **Session** | One *conversation* on that line | One GUI's worth of back-and-forth; several share one connection |
+| **Frame** | one envelope that fits through the letterbox | a `byte[]` small enough for Minecraft to carry, about **32 KB** |
+| **Message** | a whole letter, maybe several envelopes | one logical payload, split across frames and reassembled |
+| **Envelope** *(the type)* | the four things a letter can be | ask / answer / tell / take it back, and nothing else |
+| **Connection** | one open phone line to one person | `CgProtocolConnection`: a router, a transport, and who is at the far end |
+| **Session** | one conversation on that line | one GUI's back-and-forth; several share a connection |
+| **Peer** | the other end | on the server a player; on the client the server |
 
-> **The single most common confusion**: **Frame ≠ Message ≠ Envelope.** A frame is a *transport*
-> concern (how big a chunk the game will carry). A message is *one payload* that may span many
-> frames. An `CgEnvelope` is the *grammar* wrapper around a payload. Three different layers, and
-> mixing them up is why the wire code looks more complicated than it is.
-
-And one more, because it's the word that sounds like it means something bigger than it does:
-
-| Word | ELI5 |
-|---|---|
-| **Peer** | Literally "the other end". On the server, a player. On the client, the server. That's all. |
-
----
+**Frame ≠ Message ≠ Envelope**: a frame is a transport chunk, a message one payload over many frames, a `CgEnvelope`
+the grammar around a payload.
 
 ## 2. The layer cake
 
-Bottom is bytes, top is widgets. Read it upward — each layer only knows about the one directly
-below it.
+Bottom is bytes, top is widgets; each layer knows only the one below.
 
 ```
       ┌──────────────────────────────────────────────────────────────┐
@@ -83,21 +56,14 @@ below it.
              ↑ a loader implements ONLY this line (≈4 methods)
 ```
 
-**The important structural fact:** everything from layer 1 upward is written once. Layers 0–5 and
-the codecs are CrystalGraphics' (`com.crystalgraphics.net`, `com.crystalgraphics.serialization`), so a
-consumer with no UI networks too; layers 6–8 are CrystalGUI's `core/`. A new Minecraft version
-implements layer 0 and nothing else.
-
----
+Layers 0–5 and the codecs are CrystalGraphics' (`com.crystalgraphics.net`, `com.crystalgraphics.serialization`), so a
+consumer with no UI networks too; 6–8 are CrystalGUI's. A new Minecraft version implements layer 0 only.
 
 # PART ONE — THE BOTTOM: MOVING BYTES
 
 ## 3. `CgNetworkChannel` — the road
 
-**ELI5:** the postal service. It knows how to carry a parcel and how big a parcel may be. It has no
-idea what's inside.
-
-Four methods and an availability check:
+**ELI5:** the postal service: it carries a parcel and knows how big one may be, not what is inside.
 
 ```java
 void sendToServer(byte[] frame);
@@ -107,26 +73,19 @@ int  maxFrameBytes();
 boolean isAvailable();
 ```
 
-That is **the entire platform contribution to networking.** Framing, stream ids, fragmentation, flow
-control, cancellation, what a message means — all of it lives above this line. A loader never sees
-an `CgEnvelope`, never learns a stream id, never picks a chunk size.
-
-`player` is `Object` on purpose: `core/` may not name `EntityPlayerMP`. It's an opaque handle that
-travels back down to the adapter untouched.
+That is the whole platform contribution. `player` is `Object` because `core/` may not name a Minecraft type.
 
 ### What actually differs between Minecraft versions
 
 | Differs | Absorbed by |
 |---|---|
-| Channel identity — a ≤20-char string on 1.7.10, a `ResourceLocation` on 1.20.x | Private to the adapter |
-| Payload type — raw `ByteBuf` vs a registered `CustomPacketPayload` record | Private to the adapter |
-| Player handle — `EntityPlayerMP` vs `ServerPlayer` | The `Object` above |
-| Delivery thread — Netty on 1.7.10, main thread on Fabric/NeoForge | The inbound handler only *enqueues*, so either is fine |
-| **Frame ceiling** — four different numbers | `maxFrameBytes()`, asked for and never assumed |
+| Channel identity: a ≤20-char string on 1.7.10, a `ResourceLocation` on 1.20.x | the adapter |
+| Payload type: raw `ByteBuf` vs a registered `CustomPacketPayload` | the adapter |
+| Player handle: `EntityPlayerMP` vs `ServerPlayer` | the `Object` above |
+| Delivery thread: Netty on 1.7.10, the main thread on Fabric/NeoForge | the inbound handler only enqueues |
+| **Frame ceiling** | `maxFrameBytes()`, asked, never assumed |
 
-**Nothing else reaches `core`.** That's what makes "will this work on a version nobody wrote an
-adapter for" a testable question: `FrameMultiplexerTest` runs the engine at every real ceiling plus
-one below and one above them all.
+`FrameMultiplexerTest` runs the engine at every real ceiling plus one below and one above them all.
 
 ### The numbers
 
@@ -135,10 +94,8 @@ one below and one above them all.
 | **1.7.10** | 32,766 | 2,097,050 |
 | **1.20.x** | 32,767 | 1,048,576 |
 
-The client→server bound is **not a Forge decision and will not move**: vanilla writes the packet
-length as a *signed short*. That's the direction carrying your file saves, which matters later.
-
----
+The client→server bound is vanilla's signed-short packet length and will not move, and that is the direction file
+saves take.
 
 ## 4. `CgFrameCodec` — one frame on the wire
 
@@ -151,59 +108,32 @@ length as a *signed short*. That's the direction carrying your file saves, which
 | `OP_DATA` `0x01` | a fragment of a message |
 | `OP_WINDOW_UPDATE` `0x02` | "you may send me N more bytes" |
 | `OP_RESET` `0x03` | "abandon this stream" |
-| `FLAG_FIN` `0x01` | this is the last fragment |
-| stream `0` | means *the connection itself*; never carries `OP_DATA` |
+| `FLAG_FIN` `0x01` | the last fragment |
+| stream `0` | the connection itself; never carries `OP_DATA` |
 
-**Two things deliberately absent, and both are the interesting part:**
-
-- **No length field.** The platform hands over one discrete `byte[]` per frame — a Minecraft custom
-  payload is *already* framed — so a length would restate `array.length`, and the two could
-  disagree. This is the one piece of framing we get for free.
-- **No sequence number.** Delivery is a single ordered, reliable TCP connection, so fragments cannot
-  arrive out of order and cannot vanish without the connection dying. A sequence number would encode
-  a guarantee the transport already makes, and buy a reordering buffer no test could ever exercise.
-  *A datagram protocol couldn't make this choice; this one can.*
-
----
+- **No length field**: a custom payload is already one discrete `byte[]`.
+- **No sequence number**: one ordered, reliable TCP connection cannot reorder or drop fragments.
 
 ## 5. `CgFrameMultiplexer` — the sorting office
 
-**ELI5:** you have one letterbox, a 32 KB limit, and several parcels to send. This class cuts them
-into letterbox-sized pieces, **interleaves** them so a big parcel doesn't block a small one, and
-refuses to shove more through than the receiver says it can handle.
-
-Three mechanisms, **none of them invented here**:
+**ELI5:** one letterbox, a 32 KB limit and several parcels: cut them into letterbox pieces, interleave them so a big
+one does not block a small one, and never push more than the receiver said it can take. Three borrowed mechanisms:
 
 ### 5.1 Stream multiplexing — from HTTP/2
 
-Every message gets a **stream id**. Frames from different streams interleave. So a five-megabyte
-file read cannot sit in front of a two-hundred-byte RPC.
-
-Without it, opening a large file visibly freezes the editor's own protocol behind it.
-
-> **Odd/even ids.** The two ends allocate stream ids from different halves of the number space —
-> the *initiator* takes one parity, the other end takes the other. HTTP/2's trick. It means both
-> ends can open streams concurrently without agreeing on anything or asking permission. In
-> `CgNetwork`, the **client is the initiator and the server is not**.
+Every message gets a stream id and frames from different streams interleave, so a 5 MB file read cannot sit in front
+of a 200-byte call. The two ends allocate ids from opposite parities, so both open streams without coordinating; the
+client is the initiator.
 
 ### 5.2 FIN fragmentation — from WebSocket
 
-A message is N frames on one stream, the last one flagged `FIN`. See §4 for why there's no chunk
-index.
+A message is N frames on one stream, the last flagged `FIN`.
 
 ### 5.3 Credit flow control — from HTTP/2's `WINDOW_UPDATE`
 
-The receiver advertises a byte budget; the sender spends it and **stops when it's gone**. Default
-window: **256 KB** (`DEFAULT_WINDOW_BYTES`).
-
-**This is the one that is not optional here.** RFC 9113 gives the general reason — *"a flow-control
-scheme ensures that streams on the same connection do not destructively interfere with each other"*
-— and our case is worse than the one it describes. `NetworkManager.outboundPacketsQueue` is an
-**unbounded** `ConcurrentLinkedQueue` **shared with the entire game**. Our streams contend not only
-with each other but with chat, movement and chunk loading, on the same TCP connection.
-
-> A sender that pushes a large file as fast as it can encode **does not degrade this feature, it
-> degrades the game.**
+The receiver advertises a budget (`DEFAULT_WINDOW_BYTES`, 256 KB); the sender stops when it is spent. **Required
+here**: `NetworkManager.outboundPacketsQueue` is unbounded and shared with the whole game, so an unthrottled sender
+degrades chat, movement and chunk loading.
 
 ### 5.4 Threading — one concurrent queue and nothing else
 
@@ -212,25 +142,13 @@ onFrameReceived(bytes)   // network thread. Does exactly ONE thing: enqueue.
 pump()                   // your thread. Reassembly, delivery, credit, scheduling — all here.
 ```
 
-Nothing is ever delivered spontaneously. `Property` and `SignalBase` are single-threaded by
-documented contract, so delivering from the network thread wouldn't be a race to tune — it would be
-a correctness bug.
-
-Credit is therefore *single-threaded state* despite being replenished by the peer, because a
-`WINDOW_UPDATE` is only ever **processed** during a pump.
+Nothing is delivered spontaneously: `Property` and `SignalBase` are single-threaded. A `WINDOW_UPDATE` is processed
+only in a pump, so credit is single-threaded too.
 
 ### 5.5 `CgStreamRefused` — one stream died, the connection is fine
 
-HTTP/2 draws exactly this line and the class is named for it: a **stream error** resets one stream
-and the connection carries on; a **connection error** means the peer isn't speaking the protocol and
-there's nothing to salvage.
-
-The multiplexer had both conditions and one exception type, so it *couldn't act on the difference* —
-and didn't: refusing a single oversized transfer threw out of `pump`, abandoning every frame queued
-behind it and skipping that tick's credit replenishment, on a connection whose other streams were
-healthy.
-
----
+HTTP/2's line: a **stream error** resets one stream and the connection carries on; a **connection error** means the
+peer is not speaking the protocol.
 
 ## 6. `CgBinaryFormat`, `CgWireTransport`, `CgTransport`
 
@@ -241,92 +159,47 @@ void send(T encodedPacket);
 void setReceiver(Consumer<T> receiver);
 ```
 
-Two methods. Note it takes **`T`, not `CgEnvelope`** — sessions encode *before* handing over, so
-**every implementation, including the in-memory one used by tests, exercises the real codec on every
-hop.** A transport passing object references would let a field somebody forgot to encode pass every
-test and fail only in game.
-
-> **"It is a mailbox, not a dispatcher."** The receiver may be called from any thread. What arrives
-> is queued and processed from `tick()` on the thread that owns the tree.
+It takes `T`, not `CgEnvelope`: sessions encode first, so every implementation, the test double included, runs the real
+codec. The receiver may be called from any thread; what arrives is processed in `tick()` on the tree's thread.
 
 ### `CgBinaryFormat` — tree ⇄ bytes
 
-`CgPlainOps` builds a tree of plain `Map`/`List`/`String`/numbers. `CgBinaryFormat` turns that tree into
-bytes and back.
+`CgPlainOps` builds a tree of plain values; `CgBinaryFormat` turns it into bytes and back.
 
-**Deliberately *not* a `CgDynamicOps`.** A binary `CgDynamicOps` was the obvious shape and is the wrong
-one: `CgDynamicOps` *builds a tree*, and a tree of `byte[]` composes by concatenating its children, so
-every nesting level recopies everything below it.
-
-**Why not JSON?** CrystalGraphics' `CgJsonOps` works and stays the readable path for debugging. It's a poor *wire*
-format for one measured reason: **32,766 bytes per client→server packet**, and that's the direction
-carrying file saves. Text encoding spends the budget that matters most.
-
-**Number width is part of the value.** Every numeric box gets its own tag and decode restores the
-same box type. Not tidiness — `CgPlainOps` holds `Object`, so a codec that reads a field back and
-casts it sees the runtime class. Collapsing every integer to `Long` (what a JSON round trip does)
-makes "the same tree" true of the values and false of the types, and it fails at the *reader*.
+- Not a `CgDynamicOps`: a binary ops would recopy every level on nesting.
+- Not JSON on the wire: `CgJsonOps` stays the readable path, but text spends the 32,766-byte client→server budget.
+- **Number width is part of the value**: each numeric box has its own tag and decodes to the same type, since a reader
+  casts the runtime class.
 
 ### `CgInMemoryTransport` — the test double
 
-Two transports wired into each other with a queue instead of a socket. `pair()`, `deliver()`, plus
-`dropNext(n)` and `corruptNext(fn)` for simulating a bad link. Every session test in the repository
-runs against it — and because of the `T`-not-`CgEnvelope` rule above, those tests exercise the same
-codec production does.
-
----
+Two transports joined by a queue: `pair()`, `deliver()`, `dropNext(n)`, `corruptNext(fn)`. Every session test runs on
+it, through the real codec.
 
 # PART TWO — THE MIDDLE: MESSAGES
 
 ## 7. `CgEnvelope` — the closed grammar
 
-**Every message on the wire is one of exactly four things:**
-
 | Kind | Wire tag | Carries | Must be answered? |
 |---|---|---|---|
-| **Request** | `q` | id, method, payload | **Yes, exactly once** |
-| **Response** | `r` | id, ok/error, payload | — it *is* the answer |
-| **Notification** | `n` | method, payload | **No — and must not be** |
-| **Cancel** | `x` | id | No |
+| **Request** | `q` | id, method, payload | **yes, exactly once** |
+| **Response** | `r` | id, ok/error, payload | it is the answer |
+| **Notification** | `n` | method, payload | **no, and must not be** |
+| **Cancel** | `x` | id | no |
 
-Wire field names: `k` kind, `i` id, `m` method, `p` payload, `e` error. `CgEnvelopeCodec.VERSION = 1`.
+Wire fields: `k` kind, `i` id, `m` method, `p` payload, `e` error. `CgEnvelopeCodec.VERSION = 1`.
 
-> **The envelope is closed; the vocabulary is open.** That distinction is the whole design.
->
-> These four are the *grammar* — ask, answer, tell, take it back — and **a protocol does not grow new
-> grammar.** Everything a message is *about* is a **method string**, and that set is open: adding one
-> is a registration next to the code that owns it.
+**The envelope is closed; the vocabulary is open**: these four are the grammar, and everything a message is about is a
+method string, registered beside the code that owns it.
 
-### What this replaced
-
-`UIPacket` was a sealed union of nine records. Adding a message meant editing **four** places — the
-union, `encode`, `decode`, and every session's `handle` chain — and all four were shared by every
-subsystem, so the workspace, the UI and the script runtime edited the same three files and
-conflicted there.
-
-**Now: adding a message is adding a string.**
-
-### Request vs Notification is *structural*, taken from LSP
-
-> *"every processed request must send a response back … notifications don't require responses."*
-
-`UIPacket` mixed the two with no way to tell them apart. Making it structural means the router can
-answer an unknown **request** with an error (a caller waiting on a reply always gets one) while an
-unknown **notification** is logged and dropped — the correct treatment for each, and impossible to
-get right without the distinction.
-
-### Payloads are not decoded here
-
-The envelope codec routes an **opaque** payload. Only the handler registered for a method knows the
-shape. So the envelope codec never grows a branch, a subsystem's wire format stays private to it,
-and a large payload can be routed — or refused — without being parsed.
-
----
+- **Request and notification are structural** (LSP's rule): an unknown request is answered with an error, an unknown
+  notification logged and dropped.
+- **Payloads are not decoded here**: the codec routes an opaque payload, so it never grows a branch and a large
+  payload can be refused unparsed.
 
 ## 8. `CgMessageRouter` — the switchboard
 
-**ELI5:** a phone switchboard. "Method name in, handler out." It also remembers who's waiting for an
-answer.
+**ELI5:** method name in, handler out, and a memory of who is waiting for an answer.
 
 ```java
 router.onRequest("fs/read",       (payload, respond) -> respond.ok(readFile(payload)));
@@ -336,26 +209,18 @@ router.request  ("fs/read", path, onOk, onError);
 router.notify   ("ui/stateDelta", delta);
 ```
 
-**Nothing enumerates the set.** That's the property that makes adding a message one edit instead of
-four. The workspace registers `fs.*`, a session registers `ui/*`, a script runtime in `language/`
-registers `script/*` **without `core` ever learning it exists**.
-
-It owns: correlation (request id ↔ response), the pending map, exactly-once responding, per-request
-deadlines, cancellation, and `failAllPending` when the link drops.
+Nothing enumerates the methods: the workspace registers `fs/*`, a session `ui/*`, a runtime in `language/` `script/*`,
+without `core` knowing. It owns correlation, the pending map, exactly-once responding, deadlines, cancellation and
+`failAllPending` when the link drops.
 
 ### Unknown methods are answered, not dropped
 
 | | |
 |---|---|
 | Unknown **request** | answered `protocol/methodNotFound` |
-| Unknown **notification** | logged **once per method name**, then discarded |
+| Unknown **notification** | logged **once per method name**, then discarded (a newer peer may send it at frame rate) |
 
-They differ because the shapes differ: somebody is waiting on the first, nobody on the second.
-Logging once rather than per message matters because the common cause is *a peer one version ahead
-sending something at frame rate*.
-
-The full error set: `protocol/methodNotFound`, `protocol/handlerFailed`, `protocol/timeout`,
-`protocol/cancelled`.
+Errors: `protocol/methodNotFound`, `protocol/handlerFailed`, `protocol/timeout`, `protocol/cancelled`.
 
 ### Replying is a callback, not a return value
 
@@ -363,15 +228,11 @@ The full error set: `protocol/methodNotFound`, `protocol/handlerFailed`, `protoc
 interface Responder<T> { void ok(T payload); void fail(String error); }
 ```
 
-Because a handler may want to work off-thread and reply later. **Exactly one of these, exactly once**
-— the router enforces it; later calls are ignored and logged.
-
----
+A handler may reply later from elsewhere. Exactly one call, exactly once; later calls are ignored and logged.
 
 ## 9. `CgProtocolConnection` — one peer's end
 
-**ELI5:** the phone line to one specific person. A router, a transport underneath it, and a name for
-who's on the other side.
+**ELI5:** the phone line to one person: a router, a transport under it, and who is at the other end.
 
 ```java
 connection.peer();        // the platform's handle — EntityPlayerMP, or null on a client
@@ -380,30 +241,14 @@ connection.router();      // the switchboard, for anything the conveniences don'
 connection.tick();        // ← pump the wire, drain what arrived, expire what timed out
 ```
 
-### Why per-connection and not a global singleton
-
-CustomNPC+'s `PacketHandler` maps a packet type to a handler and *can* be a singleton, because a
-packet carries everything needed to act on it. **A router cannot**: it holds pending requests
-correlated to *one peer*, a stream-id space, credit, and timeouts. Two players sharing a router would
-collide on ids the first time both had a call in flight.
-
-So: the **registry** is global (§10), and what it registers are contributors invoked **once per
-connection**.
-
-### `tick()` does all three steps, deliberately
-
-Pump the wire → drain the mailbox → expire timeouts. One call, because a subsystem that had to
-remember to pump its transport separately **would receive nothing, silently** — the exact failure
-shape this codebase keeps paying for elsewhere.
-
-Default call timeout: **10 seconds**.
-
----
+- **Per connection, never a singleton**: a router holds pending requests, a stream-id space, credit and timeouts for
+  one peer. The registry (§10) is global; what it registers is invoked once per connection.
+- **`tick()` does all three steps** (pump, drain, expire), so no subsystem can forget to pump and receive nothing.
+- Default call timeout: **10 seconds**.
 
 ## 10. `CgProtocols` — where a subsystem says "I speak part of this"
 
-**ELI5:** a sign-up sheet. Subsystems put their name on it once at startup. Every time a new phone
-line opens, everyone on the sheet gets wired into it.
+**ELI5:** a sign-up sheet: sign once at startup, and every new line is wired to everyone on it.
 
 ```java
 // ONCE, at mod init -- sided at the call site, and a lambda:
@@ -416,28 +261,13 @@ CgProtocolConnection<Object> connection =
         CgProtocols.open(transport, CgPlainOps.INSTANCE, wire::pump, player);
 ```
 
-**Adds, never replaces** — so registration order doesn't matter and two subsystems can't evict each
-other. A subsystem registers exactly once, at init, and never thinks about connections again.
-
-`CgProtocols.contributors()` returns what has registered — diagnostics, and the answer to "is my
-subsystem actually wired".
-
-### Method names are namespaced
-
-`ui/*`, `command/*`, `script/*` — LSP's `textDocument/hover` convention.
-
-> The workspace is **`fs/`** — `fs/read`, `fs/write`, `fs/list` — and reads the same way `ui/` does.
-> It used to be `fs.` with a dot, which was an honest inconsistency and is now gone; the `CgProtocols`
-> javadoc's `workspace/read` example names a method that has never existed and is the last trace of a
-> third spelling. Nothing parses the separator, so this was only ever a grepping problem.
-
----
+Registration adds, never replaces, so order does not matter. `CgProtocols.contributors()` lists what registered.
+Method names are namespaced, LSP style: `ui/*`, `fs/*`, `command/*`, `script/*`.
 
 # PART THREE — HOW A CONNECTION IS ESTABLISHED
 
-This is the part that's invisible from any single class. The connections are CrystalGraphics'
-(`com.crystalgraphics.net.CgNetwork`), so any mod on CrystalGraphics has them, with or without CrystalGUI;
-CrystalGUI only contributes protocols to them.
+The connections are CrystalGraphics' (`com.crystalgraphics.net.CgNetwork`), present for any mod on it; CrystalGUI
+contributes protocols.
 
 ## 11. The sequence, start to finish
 
@@ -450,7 +280,7 @@ CgNetwork.install(channel, player -> profileIdOf(player));   // the channel fill
                                                               // and both tables are built
 ```
 
-CrystalGUI's host, after it (CrystalGUI loads after CrystalGraphics):
+CrystalGUI's, after it:
 
 ```java
 CgUiWorkspaceHost.register();                          // contributors sign the sheet
@@ -458,29 +288,20 @@ WindowProtocol.register();
 CgNetwork.onPeerClosed(CgUiWorkspaceHost::forget);     // per-peer state dropped when a peer goes
 ```
 
-**Contributors before connections.** A contributor is only bound to connections opened **after** it
-registers. No peer can exist at mod init, so every contributor registered there is bound to every
-connection.
-
-> **`init`, not `preInit`, on 1.7.10 and legacy Forge:** a channel registered at preInit delivered **no
-> packet in either direction**, with every gate reporting healthy. CustomNPC+ builds its handler at
-> preInit and calls `registerChannels()` from `FMLInitializationEvent`.
-
-`install` hands the channel `CgNetwork::route`, so frames have somewhere to go, and the host subscribes
-its join, leave, tick and connection events.
+- **Contributors before connections**: a contributor binds only to connections opened after it registers.
+- **`init`, not `preInit`, on 1.7.10 and legacy Forge**: a channel registered at preInit delivers nothing.
+- `install` hands the channel `CgNetwork::route`, and the host subscribes its join, leave, tick and connection events.
 
 ### Step 1 — a peer appears
 
-What each host forwards (1.7.10's events shown; modern loaders have their own, in the same places):
+1.7.10's events (modern loaders have their own, in the same places):
 
 | | Opens on | Closes on | Ticks on |
 |---|---|---|---|
 | **Server** | `PlayerLoggedInEvent` → `playerJoined` | `PlayerLoggedOutEvent` → `playerLeft`, `FMLServerStoppingEvent` → `closeAll` | `ServerTickEvent` → `serverTick` |
 | **Client** | `ClientConnectedToServerEvent` → `clientConnected` | `ClientDisconnectionFromServerEvent` → `clientDisconnected` | `ClientTickEvent` → `clientTick` |
 
-> A kick and a disconnect are the same event as a quit. What matters is that the peer is gone and
-> **every caller waiting on a reply is told**, rather than waiting out a ten-second timeout for something
-> that's never coming.
+A kick, a disconnect and a quit are one event: the peer is gone and every caller waiting on a reply is told.
 
 ### Step 2 — `open()` builds the stack
 
@@ -494,33 +315,21 @@ CgProtocolConnection<Object> connection =
 peers.put(key, new Held(frames, connection, peer));
 ```
 
-Four lines, and each one is a layer of §2 being stacked:
-
-1. the multiplexer learns the ceiling, its stream-id parity, and *where to put a finished frame*;
-2. the transport wraps it with the tree⇄bytes codec;
-3. `CgProtocols.open` builds the router **and binds every contributor onto it**;
-4. `Held` keeps the two together, so closing one closes all of it.
-
-> **The pump goes *in* here** rather than being left to a caller. That's what makes `tick()` the one
-> call — a subsystem that forgot to pump would receive nothing, silently.
-
-> **`initiator`** is `true` on the client, `false` on the server — the odd/even stream ids of §5.1.
+The multiplexer learns the ceiling, its stream parity (`initiator`: true on the client) and where finished frames go;
+the transport adds the codec; `CgProtocols.open` builds the router and binds every contributor; `Held` closes it all
+together. The pump goes in here, so `tick()` is the one call.
 
 ### Step 3 — keyed by profile, resolved at send time
 
-The server table is keyed by the player's **profile UUID**, never the entity: the game builds a new entity
-on every respawn and dimension change, and an entity-keyed table is orphaned by the first death. The
-peer, a `CgPeer`, carries the id, the name at join, and a supplier for the **live** player, which the
-outbound route asks on every send:
+The server table is keyed by the player's **profile UUID**, never the entity, which respawn and dimension changes
+replace. A `CgPeer` carries the id, the name at join, and a supplier for the live player, asked on every send:
 
 ```java
 CgNetwork.playerJoined(id, name, () -> handler.playerEntity);   // the handler is re-pointed at the new body
 ```
 
-**Three threads, and the map is the only thing they share.** Frames arrive on Netty's thread; server
-connections open/close/tick on the server thread; the client does all three on the client thread. So
-the map is concurrent and *nothing else is* — `CgProtocolConnection.tick()` is the only thing that
-dispatches, and it's always called from the thread that owns whatever the handlers touch.
+Frames arrive on Netty's thread; server connections open, close and tick on the server thread, the client's on the
+client thread. The map is concurrent and nothing else is: `CgProtocolConnection.tick()` is the only dispatcher.
 
 ### Step 4 — inbound frames get routed
 
@@ -531,24 +340,18 @@ private static void route(Object sender, byte[] frame) {     // NETTY THREAD
 }
 ```
 
-> **A frame for a peer that has already gone is dropped, never used to open one.** A connection is
-> created by a *lifecycle event*, never by traffic. Creating one here would resurrect a player who
-> has left, and make a disconnect racy against whatever was still in flight.
+A frame for a peer that has gone is dropped: only a lifecycle event creates a connection.
 
 ### Step 5 — ticking
 
-**On `Phase.START`** on 1.7.10 and legacy Forge, so a message that arrived since the last tick is applied
-*before* the world runs on it rather than a tick later. The modern hosts tick at the end of the tick.
-One peer's exception never stops the others being ticked.
+On `Phase.START` on 1.7.10 and legacy Forge, so a message is applied before the world runs on it; the modern hosts
+tick at the end. One peer's exception never stops the others.
 
 ### Step 6 — closing
 
 ```java
 connection.close(reason);   // fails EVERYTHING outstanding, immediately
 ```
-
-Rather than letting each caller wait out its own timeout. *A peer that is gone is knowable now; ten
-seconds of silence per pending call is not information.*
 
 ### How you get hold of one
 
@@ -559,16 +362,13 @@ CgNetwork.openConnections();       // diagnostics; what a leak shows up in
 CgNetwork.isInstalled();           // did the host install the connections?
 ```
 
-> `isInstalled()` exists because an unavailable channel is a `warn` and a `return` rather than a throw:
-> a server with no networking boots happily and looks healthy. The gauntlet's `crystalgraphics:server` turns
-> that into a failed report.
-
----
+An unavailable channel warns and returns rather than throwing, so a server with no networking looks healthy;
+`isInstalled()` and the gauntlet's `crystalgraphics:server` catch it.
 
 # PART FOUR — DEFINING A PACKET CONTRACT
 
-This is the part you'll actually do. **There is no packet class, no discriminator byte, no registry
-of ids.** A contract is: *a name, a payload shape, a handler on one side, a caller on the other.*
+**There is no packet class, discriminator byte or id registry.** A contract is a name, a payload shape, a handler on
+one side and a caller on the other.
 
 ## 12. The recipe
 
@@ -581,9 +381,7 @@ public final class FsMethods {
 }
 ```
 
-> **Both ends read these constants rather than spelling the strings twice.** A protocol whose two
-> halves each type `"etag"` by hand is one typo away from a silent mismatch that presents as a
-> *conflict loop* — which looks like a filesystem bug, not a networking one.
+Both ends read the constants, never the spelled strings.
 
 ### 2. Put each payload in one record, with a codec
 
@@ -596,10 +394,8 @@ public record ReadResponse(String etag, byte[] content, boolean unchanged,
 public static CgCodec<ReadRequest> readRequest() { … }
 ```
 
-> **This is the step the workspace added and `ui/*` deliberately did not.** Keys written by hand on
-> both sides are the same typo risk one level down, and a record plus a codec makes a field written on
-> one side provably the field read on the other. `ui/*` stays untyped because it is an **open**
-> vocabulary a mod extends — a codec per mod message is a registration this stack exists to remove.
+A record plus a codec makes a field written on one side provably the field read on the other. `ui/*` stays untyped
+because a mod extends its vocabulary.
 
 ### 3. Server side — register a handler
 
@@ -619,15 +415,12 @@ workspace.files().read(resource)
         .onError(failure -> { … });     // a code and a detail, never a String alone
 ```
 
-> **`CgReply<T>` is the one async shape**, and its continuation runs on the **frame thread** — which is
-> what lets a `then` touch the tree without a hop. A `Stream<T>` is its many-answers twin, for a paged
-> listing or a chunked read.
-
-That's the whole contract. **No fourth file to edit.**
+`CgReply<T>` is the one async shape, its continuation run on the frame thread; a `Stream<T>` is its many-answers twin
+(a paged listing, a chunked read).
 
 ### `CgStateMap` — the payload's readable face
 
-A small typed key/value bag over any `CgDynamicOps`:
+A typed key/value bag over any `CgDynamicOps`:
 
 ```java
 out.putString("k", v);  out.putInt(...);  putFloat  putBool  putBytes  putEnum  putList
@@ -635,15 +428,10 @@ in.getString("k", fallback);              // every getter takes a fallback
 out.putStringIfNot("k", v, "");           // omitted when it equals the default
 ```
 
-**Every getter taking a fallback is the versioning story.** A field added later decodes against an
-older sender without a version bump, and a default-valued record writes an *empty* map that gets
-dropped entirely.
-
----
+Every getter has a fallback, which is the versioning story: a field added later decodes from an older sender with no
+version bump, and a default-valued record writes an empty map that is dropped.
 
 ## 13. A real contract, both halves side by side — `fs/read`
-
-This one is worth reading in full because it shows every technique at once.
 
 ### The server half (`WorkspaceBinding`)
 
@@ -696,19 +484,12 @@ public CgReply<FileContent> read(Resource file) {
 }
 ```
 
-**Four lessons in one method:**
-
-1. **The reply says what shape it is.** `unchanged` / inline / `chunked` are flags on the response,
-   not three different methods. A caller cannot tell which happened, and *that is the point* — the
-   threshold is the server's, so a client must never assume one.
-2. **Chunked reads are client-driven (pull, not push).** A push would work — the transport has
-   credit flow control. Pull was chosen because the client decides the pace (so a UI can pause or
-   abandon a download with no cancel protocol) and **a resume is the same request with a different
-   offset**, rather than a new mechanism. HTTP range requests are the same shape for the same reason.
-3. **"Too big for one message" is a fact, not a policy.** The transport bounds a single reassembled
-   message, so a large file *cannot* arrive whole however patient anyone is.
-4. **The client keeps the etag so the UI doesn't have to.** Forgetting that is how an editor ends up
-   either never detecting a conflict or reporting one on every save.
+1. **The reply says what shape it is**: unchanged, inline or chunked are flags on one response. The threshold is the
+   server's; a client never assumes one.
+2. **Chunked reads are pulled by the client**: the client sets the pace, and a resume is the same request at another
+   offset (HTTP ranges).
+3. **"Too big for one message" is a fact**: the transport bounds a reassembled message.
+4. **The client keeps the etag**, so the UI does not have to.
 
 ### Errors are codes, never stack traces
 
@@ -719,12 +500,8 @@ catch (WorkspaceConflictException e) -> respond.fail(FsError.conflict(actualEtag
 catch (RuntimeException e)           -> respond.fail(FsError.of("UNKNOWN", …));
 ```
 
-So a client **branches on a value** rather than matching message text — and an unexpected exception
-is reported as `UNKNOWN` rather than leaking a server-side message that may name a directory.
-
-> **An `FsError` carries fields, not only a code**, and the conflict is why: a stale write is refused
-> with **the etag the file actually holds**, so the client can re-read, merge and offer the user a
-> choice rather than a dead end. A code alone would leave it with nothing to act on.
+A client branches on a value; an unexpected exception is `UNKNOWN`, leaking no server path. An `FsError` carries
+fields: a conflict returns the etag the file actually holds, so the client can re-read and merge.
 
 ### Who you are is bound at construction, never sent
 
@@ -732,10 +509,8 @@ is reported as `UNKNOWN` rather than leaking a server-side message that may name
 new WorkspaceBinding<>(service, hub, actorFor(peer), peer, ops)
 ```
 
-> One connection is one player, so the actor is bound at bind time rather than travelling in each
-> call. **A client that could name its own actor could name somebody else's.**
-
----
+One connection is one player, so the actor is bound once. A client that could name its own actor could name somebody
+else's.
 
 ## 14. The other direction — server pushing to a client
 
@@ -751,179 +526,104 @@ connection.onNotify(FsMethods.CHANGED, payload -> {
 });
 ```
 
-> **It is a notification now**, and it used to be a request. The interface was called `Notifier` and
-> its method `notify`, and it was wired to `connection.call(...)` — a **Request** (`q`), which the
-> client dutifully answered `ok(null)`. So every change cost a round trip's worth of envelopes for an
-> answer nobody read. It worked correctly and the naming said something the wire did not; `fs/changed`
-> is an `n` today. `PushIsANotificationTest` is the standing form of that.
-
-Note the ordering inside the handler: **the cache is dropped before the callback**, so a handler that
-re-reads the file isn't served the stale bytes.
-
----
+`fs/changed` is a notification (`PushIsANotificationTest`), and the cache is dropped before the callback, so a handler
+that re-reads gets fresh bytes.
 
 # PART FIVE — THE TENANTS
 
-Three subsystems ride a `CgProtocolConnection`. They're peers of each other; none is privileged.
+Three peer subsystems ride a `CgProtocolConnection`.
 
 ## 15. The UI — `ui/*`
 
 | Method | Kind | Direction |
 |---|---|---|
 | `ui/openWindow` | notification | S→C |
-| `ui/description` | **request** | C→S — answered with the tree |
+| `ui/description` | **request** | C→S, answered with the tree |
 | `ui/stateDelta` | notification | S→C |
-| `ui/treeOps` | notification | S→C — an ordered edit script: `insert` / `remove` / `move` |
-| `ui/closeWindow` | notification | S→C — "this window is finished" |
-| `ui/close` | notification | **C→S — "the user closed it"** |
-| `ui/requestClose` | **request** | S→C — "may I?", answered by the content |
-| `ui/requestOpen` | **request** | C→S — "give me a window of this type"; the answer is only *whether* |
-| `ui/focusWindow` | notification | S→C — "bring it forward" |
-| `ui/visibility` | notification | C→S — "it is / is not on screen" |
-| `ui/view` | notification | S→C — a command about the *window* rather than the tree (title, icon, notify) |
-| `ui/sheet` | **request** | C→S — answered with a stylesheet, by hash |
+| `ui/treeOps` | notification | S→C, an ordered edit script: `insert` / `remove` / `move` |
+| `ui/closeWindow` | notification | S→C, "this window is finished" |
+| `ui/close` | notification | **C→S, "the user closed it"** (Minecraft's close-container packet) |
+| `ui/requestClose` | **request** | S→C, "may I?", answered by the content |
+| `ui/requestOpen` | **request** | C→S, "give me a window of this type"; the answer is only whether |
+| `ui/focusWindow` | notification | S→C, "bring it forward" |
+| `ui/visibility` | notification | C→S, "it is / is not on screen" |
+| `ui/view` | notification | S→C, about the window rather than the tree (title, icon, notify) |
+| `ui/sheet` | **request** | C→S, answered with a stylesheet, by hash |
 | `ui/event` | notification | C→S |
-| `ui/rows` | **request** | C→S — "I am looking at rows `[from, to)`"; the answer is the **count** |
+| `ui/rows` | **request** | C→S, "I am looking at rows `[from, to)`"; the answer is the **count** |
 
-> **`ui/close` is the newest of these by years, and its absence was not a missing feature.** Minecraft
-> has had the equivalent since alpha — `C0DPacketCloseWindow` → `processCloseWindow` →
-> `closeContainer`, and `ServerboundContainerClosePacket` → `doCloseContainer` on 1.20 — because a
-> server holding a window's model needs to know when nobody is looking at it. Without it a closed
-> window left its session open, observing its tree and flushing state deltas into a frame that had
-> been destroyed, and the only close anything ever noticed was the player disconnecting.
-
-**Every `ui/*` payload carries `w`, the window id** — in the *payload*, not the envelope, because
-it's a fact about the UI protocol and the envelope isn't allowed to know one.
-
-> LDLib2 resolves incoming packets against *"whatever menu the player has open"*, so a packet in
-> flight when a GUI closes lands on the **next** one. Four bytes makes that impossible.
+**Every `ui/*` payload carries `w`, the window id**, in the payload: a packet in flight when a window closes cannot land
+on the next one.
 
 ### `ServerWindows` / `ClientWindows` — a window's lifetime
 
-**The layer above the sessions, and the one you actually use.** A session is the *protocol* for one
-window; a host is what opens one, ticks it, and ends it — the id allocation, the `bind`-then-`open`
-ordering, the per-tick validity sweep and flush, and all four ways a window can end.
+**The layer you use**: it allocates ids, binds then opens, sweeps validity and flushes each tick, and ends a window
+all four ways.
 
 ```java
 WindowProtocol.register();                                  // once, at init
 ServerWindows.of(connection).open(new MyWindow(model));   // whenever you have something to show
 ```
 
-It is ported from `ServerPlayer.openMenu` (both MC versions): allocate the next id, construct, tell
-the client with the **type** and the **title**, start observing, tick with a `stillValid` check. Two
-divergences, both deliberate:
+Ported from `ServerPlayer.openMenu`: next id, construct, tell the client the type and title, observe, tick with a
+`stillValid` check. Two deliberate differences:
 
-- **Many windows per connection.** `openMenu` force-closes the previous container; CrystalOS is built
-  for several at once. Uniqueness is per **key** instead — opening under a key that is already open
-  brings the existing window forward, which is Minecraft's rule narrowed from "any window" to "the
-  same subject", and keeps its scroll position and whatever is half-typed in it.
-- **Close is a request.** The frame asks, the client decides, then tells the server via `ui/close`.
+- **Many windows per connection**, unique per **key**: opening an open key brings that window forward with its state.
+- **Close is a request**: the frame asks, the client decides, then sends `ui/close`.
 
-On the client, `ClientWindows` adopts each session as it arrives and hands the rebuilt tree to a
-**`WindowMount`** — the one thing a platform implements (on 1.7.10, a `WindowFrame` on the desktop).
-Local behaviour is looked up **by window type**, which is `MenuScreens.register` — with one
-improvement over it: **a window whose type nothing registered still mounts and still works**, because
-a description is self-sufficient where a `MenuType` is only a key to code.
+On the client, `ClientWindows` adopts each session and hands the tree to a **`WindowMount`**, the one thing a platform
+implements. Local behaviour is looked up by window type (`MenuScreens.register`), and a type nothing registered still
+mounts and works.
 
 ### `ServerUiSession` — owns the tree, never lays it out
 
-**There is no `UIDocument` anywhere in it.** That absence *is* the headless story, structurally rather
-than by flag: no window → no Taffy tree → no style engine → no layout → **no path into text
-measurement**, which is the one thing that genuinely needs a font stack.
-
-It implements `UITreeObserver`, so it's told when elements attach, detach or go state-dirty, and
-coalesces those into **one `ui/stateDelta` per `tick()`**.
+No `UIDocument`: no Taffy, no style engine, no layout, so no path into text measurement. It implements
+`TreeObserver` and coalesces changes into one `ui/stateDelta` per `tick()`.
 
 ### `ClientUiSession` — rebuilds, and caches
 
-Keyed by **content hash**, so cache invalidation doesn't exist as a problem: a changed UI is simply a
-different key, and a stale entry can never be served. **A UI the client has opened before costs one
-`ui/openWindow` packet and nothing else, whatever its size.**
+Keyed by content hash, so a stale entry cannot be served. A UI opened before costs one `ui/openWindow` packet.
 
 ### `ClientUiSessions` vs a bare `ClientUiSession`
 
-One window → construct a `ClientUiSession` directly. More than one → `ClientUiSessions.forConnection`.
-
-**They're mutually exclusive**, and for a precise reason: both bind `ui/openWindow`, and `ui/openWindow`
-is the one message that **cannot be routed by window id — it is what announces the id**. So a single
-owner per connection has to hand out the per-window sessions. The router refuses the second binder.
+One window: a `ClientUiSession`. More: `ClientUiSessions.forConnection`. They are exclusive, since both bind
+`ui/openWindow`, the one message that cannot be routed by window id; the router refuses a second binder.
 
 ### `UiWindowMux` — dispatch by window *as well as* method
 
-`CgMessageRouter` keys handlers by method name alone and **refuses a duplicate** — which made one UI
-session per connection a structural fact. Every UI message already carried the window id and every
-session already *re-checked* it on the way in, so the id was being **verified by a handler that could
-only ever be one**. The mux turns that check into the lookup it always wanted to be.
-
-> It's a layer *above* the router rather than a change *to* it, because `CgMessageRouter` is the
-> generic vocabulary — the workspace and a future `script/*` bind to it and have **no window to be
-> keyed by**. Teaching the router about `w` would put one subsystem's payload shape into the layer
-> every subsystem shares. Same split `CgFrameMultiplexer` already makes a layer down: *the generic
-> thing carries ids, and the thing that knows what an id means sits on top.*
-
-**A UI message with no window id is refused (request) or dropped with one warning (notification) —
-never delivered to "the only window".** A fallback that's correct with one window and silently wrong
-with two is worse than the limit it replaces, because it fails exactly when the feature starts being
-used.
+`CgMessageRouter` keys by method alone and refuses duplicates; the mux sits above it and dispatches on `w` too. A UI
+message with no window id is refused (request) or dropped with one warning (notification), never delivered to "the
+only window".
 
 ### The UI's supporting cast
 
 | | |
 |---|---|
-| `UIElementTreeSource` | Element ids live in a table the source owns, allocated on first sight and **kept for the life of the source** — so an id survives a sibling insert, a reparent and a detach. An id that moves is not a name, and a message in flight names an element. |
-| `ServerTreeMirror` / `ClientTreeMirror` | The edit script, **generic in the node type** and naming no widget, no session and no transport. The server half *produces* payloads rather than sending them, which is what lets one window fan out to viewers with different visibility without this class knowing viewers exist. |
-| `CgContentHash` | SHA-256 of a canonical encoding. Map keys sorted, type tags and counts written before each container, so two structurally different trees can't collide. This is what makes re-opening free. |
-| `UIElementMirror` | `{tag, id?, class[]?, style{}?, flags?, focus?, state{}?, children[]?}`. Children are `describedChildren()`, which a widget with structural light children overrides. **Throws on an unknown tag** — a styleless div where a slider should be is worse than a refusal. |
-| `SheetRef` | `(hash, id?)` — one shape covering four cases: client has the theme (nothing transfers), version skew (fetch), datapack-only theme (fetch), generated sheet (hash is the whole identity). |
-| `WidgetContract` | What a KIND of widget is: its state slots **in apply order**, the events it can report, and whether a description may carry children. One declaration, four readers — and there is deliberately **no kind vocabulary class**, because a closed set of four strings is a list a third party cannot add to. |
-
-> **Two entries here used to say the opposite, and both are worth knowing.** Ids were *"a depth-first
-> position, computed on both sides, never transmitted"* — which made inserting an element renumber
-> everything after it, and is the defect the whole mirror came out of. And `UiEventKinds` was that
-> closed set; it went at M3 when events became typed constants a widget declares for itself.
+| `UIElementTreeSource` | element ids owned by the source, allocated on first sight and kept for its life |
+| `ServerTreeMirror` / `ClientTreeMirror` | the edit script, generic in the node type; the server half produces payloads, so one window fans out to viewers with different visibility |
+| `CgContentHash` | SHA-256 of a canonical encoding (sorted keys, type tags and counts) |
+| `UIElementMirror` | `{tag, id?, class[]?, style{}?, flags?, focus?, state{}?, children[]?}`; children are `describedChildren()`. **Throws on an unknown tag** |
+| `SheetRef` | `(hash, id?)`: theme present, version skew, datapack theme, generated sheet |
+| `WidgetContract` | what a kind of widget is: state slots in apply order, events, whether it takes children |
 
 ## 16. The workspace — `fs/*`
 
-`FsMethods` (names) · `FsMessages` (every payload, as a record with a codec) · `FsError` ·
-`WorkspaceBinding` (server) · `Workspace` (client).
+`FsMethods` · `FsMessages` (every payload a record with a codec) · `FsError` · `WorkspaceBinding` (server) ·
+`Workspace` (client).
 
-`WorkspaceBinding.installOn` takes either a `CgProtocolConnection` — which registers every method **and**
-attaches the binding, so `ServerScope.workspace()` can find it — or a bare `Registrar`, a functional
-interface satisfied by both `CgMessageRouter::onRequest` and `ServerUiSession::onCall`. So binding the
-workspace does not depend on which of them a host happens to hold, and a test can install onto a bare
-registry without standing up a session.
+`WorkspaceBinding.installOn` takes a `CgProtocolConnection` (registering every method and attaching the binding, so
+`ServerScope.workspace()` finds it) or a bare `Registrar` (`CgMessageRouter::onRequest`, `ServerUiSession::onCall`),
+so a test installs onto a bare registry.
 
-The vocabulary: `fs/hello`, `fs/projects`, `fs/capabilities`, `fs/list`, `fs/stat`, `fs/read`,
-`fs/readChunk`, `fs/write`, `fs/writeDelta`, `fs/create`, `fs/mkdir`, `fs/rename`, `fs/copy`,
-`fs/delete`, `fs/watch`, `fs/unwatch`, `fs/changed`, `fs/presence`, `fs/trashList`, `fs/restore`,
-`fs/purge`.
-
-> **Every payload is a record with a codec** (`FsMessages`), which is the difference from `ui/*` and is
-> deliberate: a file protocol is a fixed vocabulary two halves have to agree on field by field, so a
-> field written on one side is provably the field read on the other. `ui/*` is the opposite — an open
-> vocabulary a mod extends — and typing it would mean a codec per mod message.
-
-> **`fs/list` is paged**, answering `{entries, cursor}`: a listing of a large directory arrives in
-> pages rather than as one message that may not fit, which is what the transport's reassembly cap is
-> there to refuse.
-
-> The primer used to say there was deliberately **no `fs/list` or `fs/stat`** — that a manifest *is* a
-> listing carrying the etags, and a second method would be one query answered twice. The reasoning was
-> sound and the conclusion did not survive paging: `fs/list` IS that manifest, renamed, with a cursor.
+The vocabulary: `fs/hello`, `fs/projects`, `fs/capabilities`, `fs/list` (paged: `{entries, cursor}`), `fs/stat`,
+`fs/read`, `fs/readChunk`, `fs/write`, `fs/writeDelta`, `fs/create`, `fs/mkdir`, `fs/rename`, `fs/copy`, `fs/delete`,
+`fs/watch`, `fs/unwatch`, `fs/changed`, `fs/presence`, `fs/trashList`, `fs/restore`, `fs/purge`.
 
 ## 17. Commands — `command/*`
 
-`command/contribute`, `command/withdraw`, `command/setEnabled` (all S→C notifications) and
-`command/invoke` (C→S **request**).
-
-> **The direction of each is the design.** Everything *about* a command flows server→client, because
-> the server is the only one that knows. The single thing flowing back is **"the user did it"** — and
-> that's a request, because a command can fail and the person who pressed the key deserves to be told.
->
-> Enablement is **pushed, not asked**. A client that had to ask "may I?" as the menu opened would put
-> a round trip inside a UI gesture.
-
----
+`command/contribute`, `command/withdraw`, `command/setEnabled` (S→C notifications) and `command/invoke` (C→S
+**request**). Everything about a command flows from the server, which alone knows; "the user did it" flows back as a
+request, since it can fail. Enablement is pushed, so no round trip sits inside a menu opening.
 
 # PART SIX — THE 1.7.10 WIRING
 
@@ -936,49 +636,27 @@ private static final String CHANNEL = "crystalgraphics"; // ≤20 chars — a ha
 private static final int MAX_FRAME_BYTES = 32_766;
 ```
 
-**An event-driven channel, not `SimpleNetworkWrapper`.** The first version used
-`SimpleNetworkWrapper` with an `IMessage` and a discriminator. It registered without error and
-dispatched through a live `NetworkDispatcher` — everything on the send path verified in a running
-client — and the handler **never fired, silently, in either direction.**
+**An event-driven channel** (`newEventDrivenChannel`), handing over a raw `ByteBuf` both ways. `SimpleNetworkWrapper`
+marshals typed messages, which we do not want, and its handler never fired here. Three traps:
 
-`newEventDrivenChannel` is what CustomNPC+ and most long-lived 1.7.10 mods use, and it's the better
-fit regardless: `SimpleNetworkWrapper` exists to marshal *typed* messages, matching a discriminator
-byte to a class and instantiating it reflectively — **and we want none of that.** The frame's
-structure is decided in `core` and every byte is ours. An event channel hands over a raw `ByteBuf` in
-both directions, which is exactly this contract.
+1. **`setTarget` is required**:
 
-### Three traps this class is a monument to
+   ```java
+   FMLProxyPacket packet = new FMLProxyPacket(Unpooled.copiedBuffer(frame), CHANNEL);
+   packet.setTarget(target);     // ← without this, single player silently drops everything
+   ```
 
-**1. `setTarget` is not optional.**
+   In single player the packet arrives by reference, and `processPacket` finds no channel for a null side and drops it
+   with no log.
+2. **`copiedBuffer`, not `wrappedBuffer`**: FML keeps the buffer past the call.
+3. **Report the smaller ceiling**: one channel serves both directions, and over-reporting fails mid-send.
 
-```java
-FMLProxyPacket packet = new FMLProxyPacket(Unpooled.copiedBuffer(frame), CHANNEL);
-packet.setTarget(target);     // ← without this, single player silently drops everything
-```
-
-`new FMLProxyPacket(ByteBuf, String)` leaves `target` null.
-
-- **Remote connection** — the packet is serialised and the receiver rebuilds it with a constructor
-  that sets `target` itself. A null target never survives the wire, so it never matters.
-- **Single player** — the connection is local and the *same object* arrives by reference.
-  `processPacket` does `getChannel(channel, this.target)` with a null side, finds no channel, and
-  **drops the packet with no log and no exception.**
-
-Every send succeeded, the dispatcher was live, the channel was registered on both sides, and nothing
-was ever received. That cost a day.
-
-**2. `copiedBuffer`, not `wrappedBuffer`.** FML keeps the buffer past the call; wrapping would alias
-an array the caller is free to reuse.
-
-**3. Report the *smaller* ceiling.** One channel serves both directions, and over-reporting fails
-inside Forge mid-send with the connection already committed.
-
-> **FML does not fragment for us.** `CgFrameMultiplexer` does it instead, once, for every platform.
+FML does not fragment for us; `CgFrameMultiplexer` does.
 
 ## 19. `Network1710` — the lifecycle
 
-CrystalGraphics' FML subscriptions, covered in full in §11. In one line: **it forwards join, leave, both
-ticks at `Phase.START` and the client's connect and disconnect into `CgNetwork`, which owns the tables.**
+CrystalGraphics' FML subscriptions (§11): it forwards join, leave, both ticks at `Phase.START`, and the client's
+connect and disconnect into `CgNetwork`, which owns the tables.
 
 ## 20. `CgUiWorkspaceHost` — the server actually serving files
 
@@ -986,37 +664,15 @@ ticks at `Phase.START` and the client's connect and disconnect into `CgNetwork`,
 CgProtocols.server("workspace", CgUiWorkspaceHost::bindWorkspace);
 ```
 
-> **`Contributor` is a lambda over `CgProtocolConnection<Object>`.** It used to be a generic method —
-> `<T> void bind(CgProtocolConnection<T>)` — and every contributor that ever existed immediately cast
-> to `Object` with a `@SuppressWarnings`, so the genericity bought an anonymous class per mod and
-> nothing else. The one unchecked cast now lives inside `CgProtocols.open`, sound by the ops
-> discipline: every `CgStateMap` takes its ops from `connection.ops()`. And `CgProtocols.server` /
-> `CgProtocols.client` put the side in the method name instead of a `peer() == null` guard every
-> contributor had to open with.
-
-**Files live on the server's machine, and single player is not a special case.** The root is
-`<serverdir>/crystalgui/workspace` via `MinecraftServer.getFile(...)` — the server directory on a
-dedicated server, the game directory in single player, **because the integrated server is a server.**
-
-> One code path, and single player is the remote case with a very short wire. That's what makes it
-> testable at all: a bug that only appears when the two halves are genuinely apart would otherwise
-> wait for a dedicated server to find it.
-
-**One `WorkspaceBinding` per connection**, because the actor is per player — sharing one would
-authorise every request as whoever connected first. It holds that peer's audit and its idempotency
-table, and its entry in the **one** `WatchHub`: the hub is per SERVER, so a path four peers are
-watching is stat-ed once a tick rather than four times.
-
-**A client connection must not host a workspace:**
-
-```java
-if (connection.peer() == null) return;   // a client is the CONSUMER
-```
-
-Without this, a single-player process would serve itself **from its own client end as well** — both
-ends answering `fs.*` on one wire, with whichever registered first winning.
-
----
+- A contributor is a lambda over `CgProtocolConnection<Object>`; `CgProtocols.server` / `client` put the side in the
+  method name.
+- **Files live on the server's machine, and single player is not a special case**: the root is
+  `<serverdir>/crystalgui/workspace` through `MinecraftServer.getFile(...)`, the game directory in single player
+  because the integrated server is a server.
+- **One `WorkspaceBinding` per connection**, the actor being per player, with that peer's audit, idempotency table
+  and entry in the server's one `WatchHub`.
+- **A client connection never hosts a workspace** (`if (connection.peer() == null) return;`), or single player would
+  serve itself from both ends.
 
 # PART SEVEN — PUTTING IT TOGETHER
 
@@ -1068,7 +724,7 @@ CgNetworkChannel.sendToServer(frame)                     [0] the road
                                                                             ↓
                                     UiWindowMux: w=7001 → this session     [6]
                                                                             ↓
-                                    ServerUiSession: nid=3 → NetworkIds.find
+                                    ServerUiSession: nid=3 → the element
                                       → runs YOUR lambda                   [7]
                                                                             ↓
                                     model.setRunning(true)
@@ -1082,51 +738,38 @@ CgNetworkChannel.sendToServer(frame)                     [0] the road
     ◄══════════════════════════════ all the way back down and up ═══════════
 ```
 
-**Note what never happened:** no pixel, no colour, no layout crossed. The client drew a tree it did
-not build, from widget classes it already had.
+No pixel, colour or layout crossed: the client drew a tree it did not build, from widget classes it already had.
 
 ## 22. Who ticks what, and on which thread
 
 | Thing | Called by | Thread | If you forget |
 |---|---|---|---|
-| `channel.setInboundHandler` | once, at init | — | Frames arrive and go nowhere |
+| `channel.setInboundHandler` | once, at init | — | frames arrive and go nowhere |
 | `CgFrameMultiplexer.onFrameReceived` | the channel adapter | **Netty** | — (it only enqueues) |
-| `CgProtocolConnection.tick()` | the loader, per tick | server / client thread | **Silence.** Nothing arrives, nothing sends, nothing times out |
-| `CgProtocolConnection.onTick` hooks | `tick()`, after the drain | server / client thread | Whatever registered one stops running. `ServerWindows` is one |
-| `ServerUiSession.tick()` | **`ServerWindows`**, per tick | server thread | Session stays live, answers calls, **never sends another state update** |
-| `ClientUiSession.tick()` | nobody needs to | client thread | Nothing — it's a genuine no-op while riding a connection |
+| `CgProtocolConnection.tick()` | the loader, per tick | server / client thread | **silence**: nothing arrives, sends or times out |
+| `CgProtocolConnection.onTick` hooks | `tick()`, after the drain | server / client thread | what registered one stops; `ServerWindows` is one |
+| `ServerUiSession.tick()` | **`ServerWindows`**, per tick | server thread | the session answers calls and never sends another state update |
+| `ClientUiSession.tick()` | nobody | client thread | nothing: a no-op while riding a connection |
 
-> ⚠️ **The two session `tick()`s are not symmetric, and they read alike.** `ClientUiSession.tick()`
-> returns immediately when riding a connection — the connection already drained the mailbox for every
-> subsystem on it. But `ServerUiSession.tick()` **still flushes**, because it is the observer holding
-> that tick's dirty set and *nothing else knows the set exists*.
->
-> **You no longer call either.** `ServerWindows` ticks every window on a connection from that
-> connection's own `onTick` hook, which is most of the reason a mod stopped needing a tick handler at
-> all. Forgetting the server's used to be a live session that answered calls and silently never sent
-> another state update; it is now unforgettable.
-
-**The one rule underneath all of this:** everything above `onFrameReceived` runs on the thread that
-owns the tree. `Property` and `SignalBase` are single-threaded by documented contract, so touching an
-element from the network thread isn't a race to tune — it's a correctness bug.
+You call neither session's `tick()`: `ServerWindows` ticks every window from its connection's `onTick`. Everything
+above `onFrameReceived` runs on the thread that owns the tree.
 
 ## 23. Words people mix up
 
 | These look alike | …and are not |
 |---|---|
-| **Frame** / **Message** / **Envelope** | Transport chunk / one payload / the grammar wrapper. Three layers |
-| **Transport** / **Connection** | A pipe / a pipe with a router, an identity, and pending state on it |
-| **Connection** / **Session** | One phone line / one conversation on it. Several sessions share a connection |
-| **`CgProtocolConnection.tick()`** / **`Session.tick()`** | Moves bytes and dispatches / flushes this subsystem's own pending work |
-| **Request** / **Notification** | Somebody is waiting / nobody is. Decides how an unknown method is treated |
-| **Network id** / **CSS id** | A depth-first position the protocol addresses by / a string the cascade matches. **Unrelated** |
-| **`ClientUiSession`** / **`ClientUiSessions`** | One window / the owner that hands them out. **Mutually exclusive on one connection** |
-| **`ServerUiSession`** / **`ServerWindow`** | The protocol for one window / the thing you *write*. A window has a session; you rarely touch it |
-| **`ui/closeWindow`** / **`ui/close`** | Server→client, "this is finished" / client→server, "the user closed it". **Different directions, and the second is newer than the first by years** |
-| **hidden** / **closed** | Retained, detached, `ui/visibility false`, comes back / gone, session ended, `onClosed` fired |
-| **`window.key()`** / **`window.type()`** | *Which* window (dedup + geometry) / *what kind* (client behaviour lookup) |
-| **Stream error** / **Connection error** | Reset one stream, carry on / the peer isn't speaking the protocol |
-| **`ui/`** / **`fs.`** | Same idea, different separator. An inconsistency, not a rule |
+| **Frame** / **Message** / **Envelope** | transport chunk / one payload / the grammar wrapper |
+| **Transport** / **Connection** | a pipe / a pipe with a router, an identity and pending state |
+| **Connection** / **Session** | one line / one conversation on it |
+| **`CgProtocolConnection.tick()`** / **`Session.tick()`** | moves bytes and dispatches / flushes one subsystem's work |
+| **Request** / **Notification** | somebody waits / nobody does |
+| **Network id** / **CSS id** | an int the tree source owns and the protocol addresses / a string the cascade matches |
+| **`ClientUiSession`** / **`ClientUiSessions`** | one window / the owner that hands them out; exclusive on a connection |
+| **`ServerUiSession`** / **`ServerWindow`** | the protocol for one window / the thing you write |
+| **`ui/closeWindow`** / **`ui/close`** | server→client, "finished" / client→server, "the user closed it" |
+| **hidden** / **closed** | retained, `ui/visibility false`, comes back / gone, session ended, `onClosed` fired |
+| **`window.key()`** / **`window.type()`** | which window (dedup and geometry) / what kind (client behaviour) |
+| **Stream error** / **Connection error** | reset one stream / the peer is not speaking the protocol |
 
 ## 24. Cheat sheet
 
@@ -1177,16 +820,14 @@ public final class MyPanel extends UINode implements Networked<MyModel> {
     @Override public String title(MyModel m) { return "My panel"; }
     @Override public String key(MyModel m)   { return "mymod:panel"; } // dedup + remembered geometry
 
-    @Override public void bound()                { /* widget listeners */ }  // CLIENT, every bind
+    @Override public void bindWidgets()          { /* widget listeners */ }  // CLIENT, every bind
     @Override public void client(ClientScope io) { /* onCall/onNotify  */ }  // CLIENT, once
     @Override public void closed(String why)     { }   // both sides: SERVER/CLIENT/NOT_VALID/CONNECTION_LOST
 }
 
 // ── Receive a UI ──────────────────────────────────────────────────────────
-// NOTHING. The open names the panel class on the wire; the engine initialises
-// it (guarded: it must be a Networked) and runs the client half. A window whose
-// binding fails still renders and reports its events -- only the local extras
-// go quiet, loudly, in the log.
+// Nothing. The open names the panel class; the engine initialises it (it must be a Networked) and runs the client
+// half. A window whose binding fails still renders and reports its events; only the local extras go quiet, logged.
 
 // once per client, not per mod — the desktop's DesktopWindowMount does this on every host:
 ClientWindows.of(c).setMount(myWindowMount);
@@ -1196,14 +837,12 @@ ClientWindows.of(c).setMount(myWindowMount);
 
 | | |
 |---|---|
-| `com.crystalgui.app.machine` | All of this, runnable. **Start here** — and `docs/CGUI_BUILDING_UIS.md` is its written half |
-| `docs/CGUI_SERVER_AND_SERIALIZATION.md` | The same ground as a reference: codecs, hashing, the headless contract |
-| `core/src/headlessTest/` | A server's classpath: CrystalGraphics core, no GL context. If it runs here, it runs on a server |
-| `com.crystalgui.gauntlet.ConnectionTest` | **The whole stack against a real connection**, as a checklist — the session handshake, tree and state deltas, events, calls, fan-out, and the workspace. Topology is a parameter: single player, a real socket, or two clients with roles, where a check that means nothing in the topology you ran is reported SKIPPED rather than silently passed. It was six probe classes, three of which existed mainly to refuse to run in the wrong one |
-| `plan/net-window-host.md` | Why the layer above the sessions exists: the audit that produced it, and the seventeen findings |
-| `./gradlew :runtime:mc:1710:serverSmoke` | Boots a dedicated server, asserts the stack came up, stops. ~48s |
-
----
+| `com.crystalgui.app.machine` | all of this, runnable (`./gradlew :core:runExample` runs `MachineDemo` on the headless classpath); `CGUI_BUILDING_UIS.md` is its written half |
+| `CGUI_SERVER_AND_SERIALIZATION.md` | the same ground as a reference |
+| `core/src/headlessTest/` | a server's classpath: if it runs here, it runs on a server |
+| `com.crystalgui.gauntlet.ConnectionTest` | the whole stack against a real connection: handshake, deltas, events, calls, fan-out, the workspace. Topology is a parameter; a check meaningless in it is reported SKIPPED |
+| `plan/net-window-host.md` | why the layer above the sessions exists |
+| `./gradlew :runtime:mc:1710:serverSmoke` | boots a dedicated server, asserts the stack came up, stops |
 
 ## Appendix — the constants, in one place
 
@@ -1221,4 +860,4 @@ ClientWindows.of(c).setMount(myWindowMount);
 | 1.7.10 and legacy channel name | `crystalgraphics` (≤20 chars, hard limit); modern `crystalgraphics:wire` |
 | Frame ceilings | 32,766 / 2,097,050 (1.7.10) · 32,767 / 1,048,576 (1.20.x) |
 | Protocol errors | `protocol/methodNotFound` · `handlerFailed` · `timeout` · `cancelled` |
-| UI window-id key | `w`, in the payload — never the envelope |
+| UI window-id key | `w`, in the payload, never the envelope |

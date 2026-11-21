@@ -3,21 +3,11 @@
  * @kind   dark
  * @author crystalgui
  *
- * VS Code's Light+ values — the scheme crystal-light suggests, and the half of light mode a UI theme
- * cannot supply: a document's ink and paper belong here. The SECOND, independently-selectable
- * axis (plan/style-overhaul.md §3.6): a scheme is a variable table over the editor's already-tokenized
- * rules, exactly as a theme is over the chrome's. The rules themselves stay in default.css — the
- * widget publishes its ranges whether or not anything styles them, and a themeless editor that
- * silently rendered plain text would read as the tokenizer failing, not as an absent scheme; the
- * var() fallbacks there ARE this scheme's values, so an editor without a scheme looks identical.
- *
- * Scope, machine-enforced (StyleGovernanceTest): a scheme defines ONLY --editor-*, --syntax-*,
- * --find-match-* and --search-excluded-* tokens. Everything else is the UI theme's business —
- * that split is what makes Crystal Dark + a different scheme a legal pair, as in IntelliJ.
+ * VS Code's Light+: a document's ink and paper on a light theme.
+ * An editor scheme: the second, independent axis to the UI theme.
  */
 
 theme {
-    /* ── The editor's surfaces ── */
     --editor-bg: #FFFFFF;
     --editor-fg: #1F1F22;
     --editor-caret: #0057B8;
@@ -31,7 +21,6 @@ theme {
     --editor-whitespace: #D0D0D6;
     --editor-ruler: #E4E4E8;
 
-    /* ── Folding ── */
     --editor-fold: #9A9AA0;
     --editor-fold-active: #3B3C41;
     --editor-fold-placeholder-bg: #E8EDF5;
@@ -39,35 +28,25 @@ theme {
     --editor-fold-placeholder-hover-bg: #D8E2F0;
     --editor-fold-placeholder-hover-fg: #1F1F22;
 
-    /* ── The zoom indicator ── */
     --editor-zoom-bg: #EDEFF3;
     --editor-zoom-fg: #3B3C41;
     --editor-zoom-link: #1B72C4;
     --editor-zoom-link-pressed: #12508C;
 
-    /* ── Find & replace, in the document ── */
     --find-match-bg: #F5D9A0;
     --find-match-fg: #1F1F22;
     --search-excluded-fg: #8C8D93;
 
-    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
-     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground. */
     --editor-occurrence-bg: #E4E9EE;
 
-    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
-     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
     --editor-selection-occurrence-bg: #EDF1F5;
 
-    /* ── Syntax — the six general names every tokenizer falls back to ── */
     --syntax-keyword: #0000FF;
     --syntax-keyword-control: #AF00DB;
     --syntax-keyword-operator: #0000FF;
     --syntax-type: #267F99;
     --syntax-type-parameter: #267F99;
 
-    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
-     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
-     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
     --syntax-type-interface: #267F99;
     --syntax-type-enum: #267F99;
     --syntax-type-enum-style: normal;
@@ -79,8 +58,6 @@ theme {
     --syntax-function-method: #795E26;
     --syntax-function-call: #795E26;
     --syntax-function-static: #795E26;
-    /* VS Code does not slant a static call; stated rather than inherited, per the rule that a
-     * scheme defines every key the sheet reads. */
     --syntax-function-static-style: normal;
     --syntax-string: #A31515;
     --syntax-string-escape: #EE0000;
@@ -91,13 +68,9 @@ theme {
     --syntax-constant-builtin: #0000FF;
     --syntax-comment: #008000;
     --syntax-comment-doc: #008000;
-    /* DOC COMMENTS, from VS Code Light+ for the reason Dark+ takes its own: this is VS Code's palette
-     * rather than IntelliJ's. Tag #0000FF is Light+'s `storage`, the name after it #001080 is its
-     * `variable`, and #800000 is what Light+ paints an HTML tag. */
     --syntax-doc-tag: #0000FF;
     --syntax-doc-value: #001080;
     --syntax-doc-markup: #800000;
-    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). Light+’s own answer, matching Dark+: colour alone, no face. */
     --syntax-doc-tag-style: normal;
     --syntax-doc-tag-weight: normal;
     --syntax-doc-value-style: normal;
@@ -117,15 +90,10 @@ theme {
     --syntax-label: #AF00DB;
     --syntax-markup: #000000;
 
-    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
     --syntax-module: #1F1F22;
     --syntax-error: #E51400;
-    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
-     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
     --syntax-unresolved: #E51400;
     --syntax-deprecated: #808080;
-    /* Dead code — nothing reads it. LIGHTER than the body text here, where dark schemes go darker: on
-     * white, receding means moving toward the background in the other direction. @see dark-plus.css */
     --syntax-unnecessary: #A6A6A6;
     --syntax-operator: #000000;
     --syntax-punctuation: #383838;

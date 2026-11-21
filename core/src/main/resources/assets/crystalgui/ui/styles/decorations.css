@@ -1,25 +1,7 @@
-/*
- * File decoration palette — the colours a FileDecorationProvider's styleClass resolves to.
- *
- * A theme fragment, like filetypes.css and for the same reason: default.css is the user-agent sheet and
- * carries geometry only. Add it with
- * styleEngine.addStylesheet(StyleSheetRegistry.of("crystalgui:decorations")).
- *
- * WHY THESE ARE CLASSES AND NOT ARGB INTS. VS Code's IDecorationData names a theme colour id; a
- * FileDecoration names a CSS class. Same intent, and it is the rule the rest of this engine already
- * follows -- graph.css owns the port palette and NodePort reads its wire colour back out of the cascade,
- * rather than Java holding colours no theme can reach.
- *
- * `color` is inherited, so setting it on the ROW reaches the label and any currentColor mark inside it.
- * It does NOT reach the file-type icon: the shipped IntelliJ icons carry their own fills. That is
- * deliberate and matches every editor -- a modified Java file keeps its Java icon and turns its NAME
- * orange, rather than repainting the glyph.
- *
- * Colours follow VS Code's own git decoration set, because they are the ones people already read without
- * being told.
+/* decorations.css — the colours a FileDecorationProvider's styleClass resolves to.
+ * A theme fragment, not geometry: add StyleSheetRegistry.of("crystalgui:decorations").
  */
 
-/* Version control ---------------------------------------------------------------------------------- */
 .decoration-modified   { color: var(--decoration-modified, #E2C08D); }
 .decoration-added      { color: var(--decoration-added, #81B88B); }
 .decoration-deleted    { color: var(--decoration-deleted, #C74E39); text-decoration-line: line-through; }
@@ -27,34 +9,19 @@
 .decoration-untracked  { color: var(--decoration-untracked, #73C991); }
 .decoration-conflict   { color: var(--decoration-conflict, #E4676B); }
 
-/* Ignored is the one that reads as ABSENCE rather than as a colour: it is dimmed, not tinted. A colour
- * would make an ignored file more prominent than a tracked one, which is backwards. */
+/* Dimmed, not tinted: a colour would make an ignored file stand out more than a tracked one. */
 .decoration-ignored    { color: var(--decoration-ignored, #6B6B6B); }
 
-/* Diagnostics -------------------------------------------------------------------------------------- */
 .decoration-error      { color: var(--decoration-error, #F14C4C); }
 .decoration-warning    { color: var(--decoration-warning, #CCA700); }
 .decoration-info       { color: var(--decoration-info, #3794FF); }
 
-/* Editor state ------------------------------------------------------------------------------------- */
 .decoration-dirty      { color: var(--decoration-dirty, #E2C08D); }
 .decoration-readonly   { color: var(--decoration-readonly, #8A9199); }
 
-/* A live script. Green because that is what a run control is everywhere, and it has to read as a STATE
- * rather than as a problem -- the diagnostic colours above are the ones that mean something is wrong.
- *
- * Deliberately close to `decoration-added` without being it: both say "this is fine and it is happening",
- * and a reader who has learnt one has already learnt the other. RunDecorations states only this colour
- * and never a letter, so a file that is edited AND running keeps its `M` and shows it in this colour --
- * which is the case worth seeing, since the text on disk is then not what is running. */
-/* ONE TOKEN FOR THE RUNNING COLOUR, read by the tree row here and by the activity bar's dot in
- * `ua/workbench.css`. They were two different greens for one concept, chosen weeks apart, which is the
- * arrangement where a theme changes one of them and nobody notices the other. */
+/* One token, also read by the activity bar's dot in ua/workbench.css. */
 .decoration-running    { color: var(--run-live-fg, #5FAD65); }
 
-/* The badge inherits the row's decoration colour through `color`, so it needs no rule per state --
- * only the shared shrink. Stated here rather than in default.css because a theme that wants no badges
- * at all should be able to say so without editing the user-agent sheet. */
 .__project-row__ .__badge__ {
     font-size: 22px;
 }

@@ -63,9 +63,7 @@ enumerate what any extension did. Anything registered *on the workbench* needs n
 the workbench does. What needs one is anything **process-wide**: a global command, a static registry
 entry. That is exactly the class of thing that otherwise gets left behind.
 
-**One class per feature.** Put `activate` on the thing itself rather than writing a `MyFeatureExtension`
-beside it. The two would share one lifetime and one id, and the second file's only real content would be
-the first one's name.
+**One class per feature.** Put `activate` on the thing itself, not on a `MyFeatureExtension` beside it.
 
 Several registrations? Group them:
 
@@ -197,12 +195,8 @@ Any tree already answers `TreeViewCommands` — Expand Selected (Mod+=), Expand 
 
 ### A panel that works the second time
 
-Four of the things a panel used to have to do by hand are the engine's now. What is left is genuinely
-yours.
-
-**Declare what you follow; the engine decides when.** A subscription made in a constructor used to be
-gone the first time the dock took the panel out — hiding it, rebuilding a layout, replacing what is
-behind a tab — and nothing remade it.
+**Declare what you follow; the engine decides when.** The dock takes a panel out and puts it back (hiding
+it, rebuilding a layout), so a subscription held by hand dies the first time.
 
 ```java
 public MyPanel(WorkbenchContext workbench) {
@@ -250,17 +244,12 @@ needs `width: 100%; flex-basis: 0; flex-grow: 1` or it lays out at zero height �
 panel is the right size, and it reads as "the panel is empty". Assert on the box, not the model: a test
 counting `visibleRows()` reports green against a blank panel.
 
-**What is still a design decision.** One panel for the workbench, re-pointed as the tab changes, or one
-per document — the Hierarchy panel takes the first, and says what to do rather than disappearing when
-the tab in front is not its kind. A blank panel reads as broken, so a panel that can be vacant
-declares its note with `EmptyState.of(this, heading, lines...)` and calls `setVacant` on it; the
-container places the note and swaps it in. See `docs/CGUI_WIDGETS.md` §6b. A tool window that comes and goes moves everything beside it, and "the panel I
-docked has gone" is indistinguishable from a bug.
+**A panel that can be vacant says so** rather than going blank or disappearing: declare its note with
+`EmptyState.of(this, heading, lines...)` and call `setVacant`; the container swaps it in (`CGUI_WIDGETS.md` §6b).
 
 `HierarchyToolWindow` + `HierarchyPanel` (`app/uibuilder/panel/`) is the worked example, and
-`HierarchyPanelFollowsTheOpenDocumentTest` drives it through a real `Workbench` over a transport — which
-is how to test one. A directly-constructed panel passes while the running one is empty: what a panel
-can *build* is never the question; what it is *told*, and whether that is still current, is.
+`HierarchyPanelFollowsTheOpenDocumentTest` is how to test one: through a real `Workbench` over a transport. A
+directly constructed panel passes while the running one is empty.
 
 ---
 
@@ -296,10 +285,8 @@ writes with the etag, a change on the server reloads a clean document and marks 
 list survives a quit, and the tab says which file it is — **none of which you write**, because all of it
 is the document layer's.
 
-> `DocumentEditor.view()` is a **getter**, not a factory. Build the element once, in the constructor,
-> and return the same one — it reads like a getter and returning `new MyView()` hands a different
-> element to the dock, to the editor class and to the Inspector. `EditorService.Tab` asks once, so the
-> engine is consistent either way; anything holding your editor directly is not.
+> `DocumentEditor.view()` is a **getter**, not a factory: build the element once, in the constructor, and return
+> the same one every time.
 
 Matching files:
 
@@ -343,10 +330,6 @@ public Disposable activate(WorkbenchContext workbench) {
 }
 ```
 
-The two are separate because they answer different questions: most openable things cannot be conjured
-from nothing — an image, a decompiled class — and some creatable things are not documents at all, such
-as a folder.
-
 **Where it is offered** is yours to decide, and it is asked per click rather than once at
 registration:
 
@@ -356,10 +339,8 @@ registration:
 .where(at -> at.directory().name().equals("shaders"))
 ```
 
-A kind that says nothing is offered everywhere, which is right for a plain file and wrong for a Java
-class. `NewDocumentContext` carries the destination directory and the source root containing it — no
-workbench, no tree and no selection — so a kind declared in a jar that has never heard of the explorer
-can still say where it belongs.
+A kind that says nothing is offered everywhere. `NewDocumentContext` carries the destination directory and the
+source root containing it, and nothing else.
 
 **Asking a second question.** Declare variants and the engine gives you IntelliJ's name-and-kind
 prompt — a name field, and a list to pick from — with no widget of your own:
@@ -378,11 +359,8 @@ and one that makes a `directory()` takes a name and no template at all.
 package the file lands in — `typeName()` is the name without its extension, and `inDefaultPackage()`
 is how a Java template knows to omit its `package` line rather than write an empty one.
 
-> **Ordering.** Rows sort by group, then by order. Orders below `NewDocumentKind.RESERVED` are the
-> engine's — the plain file, the folder, the document types CrystalGUI ships — and a contributor's
-> default order *is* that value, so anything you register lands after all of them without having to
-> know the numbers. Nothing enforces it: a product assembling its own workbench may well want its own
-> document at the top, and a thrown exception there would be a rule about taste.
+> **Ordering.** Rows sort by group, then by order. Orders below `NewDocumentKind.RESERVED` are the engine's, and
+> a contributor's default order is that value, so your rows land after the built-ins. Nothing enforces it.
 
 ## 5. Commands, menus and shortcuts
 
@@ -421,11 +399,8 @@ alive and draws rows for something that is gone.
 Menu ids you will want: `MenuId.MAIN_FILE`, `MAIN_EDIT`, `MAIN_VIEW`, `MAIN_WINDOW`, `MAIN_HELP`,
 `EXPLORER_CONTEXT`, `EDITOR_CONTEXT`, `EDITOR_TAB_CONTEXT`, `PALETTE`.
 
-> **Resolve your subject from the context, never from "whatever is active".** Four routes can reach the
-> same command and each arrives with a different `source` element — a menu bar resolves against what is
-> *focused*, a context menu against what was *clicked*. Asking the workbench for the active thing is
-> right for three of them and silently wrong for the fourth, which is the one the user reached for
-> precisely *because* it is not in front.
+> **Resolve your subject from the context, never from "whatever is active".** A menu bar resolves against what
+> is focused, a context menu against what was clicked; the active thing is wrong for the second.
 
 A panel's own show/hide command needs none of this — `ToolWindowKind.toggle(id)` writes it.
 
@@ -448,9 +423,7 @@ StatusBarEntryAccessor slot = workbench.statusBar()
 The accessor is the handle: `slot.update(entry.withText("43 recipes"))` to change it,
 `slot.dispose()` to take it away. Higher priority sits further from the edge.
 
-**Withdraw an entry with nothing to say** rather than showing a permanent zero — the Problems count does,
-because a clean workspace is the normal state and a readout that never changes is one you learn to stop
-seeing.
+**Withdraw an entry with nothing to say** rather than showing a permanent zero, as the Problems count does.
 
 ---
 
@@ -476,8 +449,7 @@ return () -> workbench.decorations().removeProvider(provider);
 Call `workbench.decorations().invalidate()` when your answers change. The colour comes from the style
 class, in `decorations.css` — a decoration names a class, never a colour, so a theme can restyle it.
 
-A folder gets the **colour** and not the letter: a folder showing `M` claims the folder itself is
-modified, and the split is the entire information content of the bubble.
+A folder gets the **colour** and not the letter.
 
 ---
 
@@ -525,12 +497,10 @@ public final class MyFeature implements WorkbenchExtension, SessionSlice {
 }
 ```
 
-The key is your extension id rather than a name of its own, so an application that stops enabling your
-feature leaves its corner untouched rather than dropping it.
+The key is your extension id, so an application that stops enabling your feature leaves its corner untouched.
 
-**What belongs here is arrangement, not content.** A filter, a sort order, which tab was selected. Not
-the user's data — that is a file — and not anything another person would see, because a session is per
-client. Writing view state into a shared file means one person's camera position becomes everybody's.
+**What belongs here is arrangement, not content**: a filter, a sort order, the selected tab. The user's data is a
+file, and a session is per client, so view state never goes in a shared file.
 
 ---
 
@@ -609,10 +579,9 @@ For anything on disk that is yours:
 Path cache = workbench.cacheDirectory("mymod");   // per host, yours alone
 ```
 
-That is `crystalgui/cache/apps/<application>/mymod/`, and **it can be deleted at any moment**. Put
-compiled output, an index or a thumbnail there; anything a user would miss is not a cache. It is null on
-a host with nowhere to write, which is an ordinary answer — an extension that caches nowhere still
-works, and a test is exactly that host.
+That is `crystalgui/cache/apps/<application>/mymod/`, and **it can be deleted at any moment**: compiled output, an
+index, a thumbnail, never what a user would miss. It is null on a host with nowhere to write (a test), and an
+extension must still work.
 
 Ask for it while your extension is being activated, not later: extensions activate while the workbench
 is being built, and that is when the root is set.
@@ -670,8 +639,7 @@ src/main/resources/META-INF/services/com.crystalgui.desktop.app.ApplicationKinds
 `applications.installPrimary(KIND)` also makes it what the desktop's "open the application" key launches. CrystalGUI
 claims that for Crystal Editor; the first claim wins and a second is logged.
 
-The manifest is **data**: `opens` is read by "open with" and by a launcher without anything being
-launched, so it cannot be derived by building an application and asking what it registered.
+The manifest is **data**: "open with" and a launcher read `opens` without launching anything.
 
 ### A starting window, for an application that takes time to build
 

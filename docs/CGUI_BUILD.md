@@ -210,9 +210,8 @@ below.
 
 ### Legacy Forge servers (1.8.9–1.12.2): `server_smoke.py`, not Gradle
 
-**Legacy nodes have no `serverSmoke` task**: `./gradlew :runtime:mc:legacy:forge:1.12.2:serverSmoke` fails with
-*task 'serverSmoke' not found*, which reads as "legacy servers cannot run". They can. The legacy check is a script
-that installs real Forge servers and runs the **shipped** jars on them, playing `serverSmoke`'s gauntlet tests:
+**Legacy nodes have no `serverSmoke` task**, but their servers run: a script installs real Forge servers and runs
+the **shipped** jars on them, playing `serverSmoke`'s gauntlet tests:
 
 ```bash
 ./gradlew singleJar languageJar :CrystalGraphics:singleJar      # 1. the four jars it copies into mods/ -- every time
@@ -259,9 +258,8 @@ report fails the run; a capture alone proves nothing (a frame can be the previou
 ### A failure on an installed client is fixed in a dev run
 
 **When a Prism client crashes or misbehaves, reproduce it in that node's dev run and iterate there** —
-never by rebuilding and redeploying through `prodSmoke`, which costs about ten minutes a cycle where a
-dev client costs two. `prodSmoke` then confirms the fix in the shipped jar once, at the end. It stays the
-only witness for what a dev run cannot see: relocation, remapping, downgrading and the merged descriptors.
+never through `prodSmoke`. `prodSmoke` then confirms the fix in the shipped jar once, at the end: it is the
+only witness for relocation, remapping, downgrading and the merged descriptors.
 
 ```bash
 # the same gauntlet run prodSmoke arms, on the dev client; every -Dcrystalgui.* / -Dcrystalgraphics.* is forwarded
@@ -288,9 +286,8 @@ with no `-PcgTargets` runs the sweep, `prodSmokeSweep` in the root build: 1.7.10
 1.13.2, 1.14.4, 1.15.2, 1.16.5, 1.17.1, 1.18.2, and the first and last of each major with many minors —
 1.19 and 1.19.4, 1.20.1 and 1.20.6, 1.21.4 and 1.21.11, 26.1 and 26.2 — with every 1.20, 1.21 and 26 one
 on all three loaders (NeoForge's first is 1.20.2, and Forge's first 26.x is 26.1.1). Thirty clients, four
-at a time, oldest first — 1.7.10, 1.8.9, 1.10.2 and 1.12.2 lead and the three 26.2s close — about twenty
-minutes with the language probes. Every instance is over a hundred clients and an hour, and
-eight at a time took the workstation down; `-PcgTargets=all` is there for the rare release that needs it.
+at a time, oldest first: about twenty minutes. `-PcgTargets=all` (over a hundred clients) is for the rare
+release that needs it.
 A new version is checked by its own label (`-PcgTargets=<label>`), and a line that gains a minor keeps
 its first and last in the sweep.
 

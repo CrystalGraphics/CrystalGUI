@@ -1,77 +1,18 @@
 /* ua/editor.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
- *
- * The scroll substrate every list shares (scroller/scrollerview/listview/treeview/tableview), then the text editor: viewport, caret, selection, gutter, syntax highlight names, guides, zoom, folding.
- *
- * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
- * one sheet the engine loads — rule order across files is as load-bearing as within one
- * (:disabled after :hover ties), so files split at section boundaries and never reorder.
- * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
- * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+ * Scrollers, the text editor and its gutter, the syntax vocabulary, the zoom indicator, tables, the completion popup, Quick Documentation and difference decorations.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
+ */
 
-/* ── Scroller / ScrollerView ────────────────────────────────────────────────────────────────────
- * The bar's ROOT is the track — no separate track element. The thumb's length and position come from
- * Java at IMPORTANT origin (they're runtime state), so a theme only sets thickness and colours here.
- *
- * The bars are absolutely positioned by ScrollerView so they overlay content rather than taking a
- * slice of the layout; these rules pin them to the trailing edges. */
-
-/* Wheel and programmatic scrolls ease instead of jumping. CSS's own default is `auto` (instant), but
- * a jump-per-notch reads as broken in a UI at this scale — this is the engine making a nicer default,
- * and any consumer can put it back with `scroll-behavior: auto`. Dragging a thumb stays instant
- * regardless; see ScrollerView. `scroll-duration` is ours, not CSS — browsers hard-code their curve. */
-/* `listview`, `treeview` and `tableview` are all named alongside `scrollerview` below, and it is not
- * optional — nor is it enough to name the base class.
- *
- * A widget's cascade identity is its TAG, never its Java supertype. ListView extends ScrollerView but
- * reports `listview`; TreeView extends ListView and reports `treeview`; TableView likewise. Each new
- * subclass is a NEW tag that matches none of the rules its superclass relies on — which is why naming
- * `listview` alone was not enough, and the tree and table shipped with invisible scrollbars until they
- * were named here too.
- *
- * Without these the bars exist as elements, get no width from anywhere, and simply do not draw — a
- * 100,000-row list that scrolls with no thumb to show where you are. The same trap made `Dropdown` lay
- * out at zero height until this file named it. */
-/* BY CLASS, for the reason the bars below already record: this was one tag per ScrollerView subclass,
- * and a subclass answers its OWN tag -- so `configuratorpanel` matched none of them and the inspector
- * was the one panel in the workbench that jumped rather than eased. Every subclass carries
- * `ScrollerView.SCROLL_VIEW_CLASS`, so nothing has to be added here again. */
 .__scroll-view__ {
     scroll-behavior: smooth;
     scroll-duration: 0.18;
 }
 
-/* The multi-line editor (6.1.6). Geometry only, plus the two colours without which the widget cannot be
- * used at all: a caret and a selection band that are invisible are not "unthemed", they are broken. A
- * theme overrides both, the same way it overrides the scroller track above.
- *
- * The caret and the bands are ordinary absolutely-positioned children in document coordinates, so they
- * scroll with the text for free -- see TextEditor#layOutCaretAndSelection. */
-/* ── The code face ───────────────────────────────────────────────────────────────────────────────
- *
- * MONOSPACE HERE AND NOWHERE ELSE. It was briefly the default for the whole UI, which was an overreach:
- * the argument for mono is that anything laying code out by COUNTING CHARACTERS is exact in it and only
- * approximate otherwise -- the Quick Documentation popup's hanging indent under `implements`, indent
- * guides, a column ruler -- and that argument says nothing about a menu bar or a tab strip, which simply
- * read worse in it.
- *
- * Both references split it the same way: IntelliJ uses Inter for the entire IDE and JetBrains Mono only
- * in the editor, and VS Code uses the system UI font with a mono face in the editor. So this names the
- * surfaces that draw CODE -- the editor, and anything carrying `.__syntax__`, which is the class that
- * already means exactly that -- and every other widget inherits the proportional default.
- *
- * A list, in preference order: the first entry that loads wins and the rest supply glyphs it lacks, so
- * the sans behind it covers anything JetBrains Mono has no glyph for. */
 texteditor,
 .__syntax__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
                  "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
 
-    /* AND THE DOCUMENT'S INK, which only `texteditor` used to declare — so a code surface OUTSIDE the
-     * editor inherited whatever chrome it was promoted into. Most of a line of code is UNCAPTURED:
-     * parentheses, commas, semicolons, `=`, the angle brackets of a generic. Nothing colours them, by
-     * design, so they are the surface's own foreground — and in a documentation popup, which is in the
-     * TOP LAYER and therefore not inside the editor at all, that foreground came from the chrome. The
-     * declaration read in two palettes at once, with the punctuation the wrong one. */
     color: var(--editor-fg, #FFFFFF);
 }
 
@@ -79,63 +20,24 @@ texteditor {
     overflow: auto;
     line-height: 1.4;
 
-    /* Text must not sit flush against the editor's own edge. At uiScale 2 a 2px border is two physical
-     * pixels, and a Minecraft-font `l` is about that wide of actual ink -- so a flush first glyph is
-     * painted over by the border and the line reads as ".ine 0" instead of "line 0". This is geometry,
-     * not taste, which is why it is in the user-agent sheet; TextEditor derives its text origin, its
-     * caret and its hit testing from exactly this padding. */
     padding-left: 2px;
     padding-right: 6px;
 
-    /* THE DOCUMENT'S OWN SURFACE AND TEXT COLOUR, and the reason they are here at all: until the light
-     * theme was built, this widget declared NEITHER. Its text was the `color` property's initial value
-     * (white) inherited from nowhere in particular, and its background was whatever pane happened to sit
-     * behind it. Both are invisible mistakes in a dark UI and fatal in a light one -- white text on a
-     * white pane -- which is exactly the class of gap a second theme exists to find.
-     *
-     * The fallbacks reproduce that accident exactly (white text, no fill), so an unthemed editor is
-     * unchanged; the SCHEME supplies the real pair, because a document's ink and paper belong to the
-     * editor colour scheme rather than to the UI theme -- the same split IntelliJ draws. */
     color: var(--editor-fg, #FFFFFF);
     background: var(--editor-bg, #00000000);
 }
 
-/* A line must not wrap: the editor's whole windowing model is that row N sits at N * lineHeight, and a
- * wrapped line silently breaks that arithmetic rather than looking wrong. Soft wrap needs the
- * variable-height virtualisation deferred in 6.1.3. */
-/* justify-content centres on the MAIN axis, and the engine's default flex-direction is column -- so
- * this is what puts the text in the middle of its row rather than at the top of it. The caret and the
- * selection bands are centred on the same axis from the font's own ink height, so all three agree
- * however tall line-height is. */
-/* THE STACK, bottom to top: current line, selection, text, caret, scrollbars, gutter.
- *
- * These are load-bearing, not styling. Equal-z siblings paint in insertion order, and the scrollers are
- * created by ScrollerView's constructor while the lines are realised later -- so at equal z the text
- * painted OVER the horizontal bar, and the row straddling the bar's strip spilled across it. The bars
- * have to be above the text; the gutter has to be above the bars, so a long line scrolled sideways
- * passes behind the numbers rather than through them. */
+/* No wrap: the editor places row N at N times the line height. */
 texteditor .__line__ {
     white-space: nowrap;
     justify-content: center;
     z-index: 0;
-    /* At least the viewport, whatever its text: resolved by layout, so a resize rewrites no row. */
     min-width: 100%;
 }
 
-/* THE Z-INDICES ARE LOAD-BEARING, not decoration. Equal-z siblings paint in insertion order, and the
- * caret is created in the constructor while lines are realised later -- so without this the caret paints
- * UNDER every line and reads as a caret that lags a character behind whatever was just typed. Stacking it
- * explicitly is also what lets the bands sit behind the glyphs they highlight rather than over them. */
-/* The caret's WIDTH comes from the inheritable `caret-width` property on the editor, not from a width
- * here -- TextEditor sizes and positions the element from it so it can straddle the character boundary
- * rather than start at it. Colour and stacking remain a theme's business. */
+/* The z-indices are load-bearing: equal-z siblings paint in insertion order, and the caret is made before the lines. */
 texteditor {
     caret-width: 2px;
-    /* THE STACK ABOVE IS THE EDITOR'S OWN, and without a context of its own every one of those z-indices is
-     * ordered against the whole document instead. A positioned box that is not a stacking context lends its
-     * z-ordered descendants upward, so the gutter painted over the dock's drop overlay -- an editor's line
-     * numbers on top of the wash marking where a dragged tab would land -- and `__selection__` at -1 was one
-     * ancestor away from sliding under the panel behind it. Same reason `desktop .__windows__` isolates. */
     isolation: isolate;
 }
 
@@ -149,54 +51,16 @@ texteditor .__selection__ {
     z-index: -1;
 }
 
-/* The gutter. Scroll-exempt, so TextEditor positions its numbers by hand -- it has to hold still
- * horizontally while scrolling vertically, and a scroll offset here is a pose translate that cannot
- * apply on one axis only. z-index above the lines so a long line scrolled sideways passes behind the
- * numbers rather than through them. */
-/* THE GUTTER'S THREE METRICS LIVE HERE, and TextEditor reads them back off the laid-out box. They were
- * Java constants of the `max(6f, fontSize * 0.9f)` kind, which is precisely what this file exists to
- * prevent — a pixel value in a widget belongs in the user-agent sheet, where a theme can change it and
- * where the three can be compared side by side.
- *
- *   padding-left   the margin before the digits. The digits are right-aligned in a field sized to the
- *                  widest number the file can reach, so without this the number that fills the field
- *                  exactly (10 in a two-digit file) sits flush on the border.
- *   padding-right  the fold column: the clear space between the numbers and the code. This is what makes
- *                  the gutter read as a margin rather than as digits jammed against the text, and it is
- *                  where a fold arrow goes when there is one.
- *   margin-right   the gap between the gutter's painted box and the first character. Margin, not padding,
- *                  and the distinction is load-bearing: it is space OUTSIDE the background, which is the
- *                  only reason the level-0 indent guide can sit in it without the gutter painting over it.
- *
- * The line numbers are positioned with left: 0, and an absolute inset is padding-box relative — so
- * padding-left places them and must not be added again in Java.
- *
- * ALL THREE ARE `em`, AND THAT IS THE WHOLE POINT. The digits between them are measured text and grow
- * with zoom; a bare CSS length does not, so the gutter's proportions came apart from the code the more
- * the editor was zoomed. TextEditor used to paper over it by caching the font size it FIRST ever saw and
- * scaling these three by the ratio since — an em with no name, no way for a sheet to opt out of, and a
- * reference value that depended on when the editor happened to be constructed. They are 0.4/1.4/0.7 of
- * 20px, which is what they were before, and now they say so.
- *
- * The editor pushes its own font-size onto the gutter each frame (refreshGutterMetrics) because
- * font-size does NOT effectively inherit here — ua/core.css's `* { font-size: 10 }` is a candidate on
- * every element, and inheritance only applies where there is none at any origin. Without that push these
- * would resolve against 10 forever and the em would buy nothing. */
+/* TextEditor reads these three metrics back off the laid-out box. */
 texteditor .__gutter__ {
     z-index: 6;
     padding-left: 0.4em;
     padding-right: 1.4em;
     margin-right: 0.7em;
     background-color: var(--editor-gutter-bg, var(--panel-bg, #191A1C));
-    /* Clips its own numbers. The gutter stops above the horizontal scrollbar, but the numbers inside it
-     * are positioned by hand from the scroll offset, so without this the one at the boundary is drawn
-     * past the gutter's edge and over the bar. */
     overflow: hidden;
 }
 
-/* Right-aligned within a box TextEditor sizes to the digits and insets by the gutter's own margin, so
- * the widest number in the file stops short of the border instead of touching it. No padding here: the
- * geometry is the widget's, and a padding-right would eat into the margin it just reserved. */
 texteditor .__line-number__ {
     justify-content: center;
     align-items: flex-end;
@@ -204,44 +68,16 @@ texteditor .__line-number__ {
     white-space: nowrap;
 }
 
-/* Behind everything, including the selection bands: it marks a row, it does not compete with them. */
 texteditor .__current-line__ {
     background-color: var(--editor-current-line, #232830);
     z-index: -2;
 }
 
-/* THE TEXT VIEWPORT. Everything drawn in document coordinates lives in here — lines, caret, selection
- * bands, the current-line band, indent guides, whitespace markers and rulers — and this is what stops any
- * of them reaching the gutter or the scrollbars.
- *
- * overflow: hidden is the entire point of the element. Widening the editor's own padding does NOT work:
- * drawSubtree scissors to the PADDING box on purpose (real CSS overflow:hidden clips at the padding edge
- * too), so padding is inside the rect and growing it moves no clip. Scroll-exempt children are inside it
- * as well — popScissor runs after they are drawn — so the chrome cannot be excluded that way either. The
- * only way to clip the text and not the gutter is to give the text its own box.
- *
- * z-index 0: it holds the text, so it sits where the text used to. The gutter (6) and the bars (7) are
- * above it, and the current-line band and selection are below via their own negative z inside it. */
 texteditor .__text-viewport__ {
     overflow: hidden;
     z-index: 0;
 }
 
-/* THE SCROLL LAYERS — one per coordinate space, each moved by a single transform.
- *
- * A scroll container moves its children with one matrix and never lays out (UIElement.applyScrollOffset:
- * "the offset never reaches Taffy; it lives purely in the transform chain"). The text viewport is
- * scroll-exempt because it has to be a WINDOW that holds still, so its children lost that — and paid for
- * it by rewriting every row's and every decoration's left/top into the cascade on every frame the view
- * moved, which does reach Taffy. A layer takes the translate back: children are positioned in document
- * coordinates that do not change while scrolling, and the layer alone moves. See TextEditor#linesLayer.
- *
- * Fills its host so nothing inside is clipped by the layer itself — the viewport above still clips, which
- * is the point of it. z-index 0 puts the lines layer exactly where the lines used to sit, between the
- * current-line band (-2) below and the rulers (4) above; the decorations inside keep their own -1..1
- * order relative to each other, which is why splitting one parent into layers reorders nothing.
- *
- * No colour, no border, no padding: it is a coordinate space, not a box anyone can see. */
 texteditor .__scroll-layer__ {
     position: absolute;
     left: 0;
@@ -251,56 +87,16 @@ texteditor .__scroll-layer__ {
     z-index: 0;
 }
 
-/* Indent guides sit BEHIND the text but in front of the current-line band, so a guide still reads on the
- * row the caret is on. Deliberately dim: a guide the eye can follow when it looks for it and ignores when
- * it does not is the whole design brief, and one that competes with the code is worse than none.
- *
- * These start at indent level ONE. Level zero is the gutter's edge below, not a guide — see there. */
 texteditor .__indent-guide__ {
     background-color: var(--editor-indent-guide, #2F3540);
     z-index: -1;
 }
 
-/* THE MATCHING BRACKET PAIR, marked whenever the caret is on either side of one.
- *
- * This belongs in the user-agent sheet by the same rule as the caret and the selection band: the widget
- * PUBLISHES the ranges whether or not anything styles them, so with no rule the feature is fully working
- * and completely invisible — which is not "unthemed", it is broken. It was exactly that until now.
- *
- * A COLOUR on the glyph, not a background behind it. IntelliJ tints the brace itself, and the reason is
- * legibility rather than taste: a background has to fight the current-line band, which is drawn under the
- * very line a bracket match is most often looked at, and a subtle fill loses that fight completely. */
-/* ── The syntax vocabulary ───────────────────────────────────────────────────────────────────────
- *
- * `.__syntax__` rather than `texteditor text`, so this is a CAPABILITY a widget opts into rather than
- * something the editor owns. The capture names below are §10.1's vocabulary -- the one the grammar, the
- * semantic provider and every colour scheme already agree on -- and anything that wants code coloured
- * like code should get the same forty rules rather than a second copy that drifts.
- *
- * The second consumer is the Quick Documentation popup's signature line, which draws a declaration the
- * engine tokenized. Duplicating these selectors for it would have meant two lists to keep in step, and
- * the first divergence shows up as one word in the wrong colour -- which reads as a scheme bug. */
 .__syntax__::highlight(bracket) {
     color: var(--syntax-bracket, #4EC9A0);
     font-weight: var(--syntax-bracket-weight, normal);
 }
 
-/* ── Every other place this name appears ─────────────────────────────────────────────────────────
- *
- * The word under the caret, marked wherever else it occurs. Both references do it and it is the most
- * visible thing an editor without it is missing: "where else is this" gets answered by standing still
- * rather than by typing the name into a find box.
- *
- * A BACKGROUND AND NOT A COLOUR, unlike everything above it. The syntax rules say what a token IS, so
- * they own its colour; this says where the caret's word also appears, which is a different statement
- * and must not overwrite the first -- recolouring an occurrence would make a variable stop looking like
- * a variable for as long as the caret sat in one of them. IntelliJ and VS Code both use a ground for
- * exactly this reason.
- *
- * Deliberately fainter than a find match: a search is something you asked for, an occurrence is
- * something the caret happened to be standing in. TextEditor publishes them in that order so a find hit
- * wins the character where the two overlap. */
-/* An input method's run in progress, underlined as every editor shows it. */
 .__syntax__::highlight(ime-composition) {
     text-decoration-line: underline;
 }
@@ -309,77 +105,19 @@ texteditor .__indent-guide__ {
     background-color: var(--editor-occurrence-bg, #3A3D41);
 }
 
-/* SELECTION HIGHLIGHT, and a separate name on purpose. The rule above marks where the symbol the caret
- * is standing in also lives; this marks where the CHARACTERS you chose also appear, which is by
- * definition not a whole-word question -- selecting `ell` is a request about three letters. VS Code
- * keeps `wordHighlight` and `selectionHighlight` apart for the same reason, and fainter still, because
- * the selection band is already saying where the thing you picked is. */
 .__syntax__::highlight(selection-occurrence) {
     background-color: var(--editor-selection-occurrence-bg, #2E3236);
 }
 
-/* ── Dead weight, faded rather than underlined ───────────────────────────────────────────────────
- *
- * DiagnosticTag.UNNECESSARY, published from the diagnostic lane. A tag is not a severity: "this import is
- * never used" is not a lesser warning, it is a different kind of statement, and underlining it says
- * something is wrong about code whose only fault is that nobody reads it. Every reference implementation
- * fades instead, which is exactly what lets them report six kinds of unused thing without a file looking
- * broken.
- *
- * PUBLISHED AFTER the syntax tokens, so this wins the character rather than tinting it — see
- * TextEditor.addTagRanges. That makes unused code go flat, which is IntelliJ's rendering; VS Code lowers
- * the opacity and keeps the hue, which a highlight cannot express and which would need colour blending in
- * the paint path to imitate.
- *
- * Its sibling tag has NO rule here on purpose: `::highlight(deprecated)` is already written further down
- * and is fed by the SEMANTIC TOKEN path, which marks the reference itself rather than a diagnostic's
- * range and works whether or not the deprecation warning is switched on. The tag is still produced —
- * the Problems panel draws its own row from it — it simply does not need a second inline rule. */
 .__syntax__::highlight(unnecessary) {
     color: var(--syntax-unnecessary, #6A6A6A);
 }
 
-/* ── Syntax colours ──
- *
- * THE SAME TRAP THE BRACKET RULE ABOVE RECORDS, and it caught us a second time. A tokenizer publishes
- * its ranges whether or not anything styles them, so setting a language on an editor made it tokenize
- * correctly and look *identical* — every keyword, string and comment resolved, was handed to the
- * cascade, and rendered in the default colour. That is not "unthemed": with no rule here, choosing a
- * language does nothing observable at all, and the bug reads as the tokenizer failing.
- *
- * The names are what SyntaxTokenizer emits — tree-sitter capture names, the vocabulary shared by every
- * published highlights.scm. SyntaxToken.generalName() falls back from `function.builtin` to `function`,
- * so a specialisation with no rule of its own still colours as its general form.
- *
- * THAT FALLBACK IS WHY SIX RULES USED TO LOOK SUFFICIENT AND WERE NOT. It only fires for a name that HAS
- * a general form: `@operator`, `@attribute`, `@variable`, `@constant`, `@property` and `@tag` have none,
- * so the Java grammar's captures for them fell through to body text — indistinguishable from a capture
- * the grammar never produced, which is precisely the invisible half of this trap. Every name in the
- * vocabulary now has a rule, and StyleGovernanceTest fails the build if a shipped grammar introduces one
- * that does not.
- *
- * Every colour is var(--syntax-*, <Dark+ fallback>) so an editor with no scheme loaded still reads. */
-/* WEIGHT IS A CHANNEL, and until now no scheme used it. `font-weight` has been legal on a highlight
- * since HighlightStyle carved it in beside `font-style` -- the divergence from CSS Pseudo-Elements 4
- * that file argues at length -- and then nothing exercised it, which is the shape of a mechanism that
- * quietly stops working. Eclipse Dark bolds its keyword and bold-italicises its constants, Islands bolds
- * the matched brace, and every one of those was silently flattened. Only three captures are evidenced
- * across the reference schemes, so there are three keys and not one per capture. */
 .__syntax__::highlight(keyword) {
     color: var(--syntax-keyword, #569CD6);
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* THE WEIGHT TRAVELS WITH THE KEYWORD COLOUR, everywhere the colour goes. Eclipse Dark draws ten
- * captures in its keyword orange and bolds them as one gesture, and only two of the ten read the weight
- * — so `console`, `null`, `true`, a GLSL `uniform` and an HTML tag were orange and thin beside a bold
- * `var` on the same line. That is the defect `type.builtin` already records from the other direction
- * ("the whole line was bold except its return type, which reads as the one word having failed"); it was
- * fixed for the one capture that had been noticed rather than for the channel.
- *
- * Reading `--syntax-keyword-weight` rather than growing a key each is the same argument that file makes:
- * a scheme bolds "the keyword family" as one decision, not nine. Every other shipped scheme sets the key
- * to `normal`, so this is inert in all of them — the rule is "orange and bold, or neither". */
 .__syntax__::highlight(keyword.control) {
     color: var(--syntax-keyword-control, #C586C0);
     font-weight: var(--syntax-keyword-weight, normal);
@@ -390,13 +128,6 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* A PACKAGE PATH — `java.util` in an import, `com.crystalgui.language` in a package declaration.
- * tree-sitter's own name for it (nvim-treesitter and Helix both capture a Java package path as
- * @module), so the grammar and the engine keep speaking one vocabulary.
- *
- * Only an engine can produce these: the shipped grammar's rule for a scoped identifier is a
- * CAPITALISATION heuristic, which is blind to `com.crystalgui` by construction and fires wrongly on
- * `Foo.bar`. Body text by default, which is what IntelliJ's own Darcula-derived schemes show. */
 .__syntax__::highlight(module) {
     color: var(--syntax-module, #D4D4D4);
 }
@@ -405,24 +136,10 @@ texteditor .__indent-guide__ {
     color: var(--syntax-type, #4EC9A0);
 }
 
-/* A TYPE PARAMETER IS NOT A TYPE. `<E>` is a placeholder the declaration introduces, and every JetBrains
- * scheme gives it a colour of its own (TYPE_PARAMETER_NAME_ATTRIBUTES, teal). Folded into `type` it took
- * the default foreground in Islands, so the one name on the line that is NOT a real type read exactly
- * like the ones that are. Only an engine can emit it -- the two are spelled identically, so a grammar has
- * nothing to go on. */
 .__syntax__::highlight(type.parameter) {
     color: var(--syntax-type-parameter, #4EC9A0);
 }
 
-/* AN INTERFACE AND AN ENUM ARE TYPES A SCHEME MAY WANT TO SAY MORE ABOUT — DEFAULT_INTERFACE_NAME and
- * ENUM_NAME_ATTRIBUTES, which Eclipse Dark gives light cyan and italic pink and which Islands and Dark+
- * leave alike. Only an engine can tell them apart: `class Foo`, `interface Foo` and `enum Foo` are
- * spelled identically at every use site, so a parser sees three occurrences of one thing.
- *
- * BOTH DEFAULT TO THE TYPE COLOUR, which is what makes this free for a scheme with nothing to add: a
- * dotted capture publishes under its general form too, so a scheme that never names these still draws
- * every type alike. Placed AFTER `type` deliberately — the two rules tie on specificity (one
- * pseudo-element each) and source order is what decides, the same rule `:disabled` and `:hover` pay. */
 .__syntax__::highlight(type.interface) {
     color: var(--syntax-type-interface, #4EC9A0);
 }
@@ -432,22 +149,11 @@ texteditor .__indent-guide__ {
     font-style: var(--syntax-type-enum-style, normal);
 }
 
-/* A PRIMITIVE IS THE KEYWORD ATTRIBUTE, in both references — neither IntelliJ nor VS Code has a separate
- * colour for `int`, `double` and `void`; they are lexer keywords and are drawn as such. That is already
- * why every shipped scheme gives this the same colour as `keyword`, and it is why the WEIGHT is read from
- * `--syntax-keyword-weight` rather than from a key of its own: under Eclipse Dark the whole line was bold
- * except its return type, which reads as the one word having failed rather than as a deliberate palette. */
 .__syntax__::highlight(type.builtin) {
     color: var(--syntax-type-builtin, #569CD6);
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* A STORAGE QUALIFIER IS A KEYWORD, not a type, and the dotted fallback gets this one wrong.
- * GLSL's `uniform`, `layout`, `in`, `out`, `flat` and `noperspective` are captured as
- * @type.qualifier, which falls back to `type` — and this scheme leaves types at the default
- * foreground, so every qualifier in a shader went colourless. Reserved words read as keywords in
- * IntelliJ's GLSL and in every other editor; the fallback is only ever a guess, and this is where it
- * guesses wrong. */
 .__syntax__::highlight(type.qualifier) {
     color: var(--syntax-type-qualifier, #569CD6);
     font-weight: var(--syntax-keyword-weight, normal);
@@ -461,8 +167,6 @@ texteditor .__indent-guide__ {
     color: var(--syntax-function-builtin, #DCDCAA);
 }
 
-/* A function-like macro — `#define SATURATE(x)`. A DEFINITION, so it takes the declaration colour
- * rather than the call one; the fallback would give it the call's, since its stem is `function`. */
 .__syntax__::highlight(function.special) {
     color: var(--syntax-function-special, #DCDCAA);
 }
@@ -471,20 +175,11 @@ texteditor .__indent-guide__ {
     color: var(--syntax-function-method, #DCDCAA);
 }
 
-/* A STATIC call, which differs from an instance one by a SLANT and nothing else -- that is the whole of
- * DEFAULT_STATIC_METHOD against DEFAULT_INSTANCE_METHOD. The same channel a static field already uses to
- * say "this name does not belong to the object in front of you", and the only one left once colour is
- * carrying the declaration-versus-call distinction. A scheme with no opinion inherits the call colour
- * upright, which is what the plus schemes do. */
 .__syntax__::highlight(function.static) {
     color: var(--syntax-function-static, #DCDCAA);
     font-style: var(--syntax-function-static-style, normal);
 }
 
-/* A method CALL, distinct from a declaration — see Queries.splitMethodDeclarationsFromCalls for why the
- * vendored query is adjusted to tell them apart. Every reference scheme colours these differently, and
- * with one name a scheme has to pick a side: blue everywhere lights up every .get() on screen, plain
- * everywhere leaves the document with only keywords and strings tinted. */
 .__syntax__::highlight(function.call) {
     color: var(--syntax-function-call, #DCDCAA);
 }
@@ -510,11 +205,6 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* ITALIC, from the same mechanism the comment rules use. IntelliJ's exported scheme sets FONT_TYPE 2 on
- * both DEFAULT_CONSTANT and DEFAULT_STATIC_FIELD, and it is doing real work rather than decoration: a
- * grammar cannot tell a static field from an instance one, so slant is the only channel left that says
- * "this name does not belong to the object in front of you". A scheme that wants them upright says so
- * with --syntax-constant-style rather than by overriding the rule. */
 .__syntax__::highlight(constant) {
     color: var(--syntax-constant, #4FC1FF);
     font-style: var(--syntax-constant-style, normal);
@@ -526,10 +216,6 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* COMMENTS CARRY font-style, which every reference scheme sets and this engine refused until now.
- * `::highlight()` accepting it is a deliberate divergence from CSS Pseudo-Elements 4 — argued at
- * HighlightStyle.ALLOWED, and permissible here because a highlight already re-shapes, so the overlay
- * premise the spec's restriction rests on does not hold. */
 .__syntax__::highlight(comment) {
     color: var(--syntax-comment, #6A9955);
     font-style: var(--syntax-comment-style, italic);
@@ -540,32 +226,12 @@ texteditor .__indent-guide__ {
     font-style: var(--syntax-comment-style, italic);
 }
 
-/* INSIDE A DOC COMMENT — its tags, the names they name, and the HTML people write in them.
- *
- * IntelliJ's own four keys, which is where these come from: DEFAULT_DOC_COMMENT,
- * DEFAULT_DOC_COMMENT_TAG, DEFAULT_DOC_COMMENT_TAG_VALUE and DEFAULT_DOC_MARKUP. A grammar cannot
- * produce them — to a Java parser a doc comment is ONE token and everything in it is a convention
- * — so `DocComments` lexes it, and these are the names it emits.
- *
- * DOTTED, so a scheme that says nothing about them still colours a doc comment: `comment.doc.tag` falls
- * back to `comment.doc`, which falls back to `comment`. That is why they are not four unrelated names,
- * and it is what lets a scheme opt into as much of this as it wants. */
-
-/* THE FACE IS PART OF THE SCHEME'S DATA, not a decoration chosen here. IntelliJ's `FONT_TYPE` on
- * DEFAULT_DOC_COMMENT_TAG is 0/1/2/3 for plain/bold/italic/both, and it is 3 in `Eclipse_Dark_Theme.icls`
- * — which is not incidental: that scheme's tag colour (#8E8070) sits almost exactly on its comment
- * grey (#808080), so the FACE is what tells a tag from the prose around it and the colour alone leaves
- * them indistinguishable. A scheme that separates them by colour sets neither and inherits the comment's
- * own style. */
 .__syntax__::highlight(comment.doc.tag) {
     color: var(--syntax-doc-tag, #67A37C);
     font-style: var(--syntax-doc-tag-style, italic);
     font-weight: var(--syntax-doc-tag-weight, normal);
 }
 
-/* The name a tag names — the `x` in `@param x`. Deliberately NOT italic even where the comment is:
- * it is an identifier quoted inside prose, and every reference scheme sets it apart from the tag rather
- * than matching it. */
 .__syntax__::highlight(comment.doc.value) {
     color: var(--syntax-doc-value, #ABADB3);
     font-style: var(--syntax-doc-value-style, normal);
@@ -577,11 +243,6 @@ texteditor .__indent-guide__ {
     font-style: var(--syntax-comment-style, italic);
 }
 
-/* ── Identifiers ──
- *
- * A grammar cannot tell a field from a local by itself; `locals.scm` can, within a file, and semantic
- * tokens can across one. These are the names both produce, so the colours are in place before either
- * lands rather than arriving with them. */
 .__syntax__::highlight(variable) {
     color: var(--syntax-variable, #9CDCFE);
 }
@@ -595,36 +256,18 @@ texteditor .__indent-guide__ {
     color: var(--syntax-variable-parameter, #9CDCFE);
 }
 
-/* A LOCAL THAT IS WRITTEN TO AGAIN, and a parameter likewise -- DEFAULT_REASSIGNED_LOCAL_VARIABLE and
- * DEFAULT_REASSIGNED_PARAMETER, which differ from the ordinary kind by an UNDERLINE and nothing else.
- *
- * The colour deliberately stays the kind's: what changed is not what the name is, it is that its value
- * does not stay put, so the channel carrying it has to be one the kind is not already using. Only an
- * engine can emit these -- a grammar sees a name, and whether it is assigned again is a fact about the
- * whole method rather than about the token. */
 .__syntax__::highlight(variable.reassigned) {
     color: var(--syntax-variable, #9CDCFE);
     text-decoration-line: underline;
     text-decoration-color: var(--syntax-reassigned-underline, #84868C);
 }
 
-/* A SEPARATE TOKEN FROM THE LOCAL'S, because IntelliJ has two attributes here and a scheme uses the
- * difference: Eclipse Dark underlines a reassigned PARAMETER and writes the reassigned LOCAL as
- * baseAttributes="DEFAULT_LOCAL_VARIABLE", i.e. do not mark it at all. One shared token cannot say
- * that, and the scheme that wanted it would have been silently overruled by the other three. A scheme
- * with nothing to distinguish sets both to the same colour, which is what every other one does. */
 .__syntax__::highlight(variable.parameter.reassigned) {
     color: var(--syntax-variable-parameter, #9CDCFE);
     text-decoration-line: underline;
     text-decoration-color: var(--syntax-parameter-reassigned-underline, #84868C);
 }
 
-/* CAPTURED BY A LAMBDA -- IntelliJ's IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES, which gives it the
- * FIELD colour and an underline of its own.
- *
- * That pairing is not arbitrary: a captured local behaves far more like a field than like a local. It is
- * effectively final by language rule, it outlives the frame that declared it, and inside a lambda body
- * the one thing worth knowing about a name is whether it came from outside. */
 .__syntax__::highlight(variable.captured) {
     color: var(--syntax-variable-captured, #9CDCFE);
     text-decoration-line: underline;
@@ -639,7 +282,6 @@ texteditor .__indent-guide__ {
     color: var(--syntax-property, #9CDCFE);
 }
 
-/* SLANTED where a scheme says so: Eclipse Dark's ANNOTATION_NAME is FONT_TYPE 2. */
 .__syntax__::highlight(attribute) {
     color: var(--syntax-attribute, #9CDCFE);
     font-style: var(--syntax-attribute-style, normal);
@@ -650,10 +292,6 @@ texteditor .__indent-guide__ {
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* From the CSS, JavaScript and HTML grammars, which name two things the Java one never needed.
- * `constructor` is a class name in `new X()` or `class X`; `embedded` is the interpolated expression
- * inside a template literal or an HTML attribute value. Both are identifier-shaped, so they take the
- * type and default colours rather than inventing a hue nobody's reference scheme has. */
 .__syntax__::highlight(constructor) {
     color: var(--syntax-constructor, #4EC9A0);
 }
@@ -662,63 +300,28 @@ texteditor .__indent-guide__ {
     color: var(--syntax-embedded, #D4D4D4);
 }
 
-/* From GLSL: a `case` label. A genuinely new concept rather than a dialect spelling of an existing one,
- * so it gets a token instead of being normalized onto a near-miss — see Queries.normalizeCaptureDialect
- * for where synonyms are folded and why this is not one. */
 .__syntax__::highlight(label) {
     color: var(--syntax-label, #C586C0);
     font-weight: var(--syntax-keyword-weight, normal);
 }
 
-/* From XML. `markup` is document content as opposed to the tags around it — the text between elements,
- * and its heading/link/raw specialisations. It reads as body text on purpose: in a markup document the
- * content is the thing being read, and tinting it would invert the figure and ground. */
 .__syntax__::highlight(markup) {
     color: var(--syntax-markup, #D4D4D4);
 }
 
-/* MALFORMED MARKUP, which is the one capture in the vocabulary that reports a PROBLEM rather than
- * naming a construct. A mismatched closing tag is the classic case, and a grammar can see it without
- * any semantic layer — so this is the one place a red belongs in a scheme that otherwise has none. */
 .__syntax__::highlight(error) {
     color: var(--syntax-error, #F44747);
 }
 
-/* ── The two an ENGINE reports, which no grammar can ──
- *
- * `error` above is a grammar's answer: malformed text, visible from shape alone. These two are not.
- * Whether a name resolves and whether the thing it names is deprecated are questions about the world
- * outside the file, so they appear only where a language engine is loaded — which is also why they
- * degrade to nothing rather than to a wrong colour when one is not. */
-
-/* A NAME THAT RESOLVES TO NOTHING — RECOLOURED, and no longer also underlined.
- *
- * This rule and the comment above it had drifted apart: the note said "underlined rather than recoloured,
- * so it keeps the colour that says which kind it is", and the rule underneath it did both. With the
- * diagnostic squiggle under the same characters that made three marks for one fact, and the two lines
- * read as a double underline — which is what it looks like, because it is one.
- *
- * The squiggle IS the underline: it is drawn at the line's bottom, coloured by severity, and it is what
- * every editor uses to say "there is an error here". So this contributes the one thing the squiggle
- * cannot — that the error is about THIS name rather than the statement around it. Red text plus a wavy
- * underline is also exactly IntelliJ's rendering of an unresolved reference. */
 .__syntax__::highlight(unresolved) {
     color: var(--syntax-unresolved, #F44747);
 }
 
-/* STRUCK THROUGH, matching what DiagnosticTag.DEPRECATED already does to a diagnostic that carries it.
- * The two paths have to agree about what deprecated looks like, or the same fact is drawn two ways
- * depending on which layer noticed it. `text-decoration-line` has been allowed in a highlight since
- * M2's carve-out, which is what makes this a rule rather than a feature request. */
 .__syntax__::highlight(deprecated) {
     color: var(--syntax-deprecated, #A0A0A0);
     text-decoration-line: line-through;
 }
 
-/* ── Punctuation ──
- *
- * Dimmer than the code around it, deliberately: brackets and separators are structure the eye uses to
- * navigate and should not compete with the names. IntelliJ and Dark+ agree on this. */
 .__syntax__::highlight(operator) {
     color: var(--syntax-operator, #D4D4D4);
 }
@@ -735,51 +338,21 @@ texteditor .__indent-guide__ {
     color: var(--syntax-punctuation-delimiter, #808080);
 }
 
-/* THE ACTIVE GUIDE — the block the caret is actually inside, which IntelliJ draws brighter than the rest.
- *
- * Brighter, not thicker or a different hue: the guides are a background layer the eye is meant to be able
- * to ignore, and one that changes weight as the caret moves would pull attention on every keystroke. The
- * whole point of highlighting one is that the others stay quiet.
- *
- * Which guide this is comes from IndentLevels.activeGuideFor — a port of Monaco's getActiveIndentGuide —
- * and notably it is NOT simply "the deepest guide on the caret's row": standing on a line that opens or
- * closes a block activates the CHILD block, not the one that line is written at. */
 texteditor .__indent-guide__.__active__ {
     background-color: var(--editor-indent-guide-active, #6E7A8A);
 }
 
-/* THE GUTTER'S RIGHT EDGE. One element, full viewport height, sitting in the gutter's margin-right.
- *
- * This is what the level-zero indent guide was pretending to be, and the distinction is the whole reason
- * the guides used to break: an indent guide is drawn per row from THAT ROW's indentation, so a line at
- * indent 0 has none and the vertical run stopped dead wherever the code reached column 0 — the letter
- * sitting there looked like it had cut the line in half. An edge is structural: one element spanning the
- * viewport, which no line of code can interrupt.
- *
- * Same colour as an indent guide on purpose, so the two read as one continuous system. */
 texteditor .__gutter-edge__ {
     background-color: var(--editor-gutter-edge, #2F3540);
     z-index: 4;
 }
 
-/* Whitespace markers are text, not a fill, so they take a colour rather than a background. Dimmer than
- * the dimmest syntax colour, for the same reason as the guides. */
 texteditor .__whitespace__ {
     color: var(--editor-whitespace, #454C57);
     z-index: 0;
     white-space: nowrap;
 }
 
-/* THE ZOOM INDICATOR. IntelliJ's: a small bar at the bottom of the viewport reporting the size, with a
- * button back to the default. Bottom-centre because the caret is almost never there, so the thing telling
- * you about the text does not sit on the text you are reading.
- *
- * The HOLD is the widget's (it is a countdown, not a property); the FADE is here. TextEditor only adds and
- * removes __shown__, and the transition below runs because the computed opacity changed — so how long the
- * fade takes and what it eases on stay in the sheet, and the widget never learns either.
- *
- * flex-direction: row, because the engine's Taffy default is COLUMN and the label would otherwise sit
- * above the button rather than beside it. */
 texteditor .__zoom-indicator__ {
     flex-direction: row;
     align-items: center;
@@ -798,28 +371,12 @@ texteditor .__zoom-indicator__.__shown__ {
     opacity: 1;
 }
 
-/* FIXED SIZE, declared here rather than inherited. font-size is inheritable, so without a specified
- * value these would take the editor's — which zoom rewrites at IMPORTANT — and the indicator would shrink
- * to unreadable at 8px and balloon at 40. It describes the text; it is not part of it. */
 texteditor .__zoom-label__ {
     font-size: 20px;
     color: var(--editor-zoom-fg, #C8CDD4);
     white-space: nowrap;
 }
 
-/* A LINK, not a raised button. It is one action inside a transient bar, and a chunky grey button there
- * reads as a dialog. Everything the `button` rule gives it is unwound: the fill, the rounding, the
- * padding, the minimum height and the focus ring.
- *
- * These win on specificity without a fight -- `texteditor .__zoom-reset__` is 11 against `button`'s 1 --
- * except against `button:hover` and `button:active`, which are also 11. Those tie, and this file's later
- * source position decides it. Spelled out because a tie broken by source order is exactly what a future
- * reorganisation of this sheet would silently flip.
- *
- * The hover state changes the DECORATION, not the colour: an underline appearing under an already-blue
- * label is what says "link" -- a colour shift on hover reads as a button lighting up, which is the thing
- * this is trying not to look like. text-decoration-line is inheritable, so it reaches the Button's own
- * UIText without a descendant selector. */
 texteditor .__zoom-reset__ {
     font-size: 20px;
     background: #00000000;
@@ -842,23 +399,11 @@ texteditor .__zoom-reset__:active {
     text-decoration-line: underline;
 }
 
-/* A column ruler spans the viewport and does not scroll vertically -- TextEditor marks it scroll-exempt
- * and subtracts the horizontal offset by hand, exactly as the gutter does. */
 texteditor .__ruler__ {
     background-color: var(--editor-ruler, #2F3540);
     z-index: 4;
 }
 
-/* Functional geometry for the table's own structure. Nothing here is decoration — a theme owns all of
- * that — but without these the widget does not work at all:
- *
- *  - The divider is ABSOLUTELY positioned (TableView writes the inset, so it straddles the boundary
- *    instead of consuming header width the rows do not have). An out-of-flow box with no declared width
- *    is zero pixels wide, so without this rule there is nothing to grab and columns cannot be resized.
- *    In flow it merely looked wrong; out of flow it is unusable, which is what promotes this from a
- *    theme's business to the user-agent sheet's.
- *  - Rows and header cells lay out along the row axis. The engine's Taffy default is COLUMN, so
- *    omitting this stacks every cell vertically. */
 tableview .__row__,
 tableview .__header__,
 tableview .__header-cell__ {
@@ -871,24 +416,12 @@ tableview .__divider__ {
     cursor: ew-resize;
 }
 
-/* Cells clip. A name longer than its column must not bleed under the next one — and because the cell
- * is the clipping box, `text-overflow` has to sit on the text inside it, not here. */
 tableview .__cell__ {
     overflow: hidden;
 }
 
-/* NO TRACK BY DEFAULT. A scrollbar that paints a full-height rail is a permanent stripe down the
- * edge of every panel, and it is the single loudest thing in a quiet UI — IntelliJ, VS Code and
- * every modern OS draw the thumb alone and let the content show through. The token survives so a
- * theme that wants a visible gutter can still ask for one. */
-/* The bar's thickness, and the thumb's radius as HALF of it. Two names rather than one because
- * this engine has no calc(): the pairing has to be maintained by hand, so it is stated in one place
- * where the two are visibly next to each other rather than 90 lines apart. */
 * {
     --scrollbar-size: 8px;
-    /* THE ROOM RESERVED FOR IT, which is deliberately MORE than the bar is wide: at exactly the bar's
-     * width a selection band ends where the bar begins and the two read as touching. The bar keeps its
-     * own thickness; this is the column the content stays out of. @see `.__scroll-view__.__v-gutter__` */
     --scrollbar-gutter: 14px;
     --scrollbar-radius: 6px;
 }
@@ -897,16 +430,11 @@ scroller .__track__,
 scroller::part(track) {
     background: var(--scrollbar-track, #00000000);
 }
-/* Only the CROSS axis is set here. The main axis (length + position) is written from Java at
- * IMPORTANT origin, since it's runtime state, and would override anything declared here anyway.
- * A horizontal bar's thumb fills the bar's height; a vertical bar's fills its width. */
+/* Only the cross axis: Java writes the main axis at IMPORTANT origin. */
 scroller .__thumb__,
 scroller::part(thumb) {
     height: 100%;
     background: var(--scrollbar-thumb, #6E6E6E);
-    /* HALF THE BAR'S THICKNESS, derived rather than restated: a fixed 8px against the old 16px bar
-     * was already a pill, and it stayed 8px when the bar narrowed — which turns a pill into a
-     * lozenge with flat sides. Both now come from --scrollbar-size. */
     border-radius: var(--scrollbar-radius, 6px);
 }
 scroller.__vertical__ .__thumb__,
@@ -922,23 +450,12 @@ scroller::part(thumb):active {
     background: var(--scrollbar-thumb-pressed, #B4B4B4);
 }
 
-/* Step buttons. Hidden by default — that's what every modern desktop UI does, and it's what Ore
- * chose too (`.__scroller_head_button__ { display: none }`). They are fully wired regardless, so a
- * theme turns them on with nothing but CSS:
- *     scroller .__head__, scroller .__tail__ { display: flex; }
- * Because they're flex items, hiding them lets __track__ take the whole bar, so the geometry with
- * buttons off is identical to not having them at all. */
 scroller .__head__,
 scroller .__tail__,
 scroller::part(head),
 scroller::part(tail) {
     display: none;
     background: var(--scrollbar-tail, #4A4A4A);
-    /* Sized along the bar's MAIN axis, filling the cross axis. A horizontal bar's buttons are 16px
-     * WIDE and full height; the vertical rule below swaps that. Getting this wrong is why a
-     * `height`-only rule collapses the horizontal bar's buttons to nothing. Kept here rather than in
-     * a theme so enabling them stays a pure `display: flex`.
-     * 8 matches the bar's thickness, so a button comes out square. */
     width: 16px;
     height: 100%;
 }
@@ -956,8 +473,6 @@ scroller::part(tail):hover {
     background: var(--scrollbar-tail-hover, #6E6E6E);
 }
 
-/* The little square where the two bars meet — `::-webkit-scrollbar-corner` in a browser. Shown only
- * when both bars are visible; ScrollerView sizes it from their measured thicknesses. */
 scrollerview .__corner__,
 listview .__corner__,
 treeview .__corner__,
@@ -967,40 +482,12 @@ scrollerview::part(corner) {
     background: var(--scrollbar-corner, #2A2A2A);
 }
 
-/* ABOVE the editor's text AND above its gutter. Only the editor needs this: a list's rows do not overlap
- * its bars.
- *
- * The bars used to sit BELOW the gutter, which forced the gutter to stop short of them -- otherwise it
- * painted over the bar's left end as a dead square. Stopping short left the corner between the two
- * uncovered, and scrolled text showed through it. Putting the bars on top removes the reason the gutter
- * had to stop, so it can run the full height and there is no corner left to leak through.
- *
- * The lines are still behind the gutter (they are at z-index 0), which is the property that mattered:
- * a long line scrolled sideways passes behind the numbers rather than through them. */
 texteditor .__v-scroller__,
 texteditor .__h-scroller__,
 texteditor .__corner__ {
     z-index: 7;
 }
 
-/* BY CLASS, not by a list of tags. This was `scrollerview, listview, treeview, texteditor,
- * tableview` -- one entry per ScrollerView subclass -- and a widget's cascade identity is its TAG, so
- * `ConfiguratorPanel extends ScrollerView` reported `configuratorpanel` and matched none of them. Its
- * bars were laid out at zero width: invisible, while the wheel still scrolled perfectly, which reads as
- * a widget that forgot its scrollbars rather than a sheet that never sized them.
- *
- * A list of tags that has to name every subclass is a maintenance trap of the kind AGENTS.md already
- * records for the registered-property table: adding a subclass is one line somewhere else, nothing links
- * the two, and the omission is silent. Only ScrollerView creates these classes, so keying on the class
- * is both narrower in intent and wider in reach. Per-widget rules that genuinely differ -- texteditor's
- * z-index above -- stay tag-scoped.
- *
- * AND A HOSTLESS `::part()` IS THE OTHER HALF. On the new engine the bars are shadow PARTS, which no
- * outer class selector can reach -- so the class half of this rule matches nothing there and the bars
- * lay out at zero width, which is the exact failure the paragraph above describes and the reason the
- * rule was keyed on a class in the first place. `::part(v-scroller)` with no host says what
- * `.__v-scroller__` said -- "whoever exposes a part by this name" -- and needs no list of subclasses
- * to go stale. */
 .__v-scroller__,
 ::part(v-scroller) {
     width: var(--scrollbar-size, 12px);
@@ -1016,88 +503,18 @@ texteditor .__corner__ {
     bottom: 0;
 }
 
-/* ── THE GUTTER THE VERTICAL BAR SITS IN ────────────────────────────────────────────────────────
- *
- * The bars are absolutely positioned, so they take no room and CONTENT RUNS UNDERNEATH THEM. Every
- * full-width thing inside a scroller was cut off by the bar: a tree's selection band, the inspector's
- * section headers, and whatever gets written next. This is the web's `scrollbar-gutter: stable`, and it
- * belongs here beside the width it reserves rather than in each widget that noticed.
- *
- * PADDING ON THE HOST, and it needs no compensation: measured, this engine resolves an absolute inset
- * against the BORDER box, so a scroller with 40px of right padding still had its bar flush at the right
- * edge while the content box shrank to 180. In a CSS engine that resolved against the padding box the
- * bar would have come in with the content and this would need undoing again.
- *
- * ONLY WHILE THE BAR IS SHOWING -- ScrollerView adds the class -- so a panel with nothing to scroll
- * carries no dead margin. That is what a stable gutter normally trades away, and the trade is right here
- * because most panels never scroll. @see ScrollerView#V_GUTTER_CLASS
- *
- * Content WIDER than the viewport still passes under the bar, which is correct: there is no room to
- * reserve when the row is already overflowing, and a narrow panel should use every pixel it has.
- *
- * KEYED ON THE CLASS, NOT THE TAG, which is the whole reason the first attempt did nothing. A kind's tag
- * is the NAME constant on the class it names, and every scroller worth gutting declares its own --
- * `listview`, `treeview`, `projectfiletree` -- so a `scrollerview` type selector matches the base class
- * and nothing that actually scrolls a list. ScrollerView stamps `__scroll-view__` on itself in its
- * constructor for exactly this: it is what "every scroller, whatever it calls itself" is spelled as. The
- * same reasoning as the hostless `::part(v-scroller)` above, which needs no list of subclasses either. */
 .__scroll-view__.__v-gutter__ {
     padding-right: var(--scrollbar-gutter, 14px);
 }
 
-/* ── AN EDITOR OPENED AS A DOCUMENT FILLS ITS PANE ───────────────────────────────────────────────
- *
- * The fill idiom, and the same one the shader graph editor needed for the same reason: a dock pane is a
- * flex COLUMN whatever the split's orientation, so a document grows by HEIGHT. This engine defaults
- * flex-shrink to 0, so a child with a content basis keeps its content size and the pane simply carries
- * slack below it — which is the editor sitting in the top of its tab with dock showing underneath.
- * `height: 0` is the basis that lets flex-grow do the work.
- *
- * SCOPED TO THE DOCK, not written on `texteditor` itself. Unscoped it also reaches every editor embedded
- * in something that sizes it deliberately — a form field, a preview, a harness scene — and forces it to
- * eat the container. `scrollingMovesTheTextAndTheGutterTogether` is what caught that: with the widget
- * suddenly filling its host, the viewport changed and the same scroll landed on a different first line,
- * so the gutter and the text moved opposite ways. Filling is a statement about being a DOCUMENT in a
- * pane, which is what this selector says and what the bare tag cannot.
- *
- * flex-shrink is deliberately untouched — overriding it to 1 is the "help" that collapses the box, since
- * the 0 default is what stops content being compressed below its own size. */
 dockgroup texteditor {
     width: 100%;
     height: 0;
     flex-grow: 1;
 }
 
-
-/* -- Completion popup ---------------------------------------------------------------------------
- *
- * left/top/width come from Java at IMPORTANT origin (CompletionPopup.reposition), because they are
- * computed from the caret and the window. Everything below is appearance and belongs here.
- *
- * The anatomy is IntelliJ's, read off its own popup: kind icon, then the label with the matched
- * characters banded, then the detail right-aligned at the far edge. The right alignment is done with a
- * grow-only spacer rather than `text-align`, because the detail is its own element and a text alignment
- * inside it would move the glyphs within a box that is still on the left.
- */
-/* RESIZABLE from the grip at the strip's right end, and DRAGGABLE by the strip itself.
- *
- * Not `resize:` -- UIResizer writes at INLINE and reposition() writes width at IMPORTANT, so the grabber
- * could move the height and never the width. CompletionPopup owns the drag instead; see installGrip. */
 completionpopup {
-    /* CLIPPED, always. The list fills this box, and any disagreement between the two painted rows straight
-     * over the editor below, outside the popup's own border. `overflow` is also what `resize` requires:
-     * CSS only makes an element resizable when its overflow is not `visible`, and the same is true here. */
     overflow: hidden;
-    /* EVERY EDGE AND CORNER, from the cascade rather than from a hand-built grabber.
-     *
-     * This is ambient on any element -- the same shape as `overflow` making one a scroll container -- so a
-     * popup opts in with one declaration. It was hand-rolled because `UIResizer` writes at INLINE while
-     * this widget writes its own geometry at IMPORTANT, which beat it: the height could be dragged (nothing
-     * else wrote it) and the width could not be dragged at all. The widget now stands down on whichever
-     * axis the user has taken, so the ambient handles work and the grabber is gone.
-     *
-     * The leading (top/left) handles exist because a promoted popover is out of flow, which is the only
-     * case where `left`/`top` are a position rather than a nudge that reflows its siblings. */
     resize: both;
     background: var(--palette-bg, #252526);
     outline-width: 2px;
@@ -1106,64 +523,30 @@ completionpopup {
     z-index: 900;
 }
 
-/* 32px, tighter than the 18 it replaced. IntelliJ's rows have the text nearly filling the box; ours had
- * visible air above and below, which is what made the list read as a menu rather than as code. Paired with
- * CompletionPopup.ROW_HEIGHT -- a virtualised list needs the number in Java to turn an index into a scroll
- * offset and cannot read the cascade, so the duplication is forced rather than sloppy. */
 .__completion-row__ {
     height: 32px;
     flex-direction: row;
     align-items: center;
     padding-left: 8px;
-    /* Clears the scrollbar. The bar is an absolute OVERLAY -- it takes no layout width -- so a row whose
-     * padding merely matched --scrollbar-size left the type column running exactly up to it and, once the
-     * list scrolled, underneath it. Reserving the bar's width plus a little air is what the overlay model
-     * needs from anything drawing to the right edge. */
     padding-right: 24px;
     overflow: hidden;
 }
 
-/* NO `gap` on the row, and that is the point: a gap applies between EVERY pair of children, so it put
- * a space between the name and its own parameter list -- `arraycopy (Object, int, ...)`, which reads as two
- * things rather than one signature. The one place a gap is wanted is after the icon, so it is a margin
- * there instead. Everything else is separated by the grow-only spacer. */
 .__completion-icon__,
 ::part(pre-icon).__completion-icon__ {
     margin-right: 8px;
 }
 
-/* IntelliJ's selection indigo rather than the workbench's VS Code navy. A deliberate divergence from the
- * rest of the shell: this popup is the one surface being held beside IntelliJ's own, and --list-selected-bg
- * is the token every OTHER list here shares -- reusing it would drag every tree and panel along with any
- * change made for this widget. */
 .__completion-row__.__selected__ {
     background-color: var(--completion-selected-bg, #2E436E);
 }
 
-/* 24px, NOT the artwork's native 16.
- *
- * JetBrains draws these for a ~26px UI font; ours is 20px, so a 32px icon reads 1.6x the text where
- * IntelliJ's reads 1.2x — the icon stops being a hint and starts being the loudest thing in the row. 12
- * restores the ratio, and it is chosen over 13 because at uiScale 2 it is 24 device px against a 16-unit
- * viewBox: an exact 1.5x, which is the half-integer CgUiSvg's pixel-grid snapping is looking for.
- *
- * The marks below MUST carry the same number. They are full-size layers, so a mark left at 16 in a 24px
- * icon does not overflow -- it silently draws its corner glyph a third larger and in the wrong corner.
- *
- * A fixed box so every label starts at the same x -- a ragged left edge is what makes a list of
- * identifiers hard to scan. The DRAWING comes from the kind class below; this only reserves the space. */
 .__completion-icon__,
 ::part(pre-icon).__completion-icon__ {
     width: 24px;
     height: 24px;
 }
 
-/* Modifier marks: full-size layers over the icon, not badges in a corner box.
- *
- * JetBrains draws each mark on its own 16x16 canvas with the glyph already placed -- staticMark in the
- * bottom-left, finalMark in the top-left -- so stacking them at the same size is what composes them, and
- * both can show at once because they do not occupy the same corner. A `static final` field wears both,
- * which is what System.out actually is. */
 .__completion-mark-static__,
 .__completion-mark-final__,
 ::part(completion-mark-static),
@@ -1180,112 +563,35 @@ completionpopup {
 .__completion-mark-final__,
 ::part(completion-mark-final) { background: icon("crystalgui:nodes/java/finalMark"); }
 
-/* BOLD, and only on the name. font-weight inherits and is drawn by UIText alone through a CgStyleSpan, so
- * putting it on the row instead would quietly embolden the parameter list and the type column too -- which
- * is the whole distinction this split exists to draw. */
-/* NOWRAP AND ELLIPSIS ON EVERY TEXT IN THE ROW, individually.
- *
- * A row has a fixed height and its texts wrapped: a long signature became two lines drawn over the row
- * below it, and widening the popup "fixed" it by removing the need to wrap. `white-space` INHERITS, so the
- * nowrap could have gone on the row -- but `text-overflow` does NOT, and set on a wrapper it silently never
- * arrives and the row renders as plain clip. They are written together on each element so the pair cannot
- * drift apart, which is the trap AGENTS.md records against this exact property. */
-/* SHRINKABLE, and it is the row's last resort rather than its first.
- *
- * It carried `text-overflow: ellipsis` from the day it was written and could never once ellipsise, because
- * flex-shrink defaults to 0 here. That is not a cosmetic loss: a flex row gives up space somewhere, and
- * with the label rigid there was only one candidate left, so every tight row spent its whole squeeze on
- * the type column at the far end. Making the name able to give is what leaves the type alone.
- *
- * Both references truncate a long name and keep the type pinned at the edge, in that order. */
 .__completion-label__ {
     font-size: 20px;
     font-weight: bold;
     color: var(--completion-label, #D4D4D4);
-    /* SECOND. @see .__completion-params__ */
     flex-shrink: 100;
     min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-/* The parameter list, abutting the name and dimmed -- IntelliJ's "tail text". Regular weight, so the eye
- * lands on the name; same size, so the row reads as one string rather than two controls. */
 .__completion-params__ {
     font-size: 20px;
     color: var(--completion-params, #808080);
-    /* GIVES FIRST, and the number says so. flex-shrink is a RATIO, not an order -- every shrinkable item
-     * gives at once, in proportion -- so "params, then the label, then the type" is spelled as three
-     * factors an order of magnitude apart rather than as three booleans. @see .__completion-detail__ */
+    /* flex-shrink is a ratio, not an order, so the three factors are an order of magnitude apart. */
     flex-shrink: 1000;
     min-width: 0;
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-/* The SAME size as the label, distinguished by colour alone -- which is what IntelliJ does. At 18px it read
- * as a footnote rather than as the type it is.
- *
- * RIGID, and this reverses what was here before.
- *
- * It used to be the one thing in the row that gave, on the reasoning that a truncated identifier is
- * unreadable while a truncated return type is merely less informative. The reasoning is sound and the
- * arrangement was not, because it was the ONLY thing that could give: the label was not shrinkable, so a
- * tight row put the entire squeeze onto the type. Measured in a 280px row, `String` came out 53px on one
- * row and 15.4px on another -- three characters, which is exactly the reported `Str`.
- *
- * So the choice was never between a short name and a short type. It was between a readable type and a
- * type shaved to a stub, on rows picked by whichever name happened to be longest. The order is now:
- * params give first (they are the tail, and IntelliJ dims them for that reason), then the label, and the
- * type never.
- *
- * A column that is a different width on every row is worse than a narrow one -- the eye reads the right
- * edge as a column, and this was not one. */
 .__completion-detail__ {
     font-size: 20px;
     color: var(--completion-detail, #808080);
-    /* LAST, NOT NEVER -- and that one word is the fix.
-     *
-     * `flex-shrink: 0` was chosen so the type could never be shaved to a stub, and the reasoning above
-     * still holds: `String` must not come out as `Str`. But "never gives" is not the same claim as
-     * "gives last", and the difference only shows once the row cannot fit at all. With the label already
-     * at zero there was nothing left to give, so the row simply exceeded the popup and the type column
-     * was PAINTED OUTSIDE IT, over the editor behind -- past the scrollbar, on rows whose details were
-     * short enough to have fit anywhere.
-     *
-     * A factor a thousandth of the params' means it is untouched while anything else can still give,
-     * which preserves every case the rigid version was protecting: a squeeze is spent on the tail and
-     * then on the name, and the type only starts to ellipsise once the row has run out of everything
-     * else. `min-width: 0` is what lets the ellipsis happen at all -- without it the box cannot go below
-     * its content and the shrink factor is inert. */
     flex-shrink: 1;
     min-width: 0;
-    /* AND NO `max-width` HERE. A `max-width: 50%` lived here briefly, to stop a very long type crowding
-     * out a very short name, and it is the reason every type column in the game was cut to a stub: a
-     * PERCENTAGE resolves against the containing block, the row's width is not definite at the moment it
-     * is resolved, and half of an indefinite base is nothing. The detail came out about fourteen pixels
-     * wide whatever it held -- `Co`, `Pri`, `voi`, `Str` -- which reads as clipping rather than as a cap,
-     * because the box is the wrong SIZE rather than in the wrong PLACE.
-     *
-     * It looked host-specific and was not. The harness settles in a different number of passes, so its
-     * base happened to be definite by the time this resolved; that is luck rather than a difference in
-     * kind, and a percentage here is unsafe in both.
-     *
-     * The case it was written for survives without it. The factors above already spend a squeeze on the
-     * tail, then the name, and only then the type -- and a name short enough to be crowded is also short
-     * enough to survive, because a 10px label cannot give up much before the type has to start giving
-     * instead. A pixel cap is the other tempting answer and is worse: this popup is resizable, so one is
-     * either pointless at its widest or crippling at its narrowest. */
     white-space: nowrap;
     text-overflow: ellipsis;
 }
 
-/* Object's members, drawn quieter: NOT bold, and that is the whole of it.
- *
- * Dimming them as well was too much. Weight already separates them from the members that are actually
- * this type's, and taking the colour too pushes them towards reading as DISABLED -- which is a different
- * claim, and one the list makes elsewhere for deprecated rows. Losing the emphasis is the signal; losing
- * the legibility is a cost with nothing bought by it. */
 .__completion-inherited__ .__completion-label__ {
     font-weight: normal;
 }
@@ -1296,19 +602,10 @@ completionpopup {
     color: var(--completion-deprecated, #808080);
 }
 
-/* The matched characters, banded rather than recoloured wholesale -- IntelliJ colours them blue and
- * VS Code does the same. It says WHERE the query hit, which is information a rank cannot convey. */
 completionpopup text::highlight(completion-match) {
     color: var(--completion-match, #2AAAFF);
 }
 
-/* Per-kind DRAWING. The IntelliJ Platform node icons (Apache 2.0) carry their own palette and ship as
- * genuinely different drawings per background, so there is nothing here to recolour -- `icon()` resolves the
- * light/dark pair at draw time. Adding a kind is a rule here, exactly as the graph's port palette is.
- *
- * KIND AND MODIFIER ARE TWO AXES. `abstract` is a compound selector rather than a kind of its own, because
- * an abstract method and a concrete one are the same kind and simply draw differently; static is an overlay
- * (see .__completion-badge__) for the same reason. */
 .completion-kind-method,
 ::part(pre-icon).completion-kind-method,
 .completion-kind-function,
@@ -1337,28 +634,12 @@ completionpopup text::highlight(completion-match) {
 ::part(pre-icon).completion-kind-enum           { background: icon("crystalgui:nodes/java/enum"); }
 .completion-kind-annotation,
 ::part(pre-icon).completion-kind-annotation     { background: icon("crystalgui:nodes/java/annotation"); }
-/* A throwable is a CLASS with its own drawing -- see SymbolKind.EXCEPTION, which says why that is a display
- * refinement rather than a language kind. */
 .completion-kind-exception,
 ::part(pre-icon).completion-kind-exception      { background: icon("crystalgui:nodes/java/exception"); }
 .completion-kind-type_parameter,
 ::part(pre-icon).completion-kind-type_parameter { background: icon("crystalgui:nodes/java/class"); }
-/* Not reachable from a completion list -- nothing offers a package as an item -- but the Quick
- * Documentation popup draws its OWNER band with this vocabulary, and a top-level class is owned by a
- * package. Here rather than in a second prefix of its own, so one kind means one glyph everywhere. */
 .completion-kind-package,
 ::part(pre-icon).completion-kind-package        { background: icon("crystalgui:nodes/java/package"); }
-/* A MODULE IS A FILE, so it takes the file's own picture rather than a package's.
- *
- * The only thing that reports this kind is a JavaScript project script reached through an `import`
- * (M15 S6), and a package glyph on it said the wrong thing twice over: it is not a package, and the tab
- * for the very same file three inches away draws the JavaScript mark. A row and a tab disagreeing about
- * one file reads as one of them being wrong, which it was.
- *
- * KEYED ON THE KIND rather than on the file's extension, because a completion row carries a `SymbolKind`
- * and not a name -- so the day something reports a MODULE that is not a `.js` file (a `module-info`, a
- * JavaScript engine that grows real ES modules) this needs to become a per-item icon instead. Until then
- * a second mechanism would be a table saying what this one already says. */
 .completion-kind-module,
 ::part(pre-icon).completion-kind-module         { background: icon("crystalgui:filetypes/javaScript"); }
 
@@ -1367,24 +648,11 @@ completionpopup text::highlight(completion-match) {
 .completion-kind-class.completion-mod-abstract,
 ::part(pre-icon).completion-kind-class.completion-mod-abstract  { background: icon("crystalgui:nodes/java/classAbstract"); }
 
-/* A keyword is not a node and JetBrains has no icon for one -- an empty box is the honest answer, and it
- * keeps the labels aligned with every other row. */
 .completion-kind-keyword,
 ::part(pre-icon).completion-kind-keyword,
 .completion-kind-unknown,
 ::part(pre-icon).completion-kind-unknown        { background: none; }
 
-/* The bottom strip -- IntelliJ's "Press Enter to insert, Tab to replace".
- *
- * It is doing real work rather than decorating: the two keys behave DIFFERENTLY (Enter keeps the rest of the
- * identifier, Tab consumes it) and nothing else in the widget says so. Its text is derived from
- * CompletionPopup.ACCEPT_KEYS, the same list the key handler reads, so it cannot promise a binding that is
- * not there.
- *
- * 32px, paired with CompletionPopup.HINT_HEIGHT -- the flip-above-or-below decision is computed from the
- * popup's total height in Java and cannot read the cascade. */
-/* The drag handle: pressing it and moving takes the popup with you. `cursor` says so before the press,
- * which is the only thing that makes a drag target discoverable. */
 .__completion-hint__ {
     cursor: move;
     height: 32px;
@@ -1399,12 +667,6 @@ completionpopup text::highlight(completion-match) {
     color: var(--completion-hint, #6E7681);
 }
 
-/* The overflow button. `button` carries a min-height and padding of its own, and BOTH have to be cleared
- * -- min-height is a different property from height, so a base rule's minimum beats any size set here at
- * higher specificity. The search toggles cost three rounds of shrinking `height` before that was noticed.
- *
- * `background: none` as well as a colour: they are separate properties, and a rule setting only the colour
- * is painted over by whatever drawable won. */
 .__completion-options__ {
     width: 28px;
     height: 28px;
@@ -1420,17 +682,7 @@ completionpopup text::highlight(completion-match) {
     color: var(--completion-label, #D4D4D4);
 }
 
-/* ── Quick Documentation ─────────────────────────────────────────────────────────────────────────
- *
- * IntelliJ's DocumentationMarkup, band for band: DEFINITION, then CONTENT, then BOTTOM. Its SECTIONS band
- * -- the Params:/Returns:/Throws: table -- has no rule here because SymbolInfo.documentation() is one
- * rendered string and there is nothing to split it on. The band arrives with the data, not before it.
- *
- * The tag needs no ElementRegistry entry: tagName() falls back to the lowercased class name, and only a
- * widget that must survive UIDescriptionCodec needs registering. completionpopup above is the precedent. */
 documentationpopup {
-    /* Clipped for the reason the completion popup is: the bands fill this box and any disagreement paints
-     * straight over the editor, outside this border. It is also what `resize` requires. */
     overflow: hidden;
     resize: both;
     background: var(--doc-bg, #191A1C);
@@ -1438,131 +690,24 @@ documentationpopup {
     outline-color: var(--doc-border, #393B40);
     padding: 18px;
     gap: 6px;
-    /* THE LINE BOX, which is most of the vertical looseness and is not a gap at all.
-     *
-     * `line-height` defaults to `normal` -- the font's OWN line box -- and JetBrains Mono's is generous,
-     * so every band was ~30% taller than its glyphs before a single margin was involved. Tightening the
-     * gaps alone would have chased the smaller half of the difference and left the box still tall.
-     * Inheritable, so this one declaration reaches the owner row, every signature line and the footer. */
     line-height: 1.15;
-    /* SIZED TO CONTENT, AND DELIBERATELY NOT max-width CAPPED.
-     *
-     * A fixed width made every popup as wide as the widest might need — hovering `System` gave a two-word
-     * definition in a 840px box with 600px of nothing after it. A `max-width` fixed that and broke
-     * something worse: **it made the box unresizable past the cap**. A user drag writes `width` at INLINE,
-     * and max-width is applied after width whatever origin it came from, so the cap silently won and the
-     * popup simply refused to be dragged wider. Same shape as a base rule's min-height beating a height
-     * written at higher specificity.
-     *
-     * What actually needed bounding was the CONTENT, not the box: the engine breaks a long declaration
-     * across lines (see Signature), so the widest line is short by construction and the box is sensible
-     * without anything capping it. Height still caps, because a documentation body is unbounded in a way
-     * a declaration is not, and the body band is the part that scrolls.
-     *
-     * AND THE HEIGHT BOUND IS ON THE BAND, NOT HERE -- see `.__doc-scroll__`. It was `max-height: 640px`
-     * on this rule, which is the very trap the paragraph above records, one axis over: `max-height` is
-     * applied after `height` whatever origin the height came from, so a vertical drag was silently capped
-     * and the handle looked dead going down. Moving the bound to the content leaves the box free, and the
-     * box is content-sized, so nothing about the resting size changes.
-     *
-     * NOT fixable in `UIResizer` by releasing the maximum: CSS `resize` names `min-*`/`max-*` as its only
-     * constraints, and the resizer re-applies them deliberately so a LEADING edge can derive its origin
-     * from the size the box will actually settle at. `ResizeTest.maxWidthConstrainsTheResize` pins it. */
-    /* A FLOOR, because the box is sized by its DECLARATION and the prose has no say in it.
-     *
-     * `public final class Main` is a short declaration attached to eight paragraphs, so the popup opened
-     * at the width of those four words and wrapped the documentation into a column barely wider than the
-     * signature — every sentence broken three times, which reads as the renderer failing rather than as
-     * the box being small. IntelliJ's is a comfortable fixed width for exactly this reason.
-     *
-     * A minimum rather than a width, so a LONG declaration still drives the box wider; and a minimum
-     * rather than the max the comment above rejects, because a floor cannot stop a drag from growing.
-     *
-     * IT APPLIES TO THE BOX THE POPUP CHOOSES FOR ITSELF, AND NOT TO ONE THE READER CHOSE -- see the
-     * rule below. This used to stop a drag going narrower too, on the reasoning that a documentation
-     * popup below this width is unreadable. That is true of a box that arrived narrow by accident and
-     * false of one somebody deliberately dragged: the height already resizes to nothing and nobody
-     * minds, because pulling an edge is a statement about what you want. */
     min-width: 500px;
-    /* AND A CEILING, for the same reason as the floor and with the same escape hatch.
-     *
-     * The long comment above rejects `max-width` on the reasoning that the widest LINE is short by
-     * construction. That is true of the DECLARATION, which the engine breaks across lines, and false of
-     * the documentation BODY -- one prose string with no break the layout has to honour, so its
-     * max-content width is the whole paragraph on a single line. An auto-width box takes the space that
-     * asks for, so the popup opened as wide as the window; `left` then clamped to 0, because a box that
-     * wide no longer fits beside its anchor. Measured: 1200x86 in a 1200-wide viewport, against 120px for
-     * a plain popover in the same frame.
-     *
-     * The trap that comment records is real -- a cap applied to a box somebody has dragged makes the
-     * handle look dead -- and it is answered here the way the floor already answers it, by standing down
-     * the moment the reader takes hold of the edge. @see the __user-sized-width__ rule below
-     *
-     * INTELLIJ'S ENDPOINTS AT THIS SHEET'S MEASURE, which is not IntelliJ's pixels.
-     *
-     * Theirs are `docPopupPreferredMinWidth` 300 and `docPopupPreferredMaxWidth` 500 in
-     * `DocumentationHtmlUtil`, and their comment is the reason to take them rather than invent a pair --
-     * "these values were calculated based on experiments with varied content and manual resizing to
-     * comfortable width". But what those numbers encode is a MEASURE, in characters per line, and they
-     * are set against a ~26px body font. This sheet's body inherits `* { font-size: 10 }`, so 1000px here
-     * is about 120 characters where 1000px there is about 90 -- past the width prose stops being
-     * comfortable to read, which is what a popup at the ceiling looked like.
-     *
-     * Scaling theirs by 10/13 lands near 230 and 385; these are 250 and 350, settled by looking at
-     * real symbols in the harness rather than by finishing the arithmetic. The pair before this was 420
-     * and 720, which had the ratio the wrong way round -- a bigger box for a smaller font. */
     max-width: 700px;
-    /* Over the completion popup's 900 -- Ctrl+Q with a list open should read over it, not under it. */
     z-index: 910;
 }
 
-/* THE FLOOR IS FOR AN AUTO-SIZED BOX ONLY. `UIResizer` adds this class as a drag writes the width, so
- * the minimum above governs how wide the popup OPENS and stops governing the moment the reader takes
- * hold of the edge. Without it the box could not be dragged below its own opening width, which reads as
- * the resize handle being broken on that axis -- the height, which has no floor, went all the way down.
- *
- * A class rather than releasing the constraint in `UIResizer`: `resize` names `min-*`/`max-*` as its
- * only constraints and the resizer re-applies them deliberately, so a leading edge can derive its
- * origin. The cascade is where a constraint belongs. @see UIElement#USER_SIZED_WIDTH_CLASS */
+/* The floor is for an auto-sized box only: UIResizer adds this class once a drag writes the width. */
 documentationpopup.__user-sized-width__ {
     min-width: 0;
-    /* ...and the ceiling goes with the floor. `auto` is this property's own "no cap": max-width is
-     * applied after width whatever origin the width came from, so leaving it would silently win over a
-     * drag and the popup would refuse to be pulled wider. */
     max-width: auto;
 }
 
-/* THE PROBLEM BAND — the message, then the one action worth showing without being asked.
- *
- * Above the owner and separated from it by a rule, which is IntelliJ's layout and is not arbitrary: the
- * problem is why you looked, the declaration is what you were looking at. The separator is a bottom
- * border, and it carries the same uniform-width, three-transparent-edges spelling every hairline in this
- * codebase needs -- the rounded-background path takes its stroke width from border().left ALONE, so a
- * bottom-only width resolves, lays out and paints nothing. */
-/* TWO GROUNDS, NOT ONE, which is what IntelliJ draws: the message sits on chrome and the actions sit on
- * the popup's own paper. Colouring the whole band one way makes the fix row look like part of the header
- * rather than like something you can press.
- *
- * So the band itself paints NOTHING and carries no padding -- it is a column and a hairline. Each row
- * paints and pads itself, because a shared padding here would leave a strip of the wrong ground above and
- * below whichever row it belonged to. */
 documentationpopup .__doc-problem__ {
     flex-direction: column;
-    /* NO GAP. The two grounds meet; a gap between them shows the popup's paper as a seam through the
-     * header, which reads as a rendering fault rather than as spacing. */
     gap: 0px;
-    /* FULL BLEED: the popup's own padding would leave both grounds short of the box's edges and the band
-     * would read as a panel floating inside a panel rather than as the header of one. */
     margin-top: -18px;
     margin-left: -18px;
     margin-right: -18px;
-    /* THE MESSAGE'S GROUND IS PAINTED HERE, not on the message.
-     *
-     * The message is a UIText with forceSelfSizeWidth -- it reports its own measured width so the popup
-     * has something to size itself from -- and a self-sized element does not stretch to its parent. So a
-     * background on it ended where the text did, and the header read as a grey label floating on the
-     * popup's paper with the fix row full width beneath it. The band is the element that spans, so the
-     * band is what paints, and its padding is the MESSAGE's padding for the same reason. */
     padding-top: 10px;
     padding-left: 18px;
     padding-right: 18px;
@@ -1572,28 +717,6 @@ documentationpopup .__doc-problem__ {
     border-bottom-color: var(--doc-border, #393B40);
 }
 
-/* THE SAME SIZE AS EVERY OTHER BAND, declared rather than inherited. font-size does not inherit here --
- * core.css opens with a universal 10 that is a candidate on every element -- so a band that says nothing
- * draws at 10 while the owner line and the definition beside it draw at 8. Three declarations rather than
- * one on the band, because that is the rule the owner and definition rules already follow for the same
- * reason: the wrapper is not the text. */
-/* WRAPS, AND THE BOUND IS ON THE LABEL rather than on the popup -- the same arrangement `tooltip
- * .__label__` already documents, and for the same reason: a UIText wraps against a width it can see on
- * ITSELF, and an ancestor's max-width is not one. Bounded here the text wraps and the box then
- * shrink-wraps the wrapped result; bounded on the box the glyphs run straight past it.
- *
- * This band used to call forceSelfSizeWidth, which reports the UNWRAPPED run -- so `white-space: normal`
- * could never take effect and one long compiler message stretched the popup to most of the window. The
- * two are mutually exclusive, which the definition band's own comment already sets out; the difference is
- * that a declaration is short by construction and a diagnostic is a sentence.
- *
- * flex-shrink: 0 for the reason the tooltip's label carries it: the band paints the ground the text sits
- * on, so a label that gave way would leave the ground wider than the glyphs. */
-/* THE BAND WITH NOTHING TO SAY gives up its top padding rather than drawing an empty one.
- *
- * It paints its own ground and a bottom border, so it is a header rather than a line of text -- and a
- * header whose content is hidden is not absent, it is a blank grey strip that reads as a message which
- * failed to load. An intention normally fills it with its description; this is for one that has none. */
 documentationpopup .__doc-problem__.__no-message__ {
     padding-top: 0px;
 }
@@ -1603,26 +726,15 @@ documentationpopup .__doc-problem-message__ {
     padding-bottom: -6px;
     color: var(--editor-fg, #BCBEC4);
     white-space: normal;
-    /* THE SAME MEASURE THE BODY USES, and for the same reason: the popup is sized by its widest band, so a
-     * message wider than the prose beside it decides the box on its own. At 360 it did -- with the type
-     * declaration stacked one interface per line, this line became the widest thing in the popup and held
-     * it 100px past what its own content needed. A quick-fix message is a sentence, so it takes a
-     * sentence's measure. @see .__doc-body__ */
     max-width: 600px;
     flex-shrink: 0;
 }
 
-/* A ROW, and it wraps nothing: the two labels and their two accelerators are one line in IntelliJ, and a
- * shortcut that wrapped under its own action would read as a second action. */
 documentationpopup .__doc-problem-actions__ {
     flex-direction: row;
     align-items: center;
     gap: 12px;
-    /* THE POPUP'S OWN PAPER, so the fix row reads as continuous with the content below rather than as the
-     * bottom of the header. --doc-bg rather than a literal: it is the same token the box itself paints. */
     background-color: var(--doc-bg, #191A1C);
-    /* OUT THROUGH THE BAND'S PADDING, which is the message's. Without the negative pair this row's ground
-     * would stop 18px short on each side and sit as an inset strip inside the header. */
     margin-top: 14px;
     margin-left: -18px;
     margin-right: -18px;
@@ -1632,8 +744,6 @@ documentationpopup .__doc-problem-actions__ {
     padding-right: 18px;
 }
 
-/* THE LINK COLOUR, because these behave like links -- one click, no state, and the accelerator beside
- * them is the keyboard equivalent rather than a second control. */
 documentationpopup .__doc-problem-action__ {
     font-size: 16px;
     color: var(--link, #548AF7);
@@ -1641,58 +751,28 @@ documentationpopup .__doc-problem-action__ {
     cursor: pointer;
 }
 
-/* UNDERLINED ON HOVER, which is what says it is clickable at all: the accelerator beside it is the same
- * size and nearly the same weight, so colour alone leaves two words that differ only in hue. IntelliJ
- * underlines on hover rather than always, and that is the better half of the choice -- a row with two
- * permanently underlined runs reads as a form rather than as a sentence with an action in it.
- *
- * The pointer is on the rule ABOVE rather than here, deliberately: the cursor is a property of the thing
- * being pointed at, and a `cursor` that only applies while `:hover` matches is the same statement made
- * twice with one of them able to go missing. */
 documentationpopup .__doc-problem-action__:hover {
     text-decoration-line: underline;
 }
 
-/* The accelerator is a caption, not a control: dimmer, never the link colour, and it must not look
- * pressable or it becomes the thing people click instead of the action it names. */
 documentationpopup .__doc-problem-shortcut__ {
     font-size: 16px;
     color: var(--editor-line-number, #6B6B6B);
     flex-shrink: 0;
 }
 
-/* The overflow menu. The preferred fix keeps the lightbulb, which is the one row IntelliJ marks. */
 menu.__code-actions__ .__preferred-action__ {
     color: var(--link, #548AF7);
 }
 
-/* THE GUTTER BULB -- there is something to offer on the caret's row.
- *
- * In the fold column, which is the gutter's decoration lane, so it lines up with the fold arrows and
- * needs no geometry of its own. It shares that column with them by construction: a row cannot both start
- * a foldable region and be the caret's row often enough to be worth a lane of its own, and when it is,
- * the arrow is the one you came for.
- *
- * The bulb is JetBrains' own drawing and brings its own colour, so there is no token here to argue
- * about -- which also settles the question of whether it should read as a warning: upstream already
- * decided, and matching it is what makes it recognisable. */
 texteditor .__quick-fix-bulb__ {
     width:  24px;
     height: 24px;
     overlay: icon("crystalgui:general/action/intentionBulb");
-    /* NO `color`. This icon carries its own palette -- amber glass, grey base, hard-coded -- exactly like
-     * the filetype icons, so a tint here would be a declaration that does nothing. Its light/dark pair is
-     * resolved by icon() itself through CgUiSvg.ofIcon. */
     cursor: pointer;
     z-index: 5;
 }
 
-/* SHOWING A PROBLEM AND NOTHING ELSE -- the error stripe's popup.
- *
- * The three symbol bands are hidden by the widget, which is not sufficient on its own: the popup's own
- * bottom padding and the band's separator both remain, and together they draw an empty strip under the
- * actions row that reads as a section which failed to load. There is nothing below the actions, so the
- * band runs to the bottom edge and the separator has nothing left to separate. */
 documentationpopup.__problem-only__ {
     padding-bottom: 0px;
 }
@@ -1702,21 +782,13 @@ documentationpopup.__problem-only__ .__doc-problem__ {
     border-bottom-color: #00000000;
 }
 
-/* The owner band: the DECLARING type, drawn with that type's own kind icon. Reuses the completion popup's
- * icon vocabulary, which is keyed on SymbolKind and has nothing completion-specific in it but the prefix. */
 documentationpopup .__doc-owner__ {
     flex-direction: row;
     align-items: center;
     gap: 8px;
-    /* The band is 32px of icon beside ~22px of text, so without this the row is as tall as the icon and
-     * the text floats in it. Matching the icon to the text closes a gap that reads as a margin. */
     height: 28px;
 }
 
-/* ONE rule. There were briefly two — mine at 28px above the existing 22px one — and the later won, so
- * the first looked like it did nothing. Two rules for one element on the same properties is a coin toss
- * decided by file order, which is the trap the sheet's own header warns about for `:disabled` after
- * `:hover`. */
 documentationpopup .__doc-owner-icon__ {
     width: 22px;
     height: 22px;
@@ -1728,75 +800,22 @@ documentationpopup .__doc-owner-text__ {
     color: var(--doc-owner-fg, #7A7A7A);
 }
 
-/* THE PROVENANCE NOTE -- `— from JSDoc`, `— from last run`. A dynamic language's answer carries a
- * provenance a static one never needs, and the owner band is the right place for it: that band already
- * says where a symbol comes from.
- *
- * QUIETER THAN THE OWNER, and italic, because it is a remark ABOUT the answer rather than part of it.
- * Without a rule of its own it was walked as another segment of the qualified path -- `from` tinted as a
- * package, `JSDoc` as a type -- which read as the engine having parsed a class called `from.JSDoc`. */
 documentationpopup .__doc-owner-text__::highlight(doc-owner-note) {
     color: var(--doc-owner-note-fg, #5F5F5F);
     font-style: italic;
 }
 
-/* The definition line -- ONE text run, and NOT a wrapping one.
- *
- * `white-space: normal` here is what made the box too narrow, and the mechanism is worth stating because
- * it is invisible: a wrappable text element contributes only its LONGEST WORD to its container's
- * min-content width, not its whole line. So a content-sized popup sized itself to the owner row instead
- * -- hovering `java.lang.System` produced a box as wide as `java.lang` with the signature wrapped to
- * `final class` / `System` underneath it. It looked like a width bug and was a wrapping one, and it only
- * showed up when the owner was SHORTER than the signature, which is why other symbols looked fine.
- *
- * A signature is a line. Ellipsised rather than wrapped when it genuinely does not fit, which is also
- * what the completion popup does with its detail column -- and this box can be dragged wider. */
-/* IT WRAPS. A long declaration is shown in full over several lines, not truncated.
- *
- * This was `nowrap` + `text-overflow: ellipsis`, and that was the wrong call twice over. Both references
- * WRAP a signature -- IntelliJ breaks before the `=` of a long field and between the parameters of a long
- * method -- because a declaration you cannot read the end of is the one thing a documentation popup must
- * not produce. Ours cut `retryLoop(Supplier<Boolean> atten` mid-word, and because the popup clips with
- * `overflow: hidden` there was not even an ellipsis to say so.
- *
- * The reason `nowrap` went in was a different bug entirely: a wrappable UIText contributes only its
- * longest WORD to a content-sized parent's width, so the box sized itself to the owner row. That is fixed
- * by forceSelfSizeWidth() in DocumentationPopup, which makes the element report its full measured width
- * -- so wrapping is safe again, and `nowrap` was treating the symptom of something already cured.
- *
- * max-width bounds the measured width so it cannot exceed the popup: it is a SEPARATE PROPERTY from
- * width and applies after it whatever origin the width came from -- the same reason a base rule's
- * min-height beats a height written at higher specificity. Without it the IMPORTANT width from
- * forceSelfSizeWidth stays wider than the popup and the text never gets a narrower box to wrap into. */
-/* The band is a COLUMN of lines; the engine decided where they break. */
 documentationpopup .__doc-definition-box__ {
     flex-direction: column;
     align-items: flex-start;
 }
 
-/* NOWRAP, and that is now correct rather than a workaround.
- *
- * It was `normal` briefly, on the theory that the layout should wrap a long signature -- and it cannot:
- * a wrapping UIText measures the unwrapped string to report its own width, so wrapping and self-sizing
- * are mutually exclusive, and self-sizing is what makes a short signature size the popup at all. The
- * breaks come from the engine instead, at points it understands (after an annotation, between
- * parameters, before a long initializer) rather than at whatever word reaches the edge. */
-/* THE DOCUMENT'S INK, not the variable colour. This said `--syntax-variable` from when the popup had its
- * own three-name vocabulary and the SUBJECT was most of what a line contained -- reasonable then, wrong the
- * moment an engine started rendering real captures. What is left uncaptured in a signature is punctuation:
- * parens, commas, semicolons, `=`, a generic's angle brackets. Under a scheme whose locals are yellow, every
- * bracket in the box went yellow with them, and the declaration read in two palettes at once.
- *
- * It also beat the `.__syntax__` rule above on specificity (0,10,1 against 0,10,0), so setting the ink there
- * -- the right place, since it covers every code surface -- changed nothing here until this line agreed. */
 documentationpopup .__doc-definition__ {
     font-size: 16px;
     color: var(--editor-fg, #DFE1E5);
     white-space: nowrap;
 }
 
-/* Coloured from the ACTIVE SCHEME, not from a popup palette, so the signature matches the code it describes
- * and a scheme switch recolours it with nothing else to update. */
 documentationpopup .__doc-definition__::highlight(doc-modifier) {
     color: var(--syntax-keyword, #CF8E6D);
 }
@@ -1809,18 +828,6 @@ documentationpopup .__doc-definition__::highlight(doc-name) {
     color: var(--syntax-variable, #DFE1E5);
 }
 
-/* The one band that can be arbitrarily long, so it is the one that scrolls -- and it bounds ITSELF rather
- * than growing into the popup.
- *
- * `height: 0; flex-grow: 1` is the fill idiom and it is exactly wrong here now that the box is sized to
- * its content: a popover's height comes from its own children, so there is no free space to distribute
- * and a growing child with a zero basis resolves to zero -- a popup with an invisible body. QuickPick
- * records the same trap. A max-height of its own gives it somewhere to scroll inside instead. */
-/* A RULE, AND IT IS AN ELEMENT. A one-sided `border-width-*` draws all four edges or none, never the
- * one named -- so a divider is a 2px-tall box, which is what `.__status-sep__` already spells.
- *
- * Full width and zero-shrink: in a column the cross axis stretches by default, and `flex-shrink` is 0
- * here anyway, but the height is the thing a stretch could eat. */
 documentationpopup .__doc-separator__ {
     width: 100%;
     height: 2px;
@@ -1830,60 +837,14 @@ documentationpopup .__doc-separator__ {
     background-color: var(--doc-border, #393B40);
 }
 
-/* The one band that can be arbitrarily long, so it is the one that scrolls -- and it bounds ITSELF
- * rather than growing into the popup.
- *
- * `max-width` is a MEASURE, not a fraction. The popup is sized by its signature, which is one nowrap
- * line and can be very wide -- so prose given the same width ran to 100-odd characters a line, which is
- * roughly twice what anything is comfortable to read. A percentage was the obvious alternative and is
- * worse in both directions: a short signature would squeeze the prose into a sliver, and a long one
- * would still leave it unreadably wide.
- *
- * 600px, AND THE NUMBER IT REPLACED IS THE WHOLE LESSON. This said 880px and claimed that was "about 65
- * characters at this size". It is not: 880px at font-size 9 is about **107**, because the estimate
- * assumed a monospace advance and this band is set in the proportional UI font, whose average advance is
- * nearer 0.46em than 0.6em. So the rule that existed to bound the measure was itself derived from a
- * measure that was never taken, and the popup read as a wall of text with a correct-looking rule sitting
- * above it.
- *
- * COUNTED FROM A CAPTURE, not calculated again: `String`'s own documentation in the dock harness wraps
- * at ~73 characters here, against IntelliJ's ~69 for the same class. Typography's comfortable range is
- * 45-75 and both land in it. Anyone changing this number should count a line in a screenshot rather than
- * multiply by an assumed advance -- that is exactly how it went wrong the first time. */
-/* THE SCROLLING REGION -- everything except the quick-fix band above it.
- *
- * BOUNDED BY ITS OWN max-height, NOT by `height: 0; flex-grow: 1`. That idiom is this engine's usual
- * answer for "take the slack" and it needs a parent with a DEFINITE size to take slack from -- the popup
- * is sized by its content and carries a max-height rather than a height, so there is no free space to
- * distribute and the scroller sat at its basis of zero. The popup collapsed to the quick-fix band alone,
- * measured at 116px tall with 960px of documentation inside a box with no height.
- *
- * So the cap goes here: the region grows to its content and then scrolls, and the popup's own max-height
- * is the backstop rather than the mechanism.
- *
- * The body no longer scrolls itself: a scrollbar inside one band scrolls the prose while leaving a long
- * `implements` list pinned above it, which is how you end up unable to reach what the declaration pushed
- * off the bottom. */
 documentationpopup .__doc-scroll__ {
     flex-direction: column;
     width: 100%;
-    /* HOW MUCH DOCUMENTATION YOU GET BEFORE IT SCROLLS, and it is a screen-space number rather than a
-     * derived one. IntelliJ's `docPopupMaxHeight` is 500, and unlike the widths beside it that figure is
-     * NOT scaled to this sheet's smaller font: a measure in characters per line is what font size
-     * changes, while a height is how much of the editor a popup is allowed to cover. 260 covered most of
-     * it and spilled past the bottom. Released on a vertical drag by the rule below. */
     max-height: 400px;
     overflow: auto;
     gap: 6px;
 }
 
-/* ONCE THE USER HAS TAKEN THE HEIGHT, the band FILLS instead of capping itself.
- *
- * The cap above is what makes a long document scroll inside a sensible box before anybody has an opinion.
- * It is also what made a vertical drag look broken: the frame grew and the band stayed 520px, so the popup
- * gained empty space below its own content. The fill idiom needs a parent with a DEFINITE height and the
- * popup only has one once the drag has written it -- `max-height` does not make a box definite, which is
- * why writing this unconditionally collapsed the band to zero instead. */
 documentationpopup.__user-sized-height__ .__doc-scroll__ {
     max-height: auto;
     height: 0;
@@ -1891,47 +852,12 @@ documentationpopup.__user-sized-height__ .__doc-scroll__ {
     min-height: 0;
 }
 
-/* THE BAND IS A `MarkupView` NOW, so this rule sizes a CONTAINER and the text rules below it name the
- * text. `font-size` on the container would compute correctly and reach nothing — `ua/core.css` opens
- * with `* { font-size: 10 }`, so there is a candidate at STYLESHEET origin on every paragraph inside.
- * `color` genuinely does inherit and stays here, where it covers bullets and headings too. */
 documentationpopup .__doc-body__ {
     color: var(--doc-body-fg, #DFE1E5);
-    /* THE PROSE DOES NOT WIDEN THE POPUP, and it is the BOX that now says so.
-     *
-     * On the old engine `UIText` had no measure function -- it re-wrapped after layout against the box it
-     * had been given -- so a paragraph contributed nothing to any ancestor's width and the popup was
-     * sized by its declaration alone. On this engine text is `Measurable` and answers max-content, so the
-     * same paragraphs reported their whole unwrapped length and dragged the box out to the full width of
-     * the surface.
-     *
-     * That was answered here, with `max-width: 804px` on this band -- derived as the popup's 420 floor
-     * less its 18px padding a side, so a body that stopped there could not push the box past the floor.
-     * It worked, and it stopped being true the moment the popup got a width of its OWN: the width now
-     * comes from the content-length ramp, and an explicit width cannot be widened by content, so there is
-     * nothing left for a cap on the prose to prevent.
-     *
-     * What the cap did instead was the failure the paragraph below already records about the 600px one
-     * before it -- the box grew and the text did not, leaving a widening empty margin beside every
-     * paragraph. Measured in the harness: a 1290px popup with its body pinned at 402, filling only when a
-     * drag released the cap. So the prose takes its measure from the box, which is what `width: 100%`
-     * has always said here. @see DocumentationPopup#sizeToContentLength */
     width: 100%;
-    /* LOOSER THAN THE BANDS ABOVE IT, and the two want opposite things.
-     *
-     * The popup declares `line-height: 1.15` on itself so it reaches every band -- that number was chosen
-     * for the DECLARATION, which is a short stack of code lines where a generous line box reads as the
-     * popup being loose. Prose is the other case: a paragraph of running text set at 1.15 is a block with
-     * no air in it, and the eye loses its place returning to the left margin. IntelliJ sets its
-     * documentation body noticeably looser than its signature for exactly this reason.
-     *
-     * Scoped here rather than raised on the popup, or the declaration goes back to being tall. */
     line-height: 1.45;
 }
 
-/* AND THE SAME TWO PROPERTIES ON THE TEXT ITSELF, for the reason stated above. Scoped to the popup so a
- * `MarkupView` used anywhere else keeps the default size — this 9 is the documentation band's, chosen
- * against the declaration above it, not a statement about markup in general. */
 documentationpopup .__markup-paragraph__,
 documentationpopup .__markup-bullet__,
 documentationpopup .__markup-code__ > text {
@@ -1939,23 +865,12 @@ documentationpopup .__markup-code__ > text {
     line-height: 1.45;
 }
 
-/* THE BOTTOM BAND, back — and the objection that removed it is answered rather than worked around.
- *
- * It read `this file` for anything declared in the open document, which says less than the owner band
- * above it. It now HIDES in that case (DeclarationSite.resource == null means this document), so the
- * only time it appears is the one no other band covers: the symbol is declared somewhere else and this
- * names where. Same rule the body band follows.
- *
- * The pencil is `editor.goToDefinition` with a different affordance. No kebab: its four entries are
- * settings that do not exist. */
 documentationpopup .__doc-footer__ {
     flex-direction: row;
     align-items: center;
     gap: 8px;
 }
 
-/* THE FILE, not the action. This briefly carried the pencil's own icon, which made the row read as two
- * buttons with a filename between them. */
 documentationpopup .__doc-footer-icon__ {
     width: 24px;
     height: 24px;
@@ -1968,15 +883,10 @@ documentationpopup .__doc-footer-text__ {
     color: var(--doc-footer-fg, #7A7E85);
     white-space: nowrap;
     text-overflow: ellipsis;
-    /* THE ONE THAT GIVES. The pencil must not be squeezed out of a narrow popup, and a filename is the
-     * half that can lose characters and still say something. */
     width: 0;
     flex-grow: 1;
 }
 
-/* 24px, MATCHING THE FILE ICON at the other end of the row. At 14 it was the largest thing in the
- * footer and read as the row's subject rather than as its action -- which is backwards, since the
- * subject is the file name between them. */
 documentationpopup .__doc-footer-edit__ {
     width: 24px;
     height: 24px;
@@ -1985,27 +895,7 @@ documentationpopup .__doc-footer-edit__ {
     background: icon("crystalgui:general/action/edit");
 }
 
-/* THE OLD NOTE, kept because the reasoning that removed the band is still what shapes it.
- *
- * It read `this file` for anything declared in the open document -- the common case -- which says less
- * than the owner band directly above it. IntelliJ's names the MODULE instead, and we have no notion of
- * one yet, so there was nothing better to put there.
- *
- * Deleted rather than hidden: a hidden child still counts for a `gap`, so `display: none` would have
- * left exactly the space it used to take. The pencil's command, editor.goToDefinition, is untouched and
- * still bound to Ctrl+B and Ctrl+Click. */
-
-/* -- Difference decorations (Phase 6.7) ----------------------------------------
- *
- * Three kinds, two granularities. A BAND spans the viewport and says "this line differs"; a MARK sits on
- * the characters that differ and is drawn stronger, so a changed line reads as mostly-unchanged with the
- * changed part standing out -- which is the whole reason the character pass exists.
- *
- * Both are painted with a low-alpha fill rather than an opaque one: they sit BEHIND the text, and an
- * opaque band would have to re-state the foreground colour for every syntax scheme to stay readable. */
 .__diff-band__ {
-    /* Behind everything else in the viewport. The current-line band and the selection are both drawn
-     * later and both may be true of the same row at once. */
     z-index: -2;
 }
 
@@ -2025,7 +915,6 @@ documentationpopup .__doc-footer-edit__ {
     background-color: var(--diff-changed-bg, #58A6FF1F);
 }
 
-/* The character marks: the same hues, harder, because they are the answer rather than the context. */
 .__diff-mark__.__diff-added__ {
     background-color: var(--diff-added-fg, #2EA04359);
 }
@@ -2038,9 +927,6 @@ documentationpopup .__doc-footer-edit__ {
     background-color: var(--diff-changed-fg, #58A6FF4D);
 }
 
-/* A change with no rows on this side. Drawn as a rule at the boundary and given the FULL-strength colour
- * rather than the band's wash: it is two pixels tall, and at 15% alpha it is invisible -- which is the
- * failure this marker exists to prevent. */
 .__diff-band__.__diff-thin__.__diff-added__ {
     background-color: var(--diff-added-fg, #2EA04359);
 }
@@ -2053,30 +939,8 @@ documentationpopup .__doc-footer-edit__ {
     background-color: var(--diff-changed-fg, #58A6FF4D);
 }
 
-/* The revert control beside a difference.
- *
- * NO OPACITY, AND THEREFORE NO HOVER STATE, and that is a rendering constraint rather than a taste.
- *
- * It was `opacity: 0.7` with `:hover { opacity: 1 }`, and the two looked like different artwork: the
- * dimmed one came apart into fragments while the hovered one was crisp. The cause is in `UIElement`'s
- * paint path -- an element whose opacity is not 1 has its whole subtree rendered into an offscreen layer
- * FBO and blitted back (see `drawSubtree` and `CgUiPaintContext#beginLayerFbo`), so the vector icon is
- * rasterised through an intermediate buffer instead of straight onto the surface at the pose scale. At
- * full opacity that round trip does not happen, which is exactly why hovering "fixed" it.
- *
- * So anything that wants to dim an icon has to do it with COLOUR, not with alpha on the element. This one
- * simply does not dim: the artwork is already quiet, and a control that only appears beside a difference
- * does not need a resting state to distinguish it from one that is always there. */
 .__diff-chevron__ {
     background: icon("crystalgui:general/action/doubleArrowRight");
-    /* Above the bands and the line numbers: it is a control, and a control the text draws over is one
-     * nobody finds. */
     z-index: 6;
 }
-/* The mirrored gutter is positioned from Java, not from here.
- *
- * It was a rule -- `position: absolute; right: 0` -- and it did nothing: the numbers stayed on the left
- * while the widget's x-arithmetic had already moved, so the gutter painted over the first seven
- * characters of every line. The gutter, the fold column and the text viewport are all placed by hand from
- * TextEditor's own measurements, and the gutter is simply the one that had been getting away with being
- * left where flow put it. @see TextEditor#setGutterOnRight */
+/* Positioned from Java: the widget's x-arithmetic owns where the gutter sits. */

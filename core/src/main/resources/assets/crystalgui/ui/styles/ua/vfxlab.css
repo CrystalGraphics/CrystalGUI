@@ -1,5 +1,7 @@
-/* The VFX Lab (app.vfxlab): a toolbar, the effect tree | viewport | inspector split, and a status bar.
- * Every rule states its own font-size: ua/core.css sets `* { font-size: 10 }`. */
+/* ua/vfxlab.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
+ * The VFX Lab (app.vfxlab): toolbar, effect tree | viewport | inspector, status bar.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
+ */
 
 vfxlab {
     flex-direction: column;
@@ -7,8 +9,6 @@ vfxlab {
     height: 100%;
     font-size: 22px;
 }
-
-/* ── toolbar: the transport as icons, then the values it plays with ──────── */
 
 vfxlab .lab-toolbar {
     overflow: hidden;
@@ -24,7 +24,6 @@ vfxlab .lab-toolbar {
     font-size: 22px;
 }
 
-/* A textless button: its icon fills the content box and takes `color`. */
 vfxlab .lab-icon {
     width: 56px;
     height: 52px;
@@ -50,7 +49,6 @@ vfxlab .lab-icon:active {
     background-color: var(--pressed-bg, #FFFFFF22);
 }
 
-/* Pause and Loop while on: a soft accent face, outlined, as an IDE's toggled tool. */
 vfxlab .lab-icon.lab-on,
 vfxlab .lab-icon.lab-on:hover {
     background: none;
@@ -87,7 +85,6 @@ vfxlab .lab-separator {
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
-/* Speed, Hold and Target: a dim caption, then its field. */
 vfxlab .lab-speed {
     flex-direction: row;
     align-items: center;
@@ -113,7 +110,6 @@ vfxlab .lab-slack {
     flex-grow: 1;
 }
 
-/* Under the toolbar and over the status bar. */
 vfxlab .lab-rule {
     width: 100%;
     height: 2px;
@@ -121,14 +117,10 @@ vfxlab .lab-rule {
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
-/* ── panes ─────────────────────────────────────────────────────────────── */
-
-/* The fill idiom: flex-shrink is 0 here. */
 vfxlab .lab-panes {
     width: 100%;
     height: 0px;
     flex-grow: 1;
-    /* The band that gives way: the toolbar and status bar keep their height, and the window stops here. */
     min-height: 320px;
 }
 
@@ -142,12 +134,11 @@ vfxlab .lab-inspector {
 vfxlab .lab-effects {
     gap: 8px;
     padding: 8px;
-    /* the pane's limits, read by the split from its content */
     min-width: 240px;
     max-width: 720px;
 }
 
-/* An inset well, darker than the panel: --field-bg alone is the panel's own grey. */
+/* Darker than the panel: --field-bg alone is the panel's own grey. */
 vfxlab .lab-effects searchfield {
     height: 48px;
     flex-shrink: 0;
@@ -189,7 +180,6 @@ vfxlab .lab-tree-row:hover {
     background-color: var(--list-hover-bg, #FFFFFF10);
 }
 
-/* The effect being edited, whatever holds focus: the lab's one selection, not a list's keyboard cursor. */
 vfxlab .lab-tree-row.__selected__,
 vfxlab .lab-tree-row.__selected__:hover {
     background-color: var(--accent, #3574F0);
@@ -215,7 +205,6 @@ vfxlab .lab-tree-row.__expanded__ .__twisty__ {
     overlay: shape("chevron-down");
 }
 
-/* A leaf keeps the slot, so every name starts at one x. */
 vfxlab .lab-tree-row.__leaf__ .__twisty__ {
     overlay: none;
 }
@@ -228,8 +217,6 @@ vfxlab .lab-tree-label {
     text-overflow: ellipsis;
     font-size: 22px;
 }
-
-/* ── viewport ──────────────────────────────────────────────────────────── */
 
 vfxlab vfxviewport {
     width: 100%;
@@ -255,9 +242,6 @@ vfxlab .lab-stats {
     font-size: 22px;
 }
 
-/* ── inspector ─────────────────────────────────────────────────────────── */
-
-/* The right pane: the Effect and Rendering tabs, each page the panel's colour. */
 vfxlab .lab-side {
     width: 100%;
     height: 100%;
@@ -284,7 +268,6 @@ vfxlab .lab-names {
     gap: 4px;
 }
 
-/* The header's reset-all, larger than a row's. */
 vfxlab .lab-reset-all {
     width: 32px;
     height: 32px;
@@ -312,7 +295,6 @@ vfxlab .lab-intensity {
     margin-left: 8px;
 }
 
-/* Unreal's reset-to-default arrow, on a row whose value is not the look's. */
 vfxlab .lab-reset {
     width: 24px;
     height: 24px;
@@ -326,8 +308,6 @@ vfxlab .lab-reset {
 vfxlab .lab-reset:hover {
     color: var(--fg, #FFFFFF);
 }
-
-/* ── status bar: state on the left, the effect and speed on the right ──────── */
 
 vfxlab .lab-status {
     flex-direction: row;

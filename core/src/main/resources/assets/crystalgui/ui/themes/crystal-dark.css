@@ -6,14 +6,9 @@
  * @author crystalgui
  *
  * The engine's default look.
- *
- * Two blocks, and the split is the whole architecture: the SYSTEM vocabulary is the ~30 roles
- * every component token derives from (base.css), and the pins below are the handful that cannot
- * derive — alpha scrims, and the graph's translucent bands where the wire showing through is the
- * design. Everything else in the UI follows from the first block.
+ * Pins only what base.css cannot derive from the system roles.
  */
 
-/* ── The system vocabulary ─────────────────────────────────────────────────────────────────── */
 theme {
     --surface-base: #26282B;
     --surface-panel: #191A1C;
@@ -21,15 +16,8 @@ theme {
     --surface-recessed: #131416;
     --surface-editor: #191A1C;
     --surface-overlay: #2B2D30;
-    /* Glass tint. Translucent BY DESIGN: it is laid over the blurred backdrop, and an opaque tint discards the
-     * very thing the capture went and fetched. CSS ORDER, alpha LAST: #RRGGBBAA. This was #662B2D30 -- the
-     * engine's own AARRGGBB int order -- which the sheet parser reads as a 19% wash of (102,43,45), a red. */
+    /* Translucent by design: an opaque tint discards the blur under it. Hex is #RRGGBBAA, alpha last. */
     --surface-glass: #2B2D3066;
-    /* WHAT IS NOT YOURS. A library class opened read-only, and anything else the workspace does not own.
-     * A surface rather than a foreground because what it qualifies is the CONTAINER: the point is not
-     * that this text is special, it is that this whole pane cannot be edited. Warm, so it separates at a
-     * glance from every other surface here -- all of which are neutral greys -- without being the red
-     * that already means "will not compile". IntelliJ tints the same tab the same way. */
     --surface-borrowed: #281F1C;
     --border-base: #393B40;
     --border-strong: #5A5D63;
@@ -47,15 +35,6 @@ theme {
     --hover-bg: #2E3033;
     --pressed-bg: #35373B;
     --selection-bg: #04395E;
-    /* A step ABOVE the surfaces rather than between them. At #2E3033 this was three units from
-     * --surface-overlay and five from --surface-raised, which is not a difference a selection can carry:
-     * on a panel it read as a faint smudge rather than as a highlight, and against a raised surface it
-     * nearly vanished.
-     *
-     * THE GREY THIS THEME ALREADY HIGHLIGHTS WITH, rather than a fourth one invented for this: it is
-     * what the activity bar draws a hovered and a checked item in. Not DERIVED from those, though, and
-     * crystal-light is why -- there the three are three different values, so they are independent tokens
-     * that happen to agree here. Tying them together would make a light theme unable to say so. */
     --selection-inactive-bg: #46484B;
     --focus-ring: #0060DF;
     --error: #F14C4C;
@@ -63,37 +42,23 @@ theme {
     --info: #3794FF;
     --success: #3C8527;
     --modified: #E2C08D;
-    /* FULL-STRENGTH SEVERITY, for a filled MARK rather than for a word. --error/--warning/--info above
-     * are text colours: they are darkened until a sentence in them is readable on this theme's surface,
-     * which is why --warning is an olive rather than an amber. A severity icon is a solid shape and wants
-     * the saturated version -- these are the values the artwork itself carried before the icons became
-     * currentColor, and they are the reason that conversion needed somewhere to put them. */
     --error-icon: #E55765;
     --warning-icon: #FFAF0F;
     --info-icon: #548AF7;
-    /* COMPLETES THE ICON TIER. error, warning and info each already have a brighter variant for a small
-     * glyph, where the body colour is too dark to read at 20px; success had none because nothing drew one
-     * until the Run panel's live mark. This is the green IntelliJ puts over its Run tool window. */
     --success-icon: #5FAD65;
-    /* ATTENTION: what Windows flashes a taskbar button that wants looking at -- the one thing asking rather than
-     * reporting, so a colour that is none of the severities. A fill and a brighter mark on it. */
     --attention: #C4621A;
     --attention-mark: #F7A04A;
-    /* The same orange at no alpha, what a pulse fades to; and at four fifths, what it holds at once over */
     --attention-clear: #C4621A00;
     --attention-held: #C4621ACC;
 
     --link: #4A88C7;
 
-    /* ── Islands geometry. Same in both themes: a theme changes the LOOK, and a flat theme is
-     * expressed by zeroing these rather than by shipping different structure. ── */
     --radius-panel: 16px;
     --radius-control: 8px;
     --panel-gap: 6px;
 
 }
 
-/* ── Pins: what a role cannot say ──────────────────────────────────────────────────────────── */
 theme {
     --banner-error-bg: #4A2D2D;
     --banner-error-fg: #E5B4B4;
@@ -104,51 +69,19 @@ theme {
 
     --blackboard-drop-line: #44C0FF;
 
-    /* THE SNAP PREVIEW: a neutral translucent wash with a brighter edge — the region a drag is
-     * proposing, drawn over whatever is behind it.
-     *
-     * GREY rather than the accent, which is a correction. An accent-coloured sheet laid over a window
-     * reads as a tint being applied to that window rather than as a region being offered for it, and the
-     * dock's own drop highlight is not the precedent it looks like: that fills a small empty slot, where
-     * this covers live content. Windows, GNOME's tile preview and KWin's electric-border preview are all
-     * neutral.
-     *
-     * The border carries far more alpha than the fill (AA against 40) because the border is what makes
-     * the rect legible: a wash states the area and the edge states where it stops. Dimmed to match the
-     * fill it is just a slightly different wash, which is exactly what `opacity` on the element used to
-     * produce. */
     --snap-preview-bg: #9AA0A640;
     --snap-preview-border: #C8CDD2AA;
 
-    /* The top edge: black at 25%, a shade of the glass rather than an opaque seam. White blended into a bright sky above it. */
     --taskbar-border: #00000040;
-    /* The bar's top edge: white at 4% at the ends to 45% in the middle, Windows 11's lit rim. */
     --taskbar-edge-end: #FFFFFF0A;
     --taskbar-edge-mid: #FFFFFF73;
-    /* The keyboard ring on the bar's entries and start button: white, as Windows 11 draws it on its dark bar. */
     --taskbar-focus-ring: #FFFFFF;
-    /* The bar's button names: light on either bar, as Windows 11 draws its taskbar tooltips. */
     --taskbar-tooltip-bg: #F9F9F9;
     --taskbar-tooltip-border: #0000001A;
     --taskbar-tooltip-fg: #1A1A1A;
-    /* THE TASKBAR'S ACRYLIC TINT: Mica's dark base, #202020, at the floating panels' 7%; the rule's
-     * `luminosity 0.48` does the darkening, so the blurred world shows through. A pin because no system
-     * role carries this alpha.
-     *
-     * #RRGGBBAA, ALPHA LAST. In the engine's int order this pin is a RED, and it was written that way
-     * twice: the shipped #E01F2023 parses as (224,31,32) at 14%, and #EB1C1D21 -- the value the Mica
-     * rewrite replaced it with -- as (235,28,29) at 13%. The bar was maroon throughout, and two comments
-     * blamed saturation and the harness's clear colour for it before anyone read the parser.
-     * @see AGENTS.md, load-bearing invariants. */
     --taskbar-glass-tint: #20202013;
-    /* A HIDDEN DECLARATION'S VEIL: the panel, and the recessed field, at 60% over what they cover -- what opacity 0.4
-     * looked like, as one flat draw rather than a layer. Pins, for the same reason as the glow: an alpha. */
     --hidden-veil: #191A1C99;
     --hidden-veil-recessed: #13141699;
-    /* THE ACTIVE ENTRY: Windows' #5D5D5D in this theme's cool cast -- a step of sixty above the bar,
-     * where --pressed-bg was a step of twenty and read as nothing. @see base.css */
-    /* The desktop's own glass: the starting wash and the failure screen sit over the game, so they are the same in
-     * both themes. */
     --starting-wash: #0E0F1199;
     --failure-bg: #16171A66;
     --failure-title-bg: #FFFFFF1C;
@@ -156,49 +89,30 @@ theme {
     --failure-icon-rim: #B3261E;
     --failure-button-hover-bg: #FFFFFF33;
     --failure-button-active-bg: #FFFFFF44;
-    /* A game screen's scrim over the game, the same in both themes: Minecraft's own darkening, and the lighter one under a blur. */
     --screen-scrim: #0000008C;
     --screen-scrim-blur: #00000059;
     --glass-mark-fg: #FFFFFF;
-    /* WHITE AT LOW ALPHA, not a grey, so they composite with the blurred bar rather than replace it.
-     * Hover 10%, active 20%, both 30%: set by eye against Windows' taskbar, side by side (2026-11-04).
-     * Fluent's subtle fills (5.9%, 8.2%) read as one state on this bar. Fluent writes #AARRGGBB; these are
-     * the sheet's #RRGGBBAA, alpha last, or the active entry is an opaque cyan. */
+    /* White at low alpha, not grey, so they composite with the blurred bar rather than replace it. */
     --taskbar-entry-hover-bg: #FFFFFF1A;
     --taskbar-entry-active-bg: #FFFFFF33;
-    /* A step above active, for the pointer over the active entry. Fluent publishes no value for it. */
     --taskbar-entry-active-hover-bg: #FFFFFF4D;
-    /* What start's mark is multiplied by when hovered and pressed: the C's middle and last stops, halfway to white. */
     --taskbar-start-hover-tint: #D4E2FF;
     --taskbar-start-pressed-tint: #B7CDF7;
 
-    /* THE WINDOW ICON TILES. Six hues, keyed on the icon name by WindowIcon; a filled rounded square
-     * with a white glyph on it, so each is tuned to carry white at 14–36px on a dark bar — saturated
-     * enough to read as a brand tile, muted enough that six of them in a row do not read as a warning
-     * strip. The order is arbitrary and it stays arbitrary: nothing may key a meaning to a slot. */
     --window-icon-tile-1: #4A7CE0;
     --window-icon-tile-2: #3FA36B;
     --window-icon-tile-3: #D98A3A;
     --window-icon-tile-4: #8B63D9;
     --window-icon-tile-5: #2FA7B8;
     --window-icon-tile-6: #D85A7A;
-    /* Where each tile's gradient ends, bottom-right: its hue turned 28 degrees (cool hues on, warm hues back,
-     * which keeps orange off olive) and a little darker, as the editor's own tile runs blue to violet. */
     --window-icon-tile-1-end: #3E26DA;
     --window-icon-tile-2-end: #368C84;
     --window-icon-tile-3-end: #C63C26;
     --window-icon-tile-4-end: #B43FD0;
     --window-icon-tile-5-end: #28599E;
     --window-icon-tile-6-end: #D03796;
-    /* THE MONOGRAM'S TILE: a hue of its own, never a grey. It derived from --border-strong, which put it
-     * at (87,90,97) against an active entry at (90,93,99) -- three levels apart, so a window that
-     * declares no icon vanished the moment its entry became the active one, which is the one entry you
-     * are looking at. Chosen rather than derived, and close to the badge red and to tile-6: that is a
-     * real cost and a deliberate one, because a tile is an identity and never a status, and nothing else
-     * in the strip is a filled crimson square. */
     --window-icon-mono-bg: #DE2A4D;
     --window-icon-mono-bg-end: #C51E7C;
-    /* What raises a tile's letter off it. */
     --window-icon-monogram-shadow: #000000C0;
     --colorpicker-bg: #1E1E1EDD;
     --colorpicker-handle-shadow: #00000080;
@@ -208,21 +122,8 @@ theme {
     --dialog-backdrop: #00000080;
     --dialog-picker-bg: #2E2E2E76;
 
-    /* THE EDITOR'S FIND BAR. Pinned to exactly what base.css derives for it (--surface-panel), so this
-     * changes nothing here — it is stated because its light pair has to diverge, and
-     * eachThemeAndSchemePairDefinesTheSameKeys requires the two files to define the same set.
-     *
-     * That rule is doing real work rather than being satisfied: an override one theme has and the other
-     * does not is exactly how a pair drifts, and the failure mode is that the theme nobody is currently
-     * looking at quietly stops matching the design. Writing both makes the divergence a visible, paired
-     * decision — dark keeps the panel-header derivation, light needs its own shade because its panels
-     * and its editor are both white. */
     --editorfind-bg: #191A1C;
 
-    /* BETWEEN --fg and --fg-secondary, and it needs to be: a doc body at --fg is exactly as bright as
-     * the code samples inside it, so the two read as one surface, while --fg-secondary reads as disabled
-     * because that is what it means everywhere else here. About fifteen percent down from --fg -- enough
-     * for the code to come forward, not enough for the prose to look switched off. */
     --doc-body-fg: #C6C8CE;
     --dock-drop-overlay: #4A88C766;
     --dock-floating-bg: #1E1E1EF0;
@@ -250,7 +151,6 @@ theme {
     --region-drop-bg: #3574F055;
 
     --tooltip-bg: #2B2D30;
-    /* THE MENUS' EDGE: a tooltip is the same kind of popup, and the two outlines side by side read as one. */
     --tooltip-border: #323438;
 
     --scrollbar-thumb: #8C8C8C55;
@@ -261,45 +161,20 @@ theme {
 
     --activitybar-item-hover-bg: #46484b;
 
-    /* PURE WHITE, and brighter than --fg (#DFE1E5) on purpose: this is a selection ring over a grid of
-     * arbitrary window pictures, so it has to read against a screenshot of anything at all rather than
-     * merely against a panel. Windows' switcher uses the same. */
+    /* Brighter than --fg on purpose: it has to read against a screenshot of anything. */
     --switcher-selected-ring: #FFFFFF;
-    /* A jump list's unavailable row on the glass: Fluent's TextFillColorDisabled, white at 36%. */
     --jump-list-disabled-fg: #FFFFFF5D;
     --activitybar-item-checked-bg: #46484b;
-    /* A MENU'S OUTLINE AND ITS SEPARATORS, a step darker than --border-base: the popup's edge reads as a
-     * seam rather than a frame, and the rules inside it match. Every Menu draws both -- the bar's drops,
-     * context menus, dropdowns and submenus. */
     --menu-border: #323438;
     --menu-separator: #323438;
 
-    /* -- Differences -----------------------------------------------------------
-     *
-     * Two strengths per kind, and the pair is the point rather than a shade choice. The BAND is a wash
-     * behind a whole line and has to leave every syntax colour on top of it readable; the MARK is a
-     * stronger fill over the characters that actually differ, so a changed line reads as
-     * mostly-unchanged with the change standing out. One strength cannot do both jobs: at the band's
-     * alpha a mark is invisible, and at the mark's alpha a band drowns the code.
-     *
-     * Green/red/blue rather than the theme accent, because these are the one place in the application
-     * where colour carries MEANING a person already knows from every other diff they have read. */
     --diff-added-bg: #2EA04326;
     --diff-added-fg: #2EA04359;
     --diff-removed-bg: #F8514926;
     --diff-removed-fg: #F8514959;
-    /* Blue rather than amber: amber is what the notification and dirty-state tokens use, and a changed
-     * line is not a warning. */
     --diff-changed-bg: #58A6FF1F;
     --diff-changed-fg: #58A6FF4D;
 
-    /* -- A tree row's kind glyph, by role -----------------------------------------------------------
-     *
-     * One hue per role rather than per kind, so a tree stays scannable: layout grey, text amber, controls
-     * blue, collections violet, overlays teal, addons green. Hues no system role carries. The values are the
-     * signed-off mock as a colour-managed browser DISPLAYED it, not its CSS: this engine writes raw sRGB, so
-     * matching the look means matching what was on screen. The -selected twins sit on the focused selection
-     * band. */
     --kind-glyph-layout: #AEA79C;
     --kind-glyph-text: #CAA875;
     --kind-glyph-control: #75B1ED;
@@ -313,15 +188,9 @@ theme {
     --kind-glyph-overlay-selected: #8CEFE8;
     --kind-glyph-addon-selected: #9EF2CB;
 
-    /* THE STYLE LABS' GROUNDS, fixed on purpose: a lab draws its specimen on a dark ground AND a light
-     * one, because a stroke or a shadow that reads on one vanishes on the other. A theme that inverts
-     * these has taken away the only thing the pair is for. The shapes are what a blur is judged against. */
     --lab-ground-dark: #000000;
     --lab-ground-light: #FFFFFF;
     --lab-specimen-bg: #FFFFFF14;
-    /* THE PLATE AND WHAT IS ON IT, per GROUND rather than per theme: the two grounds are an absolute black and an
-     * absolute white a person picks, so what reads on them is absolute too -- a theme-derived foreground is a dark
-     * mark on the black plate as soon as the theme is a light one. Literal in both themes, as the grounds are. */
     --lab-specimen-on-light: #00000014;
     --lab-mark: #DFE1E5;
     --lab-mark-on-light: #1E1F22;

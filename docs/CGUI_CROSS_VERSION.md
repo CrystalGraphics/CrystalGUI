@@ -68,10 +68,9 @@ python CrystalGraphics/singlejar-logic/mcapi.py find Menu --in net/minecraft/wor
 `~/.gradle/caches/modules-2/`.
 
 **Whether a hook reaches what is drawn, or happens when you think: the loader's own jar.** An event existing
-is not an event mattering. Forge 26.1.1–26.2 post their camera-angle event *after* `renderLevel` has copied
-the view, so no listener's angles reach the screen; Forge 26.3 posts it twice a frame. Neither shows in a
-signature, and each cost a sweep to find by symptom. Every installed client's patched Minecraft is in
-Prism's libraries, ready to disassemble — read the call order before writing the hook:
+is not an event mattering: Forge 26.1.1–26.2 post their camera-angle event *after* `renderLevel` has copied
+the view, and Forge 26.3 posts it twice a frame. Every installed client's patched Minecraft is in Prism's
+libraries — read the call order before writing the hook:
 
 ```bash
 unzip -q -o "$PRISM/libraries/net/minecraftforge/forge/26.1.1-63.0.2/forge-26.1.1-63.0.2-client.jar" \
@@ -235,19 +234,15 @@ return server.getPlayerList().isOp(player.getGameProfile());
 ## 7. Prove it — a probe that is right the first time
 
 A runtime check of every node is a gauntlet test (`CrystalGraphics/docs/GAUNTLET.md`), which `prodSmoke`
-and dev runs play; the world seams have `crystalgraphics:world`. Its design decides whether verification
-converges or goes round in circles: the world seams took eight sweeps, and most of their failures were the
-probe's, not the hosts'. Before the first run:
+and dev runs play; the world seams have `crystalgraphics:world`. Most failed sweeps are the probe's fault, not
+the hosts'. Before the first run:
 
 1. **Every check is a cross-check of two independent sources** — the entity query against the host's
    camera, the ground scan against a raycast, the sun against the day time — never one value against a
    constant you assumed.
 2. **Measure invariants, not conventions.** A camera offset is the rotation *between* the views before and
-   after — an angle and an axis — not a world yaw read off a matrix: one host turns about the view's
-   vertical, another the world's, and both are right; reading world yaw passed the first and failed the
-   second for a player looking down. Apply one change per measurement (yaw, then roll), so each is one
-   rotation. Before blaming a host for a failed check, ask whether the check's assumption holds there
-   (1.7.10's player stands at `posY - yOffset`, its `posY` at eye level).
+   after (an angle and an axis), not a world yaw: hosts legitimately turn about different axes. One change per
+   measurement. Before blaming a host, check the assumption holds there (1.7.10's `posY` is at eye level).
 3. **Declare, then skip.** A host declares what its hook *visibly* delivers (`CgCameraManager.capabilities()`,
    `CgWorldEvents.declare`), and the probe skips the rest with a reason. A node that cannot deliver says so
    in its declaration and its javadoc — it does not fail, and it does not declare a hook that changes
@@ -275,11 +270,9 @@ probe's, not the hosts'. Before the first run:
    `forge:1.20.1` (legacyForge), `neoforge:1.20.4`, `fabric:1.20.1`, `neoforge:1.21.11`, plus
    `:runtime:mc:1710:serverSmoke` and `runtime/mc/legacy/server_smoke.py` for legacy.
 4. `./gradlew singleJar languageJar checkSingleJar checkLanguageJar`.
-5. **One** `./gradlew prodSmoke` — the sweep, its default: one client per Minecraft major and the first
-   and last of 1.19, 1.20 and 1.21, those of 1.20 and 1.21 on all three loaders — twenty-four, four at a
-   time — and open the
-   captures. Never every instance for a routine check; `CGUI_BUILD.md` § *A wide check is the sweep*. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev run; prodSmoke is their
-   only runtime check.
+5. **One** `./gradlew prodSmoke`, the sweep (`CGUI_BUILD.md` § *A wide check is the sweep*), and open the
+   captures. Never every instance for a routine check. Forge ≥1.20.2 and NeoForge 1.20.2/1.20.3 have no dev
+   run; prodSmoke is their only runtime check.
 6. A feature a smoke does not exercise (a command, an entity) needs its own probe or a manual run on
    the oldest and newest node of each loader — say which, in the commit.
 
@@ -302,8 +295,7 @@ probe's, not the hosts'. Before the first run:
 
 **A failure prodSmoke or a player finds is fixed in that node's dev run, not in Prism.** Reproduce it
 with `runClient -Dcrystalgraphics.gauntlet=...` (or `runServer`/`serverSmoke`), iterate there, and run
-`prodSmoke` once more at the end. A cycle through the shipped jar is ten minutes; a dev client is two.
-`CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run* has the command.
+`prodSmoke` once more at the end. `CGUI_BUILD.md` § *A failure on an installed client is fixed in a dev run* has the command.
 
 ## 9. Traps
 

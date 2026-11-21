@@ -5,36 +5,18 @@
  * @editor-scheme crystalgui:islands-light
  * @author crystalgui
  *
- * The vocabulary's acceptance test: if a light theme needs more than this file, some rule
- * bypassed a token. Authored rather than inverted — a light UI is not a photographic negative,
- * and the roles reverse meaning (a RECESSED surface goes white here, being the brightest thing
- * on screen, while it is the darkest in the dark theme).
- *
- * Two blocks, and the split is the whole architecture: the SYSTEM vocabulary is the ~30 roles
- * every component token derives from (base.css), and the pins below are the handful that cannot
- * derive — alpha scrims, and the graph's translucent bands where the wire showing through is the
- * design. Everything else in the UI follows from the first block.
+ * The light half of Crystal.
+ * Pins only what base.css cannot derive from the system roles.
  */
 
-/* ── The system vocabulary ─────────────────────────────────────────────────────────────────── */
 theme {
-    /* THE GROUND EVERYTHING SITS ON -- menu bar, status bar, the activity rails, and every gap between
-     * islands. IntelliJ Light's own frame colour. */
     --surface-base: #EBECF0;
-    /* AND THE ISLANDS ARE WHITE. This was #F2F2F4, a grey a shade off the frame, so the panels barely
-     * separated from the ground they float on and the whole window read as one flat sheet -- the exact
-     * thing the Islands look exists to avoid, and it is far more obvious in light than in dark because
-     * the two greys are closer together at the top of the range. */
     --surface-panel: #FFFFFF;
     --surface-raised: #E4E4E8;
     --surface-recessed: #FFFFFF;
     --surface-editor: #FFFFFF;
-    /* @see crystal-dark.css. Warm and pale here for the same reason it is warm and dark there: it has
-     * to separate from neutral surfaces without reading as an error. */
     --surface-borrowed: #FBF3E8;
     --surface-overlay: #FFFFFF;
-    /* Glass tint. The light theme's glass is a white veil rather than a grey one -- same alpha, so it lets the
-     * same amount of backdrop through. #RRGGBBAA, alpha last; was #66FFFFFF, an opaque cyan-white. */
     --surface-glass: #FFFFFF66;
     --border-base: #C4C4C8;
     --border-strong: #9A9AA0;
@@ -58,35 +40,23 @@ theme {
     --info: #1B72C4;
     --success: #2E6B1F;
     --modified: #A5762B;
-    /* FULL-STRENGTH SEVERITY, for a filled MARK rather than for a word. --error/--warning/--info above
-     * are text colours: they are darkened until a sentence in them is readable on this theme's surface,
-     * which is why --warning is an olive rather than an amber. A severity icon is a solid shape and wants
-     * the saturated version -- these are the values the artwork itself carried before the icons became
-     * currentColor, and they are the reason that conversion needed somewhere to put them. */
     --error-icon: #DB5C5C;
     --warning-icon: #FFAF0F;
     --info-icon: #4682FA;
-    /* Darker than dark's, the same relationship the other three have between the pair: a filled mark has
-     * to hold its own against a light surface, where dark's #5FAD65 washes out. */
     --success-icon: #3E8E45;
-    /* ATTENTION: as dark's, the same orange -- a filled tile under white, which reads on either surface. */
     --attention: #C4621A;
     --attention-mark: #F7A04A;
-    /* The same orange at no alpha, what a pulse fades to; and at four fifths, what it holds at once over */
     --attention-clear: #C4621A00;
     --attention-held: #C4621ACC;
 
     --link: #2A6DB0;
 
-    /* ── Islands geometry. Same in both themes: a theme changes the LOOK, and a flat theme is
-     * expressed by zeroing these rather than by shipping different structure. ── */
     --radius-panel: 16px;
     --radius-control: 8px;
     --panel-gap: 6px;
 
 }
 
-/* ── Pins: what a role cannot say ──────────────────────────────────────────────────────────── */
 theme {
     --banner-error-bg: #FAE4E4;
     --banner-error-fg: #7A1F1F;
@@ -97,42 +67,20 @@ theme {
 
     --blackboard-drop-line: #3574F0;
 
-    /* THE SNAP PREVIEW, the light theme's answer. @see crystal-dark.css for what it is and why it is
-     * grey rather than the accent.
-     *
-     * The relationship is what carries over, not the colours: a neutral wash with an edge that has far
-     * more presence than the fill. Over a light desktop that means a DARKER grey than the dark theme's,
-     * because contrast is what makes a wash read as a wash rather than as a slight discolouration —
-     * lifting a light surface a little looks like a rendering artefact, while shading it reads as
-     * something laid over it. */
     --snap-preview-bg: #5A5F6640;
     --snap-preview-border: #3C4046AA;
 
-    /* The top edge: 20% over the glass, so it lights the blur rather than drawing an opaque seam. */
     --taskbar-border: #00000033;
-    /* The edge on a light bar is a shade, not a light: black at 4% to 14%. @see crystal-dark.css */
     --taskbar-edge-end: #0000000A;
     --taskbar-edge-mid: #00000024;
-    /* Fluent's light outer focus stroke, black at 89%. @see crystal-dark.css */
     --taskbar-focus-ring: #000000E4;
-    /* The bar's button names. @see crystal-dark.css */
     --taskbar-tooltip-bg: #F9F9F9;
     --taskbar-tooltip-border: #0000001A;
     --taskbar-tooltip-fg: #1A1A1A;
-    /* The taskbar's acrylic tint — @see crystal-dark.css. As the light panels' (#F4F4F700): no colour
-     * tint, the luminosity layer pulling the world toward the light base. #RRGGBBAA, alpha last. */
     --taskbar-glass-tint: #F3F3F300;
-    /* A hidden declaration's veil -- @see crystal-dark.css. */
     --hidden-veil: #FFFFFF99;
     --hidden-veil-recessed: #FFFFFF99;
-    /* The active entry -- @see crystal-dark.css. A clear step BELOW the hover fill (#E0E4EA) on a white
-     * bar; the dark theme's mid grey would be a slab here. */
-    /* THE SHEEN INVERTS. Over a pale blurred bar, light added to light says nothing -- what reads as
-     * depth here is a shadow, so these are black at low alpha where the dark theme uses white. The
-     * rule is the same either way: a translucent tint over the backdrop, never an opaque fill that
-     * would put a hole in the blur. @see ua/desktop.css */
-    /* The desktop's own glass: the starting wash and the failure screen sit over the game, so they are the same in
-     * both themes. */
+    /* The sheen inverts: on a pale bar depth reads as shade, so black at low alpha where dark uses white. */
     --starting-wash: #0E0F1199;
     --failure-bg: #16171A66;
     --failure-title-bg: #FFFFFF1C;
@@ -140,39 +88,29 @@ theme {
     --failure-icon-rim: #B3261E;
     --failure-button-hover-bg: #FFFFFF33;
     --failure-button-active-bg: #FFFFFF44;
-    /* A game screen's scrim over the game, the same in both themes: Minecraft's own darkening, and the lighter one under a blur. */
     --screen-scrim: #0000008C;
     --screen-scrim-blur: #00000059;
     --glass-mark-fg: #FFFFFF;
-    /* The same ladder in black: hover Fluent's SubtleFillColorSecondary (3.5%), then active, then active-hovered. */
     --taskbar-entry-hover-bg: #00000009;
     --taskbar-entry-active-bg: #00000012;
     --taskbar-entry-active-hover-bg: #0000001A;
     --taskbar-start-hover-tint: #D4E2FF;
     --taskbar-start-pressed-tint: #B7CDF7;
 
-    /* The window icon tiles — @see crystal-dark.css. A step deeper than the dark theme's, because the
-     * glyph on them is still white and a pastel tile on a white bar would carry it at nothing. */
     --window-icon-tile-1: #3568C8;
     --window-icon-tile-2: #2E8C58;
     --window-icon-tile-3: #C2762A;
     --window-icon-tile-4: #7550C4;
     --window-icon-tile-5: #2490A0;
     --window-icon-tile-6: #C24A68;
-    /* Where each tile's gradient ends, bottom-right: its hue turned 28 degrees (cool hues on, warm hues back,
-     * which keeps orange off olive) and a little darker, as the editor's own tile runs blue to violet. */
     --window-icon-tile-1-end: #3D2EAC;
     --window-icon-tile-2-end: #287871;
     --window-icon-tile-3-end: #A73624;
     --window-icon-tile-4-end: #983CB2;
     --window-icon-tile-5-end: #1F4A8A;
     --window-icon-tile-6-end: #AC3A81;
-    /* The monogram's tile — @see crystal-dark.css. The SAME value as the dark theme's, not a deepened
-     * one like the six above: it already carries white at 4.6:1, which is better than tile-3 manages in
-     * either theme, so there is nothing for a darker variant to buy here. */
     --window-icon-mono-bg: #DE2A4D;
     --window-icon-mono-bg-end: #C51E7C;
-    /* What raises a tile's letter off it. */
     --window-icon-monogram-shadow: #000000C0;
     --colorpicker-bg: #FFFFFFEE;
     --colorpicker-handle-shadow: #00000040;
@@ -182,19 +120,8 @@ theme {
     --dialog-backdrop: #00000040;
     --dialog-picker-bg: #F2F2F4D0;
 
-    /* THE EDITOR'S FIND BAR, and it has to be pinned here rather than derived.
-     *
-     * base.css derives it from --surface-panel on the reasoning that the bar is a panel header — true in
-     * dark, where panels and the editor are the same colour and a hairline is what separates chrome from
-     * content. In light the panels went white and so did the editor, so that derivation puts a white bar
-     * on a white document and the separator does all the work alone. IntelliJ Light gives the bar its own
-     * shade instead, sitting between the frame and the page.
-     *
-     * Exactly the kind of value the pins block exists for: not any of the ~30 system roles, and true of
-     * this theme rather than of the vocabulary. */
     --editorfind-bg: #F7F8FA;
 
-    /* The light pair: the same gap, in the direction this theme dims. See the dark file. */
     --doc-body-fg: #3A3B40;
     --dock-drop-overlay: #3574F033;
     --dock-floating-bg: #F2F2F4F5;
@@ -232,25 +159,13 @@ theme {
 
     --activitybar-item-hover-bg: #D5D5DB;
     --activitybar-item-checked-bg: #DCDCE2;
-    /* --border-base, unchanged: the dark theme takes its menu outline and separators a step darker, and
-     * this pair must define the same keys. */
     --menu-border: #C4C4C8;
     --menu-separator: #C4C4C8;
 
-    /* The switcher's selection ring, and the INVERSE of the dark theme's rather than a lighter version
-     * of it. It sits over a grid of arbitrary window pictures, so what it has to beat is a screenshot of
-     * anything at all -- and on a light desktop most of those screenshots are pale, which is exactly
-     * where dark-theme white disappears. Near-black is the readable answer, and it is the reason this is
-     * a theme decision rather than a derivation from the system vocabulary. */
+    /* Near-black, not dark's white: on a light desktop most window pictures are pale. */
     --switcher-selected-ring: #1E1F22;
-    /* Fluent's light TextFillColorDisabled: black at 36%. @see crystal-dark.css */
     --jump-list-disabled-fg: #0000005C;
 
-    /* -- Differences -----------------------------------------------------------
-     *
-     * The dark theme's pair, retuned rather than reused. The dark values are lifted off a near-black
-     * ground and read as a faint glow; over white the same alphas read as dirty smudges, so the hues move
-     * to their light-ground equivalents and keep the two strengths the band/mark split needs. */
     --diff-added-bg: #2DA44E26;
     --diff-added-fg: #2DA44E59;
     --diff-removed-bg: #CF222E26;
@@ -258,17 +173,12 @@ theme {
     --diff-changed-bg: #0969DA1F;
     --diff-changed-fg: #0969DA4D;
 
-    /* -- A tree row's kind glyph, by role -----------------------------------------------------------
-     *
-     * The dark theme's hues, one step deeper so they hold on white and no deeper: darker read as muddy beside
-     * the dark theme's. @see crystal-dark.css */
     --kind-glyph-layout: #8C8780;
     --kind-glyph-text: #CAA875;
     --kind-glyph-control: #4E93DE;
     --kind-glyph-collection: #9A6FCB;
     --kind-glyph-overlay: #3AA39C;
     --kind-glyph-addon: #4FA27D;
-    /* A step deeper again on the light selection band, where the base tones would wash out. */
     --kind-glyph-layout-selected: #6F6A63;
     --kind-glyph-text-selected: #946C28;
     --kind-glyph-control-selected: #2F6FC0;
@@ -276,15 +186,9 @@ theme {
     --kind-glyph-overlay-selected: #237F79;
     --kind-glyph-addon-selected: #357F5E;
 
-    /* THE STYLE LABS' GROUNDS. The pair is the point — a specimen is shown on dark AND light whichever
-     * theme is running — so these are the same two colours here, not the light theme's own surfaces. The
-     * specimen's wash and the stop's rim invert, since they sit on the theme's own chrome. */
     --lab-ground-dark: #000000;
     --lab-ground-light: #FFFFFF;
     --lab-specimen-bg: #00000012;
-    /* THE PLATE AND WHAT IS ON IT, per GROUND rather than per theme: the two grounds are an absolute black and an
-     * absolute white a person picks, so what reads on them is absolute too -- a theme-derived foreground is a dark
-     * mark on the black plate as soon as the theme is a light one. Literal in both themes, as the grounds are. */
     --lab-specimen-on-light: #00000014;
     --lab-mark: #DFE1E5;
     --lab-mark-on-light: #1E1F22;

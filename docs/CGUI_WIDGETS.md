@@ -1,100 +1,63 @@
 # CrystalGUI Widgets
 
-> **Current-state reference** for `core/src/main/java/com/crystalgui/widget/`, layered so a build fails
-> when a layer reaches upward (`LayeringTest`): `.control` < `.text`/`.scroll` < `.overlay` <
-> `.form`/`.layout` < `.collection` < `.graph` < `.config` < `.canvas` < `.dnd` < `.texteditor`.
+> Reference for `widget/`, in three tiers a build checks (`LayeringTest`): `control`, `display`, `text` and `scroll`
+> name nothing above them; `overlay`, `layout` and `dnd` name only those and each other; everything else
+> (`collection`, `composite`, `config`, `canvas`, `surface`, `graph`, `texteditor`) may name any widget. **A widget's
+> tier is what it composes**, not what it is: `Dropdown` holds a `Menu`, so it cannot be in `control`.
 >
-> **A widget's TIER is decided by what it COMPOSES, not by what it is.** `Dropdown` is a control by
-> every reading of the word and it holds a `Menu`, so it cannot live in `.control` — that tier may name
-> only `control`/`text`/`scroll`, and `Menu` is `overlay`. Same for `ColorSelector` and `SearchField`.
-> The tier is a fact about the dependency graph, which is why it is checkable rather than intended.
->
-> Companions: `CGUI_STYLE_RENDER_PIPELINE.md` (how the cascade and painting actually work) and
-> `CGUI_SERVER_AND_SERIALIZATION.md` (how widget state travels to a client).
->
-> Re-verify against the code before trusting a specific signature.
-
----
+> Companions: `CGUI_STYLE_RENDER_PIPELINE.md` (the cascade and painting), `CGUI_SERVER_AND_SERIALIZATION.md` (how
+> state travels).
 
 ## 0. Conventions — read this before writing a widget
 
-These rules are enforced in code and invisible from any single class. Every widget below obeys them.
+### A widget declares that its structure is fixed
 
-### A widget DECLARES that its structure is fixed
-
-`refusePublicChildren()`, called in the constructor **every other one chains through** — on the no-arg
-one a `new Dialog("title")` never makes the declaration at all, which is most dialogs.
-
-It is a promise a widget makes about itself and **not** something derived from whether it has a default
-slot. That was tried: an unslotted light child is the WEB's ordinary state — it sits in the light tree,
-out of the composed tree, drawn by nobody, and it is legal — so deriving the refusal turned a documented
-state into a throw and took three tests with it.
+`refusePublicChildren()`, in the constructor every other one chains through. It is a promise, not derived from slots:
+an unslotted light child is legal.
 
 | Accepts children | How you put content in it |
 |---|---|
 | `UINode` | `append` |
-| `ScrollerView` | `append` — it *is* the viewport, through its slot |
+| `ScrollerView` | `append`: it is the viewport, through its slot |
 | `SplitView` | `first()` / `second()`, or `first(content)` / `second(content)` |
-| `TabView` | never directly — `addTab(label).content()` |
+| `TabView` | never directly: `addTab(label).content()` |
 
-When adding a widget, give it a **named accessor** for its content rather than opening the tree.
+Give a new widget a named accessor for its content rather than opening its tree.
 
-### Structure is a SHADOW TREE; a caller's content needs a SLOT
+### Structure is a shadow tree; a caller's content needs a slot
 
-`attachShadow()` plus `appendStructural`, with each part carrying a `part` name a theme reaches through
-`::part(name)`. The names are the old `__double-underscore__` classes with the wrapper removed —
-`__mark__` became `mark`, `__thumb__` became `thumb`.
+`attachShadow()` plus `appendStructural`, each part named for `::part(name)` (`mark`, `thumb`, …).
 
-**A widget that takes content must give its slot a home.** A light child of a shadow-hosting node with
-no default slot is in no composed tree at all: no box, no paint, no promotion, and nothing anywhere
-reporting a problem. Three widgets got this wrong in one batch and each looked like a different bug —
-`ScrollerView` put a caller's rows beside its scrollbars, `Menu` appended its items INTO its own `items`
-part so every `menuitem` rule in every sheet reached nothing, and `Dropdown` put its whole `Menu` in its
-shadow tree, which put the items inside one twice over.
+- **A widget that takes content gives its slot a home**: a light child of a shadow host with no default slot has no
+  box and no paint, and nothing reports it.
+- **The slot must be told to fill**: `align-items: stretch` on the host reaches the slot and stops there.
 
-**And the slot must be told to fill.** A slot is an ordinary box between the host and its content, so
-`align-items: stretch` on the host reaches the SLOT and stops there — a menu's rows sized to their text
-and the focus bar stopped short of the menu's edge.
+### A widget hosts a shadow tree only if nothing reaches through its structure
 
-### A widget may host a shadow tree only if nothing reaches THROUGH its structure
+`::part()` cannot name a part under a part, a tag under a part, or a nested widget's part. A subclass cannot un-shadow
+its parent (`Dropdown extends Button`), so decide the base class first. What a shadow tree buys is the slot: a
+caller's content cannot land among the widget's parts.
 
-`::part()` has no spelling for a part under a part, a tag under a part, or a nested widget's part.
-Measured over the shipped sheets: **23 widgets can, 21 cannot, and 220 rules have no `::part()`
-spelling at all** — `colorselector` alone accounts for 51. A subclass cannot un-shadow its parent
-(`Dropdown extends Button`), so decide the base class first.
+### A pseudo-class after `::part()` describes the part, not the host
 
-**What a shadow tree buys is the SLOT**, not the part naming: a caller's content cannot land among a
-widget's parts, which is what `.__content__` cost three separate times.
-
-### A pseudo-class after `::part()` describes the PART, not the host
-
-`dropdown::part(menu):open` asks whether the MENU is open. Parts before the pseudo-element describe the
-originator; parts after it describe the pseudo-element. That is CSS's rule and collapsing it made a
-dropdown's menu match the closed-popup `opacity: 0` and match nothing that lifted it again — it opened,
-promoted, placed itself correctly, and drew at zero alpha.
+`dropdown::part(menu):open` asks whether the menu is open.
 
 ### A subclass inherits its parent's `Name` unless given its own
 
-`Dropdown extends Button`, `MenuItem extends Button`, `Menu extends Popover` — each chained to the
-public parent constructor, so all three reported the wrong tag and every rule they have in every sheet
-matched nothing. A widget meant to be extended takes a **protected `(Name, ...)` constructor**. Which
-answer is right is a judgement: a dropdown deliberately does not answer `button`, while a widget wanting
-everything the supertype has plus a modifier passes the supertype's `NAME` and adds a class.
+A widget meant to be extended takes a **protected `(Name, ...)` constructor**. Decide: pass the supertype's `NAME`
+and add a class to share its look, or declare your own.
 
 ### A widget that paints its own content must be `Measurable`
 
-`TextField` draws its glyphs itself and has no child nodes, so nothing in the box tree had anything to
-size it from: it laid out **215x0** — present, styled, bordered, drawing its icon and placeholder, with
-no height at all, so a click aimed at it landed on whatever was behind. The old engine never needed this
-because a Taffy leaf with no measure function fell back to whatever the sheet said, and the shipped
-sheets give every field a height. It is the widget a THEME sizes that breaks.
+`TextField` draws its glyphs and has no children, so without a measure it lays out zero-high under a theme that does
+not size it.
 
 ### A widget states how small it can get
 
-A window is never resized below what its content needs — Windows' `WM_GETMINMAXINFO`, answered by the
-content. `WindowFrame.minimumSize` is its caption and borders plus `LayoutMinimum.of(content)`, never under the
-sheet's `min-width`/`min-height` (the floor for content that states nothing), and a drag, the keyboard's Size
-mode, `resizeTo`, a snap and a restore all stop there. A work area smaller than it wins, and the content scrolls.
+A window is never resized below its content's needs (Windows' `WM_GETMINMAXINFO`). `WindowFrame.minimumSize` is its
+caption and borders plus `LayoutMinimum.of(content)`, never under the sheet's `min-width`/`min-height`; a drag, the
+keyboard's Size mode, `resizeTo`, a snap and a restore all stop there. A smaller work area wins, and the content
+scrolls.
 
 ```css
 .my-app-root { min-width: 400px; min-height: 270px; }   /* the common case: stated in the sheet */
@@ -106,61 +69,36 @@ class Board extends UIElement implements MinimumSize {  // a floor that depends 
 }
 ```
 
-What `LayoutMinimum` folds for content that states neither: a flex container's children added up along its
-main axis with its gaps, the largest across it, inside its padding and border; a child that neither grows nor
-shrinks, at the size layout gave it (a toolbar's content-sized buttons); text at its line height, and as wide as its
-longest word, its whole line under `white-space: nowrap`, or nothing with `text-overflow: ellipsis`. A box that
-scrolls or clips forces nothing — what is inside it scrolls.
+`LayoutMinimum` folds content that states neither: a flex container's children summed along its main axis with gaps,
+the largest across it, inside padding and border; a child that neither grows nor shrinks at its laid-out size; text at
+its line height and as wide as its longest word (its whole line under `white-space: nowrap`, nothing with
+`text-overflow: ellipsis`). A box that scrolls or clips forces nothing.
 
-A window's content fills its width as a page does (`ScrollerView.setFitsCrossAxis`), rather than growing to its longest
-line: text that may wrap wraps, and only what cannot shrink overflows. The minimum is the fold's alone, never read
-back from a layout that overflowed — such a floor vanishes once the window widens past it, and a drag flickers.
-
-Overflow under half a pixel is none (`Box.maxScrollLeft`), as on the web, whose scroll sizes are whole pixels: a
-layout's rounding no longer shows a scrollbar with nothing to scroll.
+A window's content fills its width as a page does (`ScrollerView.setFitsCrossAxis`), wrapping what may wrap. Overflow
+under half a pixel is none (`Box.maxScrollLeft`).
 
 ### A listener on a shadow host can never see its own parts
 
-`event.getTarget()` is retargeted before the listener runs, and a listener attached to the host is
-OUTSIDE its own shadow root. The old idiom — one listener on the widget, an if-chain comparing the
-target against its shadow parts — compiles, runs, and takes the wrong branch forever. Attach
-inside the shadow tree, and `stopPropagation()` there.
+`event.getTarget()` is retargeted to the host. Attach inside the shadow tree and `stopPropagation()` there.
 
 ### A widget's CSS identity is its tag, not its Java supertype
 
-`Dropdown extends Button`, `MenuItem extends Button`, `Tab extends Button` — and **none of them are matched
-by `button { … }`**, because a type selector matches the registered tag, exactly as in CSS. Java inheritance
-is invisible to the cascade.
-
-This is not theoretical: `Dropdown` shipped laying out at **zero height**, because `min-height` is where a
-Button gets its box and no rule reached it. `default.css` now names `dropdown` alongside `button` throughout
-(and so does `ore.css`, or a themed dropdown renders with no chrome at all).
-
-> When you subclass a widget, decide explicitly: extend the existing selector list if it should look the
-> same, or write it its own block if it should not. Doing neither gives you an invisible control.
+`Dropdown`, `MenuItem` and `Tab` extend `Button`, and `button { … }` matches none of them. When you subclass, extend
+the selector list or give it its own block; doing neither gives an unstyled control.
 
 ### No sizes, no timings, no colours in Java
 
-Widgets write structure and state. `default.css` gives every widget functional geometry so it works
-with no theme loaded; `ore.css` gives it appearance. `Switch`'s knob animation is a `transition` on
-`flex-grow` in CSS, not a Java tween. **If you find yourself typing a pixel value into a widget, it
-belongs in `default.css`.**
-
-Widget-authored baseline styling goes in at `DEFAULT` origin, the lowest priority, so any stylesheet
-rule beats it without needing `!important`. The idiom every widget uses:
+Widgets write structure and state; the user-agent sheet gives geometry, a theme gives appearance. `Switch`'s knob is a
+`transition` in CSS, not a Java tween. Widget baseline styling goes in at `DEFAULT` origin:
 
 ```java
 StyleGroup.defaultPipeline(getStyle().getLayoutGroup(), l -> l.flexDirection(FlexDirection.ROW));
 StyleGroup.importantPipeline(getStyle().getGeneralGroup(), g -> g.display(NONE));  // the rare opposite
 ```
 
-`importantPipeline` is for state a stylesheet must *not* be able to override — `Tab` hides a
-deselected pane that way. (`UINode.moveInlineAsDefault()` also exists and does the same job
-retroactively, but no widget uses it; prefer `defaultPipeline`.)
+`importantPipeline` is for state no sheet may override (`Tab` hides a deselected pane so).
 
 ### Pseudo-classes come from getters
-
-`PseudoClasses` binds each selector to a real `UINode` method:
 
 | Selector | Method |
 |---|---|
@@ -173,59 +111,32 @@ retroactively, but no widget uses it; prefer `defaultPipeline`.)
 | `:focus` | `isFocused()` |
 | `:focus-visible` | `isFocusVisible()` |
 
-A widget gets a pseudo-class for free by overriding the getter — `Tab.isChecked()` returning its
-selected flag is the whole of how `tab:checked` works.
-
-`:focus-visible` is the web's rule and the one a focus ring should hang off: true for keyboard and
-programmatic focus, false after a mouse click — except on elements that take text input
-(`consumesTextInput()`), which always ring. `Input` decides it from `FocusSource`; see
-`CGUI_STYLE_RENDER_PIPELINE.md` §2. Note hyphenated names resolve via `PseudoClasses.lookup`, not
-`valueOf`.
+Override the getter to get the pseudo-class (`Tab.isChecked()` is all of `tab:checked`). `:focus-visible` is true for
+keyboard and programmatic focus, false after a click, except on text inputs (`consumesTextInput()`). Names resolve
+through `PseudoClasses.lookup`.
 
 ### A surface that owns a caret says so — `setRetainsFocus`
 
-A press that finds no click-focusable ancestor **clears** the focus owner. That is the web's rule —
-Blink's `HandleMouseFocus`, and why clicking a bare `<div>` blurs the input beside it — and for
-ordinary chrome it is right. For a widget whose whole point is one field it is not: pressing a prompt's
-caption, its divider or its padding blurred the field and focused *nothing*, so the window had no focus
-owner and the next keystroke went nowhere.
+A press finding no click-focusable ancestor clears focus (Blink's `HandleMouseFocus`). For a widget built around one
+field that leaves the window with no focus owner:
 
 ```java
 popup.setRetainsFocus(true);   // a press on scenery in here leaves the caret where it is
 ```
 
-Subtree-wide, and it still **defers to anything click-focusable inside it**: a `ListView` row still
-takes its own press and still selects, because that list drives selection *from* focus. What it catches
-is the scenery, whose only effect on focus otherwise is to destroy it.
+Subtree-wide, deferring to anything click-focusable inside (a `ListView` row still takes its press). Focus is
+assigned before dispatch, so `preventDefault()` cannot do this. Hand focus back with `requestPointerFocus`, never
+`requestFocus`, which scrolls its target into view.
 
-Two things to know when you reach for it:
+### Listeners, hooks, tags
 
-- The web's own escape hatch is `preventDefault()` on the mousedown, and it does not work here: focus
-  is assigned *before* dispatch, so no handler can object in time. The opt-out is on the element
-  instead, which is Swing's `setRequestFocusEnabled(false)` in shape though not in scope.
-- Handing focus back afterwards is **`requestPointerFocus`**, never `requestFocus`. The latter is the
-  DOM's `element.focus()`: it rings and it scrolls its target into view, and that reveal scrolls the
-  popup itself — the divider and every row shift together, which reads as the popup jumping on click.
-
-### Listeners, tickers, tags
-
-- **`attachListener(l, capture, bubble)` always subscribes the target phase.** The two booleans are
-  additive, not a mode selector.
-- **Per-frame work is an `Animation` hook OWNED by the node** — `document.animation()`, not a ticker
-  the widget registers on the window and can never unregister. It stops when the node leaves the tree,
-  which the old one-way registration could not guarantee: a hidden window's ticker carried on
-  invisibly, and the contract that it must return `false` lived only on the interface. Used by
-  `Scroller` (press-and-hold repeat), `ScrollerView` and `TextField` (caret blink).
-- **Anything that reads GEOMETRY uses `afterLayout`.** An ordinary hook runs BEFORE this frame's
-  layout — the frame is animation → style → layout — so a hook that measures reads the previous
-  frame's box, or none at all on the first.
-- **Declare the tag** as a `NAME` constant on the class and register it from a `NodeKinds`
-  service, which `UINodeRegistry.bootstrap()` runs. (`register(tag, Class,
-  factory)`. Without it the widget has no `tagName()`, cannot be a CSS type selector, and cannot be
-  serialized. Current tags: `element`, `button`, `checkbox`, `scroller`, `scrollerview`, `slider`,
-  `splitview`, `switch`, `tab`, `tabview`, `textfield`, `text`.
-- **Say what a tree calls it and draws for it** with a `KindInfo` at registration. The builder's Hierarchy
-  shows every node with a 12 px glyph and a tooltip, and a kind that says nothing still gets one:
+- **`attachListener(l, capture, bubble)` always subscribes the target phase**; the booleans are additive.
+- **Per-frame work is an `Animation` hook owned by the node** (`document.animation()`), stopping when it leaves the
+  tree (`Scroller`'s press-and-hold, `ScrollerView`, `TextField`'s caret blink).
+- **Anything reading geometry uses `afterLayout`**: an ordinary hook runs before this frame's layout.
+- **Declare the tag** as a `NAME` constant and register it from a `NodeKinds` service (`UIElementRegistry.bootstrap()`
+  runs them). Without it the widget has no `tagName()`, no type selector, and cannot be serialized.
+- **Say what a tree calls it and draws for it** with a `KindInfo` at registration:
 
   ```java
   UIElementRegistry.register(MachineGauge.NAME, MachineGauge::new, CONTRACT,
@@ -237,15 +148,14 @@ Two things to know when you reach for it:
 
   | Your kind declares | The row draws |
   |---|---|
-  | a glyph | it — a 16-unit SVG in `currentColor`, tinted by the role's `--kind-glyph-*` token |
+  | a glyph | it: a 16-unit SVG in `currentColor`, tinted by the role's `--kind-glyph-*` token |
   | nothing, and extends a kind that has one | that kind's glyph, under your class name split at capitals |
-  | nothing, and lays out children | its layout from computed style — column, row, wrap, grid — or a frame while empty |
+  | nothing, and lays out children | its layout from computed style (column, row, wrap, grid), or a frame while empty |
   | nothing else | a diamond tinted as an addon, saying *Your Name · yourmod* |
 
   Declaring a glyph without shipping its file draws nothing.
-- **Say where the builder's Library files it, what a card shows and what placing inserts** — the same
-  `KindInfo`. A kind that declares nothing is still listed, under a folder named for its namespace, and its
-  card draws what its factory builds; machinery a document never holds hides itself:
+- **Say where the builder's Library files it, what its card shows and what placing inserts**, in the same `KindInfo`.
+  A kind declaring nothing is listed under its namespace, its card drawing what the factory builds:
 
   ```java
   KindInfo.named("Machine Gauge").inCategory("Machines/Gauges")      // a path nests; mymod's folder otherwise
@@ -257,29 +167,22 @@ Two things to know when you reach for it:
   KindInfo.hidden();                                                  // a part, never listed
   ```
 
-  A category is a `/`-separated path, and so is a user's group in the Library: `Mine/Buttons` lists inside
-  `Mine`, a group's menu offers **New Group Inside…**, and renaming or deleting a group carries its
-  subgroups. The shipped `Forms` splits as Unity's UI Builder splits its fields — Numeric, Text, Choice,
-  Composite and Value — plus `Structure`; `Controls` into Buttons and Toggles, Inputs and Pickers; `Layout`
-  into Containers and Panes and Tabs; `Starters` into Layout, Forms and Dialogs, and Game UI (a starter's
-  category is `Starters/<folder>`). A category of a handful stays flat.
+  A category is a `/`-separated path, as is a user's Library group (`Mine/Buttons`; **New Group Inside…**; renaming
+  or deleting carries subgroups). The shipped categories follow Unity's UI Builder (`Forms` into Numeric, Text,
+  Choice, Composite, Value and Structure; `Controls`; `Layout`; `Starters/<folder>`).
 
   | Supplier | Used by | Defaults to |
   |---|---|---|
   | the factory | a decode, and everything below when nothing else is declared | — |
-  | `starter` | placing the kind — the Library, the Hierarchy's New ▸ | the factory |
+  | `starter` | placing the kind: the Library, the Hierarchy's New ▸ | the factory |
   | `Preview.sample` | the card only, never placed | the starter |
 
-  A sample's `width` is the logical width it is laid out at before the card scales it down; a control that
-  fills its row needs one or it lays out to nothing. `whole()` shrinks it however small that makes it,
-  rather than cropping it once its text would stop reading; `atCardWidth()` lays it out as wide as the card
-  shows and fits it whole, for a stretching row whose far end would otherwise be cropped. A widget whose look
-  needs a state nothing is in draws it with `presentInline()` (popovers, menus, dialogs, tooltips) or `presentFocused()` (a text
-  field). The shipped kinds' samples are `widget.WidgetSamples`, styled by `ua/samples.css`.
-- **Override `writeState`/`readState`** if the widget carries state a server would want to send or a
-  client would want to report back. See `CGUI_SERVER_AND_SERIALIZATION.md`.
-
----
+  A sample's `width` is its logical layout width before the card scales it (a row-filling control needs one);
+  `whole()` shrinks it whole; `atCardWidth()` lays it out at the card's width. A look needing a state nothing is in
+  uses `presentInline()` (popovers, menus, dialogs, tooltips) or `presentFocused()` (a text field). The shipped
+  samples are `widget.WidgetSamples`, styled by `ua/samples.css`.
+- **State a server sends or a client reports is declared on a `WidgetContract`**
+  (`CGUI_BUILDING_UIS.md` § 11, `CGUI_SERVER_AND_SERIALIZATION.md` § 2).
 
 ## 1. `Button`
 
@@ -291,14 +194,14 @@ b.setPreIcon(icon);  b.setPostIcon(null);   // null clears
 b.setEnabled(false);                        // inherited from UINode
 ```
 
-Activates on press-then-release **over the same element** (dragging off cancels), and on Space/Enter
-when focused. Plays `button_click` through CrystalGraphics' `CgSounds.play2D`; silent where the host has no such sound or no audio output.
+Activates on press-then-release over the same element (dragging off cancels), and on Space/Enter when focused. Plays
+`button_click` through `CgSounds.play2D`, silent where the host has none.
 
-- Tag `button` · internal `__pre-icon__`, `__post-icon__` · pseudo `:hover :active :focus :focus-visible :disabled`
+- Tag `button` · parts `pre-icon`, `post-icon` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (Button page)
 
-**A button that opens a menu wears IntelliJ's dropdown gutter** — one call, drawn by the UA sheet over the
-button's box in its own colour, unhittable and out of flow. It says a menu opens; the press is still yours.
+A button that opens a menu wears IntelliJ's dropdown gutter, drawn by the user-agent sheet, unhittable; the press is
+still yours:
 
 ```java
 eye.setDropdownMark(true);    // button::part(dropdown-gutter), and __dropdown-mark__ on the button
@@ -306,7 +209,7 @@ eye.setDropdownMark(true);    // button::part(dropdown-gutter), and __dropdown-m
 
 ### `ActionButton` — a command or a menu, as an icon (`widget.composite`)
 
-IntelliJ's `ActionButton`. A `Button` by tag carrying `__action-button__`, and not a focus stop.
+IntelliJ's `ActionButton`: a `Button` by tag carrying `__action-button__`, not a focus stop.
 
 ```java
 ActionButton.command(TreeViewCommands.COLLAPSE_ALL)          // runs a command
@@ -323,21 +226,20 @@ ActionButton.command(TOGGLE_ROWS).icon("crystalgui:general/action/viewRows")   /
         .whenToggled("crystalgui:general/action/viewCards", "Show as Cards");  // while the command is toggled
 ```
 
-- The tooltip is IntelliJ's help tooltip: the command's label, its **live** chord beside it
-  (`Tooltip.setShortcut`) and the description or hint under them (`Tooltip.setDescription`), after the
-  `tooltip.__wait__` delay Hide shares. `tooltip()` is the observable.
-- A command button greys while the command is disabled, re-asked four times a second while in a tree.
-- A menu button's second press closes its menu; it is the menu's invoker.
-- A toggle's `whenToggled` face shows what a press switches to, and flips on the press itself.
-- Name the `context` whenever the button sits away from what it acts on — a header is outside its view.
-  `context(Supplier)` for content that is replaced under the button.
+- The tooltip is IntelliJ's help tooltip: the command's label, its live chord (`Tooltip.setShortcut`) and the
+  description or hint (`Tooltip.setDescription`), after the `tooltip.__wait__` delay. `tooltip()` is the observable.
+- A command button greys while its command is disabled, re-asked four times a second in a tree.
+- A menu button's second press closes its menu.
+- `whenToggled` shows what a press switches to, flipping on the press.
+- Name the `context` whenever the button sits away from what it acts on; `context(Supplier)` for content replaced
+  under it.
 - Consumers: every tool window's title line (`TitleActionsContributor`) and its ⋮.
 
 ### Drawn as a picture — for a Library card or a style guide
 
-A widget whose real appearance needs a state nothing is in — open, focused — can be told to draw it without
-entering it. Only the appearance: nothing is promoted, placed, focused or made modal, so never `show` one
-presented this way. Samples are declared per kind in `widget.WidgetSamples`, styled by `ua/samples.css`.
+A widget whose look needs a state nothing is in draws it without entering it: nothing is promoted, focused or made
+modal, so never `show` one presented this way. Samples are per kind in `widget.WidgetSamples`, styled by
+`ua/samples.css`.
 
 ```java
 new TextField().setPlaceholder("Type here").presentFocused();   // caret, placeholder and :focus, no focus
@@ -346,9 +248,8 @@ menu.presentInline();                                           // Popover, Menu
 
 ### A search box over a tree — `SearchTree` (`widget.composite`)
 
-The Insert Node menu's search-and-tree half as a dockable element: a box that filters while the caret stays
-in it, a categorised tree for a blank query and a ranked flat list for anything else, arrows and Enter
-driving the list. `CreateMenu` wraps one in its popover; the builder's Library embeds one.
+A box that filters while the caret stays in it, a categorised tree for a blank query and a ranked flat list
+otherwise, arrows and Enter driving the list. `CreateMenu` wraps one; the builder's Library embeds one.
 
 ```java
 SearchTree<Row, Kind> search = new SearchTree<>();
@@ -356,15 +257,13 @@ search.setRows(rows);                       // roots(query), children, label, is
 search.onChosen.connect(kind -> place(kind));
 ```
 
-A row draws an icon when `Rows.icon(node)` names one, wearing `Rows.iconClass(node)` so a theme can tint it
-(`.__entry-icon__`); a category row never does.
+A row draws an icon when `Rows.icon(node)` names one, wearing `Rows.iconClass(node)` (`.__entry-icon__`); a category
+row never does.
 
 ### A searchable popover — `CreateMenu` (`widget.composite`)
 
-`SearchTree` under a draggable title, over a footer. **Every one looks alike** — the surface's Insert menu,
-the graph's Insert Node, the Styles tab's Add property — because the look is keyed on the `__quick-input__`
-class the constructor adds, not on a subclass's tag: a new menu gets it by extending, with nothing to opt
-into.
+`SearchTree` under a draggable title, over a footer. Every one looks alike (Insert, Insert Node, Add property): the
+look is keyed on the `__quick-input__` class its constructor adds.
 
 ```java
 final class ThingMenu extends CreateMenu<Row, Thing> {
@@ -377,14 +276,13 @@ final class ThingMenu extends CreateMenu<Row, Thing> {
 }
 ```
 
-`setFooterText(null)` puts the hints back. Rows are 20px, set from Java: a virtualised row's height is the
-view's, and a stylesheet `height` on `.__entry__` breaks the tree rather than resizing it.
+`setFooterText(null)` restores the hints. Rows are 40 px, set from Java: a virtualised row's height is the view's, and
+a sheet `height` on `.__entry__` breaks the tree.
 
 ### A surface's Add menu — `InsertMenu` (`widget.surface.insert`)
 
-What every registered `InsertSource` offers, searchable, opened at a world point: Blender's Shift+A. Browsing
-groups offers by `path()` in the order sources gave them; a query ranks label, synonyms and path, and skips an
-offer marked `browsingOnly()` (a Recent row, which the search finds under its own path). The footer describes the
+Every registered `InsertSource`'s offers, searchable, opened at a world point (Blender's Shift+A). Browsing groups by
+`path()`; a query ranks label, synonyms and path and skips `browsingOnly()` offers. The footer describes the
 highlighted offer.
 
 ```java
@@ -395,19 +293,17 @@ menu.showHeader(true);
 menu.onCycle.connect(step -> placement.cycle(step)); // Tab / Shift+Tab in the search box
 ```
 
-- `onCycle` takes Tab only while something is connected to it; otherwise Tab keeps its meaning.
-- The header is hidden until `showHeader(true)`.
-- The UI builder's consumer is `BuilderInsert`: Shift+Space under the selection, right-click on blank page at the
-  pointer, *Insert…* first on a node's menu.
+- `onCycle` takes Tab only while something is connected; the header is hidden until `showHeader(true)`.
+- The UI builder's consumer is `BuilderInsert`: Shift+Space under the selection, right-click on blank page, *Insert…*
+  on a node's menu.
 
 ### A kind drawn as itself — `PreviewCard` (`app.uibuilder.library`)
 
-A Library card: the kind's sample in a shadow root wearing the window's sheets and no panel rule, fitted into
-a tile and cropped by a square scissor, with its name under it. Samples build a few per frame through the
-window's `PreviewBuilds`; until its turn a card shows the kind's glyph.
+A Library card: the kind's sample in a shadow root wearing the window's sheets, fitted into a tile under a square
+scissor, its name below. Samples build a few per frame through `PreviewBuilds`; until then a card shows the glyph.
 
-A card may also show a **starter** — a snippet of several nodes, listed first under *Starters* in the Library and
-the Insert menu. `LibraryStarters` declares each as a `LibraryCatalog.Entry` over a shipped `.cgui`:
+A **starter** is a snippet of several nodes, first under *Starters*; `LibraryStarters` declares each as a
+`LibraryCatalog.Entry` over a shipped `.cgui`:
 
 ```java
 LibraryCatalog.Entry card = LibraryStarters.CARD;   // id "starter:crystalgui:uibuilder/starters/card"
@@ -417,9 +313,8 @@ card.build();                                       // a fresh tree of the snipp
 
 ### Keeping rows realised — `ListView.setOverscan`
 
-A list realises the viewport plus two rows each side and rebinds rows as they scroll. A list whose rows are
-few and costly to bind keeps them instead: `tree.setOverscan(64)`. Rows off screen are culled from paint, so
-what they cost is their settled style and layout.
+A list realises the viewport plus two rows each side. One with few, costly rows keeps them: `tree.setOverscan(64)`.
+Off-screen rows are culled from paint.
 
 ## 2. `Checkbox` + `CheckboxGroup`
 
@@ -433,14 +328,10 @@ c.setGroup(group);                      // normal usage — not group.register(c
 Checkbox current = group.getCurrent();
 ```
 
-`CheckboxGroup` is a plain object, **not a `UINode`** — it has no place in the tree and no styling.
-With `allowEmpty(false)` it refuses to let you un-check the last checked box, giving radio-button
-semantics.
+`CheckboxGroup` is a plain object, not a node. `allowEmpty(false)` gives radio semantics. The mark is drawn by CSS
+(`checkbox:checked::part(mark)`).
 
-The mark is drawn entirely by CSS — `checkbox:checked .__mark__ { … }`. There is no Java-side
-"draw a tick".
-
-- Tag `checkbox` · internal `__mark__` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
+- Tag `checkbox` · part `mark` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (Checkbox page)
 
 ## 3. `Switch`
@@ -451,11 +342,9 @@ s.setChecked(true);
 s.attachListener(checked -> …);         // or: s.onCheckedChanged
 ```
 
-The knob slides by animating an invisible `__spacer__`'s `flex-grow` between 0 and 1. **All timing is
-CSS** — `switch .__spacer__ { transition: flex-grow 150ms ease-out; }`. There is no duration, easing or
-size anywhere in `Switch.java`.
+The knob slides by animating an invisible spacer's `flex-grow`; all timing is CSS.
 
-- Tag `switch` · internal `__spacer__`, `__knob__` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
+- Tag `switch` · parts `spacer`, `knob` · pseudo `:checked :hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (Switch page)
 
 ## 4. `Slider`
@@ -467,14 +356,12 @@ sl.attachListener(v -> …);                     // or: sl.onValueChanged
 float f = sl.getFraction();                    // 0..1
 ```
 
-Drag-by-delta, click-to-jump, Left/Right arrows, Home/End, and the wheel. Focus policy is `CLICK`.
+Drag by delta, click to jump, Left/Right, Home/End, the wheel. Focus policy `CLICK`.
 
-- Tag `slider` · internal `__fill__`, `__thumb__`, `__spacer__` · pseudo `:hover :active :focus :focus-visible :disabled`
+- Tag `slider` · parts `fill`, `thumb`, `spacer` · pseudo `:hover :active :focus :focus-visible :disabled`
 - Scene: `cgui-gallery` (Slider page)
 
 ## 5. `TextField`
-
-The largest widget. Three layers worth keeping straight:
 
 ```java
 TextField t = new TextField();
@@ -497,33 +384,21 @@ t.setPattern("\\w+");                    // whole-text: marks :invalid, still ed
 t.setTextValidator(s -> …);
 ```
 
-**The keystroke/whole-text split is deliberate.** A char filter refuses input that could never be
-valid; a text validator flags input that is *not yet* valid but must be typable on the way to
-something that is — you cannot reach `-5` without passing through a bare `-`.
+- **A char filter refuses what could never be valid; a text validator flags what is not yet valid** but must be
+  typable on the way (`-` before `-5`).
+- `Mode` is `STRING | INTEGER | LONG | FLOAT | DOUBLE`; a range narrows the derived filter (`0..100` drops `-`).
+- Caret blink (`setCaretBlinkSeconds`, `isCaretVisible`), selection (`selectAll`, `clearSelection`,
+  `getSelectedText`, `getSelectionStart/End`), paste from the client thread's clipboard, wheel steps
+  (`stepBy(notches)`), Escape reverts.
+- Styled by `color`, `font-size`, `font-family`, `line-height` (vertical centring only), `caret-width`,
+  `selection-color`. The caret and selection band are `ascender + descender` tall; the selection paints only while
+  focused (`CGUI_STYLE_RENDER_PIPELINE.md` §8c).
 
-`Mode` is `STRING | INTEGER | LONG | FLOAT | DOUBLE`, and setting a range narrows the auto-derived
-filter: a `0..100` integer field silently drops `-`, a `-50..50` one admits it.
-
-Also: caret blink (`setCaretBlinkSeconds`, `isCaretVisible`, via `UIFrameTicker`), selection
-(`selectAll`, `clearSelection`, `getSelectedText`, `getSelectionStart/End`), paste answered from
-the client thread's clipboard, wheel-steps-the-value (`stepBy(notches)`), and Escape to revert.
-
-Six style properties drive its text: `color`, `font-size`, `font-family`, `line-height` (vertical
-centring only), `caret-width`, `selection-color`.
-
-`line-height` defaults to CSS's `normal` — the font's own line box. **Neither the caret nor the
-selection band is taken from it**: both are `ascender + descender`, excluding the `lineGap` a line box
-also carries, because that gap is leading *between* lines and this field is single-line. The selection
-also paints only while focused — blurring hides the band but keeps the range, as browsers do. See
-`CGUI_STYLE_RENDER_PIPELINE.md` §8c.
-
-**Input-method composition** (Japanese, Chinese, Korean): a host that reports a run in progress sends
-it through `Input.consumeComposition(text, caret)`. The field shows the run in its text, underlined,
-replacing it on every update; the committed characters then arrive as ordinary typing, filtered as
-usual, and drop the run first. `textInputArea()` answers the caret's box in surface pixels, where the
-host opens the IME's candidate list. `TextEditor` does the same, underlining through
-`::highlight(ime-composition)`. Only Minecraft 26.3 (SDL3) reports a composition; everywhere else the
-OS draws the run itself.
+**Input-method composition** (Japanese, Chinese, Korean): a host reports a run in progress through
+`Input.consumeComposition(text, caret)`; the field shows it underlined, replacing it on each update, and the committed
+characters arrive as ordinary typing. `textInputArea()` answers the caret's box in surface pixels for the candidate
+list. `TextEditor` does the same through `::highlight(ime-composition)`. Only Minecraft 26.3 (SDL3) reports a
+composition; elsewhere the OS draws it.
 
 ```java
 // a host with a composing input method -- Minecraft 26.3's, from CrystalGraphics' screen (ScreensModern)
@@ -542,56 +417,40 @@ t.setText("world");
 t.bindTextTo(someProperty);             // or: t.text  (Property<String>)
 ```
 
-**It sizes itself by writing width/height at `IMPORTANT` origin.** So a bare `UIText` cannot be given
-a width by CSS — wrap it in a fixed-width slot element when you need aligned columns:
+**It sizes itself at `IMPORTANT` origin**, so CSS cannot give a bare `UIText` a width: wrap it in a fixed-width slot
+for aligned columns.
 
 ```java
-UINode slot = new UINode().layout(l -> l.width(58));
+UINode slot = new UINode().layout(l -> l.width(116));
 slot.append(new UIText("label"));
 ```
 
-Consumes `color`, `font-size`, `font-family`, plus `text-offset` (paint-time glyph
-nudge, applied *after* the wrap width is read so it can never affect geometry; percentages resolve
-per-axis against this element's own box). Wraps at the font's own metrics and does **not** honour
-`line-height` yet.
+- Reads `color`, `font-size`, `font-family`, `text-align`, and `text-offset` (a paint-time nudge, after the wrap width
+  is read; percentages per axis of its own box). Wraps at the font's own metrics, not a set `line-height`.
+- **Draws text outlines**: `text-stroke`, `stroke-align`, `paint-order` (`CGUI_STYLE_RENDER_PIPELINE.md` §8d).
 
-**It also draws text outlines** — `text-stroke`, `stroke-align` and
-`paint-order`. `text-stroke` is the only spelling for the width and colour; the two longhands behind
-it are not writable by name (see `CGUI_STYLE_RENDER_PIPELINE.md` §8d for why they still exist):
+  ```css
+  text { text-stroke: 2px #0B5D8F; }                        /* outline outside the letterform */
+  text { text-stroke: 1px #0B5D8F; stroke-align: inset; }   /* an inline, inside it */
+  text { text-stroke: 2px #FFF; color: transparent; }   /* hollow: the stroke names its own colour */
+  ```
 
-```css
-text { text-stroke: 2px #0B5D8F; }                        /* outline outside the letterform */
-text { text-stroke: 1px #0B5D8F; stroke-align: inset; }   /* an inline, inside it */
-text { text-stroke: 2px #FFF; color: transparent; }   /* hollow: the stroke names its own colour */
-```
-
-Three limits worth knowing before reaching for it: the stored distance field caps the width at
-**0.131em** for most faces — 8.4px at text size 64 — and at **0.056em** (3.6px) for a face carrying
-a dense script, which keeps a narrower range because that is all eight bits hold without merging a
-kanji's strokes; wider clamps rather than erroring, and `UIText.maxStrokeWidthEm()` answers which
-applies. A stroke pulls its label onto the distance-field tier and keeps it
-there down to text the field can still antialias (7px on the wide band, 15px on the narrow), below which the
-outline is dropped rather than drawn on a fill the field cannot resolve, and an `inset` or `center` stroke closes a letterform's joints once it exceeds
-their thickness — which is geometry, not a defect. Full account in
-`docs/CGUI_STYLE_RENDER_PIPELINE.md` §8d.
-
-**The trap:** declaring `font-size` on a WRAPPER does not reach a widget's label, because
-`default.css` opens with `* { font-size: 10px }` and that is a candidate on every element — put the
-size on the element that draws, or on the `::part()`.
+  The width caps at **0.131em** for most faces and **0.056em** for a dense-script face, clamped silently
+  (`UIText.maxStrokeWidthEm()` says which). A stroked label stays on the distance-field tier down to 7 px (wide band)
+  or 15 px (narrow), below which the outline is dropped. An `inset` or `center` stroke closes thin joints: geometry.
+- **`font-size` on a wrapper does not reach a widget's label**: the user-agent `* { font-size: 10 }` is a candidate on
+  every element. Put it on the element that draws, or the `::part()`.
 
 - Tag `text` · no shadow parts
 - Scenes: `cgui-text` (wrapping, font fallback, live binding), `cgui-gallery`
 
 ## 6b. `EmptyState` — what a vacant panel says (`widget.display`)
 
-A heading and a few short lines over the middle of the panel — IntelliJ's `StatusText`. It never
-wraps: a panel narrower than the note clips each line evenly at both ends while centred, so a resize
-never reflows it. `setCentred(false)` lines a list of dashes up on one edge, as every workbench panel
-does. **The copy is a direction, not a status**: "To <do the thing>:" and the steps there, naming the
-kind of document the panel needs with one example, since another extension may serve the same panel.
+A heading and short lines over the middle of a panel (IntelliJ's `StatusText`). It never wraps: a narrow panel clips
+each line evenly at both ends. `setCentred(false)` aligns a list of dashes on one edge. **The copy is a direction**:
+"To <do the thing>:" and the steps, naming the kind of document needed with one example.
 
-**A workbench panel declares one and says when it is vacant**; the `ViewContainer` it is docked in
-places the note and shows it in the panel's place:
+A workbench panel declares one and says when it is vacant; its `ViewContainer` swaps it in:
 
 ```java
 private final EmptyState empty = EmptyState.of(this, "To see a document's structure:",
@@ -602,41 +461,29 @@ private void show(@Nullable Thing thing) {
 }
 ```
 
-`of` records the note on the panel (`EmptyState.NOTE`) and lines it up as a list; it starts vacant. A
-line that changes is rewritten on the same note. Outside a container, `new EmptyState(...)`, append it
-and `setDisplayed` it yourself — it fills its parent absolutely and takes no pointer, so the parent
-needs a size.
+`of` records the note on the panel (`EmptyState.NOTE`) and starts vacant; a changing line is rewritten in place.
+Outside a container, `new EmptyState(...)`, append it and `setDisplayed` it: it fills its parent absolutely and takes
+no pointer.
 
-**A line may end in a key chord**, which the sheet dims against the words it belongs to — the words are
-the instruction and the chord is how to perform it, so painting them alike makes the chord read as part
-of the sentence. Pass the chord separately rather than concatenating it, and pass `null` when a command
-has no binding rather than inventing one:
+**A line may end in a key chord**, dimmed against the words; pass it separately, and `null` when there is no binding:
 
 ```java
 KeyChord chord = Keymap.acceleratorFor(this, ExplorerCommands.GO_TO_FILE);
 empty.setLine(0, "— Go to File", chord == null ? null : chord.toString());
 ```
 
-- Tag `emptystate` · parts `lines`, `heading`, `line`, `chord` · tokens `--empty-state-fg`,
-  `--empty-state-chord-fg`
-- Declared by `RunPanel`, `HierarchyToolWindow`, `LibraryToolWindow`, `Inspector`, and `DockGroup` for
-  the empty editor's watermark — whose copy is the DOCK's (`DockArea.setWatermark`), because naming an
-  application's ways in is the application's business and a dock is a widget other products build with
-- The watermark reads larger and brighter than a panel's note (`dockgroup emptystate::part(line)`,
-  `--editor-watermark-fg`): it owns the whole work area and is read rather than glanced at
-- Scenes: `cgui-desktop` (open the Run, Hierarchy or Library panel with no `.cgui` in front; close every
-  editor tab for the watermark)
+- Tag `emptystate` · parts `lines`, `heading`, `line`, `chord` · tokens `--empty-state-fg`, `--empty-state-chord-fg`
+- Declared by `RunPanel`, `HierarchyToolWindow`, `LibraryToolWindow`, `Inspector`, and `DockGroup` for the empty
+  editor's watermark, whose copy is set by the dock's composer (`DockArea.setWatermark`) and reads larger
+  (`dockgroup emptystate::part(line)`, `--editor-watermark-fg`)
+- Scenes: `cgui-desktop` (the Run, Hierarchy or Library panel with no `.cgui` in front; every editor tab closed)
 
 ## 7. `Scroller` and `ScrollerView`
 
-Two different things, and the distinction is the point.
-
-**Scrolling is an ordinary `UINode` capability.** Any element with `overflow: hidden`/`auto`
-scrolls — `setScrollTop`, `setScrollLeft`, `setScroll`, `setScrollImmediate`, `scrollIntoView`,
-`getMaxScrollTop/Left`, `getScrollWidth/Height`, `getClientWidth/Height`, `setScrollExempt`. A bare
-element scrolls **programmatically only**; it never listens to the wheel.
-
-**`ScrollerView`** is that viewport plus two bars. It opts into the wheel explicitly.
+**Scrolling is an ordinary `UINode` capability**: an element with `overflow: hidden`/`auto` scrolls
+programmatically (`setScrollTop`, `setScrollLeft`, `setScroll`, `setScrollImmediate`, `scrollIntoView`,
+`getMaxScrollTop/Left`, `getScrollWidth/Height`, `getClientWidth/Height`, `setScrollExempt`) and never listens to the
+wheel. **`ScrollerView`** is that viewport plus two bars, and takes the wheel.
 
 ```java
 ScrollerView view = new ScrollerView();
@@ -646,10 +493,10 @@ view.refreshScrollers();                // cheap + idempotent; auto-called from 
 view.verticalScroller(); view.horizontalScroller(); view.corner();
 ```
 
-Wheel is 40px per notch; Shift+wheel scrolls horizontally; a horizontal-only view takes the plain
-wheel; at either end the event bubbles, giving scroll chaining.
+The wheel scrolls 40 px a notch; Shift+wheel scrolls horizontally; a horizontal-only view takes the plain wheel; at
+either end the event bubbles (scroll chaining).
 
-**`Scroller`** is the bar widget by itself — usable standalone, e.g. as `TabView`'s strip bar.
+**`Scroller`** is the bar alone, usable standalone (as `TabView`'s strip bar):
 
 ```java
 Scroller bar = new Scroller();
@@ -661,11 +508,9 @@ bar.attachListener(v -> …);             // or: onValueChanged
 bar.onScrollIntent;                     // relative nudges from the step buttons / track paging
 ```
 
-Step buttons exist but are `display: none` by default — a theme enables them with
-`.__head__, .__tail__ { display: flex; }`.
+Step buttons are `display: none` by default; a theme shows them.
 
-- Tags `scroller`, `scrollerview` · internal as listed in §0 · `Scroller` and `ScrollerView` are both
-  `UIFrameTicker`s
+- Tags `scroller`, `scrollerview`
 - Scene: `cgui-gallery` (Scroller page)
 
 ## 8. `SplitView`
@@ -679,12 +524,10 @@ sv.attachListener(pct -> …);                         // or: onPercentageChange
 sv.divider();
 ```
 
-**Percentages are 0..100**, defaulting to LDLib2's 5..95 limits. Passing `0.35f` is silently clamped
-to the minimum and collapses the first pane, which looks like a layout bug and is not one.
+**Percentages are 0..100** (limits default to 5..95): `0.35f` clamps to the minimum and collapses the first pane. The
+panes take children; the split does not. Splits nest.
 
-The panes accept children; the `SplitView` itself does not. Splits nest.
-
-- Tag `splitview` · internal `__first__`, `__divider__`, `__second__`; root gets `__vertical__`
+- Tag `splitview` · parts `first`, `divider`, `second`; root gets `__vertical__`
 - Scene: `cgui-gallery` (SplitView page)
 
 ## 9. `TabView` + `Tab`
@@ -703,50 +546,27 @@ tv.setTabOverflow(TabView.TabOverflow.WRAP);    // SCROLL (default) | SQUEEZE | 
 tv.stripActions().append(menuButton);          // controls at the strip's end, never scrolled under
 ```
 
-**When the tabs do not fit** — IntelliJ's "Show tabs in". `SCROLL` pans the rail and fades whichever end
-has tabs past it; `SQUEEZE` gives every tab an equal share, capped at its natural width, and cuts its
-label; `WRAP` breaks the rail into rows. The
-mode is a class on the view (`__tabs-squeeze__`, `__tabs-wrap__`) and the sheet does the layout.
-`stripActions()` sits over the strip's end: a strip that fills it reserves the width with its own
-`padding-right`, as an editor group's does.
+- **When tabs do not fit** (IntelliJ's "Show tabs in"): `SCROLL` pans the rail and fades the overflowing end;
+  `SQUEEZE` shares the width equally, capped at natural width, cutting labels; `WRAP` breaks into rows. The mode is a
+  class on the view (`__tabs-squeeze__`, `__tabs-wrap__`). `stripActions()` sits over the strip's end; a strip that
+  fills it reserves the width with `padding-right`.
+- Structure: a strip holding a rail (a `ScrollerView` with hidden bars, so it pans on the wheel) and a strip bar (a
+  `Scroller`), then the panes. `setTabSide` writes `flex-direction` at `DEFAULT` origin and a side class on the root.
+- **Panes are not lazy**: `addTab` builds the tab and pane at once, and a hidden pane is `display: none` at
+  `IMPORTANT` origin, so identity, listeners and scroll survive a switch. Populate lazily in `onTabSelected` if needed.
+- `Tab extends Button`. `Tab.setSelected` is package-private: go through `TabView.selectTab`.
+- Keyboard: Left/Right (Up/Down when vertical) step, Home/End jump, focus follows; bubble phase, so a focused widget in
+  a pane sees arrows first.
+- **A strip is one Tab stop** (ARIA's roving tabindex): the selected tab is `CLICK`, the rest `CLICK_NOT_TABBABLE`.
+  `TabView.updateTabStops()` owns that on every selection and membership change, falling back to the first tab.
 
-Structure: `TabView → __strip__ { __rail__ (a ScrollerView), __strip-bar__ (a Scroller) } + __panes__ {
-__pane__ … }`. The rail is a real `ScrollerView` with its bars hidden, so an overflowing tab strip pans
-on the wheel and the separate `__strip-bar__` shows the position.
-
-`setTabSide` writes `flex-direction` at `DEFAULT` origin and swaps a state class on the root, so CSS
-can do `tabview.__left__ .__strip__ { … }`.
-
-**Panes are not lazy.** `addTab` eagerly builds the `Tab` *and* its pane and inserts it immediately;
-hiding is `display` toggling at `IMPORTANT` origin, not tree removal. That is what makes element
-identity, listeners and scroll position survive a tab switch, and hit-testing plus Tab-order traversal
-both skip hidden panes. If you want lazy population, do it yourself in an `onTabSelected` listener.
-
-`Tab extends Button`, so it has `setText`/`setPreIcon`/`setPostIcon` and Space/Enter activation.
-`Tab.setSelected` is package-private on purpose — go through `TabView.selectTab`.
-
-Keyboard: Left/Right (Up/Down when vertical) step the selection, Home/End jump to the ends; focus
-moves with the selection. Bubble-phase, so a focused widget inside a pane sees arrows first.
-
-**A whole strip is one Tab stop** — the ARIA APG's *roving tabindex*. The selected tab is
-`FocusPolicy.CLICK`; every other tab is `CLICK_NOT_TABBABLE` (the web's `tabindex="-1"`), so Tab enters
-the strip once, arrows move within it, and Tab again leaves for whatever follows. Ten tabs cost one
-press to skip, not ten.
-
-`TabView.updateTabStops()` owns that invariant — not `Tab` — for the same reason `selectTab` owns
-selection: "exactly one" is a strip-wide property, and a per-tab setter could leave **zero** stops,
-which makes the entire tablist unreachable by keyboard. It runs on every selection *and* membership
-change, falls back to the first tab when nothing is selected (`selectTab(null)` is public), and restores
-a removed tab to ordinarily-tabbable on the way out.
-
-- Tags `tabview`, `tab` · internal as listed in §0 · `tab:checked` works via the overridden `isChecked()`
+- Tags `tabview`, `tab` · `tab:checked` through `isChecked()`
 - Scene: `cgui-gallery` (TabView page)
-- Known gap: tabs and panes do **not** round-trip through the codec — they live in internal containers.
+- Gap: tabs and panes do not round-trip through the codec.
 
 ## 9b. `ContextToolbar`
 
-One toolbar row whose page follows what is going on — Photoshop's options bar, Inkscape's tool
-controls, Blender's tool header.
+One toolbar row whose page follows what is going on (Photoshop's options bar, Blender's tool header).
 
 ```java
 ContextToolbar bar = new ContextToolbar(documentToolbar);   // the base: shown while nothing claims the row
@@ -757,7 +577,7 @@ claim.dispose();                                            // and back; disposi
 bar.shown();                                                // the page on show
 ```
 
-A surface wires every tool in one call, and each tool's `options()` page then comes and goes with it:
+A surface wires every tool in one call, each tool's `options()` page coming and going with it:
 
 ```java
 surface.modes().showOptionsIn(bar);
@@ -769,83 +589,42 @@ public UIElement options() {
 }
 ```
 
-- **The row's height is the sheet's, never a page's** — `contexttoolbar` has a definite height and
-  clips, so a page swapping in cannot move what is under the bar. Blender fixes its tool header the same
-  way.
-- **Claims stack.** The newest live claim shows; releasing it reveals the one under it — a modal gesture
-  over a tool's options, as Blender's modal header text sits over the tool header.
-- **A page is added on its first claim and kept**, hidden between claims as Inkscape and `GtkStack` keep
-  theirs, so its fields keep what they hold.
-- **What does not fit folds from the end** behind a » at the row's end, which opens it in a popover —
-  WinForms' `ToolStrip` overflow and Qt's toolbar extension. Put the least-used items last. A folded item
-  is hidden rather than clipped, so Tab cannot land on it.
-- **`ContextToolbar.separator()`** is a hairline between a page's groups — Photoshop's, and Qt's
-  `addSeparator`. As in a menu, the fold never leaves one at the end of the row and the popover never
-  opens on one.
-- **A field on the row is a stop, not a home.** Enter lands it and Escape drops what was typed, and either
-  hands the keyboard back — Photoshop's options bar, where the next Enter is the tool's. A tool that also
-  wants Enter leaves a focused field alone.
-- **A page hidden while it holds focus gives focus back** to whatever had it before focus entered the bar.
-- Pages arrive through `claim` and `setBase`. A child appended directly is not a page and is never hidden.
-- A page's fields come from a `ToolbarForm` bound to properties (§12d), so a live number follows its
-  source and is left alone while something is typed into it.
+- **The row's height is the sheet's**, never a page's: it clips, so a swap cannot move what is under it.
+- **Claims stack**: the newest live claim shows; releasing it reveals the one under it.
+- **A page is added on its first claim and kept**, hidden between claims, so its fields keep their values.
+- **What does not fit folds from the end** behind a », opening in a popover; put the least-used items last. Folded
+  items are hidden, so Tab cannot land on them.
+- **`ContextToolbar.separator()`** is a hairline between groups; the fold never leaves one at the row's end.
+- **A field on the row is a stop, not a home**: Enter lands it and Escape drops the typing, either handing the keyboard
+  back. A page hidden while holding focus gives focus back to whatever had it before.
+- Pages arrive through `claim` and `setBase`; a child appended directly is not a page. Fields come from a
+  `ToolbarForm` (§12d).
 
 - Tag `contexttoolbar` · pages carry `__context-page__`
-- Scenes: none yet — the UI builder's toolbar row is the consumer
-
----
+- Consumer: the UI builder's toolbar row
 
 ## 10. `Tooltip`
-
-The first consumer of the **top layer** (CSS Position 4 §top-layer — the machinery behind
-`<dialog>` and the Popover API), and the reason it was built.
 
 ```java
 Tooltip tip = Tooltip.attach(anchor, "explain this");   // shown on hover, hidden on leave
 tip.detach();                                            // remove it again
 ```
 
-`Tooltip.attach` is a **static factory on the widget**, deliberately not `UINode.setTooltip`.
-`UINode` is the core DOM node every widget builds on; a tooltip is a widget, so putting the wiring
-there inverted the dependency (core importing `widget`) and made every element in the tree carry
-a field for a feature most never use. It was also where a real bug lived: a set/clear/set cycle
-attached a second pair of hover listeners each time. Creating the tooltip and its listeners in one
-call makes that unrepresentable.
+- **A static factory on the widget**, not `UINode.setTooltip`: the core node names no widget, and one call creates the
+  tooltip and its listeners together.
+- **It is promoted to the top layer** while shown, so no ancestor's clip cuts it (`UIDocument.promote`). It stays a
+  child of the anchor, inheriting `color` and `font-family` from there.
+- **Closed is `display: none`**, so a hidden tooltip takes no room in its parent's flow.
+- **It never takes the pointer** (`setHitTest(false)`), or appearing under the cursor would hide it again.
+- **Placement** is recomputed each frame from the anchor's `localToWorld`: below by default, flipping above when there
+  is no room, clamped horizontally.
+- The gap is the tooltip's `margin-top` and the wrap width is `max-width` on its label part, both in the sheet.
 
-**Why it needs the top layer.** A tooltip's whole job is to draw *outside* the thing it describes.
-`the paint walk` paints depth-first under every ancestor's scissor, so before promotion a tooltip on a
-row inside an `overflow: hidden` scroller was clipped to the scroller. See `UIDocument.promote`.
-
-**Structure.** Internal child of the anchor — which keeps the cascade behaving like the web's, since
-it inherits `color`/`font-family` from where it sits in the tree rather than from wherever it paints.
-Its own internal `__label__` is a `UIText`.
-
-**Closed ⇒ `display: none`**, exactly as a closed popover is on the web. Not cosmetic: an ordinary
-child participates in its parent's flex flow, so a hidden tooltip would silently pad every element
-that had one. One property covers layout, paint and input at once.
-
-**Never eats the pointer** (`setHitTest(false)`). Otherwise the tooltip appearing under the cursor
-counts as leaving the anchor → hide → un-hover → show: a flicker loop. The web's `pointer-events: none`
-on tooltips exists for the same reason.
-
-**Placement** is recomputed *every frame* from the anchor's `localToWorld` — not its layout box, which
-knows nothing about scrolling — so it tracks a scrolling or animating anchor. Below the anchor by
-default, **flips above** when there is no room below, then clamps horizontally. That is the useful
-subset of CSS Anchor Positioning's `position-try-fallbacks`.
-
-- Tag `tooltip` · internal `__label__` · Scene: `cgui-gallery` (Tooltip page)
-- **No pixel values in Java**: the gap under the anchor is the tooltip's own `margin-top` in
-  `default.css`, and the wrap width is `tooltip .__label__ { max-width }`. The max-width has to sit on
-  the *label*, because `UIText` only wraps against a width it can see on itself.
-- Known gaps: no show delay (a delay is a timing value and belongs in the cascade — that needs a real
-  CSS property); no platform-delegated tooltips yet (an item's real MC tooltip must be drawn by the
-  loader, which needs a new SPI).
-
----
+- Tag `tooltip` · part `label` · Scene: `cgui-gallery` (Tooltip page)
 
 ## 11. `Dialog`
 
-A floating, movable panel — the web's `<dialog>`, **modeless** form.
+A floating, movable panel: the web's `<dialog>`.
 
 ```java
 Dialog panel = new Dialog("Inspector");
@@ -854,75 +633,29 @@ panel.moveTo(20, 20).show();
 panel.getContent().append(...);
 ```
 
-**Named `Dialog`, not `UIDocument`** — that name already means the runtime/Document analogue, and
-reusing it would be actively misleading.
+- **`show()` is modeless**: ordinary flow and stacking, ordered among others by `z-index`.
+- **`showModal()`** joins the top layer, makes everything outside it inert (which is the whole of focus trapping), adds
+  a `backdrop` scrim behind it, and closes on Escape through a cancelable `onCancel`. Nesting unwinds in order.
+- **Escape does nothing on a modeless dialog**, as in browsers; its close button is the affordance. A live drag takes
+  Escape first.
+- **Focus**: the first focusable descendant, else the dialog, on show; restored on `close()`. Clicking the title bar
+  focuses the dialog.
+- **Moving** drags the title bar and writes `left`/`top` at **`INLINE`** origin, as `resize` writes size, so an author's
+  `!important` pins it. The position is a field, never re-read from the box (a reopened dialog's box is still the
+  zero-sized hidden one).
+- **The title ellipsizes**, the one place this engine truncates by default, because the close button would paint over
+  it: `flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis` on the label. Grow
+  from zero rather than shrink from intrinsic width, or a title fitting by a fraction loses a character. Override on
+  `getTitleLabel()`.
 
-**Modeless on purpose.** Only `showModal()` adds a dialog to the top layer; `show()` leaves it in
-ordinary flow and ordinary stacking. That is what lets several editor panels coexist and order among
-each other — and against page content — by `z-index`.
-
-**`showModal()` is implemented**, and it is where `inert` earns its keep. It does three things `show()`
-does not: joins the **top layer**, makes everything outside it **inert**, and **closes on Escape** via a
-close watcher (a cancelable `onCancel`, then `close()`). *Focus trapping is not a fourth feature* — it
-falls out of inertness, which is why there is no trap code anywhere. Nesting works and unwinds in order.
-
-A modal also gets a `__backdrop__` scrim: an shadow part promoted to the top layer just *before* the
-dialog, so it paints behind it and covers the whole window (`100%` against the initial containing block,
-same as the dialog's own offsets). Not a `::backdrop` pseudo-element — the style engine has none — but the
-same idea via the substitute the widgets already use. It is `setHitTest(false)` and inert, because it is
-decoration rather than a control.
-
-> **Escape on a *modeless* dialog still does nothing**, and that is not an omission — only `showModal()`
-> establishes a close watcher, so browsers behave the same way. A live drag also eats Escape ahead of the
-> modal, because a drag is the innermost live interaction.
-
-**Escape does not close it, and that is correct.** Only `showModal()` "establishes a close watcher",
-the machinery that turns a close request into a `cancel` event and then a close — so browsers do not
-close a modeless dialog on Escape either. The affordance is the `__close__` button instead, which
-browsers leave to the author because their dialogs ship no chrome. (Escape *during a drag* cancels the
-drag — `Input` consumes it before focus routing, so the innermost live interaction wins.)
-
-**Focus** follows the spec: the focus delegate (first focusable descendant) else the dialog itself on
-`show()`, and on `close()` focus returns to whatever held it beforehand. Clicking the title bar also
-focuses the dialog — without that the ring is only ever produced programmatically and looks like a
-glitch, since `FocusPolicy.FOCUSABLE` excludes click.
-
-**Moving is ours** — nothing in CSS or HTML moves an element by pointer. It runs on the P2 positional
-drag from `__title-bar__`, and writes `left`/`top` at **`INLINE`** origin, matching what CSS `resize`
-mandates for the size it writes. One rule covers both: user-driven geometry is inline, so an author's
-`!important` can pin a dialog.
-
-> **The position is a field, never re-read from the resolved box.** The re-clamp ticker runs during
-> `advanceFrame`, *before* layout, so just after a reopen the box is still the zero-sized
-> `display: none` one — deriving position from it snapped every reopened dialog to (0,0).
-
-**The title ellipsizes, and it is the one place this engine truncates text by default.** CSS does not:
-`text-overflow`'s initial value is `clip`, and no browser user-agent sheet ellipsizes generic text —
-spilling content is the correct default, since the content is the author's. A title bar is chrome
-though, with a close button pinned to its right edge that a long title paints straight over, and every
-native window manager ellipsizes window titles for that reason. `default.css` therefore gives
-`__title-bar__ .__label__` the web's canonical truncation recipe verbatim: **`flex: 1 1 0; min-width: 0;
-white-space: nowrap; overflow: hidden; text-overflow: ellipsis`**. Override on `getTitleLabel()` if the
-whole title matters more than the button.
-
-> **`flex-grow`/`flex-basis: 0`, not `flex-shrink: 1`** — and the difference is not cosmetic. Shrinking
-> from the label's intrinsic width makes its box depend on its own measured glyphs, so a title that fits
-> by a fraction of a pixel truncates anyway and loses a whole real character to an ellipsis it never
-> needed. (Observed: `panel one` rendering as `panel on`.) Growing from zero sizes the label to *what is
-> left after the close button*, which is the actual intent and has no such edge. `min-width: 0` is what
-> permits it at all — a flex item's automatic minimum is its min-content size, which for a `nowrap` line
-> is the entire line.
-
-- Tag `dialog` · internal `__title-bar__`, `__content__`, `__close__`, `__label__` on the title text,
-  and `__backdrop__` when shown modally · Scenes: `cgui-gallery` (Dialog page, modal page)
-- Combines with `resize` (§12): the gallery's second panel is both movable and resizable.
-
----
+- Tag `dialog` · parts `title-bar`, `content`, `close`, `label`, and `backdrop` when modal · Scenes: `cgui-gallery`
+  (Dialog page, modal page)
+- Combines with `resize` (§12).
 
 ## 11b. `Popover`, `Menu`, `MenuItem`, `Dropdown`
 
-The Popover API port, plus the two widgets on top of it. **A dropdown and a context menu are the same
-class** — `Menu` — anchored to an element or to a point, which is how the web does it too.
+The Popover API, and the two widgets on it. **A dropdown and a context menu are the same class**, `Menu`, anchored to
+an element or a point.
 
 ```java
 Menu menu = new Menu();
@@ -936,9 +669,8 @@ quality.addOptions("Low", "Medium", "High");
 quality.attachSelectionListener(index -> ...);
 ```
 
-**A popover built per opening removes itself** with `removeWhenHidden()` — `hide()` keeps a popover parented
-so it can be shown again, so one built on every press and never removed stays in the tree, hidden, one more per
-press. It waits for the close fade, as `Dialog.removeWhenClosed()` does.
+**A popover built per opening removes itself** with `removeWhenHidden()`, after the close fade; `hide()` alone keeps
+it parented.
 
 ```java
 Popover palette = new Popover().removeWhenHidden();
@@ -946,125 +678,62 @@ window.topLayerNode().append(palette);   // not beside the button, or presses in
 palette.showFor(button, button);
 ```
 
-`Popover.Mode.AUTO` gets light dismiss + Escape; `MANUAL` gets neither. Placement is
-`setPreferredSide` + `setOffset`, resolved by `AnchoredPlacement` — **never set `left`/`top` yourself on
-one**, it fights placement every frame.
+- `Popover.Mode.AUTO` gets light dismiss and Escape; `MANUAL` neither. Placement is `setPreferredSide` + `setOffset`
+  through `AnchoredPlacement`: **never set `left`/`top` on one**.
+- **Pass an invoker only for a toggle**: it is excluded from light dismiss, right for a dropdown button and wrong for a
+  context menu's surface. A popover opened during a press is already protected from it.
+- The fade-in hangs off the `__open__` class (closed at `opacity: 0`, open at `1` in the sheet), giving the transition
+  a from-value out of `display: none`.
+- `Menu` takes items only, focuses its first on open, and handles Up/Down (wrapping), Home/End; Enter/Space come from
+  `Button`. **One Tab stop**: items are `CLICK_NOT_TABBABLE`.
+- **A menu is never taller than the window**: its rows scroll inside `::part(scroller)`, following the keyboard.
+- **Menus focus on hover** through `Input.requestPointerFocus` (no ring, no scroll), so one row is highlighted and the
+  keyboard continues from the pointer.
+- **An icon before a row's label** comes from its command; a menu with any such row reserves the column on all
+  (`__has-icons__`). A checkable row draws its check there instead.
 
-`Menu` refuses public children (items only), focuses its first item on open, and handles Up/Down (wrapping,
-per the ARIA pattern), Home/End; Enter/Space comes from `Button`. The whole menu is **one Tab stop** — its
-items are `CLICK_NOT_TABBABLE`, and unlike `Tab` the stop does not rove, because an open menu holds focus
-outright and Tab has nothing to do inside it.
+  ```java
+  Command.of("new.button", "Button").icon("crystalgui:nodes/ui/button", GlyphRole.CONTROL.cssClass());
+  item.setIcon("crystalgui:general/action/add", null);   // on a MenuItem built by hand
+  ```
 
-**A menu is never taller than the window.** Past that its rows scroll inside `::part(scroller)`, a
-`ScrollerView`, and the keyboard scrolls the focused row into view — so a submenu listing fifty groups
-is a scrolling list, as a font picker's is. A menu that fits shows no bar.
+- **Submenus go through `Menu.addSubmenu(label, child)`**: the row does not close its parent, the child anchors to the
+  row and prefers `Side.RIGHT`, and a `>` arrow is added (`__submenu-arrow__`, `__has-submenu__`). They open on hover
+  after `Menu.DEFAULT_SUBMENU_DELAY` (0.4 s, Windows' `MenuShowDelay`; `setSubmenuDelay`); Right opens at once, Left
+  closes back. Closing a parent closes its submenus.
+- **Choosing a leaf closes the whole chain** (`Popover.hideChain()`), stopping at a popover that only contains the
+  menu; Escape peels one level.
+- `Dropdown` is a `Button` owning a `Menu` as a part, its label following the selection; pressing toggles. Its state
+  records the index, not the text.
 
-**An icon before a row's label** comes from its command, so every menu showing the command draws it; a menu
-holding any such row reserves the icon column on every row (`__has-icons__`), so labels stay aligned:
-
-```java
-Command.of("new.button", "Button").icon("crystalgui:nodes/ui/button", GlyphRole.CONTROL.cssClass());
-item.setIcon("crystalgui:general/action/add", null);   // on a MenuItem built by hand
-```
-
-The class lands on the row and tints the icon through `menuitem.<class>::part(pre-icon)`. A checkable row
-draws its checkmark in that slot instead and takes no icon.
-
-**Submenus open on hover**, after `Menu.DEFAULT_SUBMENU_DELAY` (0.4s — Windows' own `MenuShowDelay` default;
-`setSubmenuDelay` to change it). Instant opening makes submenus flash as the pointer sweeps past. `addSubmenu`
-also adds a `>` indicator in the `__post-icon__` slot (`__submenu-arrow__`, replaceable via `setPostIcon`) and
-marks the row `__has-submenu__`. Right arrow opens immediately — a keypress is never an accidental sweep;
-Left closes back into the parent.
-
-> **The fade-in hangs off a state class, not a starting style.** A popover opens out of `display: none`, so a
-> `transition` on `opacity` has nothing to interpolate *from* — the wall `@starting-style` exists to solve.
-> `Popover` toggles `__open__`, and `default.css` keeps a **closed** popover at `opacity: 0` and an open one
-> at `1`, which gives the transition a real from-value. The duration lives in the sheet; drop that line and
-> popovers snap in.
->
-> An earlier attempt hand-rolled the starting style — one frame of `opacity: 0` at IMPORTANT origin, removed
-> on the next tick — and **silently defeated itself**: that `1 → 0` write is a transitionable change too, so
-> the engine eased *toward* zero and the removal retargeted it back before it arrived. Nothing visibly faded,
-> and no test noticed. Don't reintroduce it.
-
-**Choosing a leaf closes the whole chain of menus; Escape peels one level.** `Popover.hideChain()` walks the
-invoker chain (`parentPopover()`) and closes it — what the ARIA pattern means by "activates the item and closes
-the menu" — and stops at a popover that only CONTAINS the menu, since `continuesChain()` is true for a `Menu`
-alone: picking from a dropdown inside a panel popup closes the dropdown, not the popup. `hide()` alone closes a
-popover and its *descendants*, which leaves a submenu's parent standing.
-
-> **Pass an invoker only for a *toggle*.** `showFor`/`showAt`'s invoker is excluded from light dismiss, which
-> is what a dropdown button needs (its own press must not close the menu it just opened) and wrong for a
-> context menu — naming its trigger surface makes that whole surface unable to dismiss the menu. Nothing is
-> lost by passing `null`: a popover opened during a press is already protected from that press.
-
-**Menus do focus-follows-hover.** Hovering a row focuses it via `Input.requestPointerFocus`, so
-exactly one row is ever highlighted and the keyboard continues from wherever the pointer left off.
-`requestPointerFocus` is the no-ring, no-scroll variant — a focus ring trailing the mouse is what
-`:focus-visible` exists to prevent, and `menuitem`'s row highlight is its focus affordance instead.
-
-**Submenus go through `Menu.addSubmenu(label, child)`**, never `addItem` plus a listener. It wires the three
-things that are easy to forget: the item does not close its parent (an ordinary item does), the child anchors
-to the *row* rather than to the menu, and it prefers `Side.RIGHT` so it sits beside rather than on top.
-`MenuItem.getSubmenu()`/`hasSubmenu()` expose the relationship. Closing a parent closes its submenus.
-
-`Dropdown` is a `Button` that owns a `Menu` as an shadow part and keeps its label in step with the
-selection. Pressing it **toggles**. Its `writeState` records the **index, not the text** — the label is
-derived, so restoring the text would put the right words on a control that still thinks nothing is selected.
-
-- Tags `popover`, `menu`, `menuitem`, `dropdown` · internal `__items__` (Menu), `__menu__` (Dropdown)
-- Scene: `cgui-gallery` (menus page — dropdown, context menu, submenu)
-- Known gap: a decoded `menu` comes back **empty**, and a `dropdown` with no options — items and options
-  live in internal containers, the same gap `TabView` has with its tabs.
-
----
+- Tags `popover`, `menu`, `menuitem`, `dropdown` · parts `items`/`scroller` (Menu), `menu` (Dropdown)
+- Scene: `cgui-gallery` (menus page: dropdown, context menu, submenu)
+- Gap: a decoded `menu` comes back empty, and a `dropdown` without options.
 
 ## 12. `resize` — an element capability, not a widget
 
-> **Leading-edge handles exist only for out-of-flow elements.** A top or left handle must move the origin
-> so the opposite edge stays put, and `left`/`top` only *place* an absolutely positioned box — on an in-flow
-> one they are a relative offset that slides it over the sibling above while everything below carries on as
-> if nothing moved. So an in-flow element gets **right, bottom and the bottom-right corner**, which is
-> exactly the set CSS offers (and CSS never moves the box at all); a positioned one like `Dialog` gets all
-> eight. The set is rebuilt when `position` changes, since `position` and `resize` are independent.
-
-CSS `resize` (CSS UI 4) is **ambient on any element**, exactly as `overflow` makes any element a
-scroll container. Setting it adds an internal `__resizer__` grab handle; clearing it removes one.
+CSS `resize` (CSS UI 4) is **ambient on any element**, as `overflow` is: setting it adds a `resizer` grab handle.
 
 ```java
 panel.generalStyle(g -> g.resize(Resize.BOTH));   // or in CSS: resize: both;
 ```
 
-- The resulting size is written at **`INLINE`** origin — the spec says the UA replaces declarations in
-  the style attribute *"without `!important`"*, so an author's `!important` still wins. Every other
-  code-driven geometry write in this engine uses `IMPORTANT`; this is the deliberate exception.
-- **The resizer clamps to two things**: the element's own `min-*`/`max-*`, and what it answers as a
-  `MinimumSize` — a window's is its content's minimum plus its chrome (see § 0, *A widget states how small it
-  can get*).
-- **Eight handles** — four edges, four corners. *Not* a divergence: the spec says only that the UA
-  "presents a bidirectional resizing mechanism" and never prescribes one corner grabber. Which handles
-  exist follows the resizable axes, so `horizontal` gets the two side edges and no corners.
-- **A leading edge moves the box too** — growing leftwards keeps the right edge still, which CSS's
-  single bottom-right grabber exists to avoid ever needing. `Dialog` overrides `applyResizeOrigin` so
-  its own clamped position stays the source of truth rather than being overwritten each frame.
-- **Divergences**: applies regardless of `overflow` (browsers restrict it to scroll containers, half a
-  rendering artifact of the grabber living in the scrollbar gutter); and no `block`/`inline` values,
-  which are writing-mode-relative and would be silent aliases here.
-- **Anything resizable should normally also set `overflow`** — the other half of that restriction did
-  real work, guaranteeing a resizable box contains its content.
+- The size is written at **`INLINE`** origin, so an author's `!important` wins.
+- It clamps to the element's `min-*`/`max-*` and its `MinimumSize` (§0).
+- **Handles follow the resizable axes**: eight for `both` on a positioned element. **Leading edges exist only out of
+  flow**, since only there does `left`/`top` place the box; an in-flow element gets right, bottom and the corner.
+  `Dialog` overrides `applyResizeOrigin` so its own position stays the truth.
+- Divergences: applies regardless of `overflow`, and no `block`/`inline` values. A resizable box should normally set
+  `overflow` too.
 
-The rule this establishes, worth reusing: **if the web expresses it as a CSS property, make it ambient
-on `UINode`; if the web expresses it as an element, make it a widget.**
-
----
+**If the web expresses it as a CSS property, make it ambient on `UINode`; if as an element, make it a widget.**
 
 ## 12b. `CanvasView` — the pan/zoom plane
 
-`com.crystalgui.widget.canvas` · tag `canvasview` · `cgui-gallery` → **canvas** page · P6.2.2
+`widget.canvas` · tag `canvasview` · `cgui-gallery` → canvas page
 
-An unbounded plane viewed through a fixed window: wheel-zoom about the cursor, middle- or
-Space+left-drag to pan, `fitToContent()`, and off-screen culling. The substrate the node graph sits
-on, and deliberately not graph-specific — nodes, ports and wires are 6.2.3's.
+An unbounded plane through a fixed window: wheel-zoom about the cursor, middle- or Space+left-drag to pan,
+`fitToContent()`, off-screen culling.
 
 ```java
 CanvasView canvas = new CanvasView();
@@ -1076,64 +745,30 @@ Vector2f world = canvas.screenToWorld(rawX, rawY);
 
 ```
 CanvasView            overflow: hidden — the window, and the element gestures are read on
-  └── __content__     absolutely positioned, carries translate(pan) scale(zoom)
+  └── content         absolutely positioned, carries translate(pan) scale(zoom)
         └── nodes     the caller's elements, positioned in world coordinates
 ```
 
-- **It is a viewport, so it refuses public children.** A child of the viewport would sit outside the
-  transform and stay nailed to the screen while everything else panned. Use `content()` or `addNode`.
-- **A positive wheel notch means the wheel rolled *down*, so it zooms out.** The sign is not
-  guessable and the only thing in the repo that states it is `ScrollerView`, which grows `scrollTop`
-  by a positive delta. Taking it at face value ships a canvas that zooms in when you scroll down —
-  wrong in a way every user notices immediately and no test catches, because a test written from the
-  implementation agrees with the implementation. Pinned by asserting both consumers in one test.
-- **Zoom is CSS `transform`**, which is layout-free by construction — scaling the plane cannot reflow
-  anything, and `Transform.applyTo` is shared by the render pose and the hit-test chain, so clicks
-  follow the picture with no code in the widget. That is why this is a few hundred lines.
-- **`transform-origin` is pinned to `0 0` at IMPORTANT.** It defaults to 50% and every conversion here
-  assumes the plane scales about its top-left; a theme setting it would offset the whole canvas by
-  half a viewport, scaled. Pinned rather than compensated for, so there is one answer rather than two.
-- **`pan` is measured after zoom** — a screen-space offset, not a world one. That is what makes a pan
-  drag a plain addition of the pointer delta at any zoom. `centerOnWorld` is there for when you
-  genuinely want world units.
-- **A bare left-drag does not pan.** It is reserved for 6.2.4's marquee. Middle-drag always pans;
-  Space+left is the escape hatch for a mouse with no usable middle button (Figma/Blender/Photoshop's
-  answer). The gesture is read in the **capture** phase so it beats whatever is under the cursor.
-- **Three coordinate spaces**: world (what you author), logical (what `Box.x()` and
-  `UIElement.toLocal` speak), physical (raw pointer pixels). `screenToWorld` crosses all three;
-  `worldToViewport` returns *logical*, not physical, and says so.
+- **It refuses public children**: a child outside the transform would stay nailed to the screen. Use `content()` or
+  `addNode`.
+- **A positive wheel notch means rolled down, so it zooms out** (the sign `ScrollerView` uses for `scrollTop`).
+- **Zoom is CSS `transform`**, layout-free, and `Transform.applyTo` serves both the pose and hit testing.
+- **`transform-origin` is pinned to `0 0` at `IMPORTANT`**.
+- **`pan` is screen-space**, after zoom; `centerOnWorld` for world units.
+- **A bare left-drag does not pan** (it is the marquee's). Gestures are read in the capture phase.
+- **Three spaces**: world, logical (`Box.x()`, `toLocal`), physical (raw pointer). `screenToWorld` crosses all three;
+  `worldToViewport` returns logical.
 
-### Culling skips paint, not layout
-
-Off-screen nodes get `opacity: 0` at IMPORTANT origin, which `the paint walk` early-returns on.
-`display: none` is the obvious choice and is wrong here: a culled node's layout collapses, and its
-layout rect is precisely the input the cull decision is computed from — so it could never be
-un-culled without a cache of where it used to be, which goes stale the moment anything moves it.
-Keeping layout live makes the decision self-correcting on every tick, and costs no relayout as nodes
-cross the viewport edge, which panning does constantly. What is given up is layout cost for
-off-screen nodes, which is the smaller half: layout recomputes only when dirty, paint happens every
-frame.
-
-The pass runs from a `UIFrameTicker` rather than only on view changes, because a node can move
-without the view moving and the canvas gets no notification of a child's layout change. It is one
-AABB test per node.
-
-> **A node is culled by its box, so anything that paints outside its box must declare the region it
-> draws in.** The gallery's wire layer is the case: it paints Béziers across the whole graph from an
-> element whose natural size is `auto`, i.e. 0×0 at world origin — so it would be culled the instant
-> you panned off that one point, taking every wire with it while every node stayed visible. Giving it
-> the grid's extent fixes it *and* makes the cull correct: the wires now disappear exactly when no
-> wire is on screen. 6.2.3's real wire layer inherits this.
-
----
+**Culling skips paint, not layout**: an off-screen node gets `opacity: 0` at `IMPORTANT` origin, keeping its layout so
+the decision (made from that layout each frame, one AABB test a node) can reverse. **A node is culled by its box**, so
+anything painting outside its box declares its region or is cull-exempt (`setCullExempt`).
 
 ## 12c. The node graph — `GraphView`, `GraphNode`, `NodePort`
 
-`com.crystalgui.widget.graph` · tags `graphview` / `graphnode` / `nodeport` ·
-`cgui-gallery` → **graph** page · P6.2.3
+`widget.graph` · tags `graphview` / `graphnode` / `nodeport` · `cgui-gallery` → graph page
 
-Unity Shader Graph's construction, literally: a title bar, two port columns, controls, a preview slot,
-and wires that take their colour from the ports they leave.
+Unity Shader Graph's construction: a title bar, two port columns, controls, a preview slot, and wires coloured by
+their ports.
 
 ```java
 GraphView graph = new GraphView();
@@ -1145,65 +780,40 @@ graph.addNode(position, 20f, 30f);
 graph.connect(out, add.addInput(VEC3, "A"));
 ```
 
-`GraphView extends CanvasView`, so it inherits pan, zoom, fit and culling — and **reports the tag
-`graphview`, which matches no `canvasview` rule**. The viewport's structural styling is written from
-Java at DEFAULT origin precisely so the subclass gets it for real.
+`GraphView extends CanvasView` (pan, zoom, fit, culling) and reports `graphview`, which matches no `canvasview` rule;
+the viewport's structural styling is written from Java at `DEFAULT` origin so the subclass has it.
 
-### Ports
+**Ports**
 
-- **`PortType` is an interface, not an enum.** The types a shader graph carries are GLSL's, and the
-  manifesto is explicit that the graph is a visual editor for the `.shader` format — so CrystalGUI ships
-  the interface and the registry, and the consumer ships `float`/`vec3`/`sampler2D`. Compatibility is
-  asked of the *source* type and is deliberately asymmetric: GLSL promotes a float to a vec3 and does
-  not demote.
-- **`type.cssClass()` is `type-<id>`**, carried by the port. The palette — dot and wire alike — is
-  therefore a stylesheet's business. `NodePort.typeColor()` reads the dot's computed `border-color`
-  back out of the cascade, which is what keeps the number's source in CSS even though
-  the canvas's splines need an int.
-- **One edge per input, many per output.** Dropping onto an occupied input *replaces*; the displaced
-  edge leaves through the same `disconnect()` as a manual one, so 6.2.4 can make the pair one undoable
-  command.
-- **`nodeport:blank` means unconnected** — `isBlank()` is overridden. It drives the hollow-vs-filled dot
-  and whether the type's inline editor shows, so both are CSS rather than Java.
-- **The dot is decorative; the port is the target.** The dot is 8px and a pointer is not, so the dot and
-  label are `setHitTest(false)` and the port's padding is the hit area.
+- **`PortType` is an interface**: CrystalGUI ships the registry, a consumer the types. Compatibility is asked of the
+  source type and is asymmetric (a float promotes to a vec3, not back).
+- **`type.cssClass()` is `type-<id>`**, so the palette is the sheet's; `NodePort.typeColor()` reads the dot's computed
+  `border-color` for the wire.
+- **One edge per input, many per output**: dropping on an occupied input replaces, through the same `disconnect()`.
+- **`nodeport:blank` means unconnected** (hollow dot, inline editor shown).
+- **The port's padding is the hit area**; the dot and label are `setHitTest(false)`.
 
-### Nodes
+**Nodes**
 
-- **The node paints no background.** Each region paints its own and the port band paints *none*, so a
-  wire — drawn under every node — shows through and reads as plugged into its dot rather than cut off
-  at the border. The title bar and preview carry the corner radii the root no longer paints.
-- **Collapse hides unconnected ports**, not just the body — a stylesheet rule over `nodeport:blank`.
-- **Selection is `:checked`** via an overridden `isChecked()`. The flag on the node is view state;
-  6.2.4 owns the model, and `GraphView.selectNode` is the smallest click behaviour that works until
-  then.
-- **Dragging moves it in place** — `left`/`top` are rewritten, nothing is rebuilt. The node is a safe
-  drag source (unlike the plane in a pan) because layout is not in the transform matrix, so its own
-  coordinate space stands still while it moves through it.
-- **Clicking focuses it, by asking.** `FocusPolicy.CLICK` is not enough: the input handler focuses the
-  exact element hit, which is the title bar. See the note in `GraphNode.focusOnPress`.
+- **The node paints no background**: each region paints its own and the port band none, so wires show through.
+- **Collapse hides unconnected ports** (a rule over `nodeport:blank`).
+- **Selection is `:checked`**; `GraphView.selectNode` is the click behaviour.
+- **Dragging moves it in place**, rewriting `left`/`top`.
+- **Clicking focuses it** through `GraphNode.focusOnPress`, since a press focuses the exact element hit.
 
-### Wires
-
-One `NodeWireLayer` paints all of them in a single `ctx.curve()` batch — a trade: no Taffy node or
-draw-call boundary per edge, at the cost of per-wire CSS state. It sits at world (0,0), which makes its
-own origin the plane origin, and is **cull-exempt** (`CanvasView.setCullExempt`) because culling asks an
-element's box where it is and a painter's box says nothing about where it draws. It culls per wire
-instead. Stroke width is clamped against the canvas's zoom so a pose-scaled 2px wire does not vanish at
-0.2×.
-
----
+**Wires**: one `NodeWireLayer` paints all of them in one `ctx.curve()` batch, at world (0,0), cull-exempt and culling
+per wire. Stroke width is clamped against zoom so a wire never vanishes zoomed out.
 
 ## 12d. The config kit — `ConfigForm` over `Property`
 
-`com.crystalgui.widget.config` · tags `configuratorpanel` / `configurator` / `configuratorgroup` and one
-per control (`numbercontrol`, `slidercontrol`, `booleancontrol`, `selectcontrol`, `textcontrol`,
-`colorcontrol`, `vectorcontrol`, `matrixcontrol`, `maskcontrol`, `assetcontrol`, `arraycontrol`,
-`anchorcontrol`, `infocontrol`, `notecontrol`, `headercontrol`) · `cgui-new-gallery` → **config kit**
+`widget.config` · tags `configuratorpanel` / `configurator` / `configuratorgroup` and one per control
+(`numbercontrol`, `slidercontrol`, `booleancontrol`, `selectcontrol`, `textcontrol`, `colorcontrol`, `vectorcontrol`,
+`matrixcontrol`, `maskcontrol`, `assetcontrol`, `arraycontrol`, `anchorcontrol`, `infocontrol`, `notecontrol`,
+`headercontrol`) · `cgui-new-gallery` → config kit
 
-Blender's `layout.prop`, drawn as Unity's inspector. A `ConfigDescriptor` says what a field is, a
-`Property` says where its value lives, and a form builds the control and binds it. The same calls fill an
-inspector tab, a preferences page, a tuning window and a tool's toolbar page.
+Blender's `layout.prop`, drawn as Unity's inspector. A `ConfigDescriptor` says what a field is, a `Property` where its
+value lives, and a form builds the control and binds it: an inspector tab, a preferences page, a tuning window and a
+tool's toolbar page alike.
 
 ```java
 // An inspector section
@@ -1237,8 +847,8 @@ form.prop(ConfigDescriptor.number("blur", "Blur").range(0f, 40f),
         Property.derived(() -> (double) glass.getBlurRadius(), v -> glass.setBlurRadius(v.floatValue())));
 ```
 
-A value stored in another shape is mapped, never converted in the control — a shader graph keeps GLSL
-text, and its colour field binds `stored.map(ShaderColorFieldWidget::parseVec4, ShaderColorFieldWidget::formatVec4)`.
+A value stored in another shape is mapped, never converted in the control:
+`stored.map(ShaderColorFieldWidget::parseVec4, ShaderColorFieldWidget::formatVec4)`.
 
 | Kind | Property type |
 |---|---|
@@ -1250,31 +860,25 @@ text, and its colour field binds `stored.map(ShaderColorFieldWidget::parseVec4, 
 | `MASK` | `Set<String>` |
 | `ARRAY` | `List<Object>` |
 
-- **A bound field needs nothing wired.** An edit writes the property; a change made anywhere else shows
-  up — at once for a stored or `announcedBy` property, after the next layout for a polled one — and only
-  while the field is in a tree, re-reading when it comes back. A host reacts to an edit in the property's
-  writer.
-- **A field holding a typed edit is never overwritten**, as in Dear ImGui and Unity. What moved meanwhile
-  shows once the edit lands or is dropped.
-- **A scrub or a slider drag is one step** of the property's `editedIn` history, however many values it
-  writes.
-- **`setValue` on a bound control writes the model** — there is no second copy to set. It emits nothing;
-  a user edit emits `changed`.
-- **The label is the scrub handle**, in a row and in a toolbar cell alike. A pixel is worth a hundredth of
-  the field's `range`, or one unit when it has none; Shift ×10, Ctrl ÷10; `scrubRate` overrides both.
-- **Prefer `prop` to `row`.** `row` starts at a value and follows nothing — a fact read once.
-- **A toolbar cell shows the `shortLabel`** and the full label on hover, hung from the cell so it clears
-  the bar. `group` in a toolbar starts a new cluster behind a separator; there is nowhere to fold.
-- **A kind with no registered control throws** — a blank field is what the registry exists to prevent.
-- A `PanelForm` group remembers being closed across a refill of its panel.
-- Geometry is `ua/inspector.css`. The one layout in Java is that a toolbar page, a cell and an anchor's
-  lines are rows, at `DEFAULT` origin, as a `Button` is.
+- **A bound field needs nothing wired**: an edit writes the property; a change elsewhere shows at once for a stored or
+  `announcedBy` property, after the next layout for a polled one, and only while the field is in a tree. A host reacts
+  in the property's writer.
+- **A field holding a typed edit is never overwritten** (Dear ImGui, Unity).
+- **A scrub or slider drag is one step** of the property's `editedIn` history.
+- **`setValue` on a bound control writes the model** and emits nothing; a user edit emits `changed`.
+- **The label is the scrub handle**: a pixel is a hundredth of the `range`, or one unit; Shift ×10, Ctrl ÷10;
+  `scrubRate` overrides.
+- **Prefer `prop` to `row`**: `row` reads a value once and follows nothing.
+- **A toolbar cell shows the `shortLabel`**, the full label on hover; `group` in a toolbar starts a cluster behind a
+  separator.
+- **A kind with no registered control throws.**
+- A `PanelForm` group remembers being closed across a refill.
+- Geometry is `ua/inspector.css`.
 
 #### Refilling — a panel that follows a selection
 
-A panel describing whatever is selected fills itself again on every change. `refill` keeps what the last fill
-placed wherever this one places the same thing, so the next node of the same kind costs its values rather than
-a new subtree — no teardown, no new elements, no restyle, no relayout. The `Inspector` fills its tabs this way.
+`refill` keeps what the last fill placed wherever this one places the same thing, so the next node of the same kind
+costs its values, not a new subtree. The `Inspector` fills its tabs this way.
 
 ```java
 panel.refill(form -> {
@@ -1286,21 +890,17 @@ panel.refill(form -> {
 });
 ```
 
-- **A `prop` row is kept when its descriptor has the same shape** (`ConfigDescriptor.sameShape`): every stated
-  value equal, each supplier present on both or neither. Its control adopts the new descriptor and binds the
-  new property, so a validator or range over the new subject is the one it asks. State the whole descriptor
-  before placing it — one changed afterwards no longer matches.
-- **A group is kept by its title** and refilled in turn; a `separator` by position.
-- **A `custom` element, or a `control` row's control, is kept only when it is `Refillable`** — handed the one
-  this fill built, it takes over what that one shows. Otherwise it is replaced, which is always correct.
-- **Use what a placement returns** — it is the element on screen.
-- **A kept row forgets what the last fill did to it**: the classes it added, a hidden or inert state and an
-  `editedIn` are undone. A listener, watch or hook cannot be, so it goes in `row.decorations()` — or it stays
-  on a row the next fill reuses and acts on whatever was selected before.
-- **A control reads its descriptor's questions when it asks them**, through `descriptor()`, never from a copy
-  taken at construction; one that derived state from them re-derives it in `descriptorAdopted`.
+- **A `prop` row is kept when its descriptor has the same shape** (`ConfigDescriptor.sameShape`); its control adopts
+  the new descriptor and binds the new property. State the whole descriptor before placing it.
+- **A group is kept by its title**, a `separator` by position.
+- **A `custom` element or a `control` row's control is kept only when `Refillable`**; otherwise replaced.
+- **Use what a placement returns**: it is the element on screen.
+- **A kept row forgets what the last fill did to it** (classes, hidden or inert, `editedIn`). A listener, watch or hook
+  goes in `row.decorations()`, or it acts on the previous selection.
+- **A control reads its descriptor when it asks**, through `descriptor()`; derived state re-derives in
+  `descriptorAdopted`.
 
-A descriptor also says how a field READS, and these four are what a dense inspector row needs:
+A descriptor also says how a field reads:
 
 ```java
 ConfigDescriptor.text("id", "id").placeholder("none").description("Unique in the document.")
@@ -1308,17 +908,12 @@ ConfigDescriptor.array("sizes", "Sizes").inlineList(true).emptyText("No sizes")
 ConfigDescriptor.number("left", "Left").scrubRate(() -> 1d / zoom)   // units per pixel, asked per drag
 ```
 
-- **`placeholder`** draws in an empty field — grey, and gone as soon as there is a value. `description` is
-  the row's hover text, on the label as well as the control.
-- **`inlineList`** lays an `ARRAY` out as rows in the field column rather than a folding group, with its
-  add and remove buttons at the first row's height; `emptyText` is what it says with nothing in it. A new
-  row starts blank and is committed only once typed into, so a list never gains an empty entry by being
-  opened.
-- **`scrubRate`** overrides the label-drag rate, and the `DoubleSupplier` form is asked at each step — what
-  a canvas that zooms needs, where a pixel is worth a different number of units every frame.
+- **`placeholder`** draws in an empty field; `description` is the row's hover text.
+- **`inlineList`** lays an `ARRAY` out as rows in the field column; `emptyText` shows when empty. A new row is
+  committed only once typed into.
+- **`scrubRate`**'s supplier form is asked each step, for a canvas that zooms.
 
-A number's **range, unit and step can follow another value** — the control keeps asking while it is shown,
-so nothing holds the control to push a bound at it:
+A number's **range, unit and step can follow another value**, asked while shown:
 
 ```java
 form.prop(ConfigDescriptor.number("stroke", "Stroke")
@@ -1327,13 +922,12 @@ form.prop(ConfigDescriptor.number("stroke", "Stroke")
         .step(0.1f), stroke);
 ```
 
-- **A control built of numbers copies its descriptor with `part(id, label)`** — a slider's field, a
-  vector's X. Every attribute and supplier comes along; a hand copy drops whichever one it forgets.
-- **A row's Ctrl+Z reaches the property's `editedIn` history** with nothing named on the row.
+- **A control built of numbers copies its descriptor with `part(id, label)`**, carrying every attribute and supplier.
+- **A row's Ctrl+Z reaches the property's `editedIn` history.**
 
 #### A control of your own
 
-Anything that edits a value is a `ValueControl<T>`, so it follows its property exactly as the kit's do:
+Anything that edits a value is a `ValueControl<T>`:
 
 ```java
 public final class OffsetPad extends ValueControl<double[]> {
@@ -1347,23 +941,20 @@ public final class OffsetPad extends ValueControl<double[]> {
 panel.append(new OffsetPad("offset").bind(shadow.map(Shadow::offset, at -> shadow.get().withOffset(at))));
 ```
 
-- **Draw in `writeToWidgets`, report with `commit`**, and bracket a drag with `beginInteraction` /
-  `endInteraction` so it is one undo step. Never keep a copy of the value in a field.
-- **A view that is not a control** — a caption, a preview — follows with
-  `PropertyWatch.follow(element, property, show)`, or `LiveEdits.follow(element, styleProperty, css)` to
-  show a declaration on an element.
-- **Children redrawn from the value are kept with `ChildList`**, never `removeAll` and append: a rebuild
-  destroys the row the pointer is pressing. Children with an identity — a row per declaration — use
-  `ChildList.Keyed`, which adds and removes only the keys that came and went.
-- **A list of rows in a panel** builds each with `panel.row(descriptor, value)`, which registers without placing,
-  and hands a removed one to `panel.forget(row)`.
-- **Parts of a composite value are `Property.map`s** of the whole, and a selection is a `Property.of(0)`
-  shared by the controls that edit through it. Write the setter as `v -> whole.get().withX(v)`, never
-  `whole.get()::withX`, which reads the whole once when the lab opens.
+- **Draw in `writeToWidgets`, report with `commit`**, and bracket a drag with `beginInteraction` / `endInteraction` for
+  one undo step. Keep no copy of the value.
+- **A view that is not a control** follows with `PropertyWatch.follow(element, property, show)`, or
+  `LiveEdits.follow(element, styleProperty, css)` for a declaration.
+- **Children redrawn from the value use `ChildList`** (`ChildList.Keyed` for identities), never `removeAll` and
+  append, which destroys the row being pressed.
+- **A list of rows in a panel** builds each with `panel.row(descriptor, value)` and hands a removed one to
+  `panel.forget(row)`.
+- **Parts of a composite value are `Property.map`s** of the whole. Write `v -> whole.get().withX(v)`, never
+  `whole.get()::withX`, which reads the whole once.
 
 ### Chips for a list of names — `ClassChips`
 
-`com.crystalgui.widget.config.control` · tag `classchips`
+`widget.config.control` · tag `classchips`
 
 ```java
 ClassChips chips = new ClassChips(ConfigDescriptor.of("classes", "classes", Kind.ARRAY), List.of("title"));
@@ -1373,26 +964,20 @@ chips.setAccepts(name -> !ClassNames.isEngine(name));             // never added
 chips.bind(fields.classes(node));
 ```
 
-Chromium DevTools' `.cls` pane, with Unity UI Builder's removal: the prompt completes by prefix, several
-names separated by spaces go in at once, Enter or Tab takes the highlighted suggestion or else what was
-typed, a chip's cross removes it, and Backspace in an empty prompt takes the last chip. The value is the
-whole list in order, and a name already present is not added twice.
-
-`::part`-less by design — it is a config control, so its pieces are classes a theme reaches directly:
-`__chips__`, `__chip__`, `__chip-label__`, `__chip-remove__`, `__flagged__`, `__chip-prompt__`,
-`__chip-suggestions__`, `__chip-suggestion__`, `__active__`, `__chip-hint__`.
-
----
+Chromium DevTools' `.cls` pane with Unity UI Builder's removal: prefix completion, several space-separated names at
+once, Enter or Tab takes the highlighted suggestion or the typed text, a chip's cross removes it, Backspace in an empty
+prompt takes the last. A name present is not added twice. Its pieces are classes (`__chips__`, `__chip__`,
+`__chip-label__`, `__chip-remove__`, `__flagged__`, `__chip-prompt__`, `__chip-suggestions__`, `__chip-suggestion__`,
+`__active__`, `__chip-hint__`).
 
 ## 12e. Editing a tree — `TreeEditing` over `TreeEditModel`
 
-`com.crystalgui.widget.collection.tree` · consumers: the Project panel (`ExplorerEditModel`) and the
-Hierarchy panel (`HierarchyEditModel`)
+`widget.collection.tree` · consumers: the Project panel (`ExplorerEditModel`) and the Hierarchy panel
+(`HierarchyEditModel`)
 
-What a file manager does to files, for any `TreeView`: drag rows to move them (a modifier copies), cut,
-copy, paste, duplicate, F2 rename and delete, over the whole selection, from keys, the Edit menu and a
-right-click. The kit decides **what** a gesture means — which items, which parent and index, move or copy,
-which name. The model **performs** it.
+A file manager's editing for any `TreeView`: drag to move (a modifier copies), cut, copy, paste, duplicate, F2 rename
+and delete, over the selection, from keys, the Edit menu and a right-click. The kit decides what a gesture means; the
+model performs it.
 
 ```java
 private static final TreeClipboard<Node> CLIPBOARD = new TreeClipboard<>();   // one per KIND of tree
@@ -1431,34 +1016,26 @@ final class NodeModel implements TreeEditModel<Node> {
 | Duplicate | offered, just after the last selected item | not offered |
 | Row mark | `__drop-before__`, `__drop-target__`, `__drop-after__` | `__drop-target__` |
 
-- **Every verb acts on the selection**, outermost items only, in tree order. A row inside another selected
-  row travels with it.
-- **Cut is performed at paste.** Until then the held rows carry `__cut__` (dimmed by the UA sheet) and
-  nothing moves. A copy stays for the next paste; a cut is spent by one.
-- **Keys are on the tree's own keymap** — Mod+X/C/V, Mod+D, F2, Delete — so they never fire while typing
-  elsewhere. Every tree also answers `TreeViewCommands` without the kit: Expand Selected (Mod+=), Expand All
-  (Mod+Shift+=), Collapse All (Mod+-). The Edit menu reaches Cut/Copy/Paste through `ClipboardActions`, which the kit installs on the
-  list.
+- **Every verb acts on the selection**, outermost items only, in tree order.
+- **Cut is performed at paste**; until then the rows carry `__cut__`. A copy stays for the next paste; a cut is spent
+  by one.
+- **Keys are on the tree's own keymap** (Mod+X/C/V, Mod+D, F2, Delete). Every tree also answers `TreeViewCommands`:
+  Expand Selected (Mod+=), Expand All (Mod+Shift+=), Collapse All (Mod+-). The Edit menu reaches cut, copy and paste
+  through `ClipboardActions`.
 - **A right-click inside the selection keeps it**; outside, the clicked row becomes the selection.
-- **A drag rests to open and pushes to scroll**, as VS Code's lists do: 500 ms on a closed branch it would land
-  in opens it, and a pointer held within 24 px of the top or bottom scrolls the tree, faster the deeper it goes.
-  Both run while the pointer is still, since a `Drag` sends `Over` only when it moves.
-- **`canEdit` gates** cut, delete, rename and dragging; **`canDrop` gates** where a paste or drop may land
-  (by default a container, and not the item itself or anything under it). Both are asked before a verb.
-- `copyModifier` is Ctrl by default; a design tool's model answers Alt, where Ctrl is the row toggle.
-- `labelOf` is what a ghost and the clipboard text say, when a name can be empty — a node with no id.
-- The commands resolve `TreeEditing.KEY`, which the list answers for rows inside it (`ListView.putData`).
-  A host that is also a document-level data provider must not answer it, or a palette Delete elsewhere
-  reaches this tree.
-
----
+- **A drag rests to open and pushes to scroll** (VS Code): 500 ms on a closed branch opens it; within 24 px of an edge
+  scrolls, faster the deeper.
+- **`canEdit` gates** cut, delete, rename and dragging; **`canDrop`** where a paste or drop may land.
+- `copyModifier` is Ctrl by default; a design tool's model answers Alt.
+- `labelOf` is what a ghost and the clipboard text say when a name can be empty.
+- The commands resolve `TreeEditing.KEY`, answered by the list for its rows. A document-level data provider must not
+  answer it, or a palette Delete elsewhere reaches the tree.
 
 ## 12f. The frame readout — `FrameStatsOverlay` over `FrameStats`
 
-`com.crystalgui.widget.display` / `com.crystalgui.core.trace` · tag `framestats` · `cgui-desktop` (F7 shows, F8 expands)
+`widget.display` / `core.trace` · tag `framestats` · `cgui-desktop` (F7 shows, F8 expands)
 
-How fast the last few seconds ran, drawn over whatever is being measured. The collector is headless and
-the overlay is one call, so the same readout serves a harness scene, the editor and a Minecraft screen.
+How fast the last few seconds ran, drawn over what is measured: a harness scene, the editor or a Minecraft screen.
 
 ```java
 FrameStatsOverlay.toggleOn(document);                         // F7 — find-or-attach, then show/hide
@@ -1468,11 +1045,8 @@ FrameStatsOverlay.of(document);                               // the one already
 hud.stats().setBudgetMs(1000f / 144f).setWindowSeconds(5f);   // this host's refresh rate
 ```
 
-**Every surface with a desktop already has it on a key.** `DesktopCommands` registers
-`desktop.frameStats` (**F7**) and `desktop.frameStatsDetail` (**F8**) — the harness scene's own keys, so
-a gesture learned while profiling a scene is the gesture in the editor and in game. They carry no menu
-entry on purpose: a frame readout is an instrument turned on the application rather than a feature of
-it, and it lives where every other one does — a documented key and the command palette.
+Every desktop has it: `desktop.frameStats` (F7) and `desktop.frameStatsDetail` (F8), on keys and in the command
+palette, with no menu entry.
 
 ```
 116 fps   8.3ms wall   8.1ms cpu                 <- the rate, and what it cost to produce
@@ -1483,8 +1057,7 @@ paint:tree 6.31ms  frame:layout 1.01ms           <- where it went; expands to a 
 jobs-busy=0 drawcalls=31 segments-replayed=153
 ```
 
-Expanded (`toggleDetail`), the phase line becomes a column — the question after the summary has said
-there is one:
+Expanded (`toggleDetail`):
 
 ```
 slowest 13.1ms cpu: phases 12.9ms
@@ -1494,65 +1067,27 @@ slowest 13.1ms cpu: phases 12.9ms
   gl:draw               1.18ms   9%
 ```
 
-- **Wall and CPU are different questions.** Wall is the interval between frame starts, vsync included —
-  what the rate is made of. CPU is what the frame spent working. Under vsync the first sits at the
-  refresh rate while the second says how much headroom is left, so a readout with only the first reports
-  60fps right up until it collapses.
-- **A frame's sample is committed at the NEXT frame's start**, because its wall time is the interval to
-  it. That also means a document framed without being painted still reports a rate: the end of a frame
-  is the painter's last line, and a HUD that waited for one said "warming up" forever in a test.
-- **Green/amber/red is a verdict, and every verdict is about the typical case.** The rate row judges the
-  window's average frame, the spread row its **p95** and the miss row the **share** that missed. Judging
-  the worst frame instead makes the row permanently red — measured at a steady 117fps, every three-second
-  window holds a frame over twice the budget. The worst frame is shown; it is not the judgement.
-- **A row that states rather than judges gets no colour** (`Health.NONE`) — the phase breakdown has no
-  budget of its own to be measured against, and green on it reads as "this part is fine".
-- **The bars carry a verdict per character, and that is not the same verdict as their height.** A bar's
-  height is its share of the window's own worst frame, so the tallest bar in a flawless run is as tall
-  as the tallest bar in a terrible one; the colour is `healthOf` against the budget, the same judgement
-  the three rows above are making. Between them one glance answers both questions — *which* frames were
-  the slow ones, and whether slow here means anything. A column is the **worst** frame in its bucket and
-  never the mean, since averaging a bucket is exactly what erases a spike.
-  `FrameStats.spark(columns)` hands back both; `Row.barHealth()` carries them to a renderer that can
-  colour a text range, and a renderer that cannot ignores it and loses only the colour. The overlay
-  colours them through `::highlight(framestats-warn|bad)` over **runs** — a node per bar would be
-  forty-six Taffy nodes rebuilt ten times a second, inside the thing that measures that sort of cost.
-- **Expanded, the breakdown is the SLOWEST frame's in the window, not the last one's.** The readout
-  refreshes ten times a second against a scene running at a hundred, so the frame whose phases are on
-  screen is one arbitrary frame in ten — and the one worth reading is the spike, which is never the one
-  still showing by the time an eye reaches it. The peak is held by **CPU** rather than wall time (wall
-  includes waiting, and there is nothing in a vsync wait to fix) and it **decays with the window**, or
-  the breakdown would describe startup forever: the first frames of any scene carry every lazy
-  allocation and every shader's first compile, and nothing afterwards would ever beat them. The
-  collapsed one-line hint stays the live frame's.
-- **The thresholds are the engine's and the colours are the sheet's**: a row wears `__good__` /
-  `__warn__` / `__bad__` and `ua/overlays.css` says what those look like.
-- **Collecting is held, not switched.** `hold()`/`release()` are counted, the overlay takes one while it
-  is showing and in a tree, and with no holder the per-frame cost is one mask test. A hold enables
-  CrystalGUI's trace channels — `crystalgui.frame` and `crystalgui.flow`, but never `crystalgui.blame`,
-  which walks a stack per invalidation and is asked for by name.
-- **`FrameStats` keeps no storage of its own.** It is a view over `CgTrace`'s frame ring
-  (`plan/platform-trace-engine.md`), which is why the expanded breakdown can be the *slowest* frame's:
-  every frame's zones are still there, so there is no peak to hold and no decay to get right.
-- **The phase rows are zones on `UiTrace.FRAME`**, written straight to that engine — a per-frame
-  count is `CgTrace.add`, and a chain that outlives a frame is a **span** on `UiTrace.FLOW`, because it
-  is not a phase. Recording follows the channel mask rather than a property, so a
-  readout can ask for the phases without a restart, which is exactly when a stall is least
-  reproducible; `-Dcrystalgui.frameprofile=true` adds the per-slow-frame LOGGING on top and nothing
-  else.
-- **A share is of the phases' own total, not of the frame.** Phases nest and the gaps between them are
-  nobody's, so a column measured against the frame would sum to 140% one frame and 60% the next, which
-  reads as a broken profiler rather than an honest total.
-- Monospaced deliberately: every number is rewritten ten times a second, and in a proportional face each
-  rewrite shifts the rest of the line. The bars are block glyphs U+2581–U+2588, which
-  `JetBrainsMono-Regular.ttf` carries — checked against the font's own character map, not assumed.
+- **Wall is the interval between frame starts**, vsync included; **CPU is the frame's work**, the headroom.
+- **A frame's sample is committed at the next frame's start**, its wall time being that interval.
+- **Colours judge the typical case**: the rate row the average, the spread row its p95, the miss row the share that
+  missed. The worst frame is shown, not judged. A row that only states (the phases) has no colour (`Health.NONE`).
+- **A bar's height is its share of the window's worst frame; its colour is `healthOf` against the budget.** A column is
+  its bucket's worst frame, never the mean. `FrameStats.spark(columns)` returns both; the overlay colours runs through
+  `::highlight(framestats-warn|bad)`.
+- **Expanded, the breakdown is the slowest frame's by CPU in the window**, decaying with it; the collapsed hint is the
+  live frame's.
+- Thresholds are the engine's, colours the sheet's (`__good__` / `__warn__` / `__bad__` in `ua/overlays.css`).
+- **Collecting is held, not switched**: `hold()`/`release()` are counted; a hold enables `crystalgui.frame` and
+  `crystalgui.flow`, never `crystalgui.blame`. With no holder it costs one mask test a frame.
+- **`FrameStats` is a view over `CgTrace`'s frame ring**; phase rows are zones on `UiTrace.FRAME`, cross-frame chains
+  spans on `UiTrace.FLOW`. `-Dcrystalgui.frameprofile=true` adds per-slow-frame logging only.
+- **A share is of the phases' own total**, not the frame's.
+- Monospaced so rewrites do not shift the line; the bars are U+2581–U+2588, which `JetBrainsMono-Regular.ttf` carries.
 
 ### Reading the counts
 
-The count rows are `CgTrace.add(UiTrace.FRAME, ...)` calls — summed per frame and written once; `drawcalls` is
-the sealed frame's draw calls after batching (`CgFrame.batches()`), added once a frame. Phase timing follows the channel mask, so they all reach
-the HUD with no property set. The layer ones answer the question a paint-bound frame actually
-raises — *why are there seventeen layers?* — and they account for every one:
+The count rows are `CgTrace.add(UiTrace.FRAME, ...)` per frame; `drawcalls` is the sealed frame's draw calls after
+batching (`CgFrame.batches()`). The layer counts account for every layer:
 
 | Count | Means |
 |---|---|
@@ -1565,24 +1100,19 @@ raises — *why are there seventeen layers?* — and they account for every one:
 | `surface-miss-revision` · `-region` · `-epoch` · `-degraded` | Why a window was walked: something in it changed, it moved within its node or was resized, the text gamma or a glyph page moved, or its text drew before its glyphs landed |
 | `segments-unkept-<reason>` | A painted segment the canvas would not keep, by `CgPaintChunk.Refusal`: `DEGRADED` is text drawn before its glyphs landed, `FRAME_TEXTURE` a draw of a texture that lives one frame |
 
----
-
 ## 13. Harness scenes
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-gallery"
 ```
 
-`cgui-gallery` is the front door: every widget, one page each, with a live Ore ⇄ default theme toggle.
-The rest are focused regression scenes for what a gallery page cannot hold.
-
 | Mode | Covers |
 |---|---|
 | `cgui-gallery` | every widget, a page each, + theme toggle |
-| `cgui-text` | `UIText` — auto-size, wrap, font fallback, live binding |
-| `cgui-text-stress` | many text nodes at once — shaping/layout cost, retained-shape reuse |
+| `cgui-new-gallery` | the config kit and newer widgets |
+| `cgui-text` | `UIText`: auto-size, wrap, font fallback, live binding |
+| `cgui-text-stress` | many text nodes at once: shaping and layout cost, retained-shape reuse |
 | `cgui-styling` | selectors, cascade, `!important`, transitions, background cross-fades |
 | `cgui-visual-layers` | overflow masking, opacity isolation, scissor vs mask |
 
-All are `INTERACTIVE` and **stay open until you close the window** — they do not exit on their own.
-Kill lingering `java.exe` processes matching `harness` after a run.
+Every scene, with its switches: `harness-scenes/CLAUDE.md`. They stay open until the window is closed.

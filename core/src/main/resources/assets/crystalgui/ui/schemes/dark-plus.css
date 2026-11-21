@@ -3,44 +3,12 @@
  * @kind   dark
  * @author crystalgui
  *
- * VS Code's Dark+ SYNTAX palette, on a surface tuned to the Islands frame. The two halves are
- * separable on purpose: the token colours are Dark+'s and are what people recognise, while the
- * paper they sit on has to agree with whatever theme surrounds it — a document darker than the
- * panels around it inverts the Islands reading, where the editor is the LIGHTEST island rather
- * than a hole in the middle of the frame. The SECOND, independently-selectable
- * axis (plan/style-overhaul.md §3.6): a scheme is a variable table over the editor's already-tokenized
- * rules, exactly as a theme is over the chrome's. The rules themselves stay in default.css — the
- * widget publishes its ranges whether or not anything styles them, and a themeless editor that
- * silently rendered plain text would read as the tokenizer failing, not as an absent scheme; the
- * var() fallbacks there ARE this scheme's values, so an editor without a scheme looks identical.
- *
- * Scope, machine-enforced (StyleGovernanceTest): a scheme defines ONLY --editor-*, --syntax-*,
- * --find-match-* and --search-excluded-* tokens. Everything else is the UI theme's business —
- * that split is what makes Crystal Dark + a different scheme a legal pair, as in IntelliJ.
+ * VS Code's Dark+ syntax palette.
+ * An editor scheme: the second, independent axis to the UI theme.
  */
 
 theme {
-    /* ── The editor's surfaces ──
-     * OPAQUE. This was #00000000, on the reasoning that it resolves to the same pixels anyway and that
-     * an opaque document fill is a SQUARE painted over the rounded island beneath it -- which is how the
-     * editor lost its corners the moment the ring that used to trace them was removed.
-     *
-     * BOTH HALVES HAVE SINCE STOPPED BEING TRUE, and each one alone is enough.
-     *
-     * The corners are no longer a cost: `texteditor.__file-editor__` carries the bottom radius ITSELF
-     * now (ua/editor.css records why, and its own note says the corners "ARE the island's"), so a fill on
-     * it is drawn inside that radius rather than over it. Verified in the harness -- the editor's bottom
-     * corners are identical opaque and transparent. The three schemes that already ship an opaque paper
-     * (light-plus, islands-light, eclipse-dark) were the standing evidence and nobody had reported a
-     * square editor.
-     *
-     * And "the same pixels" was only ever true of a DARK theme. The two axes are independent by design,
-     * so a dark scheme is expected to run on a light one -- and there a transparent paper is not the
-     * panel's colour, it IS the panel: this scheme's #D4D4D4 ink landed on Crystal Light's white paper,
-     * which is very nearly invisible. The gutter, which sets its own opaque fill, was the only part that
-     * followed the scheme, so it read as the gutter being the thing that was wrong.
-     *
-     * Pixel-identical on a dark theme, which is the whole of what the old value bought. */
+    /* Opaque: a transparent paper is the panel's colour, which on a light theme hides this scheme's light ink. */
     --editor-bg: #191A1C;
     --editor-fg: #D4D4D4;
     --editor-caret: #FF0000;
@@ -54,7 +22,6 @@ theme {
     --editor-whitespace: #454C57;
     --editor-ruler: #2B2D30;
 
-    /* ── Folding ── */
     --editor-fold: #4A515C;
     --editor-fold-active: #A9B2BF;
     --editor-fold-placeholder-bg: #2A303A;
@@ -62,42 +29,25 @@ theme {
     --editor-fold-placeholder-hover-bg: #3C4553;
     --editor-fold-placeholder-hover-fg: #DCE1E8;
 
-    /* ── The zoom indicator ── */
     --editor-zoom-bg: #2B303B;
     --editor-zoom-fg: #C8CDD4;
     --editor-zoom-link: #4A9EFF;
     --editor-zoom-link-pressed: #2F7FD8;
 
-    /* ── Find & replace, in the document ── */
     --find-match-bg: #C8873C;
     --find-match-fg: #1B1B1B;
     --search-excluded-fg: #7A7A7A;
 
-    /* The word under the caret, wherever else it appears. A GROUND and no foreground, so a marked
-     * occurrence still reads as whatever kind of token it is — VS Code's editor.wordHighlightBackground,
-     * and dim for the same reason: it marks something you did not ask for. */
     --editor-occurrence-bg: #3A3D41;
 
-    /* The same for the SELECTED text -- fainter still, since the selection band is already saying
-     * where the thing you picked is. VS Code's editor.selectionHighlightBackground. */
     --editor-selection-occurrence-bg: #2E3236;
 
-    /* ── Syntax — the full capture vocabulary ──
-     *
-     * Six general names used to be here, on the reasoning that generalName() folds every specialisation
-     * onto its stem. It does — but only for names that HAVE a stem. `operator`, `attribute`, `variable`,
-     * `constant`, `property` and `tag` have none, so the Java grammar's captures for them fell through to
-     * body text: not "unthemed", invisible, and indistinguishable from a capture the grammar never made.
-     * StyleGovernanceTest now fails the build if a shipped grammar emits a name no scheme colours. */
     --syntax-keyword: #569CD6;
     --syntax-keyword-control: #C586C0;
     --syntax-keyword-operator: #569CD6;
     --syntax-type: #4EC9A0;
     --syntax-type-parameter: #4EC9A0;
 
-    /* AN INTERFACE AND AN ENUM, which only an engine can tell from a class -- the three are
-     * spelled identically at every use site. This scheme draws all three alike -- it overrides neither
-     * DEFAULT_INTERFACE_NAME nor ENUM_NAME, so agreeing with the class colour IS the port. */
     --syntax-type-interface: #4EC9A0;
     --syntax-type-enum: #4EC9A0;
     --syntax-type-enum-style: normal;
@@ -109,8 +59,6 @@ theme {
     --syntax-function-method: #DCDCAA;
     --syntax-function-call: #DCDCAA;
     --syntax-function-static: #DCDCAA;
-    /* VS Code does not slant a static call; stated rather than inherited, per the rule that a
-     * scheme defines every key the sheet reads. */
     --syntax-function-static-style: normal;
     --syntax-string: #CE9178;
     --syntax-string-escape: #D7BA7D;
@@ -121,16 +69,9 @@ theme {
     --syntax-constant-builtin: #569CD6;
     --syntax-comment: #6A9955;
     --syntax-comment-doc: #6A9955;
-    /* DOC COMMENTS. No `ij-scheme` file to take these from and that is correct: Dark+ is VS Code's
-     * palette, so its own is the right source. VS Code colours a JSDoc tag with `storage.type.class.jsdoc`
-     * (#569CD6) and the name after it with `variable.other.jsdoc` (#9CDCFE), and an HTML tag with the same
-     * #569CD6 — which is the same colour a `<p>` gets in an HTML file, and is the honest answer for
-     * markup embedded in a comment. */
     --syntax-doc-tag: #569CD6;
     --syntax-doc-value: #9CDCFE;
     --syntax-doc-markup: #569CD6;
-    /* The FACE, from the same file's FONT_TYPE (0/1/2/3 = plain/bold/italic/both). VS Code sets no face on a JSDoc tag and this scheme’s comments are upright, so the
-     * separation is entirely colour — which at #569CD6 against #6A9955 is not subtle. */
     --syntax-doc-tag-style: normal;
     --syntax-doc-tag-weight: normal;
     --syntax-doc-value-style: normal;
@@ -150,11 +91,8 @@ theme {
     --syntax-label: #C586C0;
     --syntax-markup: #D4D4D4;
 
-    /* A PACKAGE PATH -- `java.util` in an import. Body text, which is what this scheme shows for a package path. */
     --syntax-module: #D4D4D4;
     --syntax-error: #F44747;
-    /* Reported by an ENGINE, not by a grammar -- see editor.css. Unresolved keeps the colour
-     * that says WHAT it is and takes an underline; deprecated is dimmed and struck. */
     --syntax-unresolved: #F44747;
     --syntax-deprecated: #808080;
     --syntax-operator: #D4D4D4;
@@ -162,10 +100,6 @@ theme {
     --syntax-punctuation-bracket: #808080;
     --syntax-punctuation-delimiter: #808080;
 
-    /* NOT a colour, and the one scheme token that is not: comments are italic in every reference scheme,
-     * and a scheme that wants them upright says so here rather than by overriding the rule. Dark+ itself
-     * does not italicise, so this is the one place this scheme departs from VS Code — the alternative was
-     * shipping the mechanism with nothing exercising it. */
     --syntax-comment-style: normal;
     --syntax-constant-style: normal;
     --syntax-attribute-style: normal;
@@ -173,18 +107,7 @@ theme {
     --syntax-constant-weight: normal;
     --syntax-bracket-weight: normal;
 
-    /* The bracket-MATCH highlight, which is not a capture — it is the pair under the caret. */
     --syntax-bracket: #4EC9A0;
 
-    /* DEAD CODE, and the one token here that is not about what a thing IS but about whether anything
-     * reads it. An unused import or a private method nobody calls is faded rather than underlined —
-     * severity says how much to worry, a DiagnosticTag says what the text looks like now, and "nothing
-     * reads this" is the second kind of statement.
-     *
-     * A SCHEME token rather than a theme one, because it replaces a syntax colour and has to be legible
-     * against the same background those were chosen for. VS Code spells it `editorUnnecessaryCode` and
-     * applies opacity; this is a flat colour because a highlight owns the character outright, which is
-     * IntelliJ's rendering of the same idea. #6A6A6A sits between the comment green and the background,
-     * so faded code reads as quieter than a comment rather than as another kind of comment. */
     --syntax-unnecessary: #6A6A6A;
 }

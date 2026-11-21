@@ -1,86 +1,64 @@
 # CrystalGUI — profiling
 
-What CrystalGUI adds to the trace engine: its channels, what one UI frame records, the Frame Profiler, and
-how to profile a scene, the desktop or the game in one run. **Read
-[`CrystalGraphics/docs/PROFILING.md`](../CrystalGraphics/docs/PROFILING.md) first** — the engine, the
-one-run rule, the pre-run checklist, reading a report and the conventions are all there, and none of it is
-repeated here. The invocable checklist is the `profiling` skill.
-
----
+What CrystalGUI adds to the trace engine: its channels, what a UI frame records, the Frame Profiler, and where to
+run. **Read [`CrystalGraphics/docs/PROFILING.md`](../CrystalGraphics/docs/PROFILING.md) first**: the engine, the
+one-run rule, the checklist, reading a report and the conventions are there. The invocable checklist is the
+`profiling` skill.
 
 ## The rule, restated for a UI
 
-One run answers the question. A UI frame is wider than it looks — a paint that seems slow is often a
-cascade two phases earlier, a hook a widget registered, a job's completion, or a text measurement buried
-in layout — so **map the frame before instrumenting it**, with [§ The frame](#the-frame) as the skeleton
-and every widget, hook and job on your path hung off it. Then record every channel the map names, and read
-the coverage (`unzoned`, `unexplained`, `GAP`, `SELF TIME`) before any number.
-
----
+One run answers the question. A slow paint is often a cascade two phases earlier, a widget's hook, a job's completion
+or text measured in layout, so **map the frame before instrumenting it**, on [§ The frame](#the-frame), record every
+channel the map names, and read the coverage (`unzoned`, `unexplained`, `GAP`, `SELF TIME`) before any number.
 
 ## Channels
 
 | Channel | Records | Cost | On for |
 |---|---|---|---|
 | `crystalgui.frame` | the frame's phases and counters | two clock reads a zone | every timing question |
-| `crystalgui.flow` | spans: chains that cross frames or happen outside one — open a file, close a tab, an edit, a search | the same | "this action is slow", never "this frame is slow" |
-| `crystalgui.fs` | the workspace server's filesystem: each `fs:stat` and its path checks, `fs:reconcile.sweep` on the worker, `watch-rechecked`, `watch-sweep-busy` | cheap | a hitch from the watcher, or a sweep that has stopped (`watch-sweep-busy` climbing) |
-| `crystalgui.blame` | a stack walk per invalidation, written as `invalidated-by` markers | **expensive** — once a quarter of the frames it measured | *who* causes churn. **Never on while timing** — take the numbers in one run and the attribution in another, or record both and ignore its frame times |
+| `crystalgui.flow` | spans for chains across or outside frames: open a file, close a tab, an edit, a search | the same | "this action is slow" |
+| `crystalgui.fs` | the workspace server's filesystem: `fs:stat`, `fs:reconcile.sweep`, `watch-rechecked`, `watch-sweep-busy` | cheap | a watcher hitch, or a sweep that stopped (`watch-sweep-busy` climbing) |
+| `crystalgui.blame` | a stack walk per invalidation, as `invalidated-by` markers | **expensive** | who causes churn. **Never while timing** |
 
-`CgTrace.enable("crystalgui")` takes all three. The one-run default for a UI question:
+`CgTrace.enable("crystalgui")` takes them all. The default for a UI question:
 
 ```
 -Dcrystalgraphics.trace.channels=crystalgui.frame,crystalgui.flow,crystalgraphics,gpu
 ```
 
----
-
 ## The frame
 
-A `UIDocument` frame, and what each part records. Use this as the skeleton of the map.
-
-| Phase | Zones (`crystalgui.frame`) | Counters | What sits inside that may need its own zone |
+| Phase | Zones (`crystalgui.frame`) | Counters | Inside, possibly needing its own zone |
 |---|---|---|---|
-| Jobs | `frame:jobs`, and `done:<job>` per completion inside it | `jobs-busy` | the completion callbacks' own work |
-| Hooks | `frame:hooks` | — | every `Animation` per-frame hook a widget registered — no per-hook zones |
-| Style | `style:drainDirtyMatch`, `style:prematch` (a large round matched on workers), `style:transitions`, `style:warmValues` (a sheet's values parsed on a worker) | `rematched`, `whole-window-invalidations`, `style-matched`, `style-shared`, `style-prematched`, `style-match-us`, `style-apply-us` | who invalidated: `crystalgui.blame` |
-| Layout | `frame:layout` | — | Taffy's compute and every `Measurable.measure` (text measurement); CrystalGraphics' text zones show shaping |
+| Jobs | `frame:jobs`, and `done:<job>` per completion | `jobs-busy` | the completion callbacks |
+| Hooks | `frame:hooks` | — | every per-frame `Animation` hook |
+| Style | `style:drainDirtyMatch`, `style:prematch` (a large round on workers), `style:transitions`, `style:warmValues` (a sheet's values parsed on a worker) | `rematched`, `whole-window-invalidations`, `style-matched`, `style-shared`, `style-prematched`, `style-match-us`, `style-apply-us` | who invalidated: `crystalgui.blame` |
+| Layout | `frame:layout` | — | Taffy and every `Measurable.measure`; CrystalGraphics' text zones show shaping |
 | After layout | `frame:afterLayout` | — | every `afterLayout` hook |
 | Input | `frame:input` | — | the hover diff and every listener the frame's pointer events reach |
 | Hover | `frame:hover` | — | the re-style, layout and settle when the hover moved |
-| Paint | `paint:tree`; `glend:build`; `svg.loadSource`, `svg.parse` | `drawcalls` (after batching), `text-draws`, `culled`, `layers-opacity`/`-mask`/`-elided`, `masks-elided`, `clips-rounded`, `segments`, `segments-unchanged`/`-changed`/`-dynamic` (whether a box's own paint would come out as last frame's), `segments-replayed` (recorded from what was kept), `segments-kept`/`-unkept` and `segments-unkept-<reason>` (a painted segment kept, or refused and why), `replay-check-differs`, `surfaces-kept`/`-painted`/`-new` and `surface-miss-<reason>` | every box's paint, the canvas's recording and the seal |
-| Editor | `ed:*`, `ln:*`, `part:<name>` | — | already zoned per phase; `ed:*` spans on `flow` for edits |
+| Paint | `paint:tree`; `glend:build`; `svg.loadSource`, `svg.parse` | `drawcalls`, `text-draws`, `culled`, `layers-opacity`/`-mask`/`-elided`, `masks-elided`, `clips-rounded`, `segments`, `segments-unchanged`/`-changed`/`-dynamic`, `segments-replayed`, `segments-kept`/`-unkept`, `segments-unkept-<reason>`, `replay-check-differs`, `surfaces-kept`/`-painted`/`-new`, `surface-miss-<reason>` | every box's paint, the canvas recording and the seal |
+| Editor | `ed:*`, `ln:*`, `part:<name>` | — | zoned per phase; `ed:*` spans on `flow` for edits |
 | GPU | `gpu:ui` (the whole paint, composite included) | — | — |
 
-**Who brackets the frame**: `UIDocument.frame` calls `UiTrace.frameBegin()` (committing the previous
-frame) and the paint context's `endFrame` calls `UiTrace.frameEnd()` (the CPU mark). A host frame no document
-framed — a Minecraft world with no CrystalGUI screen open — is framed by CrystalGraphics' `tickFrame`, so it
-records too, its cpu the whole host frame. **One document per
-frame**: a second `UIDocument` framed in the same real frame splits every frame in two, halving the wall
-times with no error — frames on a host with two documents are not comparable. Parked as P1 in
-`plan/crystalgraphics/platform-trace-engine.md`.
+`UIDocument.frame` calls `UiTrace.frameBegin()` and the paint context's `endFrame` calls `UiTrace.frameEnd()`. A host
+frame with no document framed (a world with no screen open) is framed by CrystalGraphics' `tickFrame`. **One document
+per frame**: a second one framed in the same real frame splits every frame in two, halving the wall times silently.
 
 ### Blame
 
-`UiTrace.blame("rematch", "com.crystalgui.style.")` attributes one occurrence to the first caller outside
-the given packages, capped and strided per frame so the totals hold. The frame then carries
-`invalidated-by Tooltip.reposition:214 x280` — the call site to change, rather than a count. Add a blame
-call wherever a count tells you *how much* churn and you need to know *from where*.
+`UiTrace.blame("rematch", "com.crystalgui.style.")` attributes an occurrence to the first caller outside those
+packages, capped and strided per frame, giving `invalidated-by Tooltip.reposition:214 x280`. Add one where a count
+says how much churn and you need from where.
 
 ### Hints
 
-Rules over counter names, run on every slow frame — in the report and the window:
-`RETENTION-MISSED`, `CASCADE-CHURN`, `COLLECTED`, `FIRST-DRAW`, `GPU-BOUND`,
-`BLOCKED-ON-WORKER` (`core.trace.UiHints`). **A hint reads a counter by its name**: renaming a counter
-silently disarms the hint that reads it — change both together.
-
----
+Rules over counter names, run on every slow frame: `RETENTION-MISSED`, `CASCADE-CHURN`, `COLLECTED`, `FIRST-DRAW`,
+`GPU-BOUND`, `BLOCKED-ON-WORKER` (`core.trace.UiHints`). **A hint reads a counter by name**: rename both together.
 
 ## Where it runs
 
 ### The harness — the default
-
-Any CrystalGUI scene, profiled with no code, one folder:
 
 ```bash
 ./gradlew :gl-debug-harness:runHarness --args="--mode=cgui-desktop" \
@@ -88,31 +66,33 @@ Any CrystalGUI scene, profiled with no code, one folder:
     -Dcrystalgraphics.trace.channels=crystalgui.frame,crystalgui.flow,gpu
 ```
 
-**The channels property is not optional here**: profile mode switches on only CrystalGraphics' own
-channels, so without it a CrystalGUI scene records none of CrystalGUI's phases. **Nor is a longer warm-up
-for `cgui-desktop`**: it generates glyphs and starts the language stack for seconds, so 30 frames profile
-its startup — add `-Dcrystalgraphics.harness.profile.warmup=600` and check that the first profiled frames
-are not the slow ones (CrystalGraphics' `PROFILING.md` § *Noise*). Read
-`gl-debug-harness/harness-output/<scene>/profile-harness-<n>f/report.txt` first; the last run is beside it
-as `.prev` (CrystalGraphics' `PROFILING.md` § *Where it runs*).
-
-**`cgui-desktop`'s slow-by-wall frames are its own**, not the machine: `scene:workspacePump`, the
-in-process workspace's network tick, stalls about 45 ms every few seconds (2026-09-30). It runs after the
-cpu mark, so it shows as idle — the verdict names it.
+- **The channels property is required**: profile mode turns on only CrystalGraphics' channels.
+- **`cgui-desktop` needs a long warm-up** (`-Dcrystalgraphics.harness.profile.warmup=600`): it generates glyphs and
+  starts the language stack for seconds. Check the first profiled frames are not the slow ones.
+- Read `gl-debug-harness/harness-output/<scene>/profile-harness-<n>f/report.txt`; the last run is beside it as `.prev`.
+- `cgui-desktop`'s slow-by-wall frames include `scene:workspacePump`, the in-process workspace's tick, stalling about
+  45 ms every few seconds after the cpu mark; the verdict names it.
 
 | Scene | Profile it for |
 |---|---|
-| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler. `-Dcrystalgui.harness.desktop.profiler=true` drives the profiler window itself; `-Dcrystalgui.harness.desktop.traceCost=true` measures the engine's own cost with channels off and on; `-Dcrystalgui.harness.desktop.graphCost=true` measures the scratch shader graph: the desktop without it, open and idle, six constant edits, and closed again, in one process (`ShaderGraphCostProbe`, writes `graph-cost.txt`); `-Dcrystalgui.harness.desktop.baseline=true` measures the desktop as a user feels it and writes `baseline.txt` (`DesktopBaselineProbe`): the editor's first open, three applications opening, steady state, a theme switch every 30 frames and a 20,000-line file opened, each as the render thread's frame, how often a new picture shows (the taskbar's and every window's real rate), input to screen, and what ran during its longest freeze, on every thread, with the document's sequence as a timeline -- the before and after for any change to how the desktop runs; `-Dcrystalgui.harness.desktop.hoverSweep=true` parks the pointer for 600 frames, then sweeps it across the editor window for 600 and prints work median and p95 per block plus the per-zone comparison (`HoverSweepProbe`, `[hover-sweep]` lines) |
+| `cgui-desktop` | the real shell: windows, taskbar, the editor, the Frame Profiler |
 | `cgui-gallery` | one widget, a page each |
 | `cgui-text-stress` | text shaping and layout under load |
 | `cgui-timeline` | the profiler's own tracks under 10,000 spans |
 | `cgui-visual-layers` | layers, opacity, masks |
 
-A workload the scenes do not reproduce belongs in a scene (`gl-debug-harness/AGENTS.md`) — a profile of a
-hand-driven session cannot be repeated, so it cannot be compared.
+`cgui-desktop`'s probes, each a `-Dcrystalgui.harness.desktop.<name>=true`:
 
-Every scene gets a run directory from the engine (`CgTraceRun`): `gl-debug-harness/crystalgraphics/cache/trace/latest/`
-(`trace.log`, and `meta.json` and `report.txt` on exit).
+| Switch | Measures |
+|---|---|
+| `profiler` | drives the profiler window itself |
+| `traceCost` | the engine's own cost, channels off and on |
+| `graphCost` | the scratch shader graph: without it, open and idle, six constant edits, closed again (`ShaderGraphCostProbe`, `graph-cost.txt`) |
+| `baseline` | the desktop as a user feels it (`DesktopBaselineProbe`, `baseline.txt`): the editor's first open, three applications, steady state, a theme switch every 30 frames, a 20,000-line file; the render thread's frame, each window's real rate, input to screen, and what ran during the longest freeze |
+| `hoverSweep` | 600 frames parked, then 600 sweeping the editor; work median and p95 per block (`HoverSweepProbe`) |
+
+A workload no scene reproduces belongs in a scene (`gl-debug-harness/AGENTS.md`): a hand-driven session cannot be
+compared. Every scene gets a run directory, `gl-debug-harness/crystalgraphics/cache/trace/latest/`.
 
 ### The game
 
@@ -123,73 +103,53 @@ Every scene gets a run directory from the engine (`CgTraceRun`): `gl-debug-harne
     -Dcrystalgraphics.trace.zones=4194304
 ```
 
-- **Size the zones** here by hand — only the harness's profile mode does it for you. With
-  `crystalgraphics` on, a frame writes ~5,000 zones a thread, so the default 65,536 holds a dozen frames;
-  frames × 5,000, rounded up, holds them all (an arena grows as it is used, 24 bytes a zone). The report's
-  `WARNING … frames hold no zones` says when it was not enough.
-- Every dev run forwards `-Dcrystalgui.*` and `-Dcrystalgraphics.*`; an installed client takes the same
-  flags in its instance's JVM arguments.
-- On exit the run directory holds the report: `<game>/crystalgraphics/cache/trace/latest/report.txt` (the
-  breakdown, or the tier `-Dcrystalgraphics.trace.report` names), `meta.json` (what was and was not
-  recording) and `trace.log` (a line per slow frame). CrystalGraphics writes it, with or without CrystalGUI.
-- **A rare hitch in a hand-driven session**: `-Dcrystalgraphics.trace.hitchDumpMs=<ms>` writes the 240 frames before
-  each frame slower than that to `latest/hitch-<frame>/` (`report.txt`, `report-full.txt`, `slow.txt`) as it
-  happens — `CrystalGraphics/docs/PROFILING.md` § *Minecraft*.
-- A repeatable in-game workload is a gauntlet run: `-Dcrystalgraphics.gauntlet=crystalgraphics:boot,crystalgui:desktop`
-  loads a world, opens the desktop, photographs it and quits; `crystalgraphics:play` plays the world alone
-  (`CrystalGraphics/docs/GAUNTLET.md`). Profile that rather than a hand-driven session.
-- **Two phases of one run**: `-Dcrystalgraphics.trace.splitAt=<marker>` also writes `report-before.txt`,
-  `report-after.txt` and `report-compare.txt` (per zone): the frames either side of the first such marker after 60
-  frames without one, `-Dcrystalgraphics.trace.splitFrames` (300) each at most. The VFX showcase's beams against
-  its blasts: `splitAt=vfx.blast` with `-Dcrystalgraphics.trace.frames=1500`, so the ring holds a whole cycle.
-- **JFR in a modern dev client**: `-PcgJvmArgs="-XX:StartFlightRecording=filename=build/client.jfr,settings=profile"`, as on 1.7.10.
-- `-Dcrystalgui.frameprofile=true` (1.7.10: `-PcgFrameProfile`) echoes each slow frame's line to the
-  console too, and turns the frame channel on; `.floor=<ms>` (8) and `.every=<ms>` (1000) tune it.
+- **Size the zones by hand**: with `crystalgraphics` on a frame writes ~5,000 zones a thread, so allow frames ×
+  5,000. `WARNING … frames hold no zones` says it was not enough.
+- Every dev run forwards `-Dcrystalgui.*` and `-Dcrystalgraphics.*`; an installed client takes them as JVM arguments.
+- On exit: `<game>/crystalgraphics/cache/trace/latest/report.txt`, `meta.json`, `trace.log`.
+- A rare hitch: `-Dcrystalgraphics.trace.hitchDumpMs=<ms>` writes the 240 frames before each slower frame to
+  `latest/hitch-<frame>/`.
+- A repeatable workload is a gauntlet: `-Dcrystalgraphics.gauntlet=crystalgraphics:boot,crystalgui:desktop`
+  (`CrystalGraphics/docs/GAUNTLET.md`).
+- Two phases of one run: `-Dcrystalgraphics.trace.splitAt=<marker>` also writes `report-before.txt`,
+  `report-after.txt` and `report-compare.txt` (`splitFrames`, 300, each at most).
+- JFR: `-PcgJvmArgs="-XX:StartFlightRecording=filename=build/client.jfr,settings=profile"`.
+- `-Dcrystalgui.frameprofile=true` (1.7.10: `-PcgFrameProfile`) echoes each slow frame to the console and turns the
+  frame channel on; `.floor=<ms>` (8), `.every=<ms>` (1000).
 
 ### By hand — the Frame Profiler
 
-For a human, or to look at a frame an agent's report named. **F9** or the taskbar's start button opens it
-on any surface with a desktop; **F7** shows the frame readout (F8 expands it), and pressing a readout bar
-opens that frame in the profiler.
+**F9** or the start button opens it; **F7** shows the frame readout (F8 expands it), and pressing a bar opens that
+frame.
 
-- **Record** switches on the channels in its settings (`crystalgui.frame`, `crystalgui.flow`, `gpu`,
-  `crystalgraphics.async`, `crystalgraphics.world` by default); the channel menu adds more live.
-- **The gear**: ring size, frames kept from the start, *Record from launch*, *stop after a hitch*, frame
-  images. Saved to `apps/crystalgui.frameprofiler/settings.json`.
-- **Tabs**: Hints, Zones, Call tree (callers beside it), Counters, Chains (the `flow` spans), Compare,
-  Screen (the frame's picture, with `images` on), Buffers.
-- **Lanes**: one per thread, and one per **sequence**: a document's turns land on whichever UI pool thread is free,
-  so each turn is a `sequence:<name>` zone (`crystalgui.frame`) and everything inside it is drawn in that
-  sequence's lane.
-- **Buffers** is live, not the selected frame's: every buffer a compute pass binds, a row per buffer and pass. Pick one
-  and a page of its elements is read after that pass next runs, each field decoded by the kernel's declaration
-  (CrystalGraphics' `CgBufferInspector`); **Follow** reads it again at the refresh rate. It watches from when it first
-  shows until the window closes, and while it watches every compute pass notes what it binds.
-- **Export** writes the selected range, or every frame held, to `<cache>/trace-exports/` and copies the
-  path — `ui.perfetto.dev` opens it, and Compare's **Load trace as B** reads it back, across restarts.
-- The footer states what the viewer itself costs and hides its own work (`trace.viewer`) unless asked.
-
----
+- **Record** turns on the channels in its settings (`crystalgui.frame`, `crystalgui.flow`, `gpu`,
+  `crystalgraphics.async`, `crystalgraphics.world`); the channel menu adds more live.
+- **The gear**: ring size, frames kept from the start, record from launch, stop after a hitch, frame images; saved
+  to `apps/crystalgui.frameprofiler/settings.json`.
+- **Tabs**: Hints, Zones, Call tree, Counters, Chains, Compare, Screen, Buffers.
+- **Lanes**: one per thread and one per sequence (`sequence:<name>` zones), since a document's turns land on any free
+  UI pool thread.
+- **Buffers** is live: every buffer a compute pass binds; pick one and its elements are read after that pass and
+  decoded by the kernel's declaration (`CgBufferInspector`); **Follow** keeps reading.
+- **Export** writes the range to `<cache>/trace-exports/` (opens in `ui.perfetto.dev`; Compare's **Load trace as B**
+  reads it back).
+- The footer states the viewer's own cost; its work (`trace.viewer`) is hidden unless asked.
 
 ## Adding zones in CrystalGUI
 
-- **Names**: zones `area:phase` (`paint:tree`, `layout:compute`, `ed:rebind`); counters kebab-case, a
-  unit in the name where there is one (`surface-miss-revision`, `graph.pool-kb`); spans read as the action (`open:file`,
-  `close.layout.closePanel`). Constants, always (`PROFILING.md` § *Conventions*).
-- **Channel**: a phase inside a frame → `UiTrace.FRAME`; a chain → `UiTrace.FLOW`; worker work that no frame
-  owns → a span on `FLOW`, or `crystalgraphics.async` when it is CrystalGraphics'.
-- **Split begin/end** — the shape most of the frame uses:
+- **Names**: zones `area:phase` (`paint:tree`); counters kebab-case with the unit (`surface-miss-revision`); spans read
+  as the action (`open:file`). Constants, always.
+- **Channel**: a phase in a frame → `UiTrace.FRAME`; a chain → `UiTrace.FLOW`; worker work no frame owns → a span on
+  `FLOW`, or `crystalgraphics.async` when it is CrystalGraphics'.
+- **Split begin/end**:
   ```java
   long t = CgTrace.stamp(UiTrace.FRAME);      // 0 while the channel is off: no clock read
   layout(width, height);
   CgTrace.zoneDone(UiTrace.FRAME, "frame:layout", t);
   ```
-- **A widget's paint** is zoned inside the widget (`paintContent`), with its own name, so every instance is
-  covered; a per-instance name (`part:<name>`) only when instances differ in cost and there are few.
-- **A new counter a hint should read** needs a rule in `UiHints` — or it is a number nobody is told about.
-- A zone that runs once per element per frame (thousands) is a counter instead.
-
----
+- A widget's paint is zoned inside the widget; a per-instance name (`part:<name>`) only for few, differing instances.
+- A new counter a hint should read needs a rule in `UiHints`.
+- Thousands per frame is a counter, not a zone.
 
 ## Instrumented today
 
@@ -197,26 +157,24 @@ opens that frame in the profiler.
 |---|---|---|
 | The frame's phases | frame | `ui/dom/UIDocument`, `style/StyleEngine`, `ui/box/BoxTree`, `BoxPainter` |
 | Paint, segments, surfaces | frame, gpu | `render/CgUiPaintContext`, `PaintSegments`, `Surface`, `ui/box/BoxPainter` |
-| SVG | frame | CrystalGraphics' `CgSvg` (parse, `svg.tier`); drawing is its canvas |
-| Jobs | `crystalgraphics.async` | CrystalGraphics' `CgJob`: `job.then` (a job's listeners at the drain), `job.task` (an `executor` task); `frame:jobs` is the drain itself |
+| SVG | frame | CrystalGraphics' `CgSvg` (parse, `svg.tier`) |
+| Jobs | `crystalgraphics.async` | `CgJob`: `job.then`, `job.task`; `frame:jobs` is the drain |
 | The editor | frame, flow | `widget/texteditor/TextEditor`, its `part/`, `fold/`, `lang/`, `doc/` |
 | Text model | flow | `text/TextBuffer`, `text/wrap/ProjectedLines` |
 | Markup, syntax | flow | `widget/text/MarkupView`, `SyntaxHighlighting` |
 | Workbench actions | flow | `workbench/DocumentTabs`, `dock/DockArea`, `dock/WorkbenchOpener`, `search/GoToFile`, `chrome/palette/QuickPick`, `explorer/ExplorerCommands` |
 | Language stack | frame, flow | `language/…/grammar`, `engine/AnalysedLanguageServices`, `java/*`, `js/JsLanguageServices` |
-| Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*` -- `sg-preview-lost` is a preview that had a picture painting none, a blink on screen. `widget/canvas`, `widget/graph`, `app/shadergraph`; the renderers under them are CrystalGraphics' `shadergraph` channel |
-| Hooks | frame | `anim-hooks`, `anim-after-layout-hooks`: live per-frame and post-layout hooks, a count that climbs while nothing happens being a leak (`UIDocument`) |
-| Work on the document's thread outside its frames | flow | `app:launch` (`desktop/app/ApplicationRegistry`), `profiler:open` (`app/frameprofiler/FrameProfiler`), `lang:analyzeNow` (`language/…/AnalysedLanguageServices`: a document opened with text is analysed before its services return) |
-| The desktop's screen on the render thread | flow | `screen:build`, `screen:shown` (an open's render-thread share), `screen:tick` (once a host frame), `screen:paint` (the viewport's frame at `HUD` or `SCREEN`) in `screen/CgUiScreen` |
+| Node graph, shader graph | frame | `canvas:cull`, `graph:tick`, `graph:paintNode`, `graph:paintWires`, `blackboard:tick`, `sg:previews`, `sg:mainPreview`, `sg:toShaderGraph`, `sg:compile`, `sg:paintPreview`; counters `graph-*`, `sg-*` (`sg-preview-lost`: a preview that blinked) |
+| Hooks | frame | `anim-hooks`, `anim-after-layout-hooks`: a count climbing while idle is a leak |
+| The document's thread outside frames | flow | `app:launch`, `profiler:open`, `lang:analyzeNow` |
+| The desktop's screen, render thread | flow | `screen:build`, `screen:shown`, `screen:tick`, `screen:paint` (`screen/CgUiScreen`) |
 
-**Not instrumented** — zone these before any question that touches them:
+**Not instrumented**: zone these before a question that touches them.
 
-- **input dispatch** (`ui/service/Input`) inside `frame:input` — hit testing, the three-phase walk, the
-  keymap — and key events, which dispatch as the host delivers them rather than in the frame;
-- **the desktop compositor** (`desktop/**`): window motion, the taskbar, snapshots, the switcher;
-- **the commit path** (`CgUiViewport`, `CommitQueue`): nothing zoned; `DesktopBaselineProbe` measures it from outside (`presentedCommit()`), and other work the sequence runs between frames shows only as its own zones;
-- **individual widgets' paint** outside the editor and SVG;
-- **Taffy's compute** inside `frame:layout`, and `UIText` measurement;
-- **the wire and the workspace** (`net/**`, `fs/**`) — spans where an action waits on them;
-- **per-frame hooks and `afterLayout` hooks**, only as their phase totals and counts — a hook of its own is
-  zoned by its owner.
+- Input dispatch (`ui/service/Input`) inside `frame:input`, and key events, which dispatch as the host delivers them.
+- The desktop compositor (`desktop/**`): window motion, the taskbar, snapshots, the switcher.
+- The commit path (`CgUiViewport`, `CommitQueue`); `DesktopBaselineProbe` measures it from outside.
+- Individual widgets' paint outside the editor and SVG.
+- Taffy's compute inside `frame:layout`, and `UIText` measurement.
+- The wire and the workspace (`net/**`, `fs/**`).
+- Individual hooks: only phase totals and counts.

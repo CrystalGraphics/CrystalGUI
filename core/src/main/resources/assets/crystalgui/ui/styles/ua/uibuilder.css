@@ -1,33 +1,14 @@
 /* ua/uibuilder.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
- *
- * The UI builder: the design surface and the artboard a document is laid out on.
- *
- * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
- * one sheet the engine loads — rule order across files is as load-bearing as within one
- * (:disabled after :hover ties), so files split at section boundaries and never reorder.
- * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
- * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+ * The UI Builder: design surface, artboard, canvas overlays and handles, the Hierarchy and Library panels, the inspector's box model, the Styles tab and the style labs.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
+ */
 
-/* ── The design surface ──────────────────────────────────────────────────────────────────────────────
- *
- * The tab a .cgui opens in: a pan-and-zoom plane with artboards on it. A surface IS a canvas, so it
- * inherits the viewport's own structural styling and only needs a size and a ground here. `height: 100%` and NOT the
- * `height: 0` + `flex-grow: 1` fill idiom: a dock area sizes its content definitely, and growing into a
- * parent that is not distributing gives a surface zero pixels tall — which is a tab that opened and has
- * nothing in it. */
 surface {
     width: 100%;
     height: 100%;
     background-color: var(--builder-surface-bg, #1B1B1F);
 }
 
-
-/* ── The artboard ────────────────────────────────────────────────────────────────────────────────────
- *
- * One page, at one canvas size, holding the document's real tree. It needs a background of its own for
- * the same reason a page in Figma does: an empty document over an empty plane is indistinguishable from
- * an editor that failed to open. The size is written by the widget — it is the document's, not a theme's
- * — and everything else here is. */
 artboard {
     border-width: 2px;
     background-color: var(--builder-page-bg, #2B2B31);
@@ -35,46 +16,27 @@ artboard {
     overflow: hidden;
 }
 
-
-/* The builder's own plane is a `surface` with its own tag, so it takes the rule above by repetition
- * rather than by inheritance -- a Name is per class and a subclass that declares one does not answer to
- * its parent's. Listed together so the two cannot drift. */
 buildersurface {
     width: 100%;
     height: 100%;
     background-color: var(--builder-surface-bg, #1B1B1F);
 }
 
-
-/* ── Canvas overlays ─────────────────────────────────────────────────────────────────────────────────
- *
- * Viewport children, so every stroke here is 2px at any zoom and none of it is in the tree being
- * designed. Both draw with fills read from their OWN computed style rather than from a constant in Java,
- * which is what lets a theme restate them: `color` is the stroke each overlay is about, `border-color`
- * the secondary one.
- *
- * They fill the viewport because what they draw is positioned inside them, not by them. */
 hoverhighlight, selectionoutline {
     width: 100%;
     height: 100%;
     color: var(--builder-hover, #6E9BF5);
 }
 
-/* The selection accent, and the dimmer stroke on its PARENT -- the flex context, which is the answer to
- * "why is this here" and is Figma's reason for drawing it at all. */
 selectionoutline {
     color: var(--builder-selected, #3574F0);
     border-color: var(--builder-selected-parent, #55607A);
 }
 
-/* Where a dragged node would land: the container outlined and the line between two children, in the
- * selection's accent -- the thing being placed is the selection. */
 dropindicator {
     color: var(--builder-selected, #3574F0);
 }
 
-/* The tag naming what a click would select: kind, #id, size. Positioned by the widget through a
- * compositor override, so nothing here places it -- only what it looks like. */
 hoverhighlight::part(tag) {
     padding: 2px 6px 2px 6px;
     font-size: 18px;
@@ -85,20 +47,6 @@ hoverhighlight::part(tag) {
     top: 0;
 }
 
-
-/* ── The tab's own layout ────────────────────────────────────────────────────────────────────────────
- *
- * Toolbar over plane. The plane takes the fill idiom (`height: 0` + `flex-grow: 1`) and the toolbar its
- * own height, which is this codebase's rule for "one fixed row and one that takes the rest" -- a
- * percentage on the plane would measure against a parent that is still distributing.
- *
- * IT PAINTS ITS OWN SURFACE, and the rounded corner is why. A rounded view masks its CHILDREN and
- * composites its own background underneath unmasked — so where the view paints nothing, the pixels in the
- * corner are a child's arriving through the mask's edge, a softer curve than the SDF fill a background is
- * drawn with. The text editor never showed this because it paints its paper itself.
- *
- * The same token `buildersurface` uses, so the two cannot drift, and nothing is visible twice: the child
- * covers this everywhere except the corner it is being cut away from. */
 builderpane {
     width: 100%;
     height: 100%;
@@ -106,41 +54,16 @@ builderpane {
     background-color: var(--builder-surface-bg, #1B1B1F);
 }
 
-/* THE BUILDER'S ONE CHROME ROW: a ContextToolbar over the builder toolbar, so Free Transform's numbers
- * take the toolbar's place rather than pushing the canvas down a row. Its height is the bar's own.
- *
- * The ground is a panel TAB STRIP's, from the same tokens -- the same job at the same place, and a second
- * vocabulary for it would drift. `--panel-bg` rather than `--tab-strip-bg`: the strip is TRANSPARENT and
- * what shows behind an Inspector's tabs is the panel underneath it. */
 builderpane > contexttoolbar {
     padding-left: 8px;
     padding-right: 8px;
     background: var(--panel-bg, #2B2B2B);
 }
 
-/* Every page the row shows spaces its controls alike: between two drawn EDGES, now the controls wear
- * outlines. */
 builderpane > contexttoolbar > .__context-page__ {
     gap: 8px;
 }
 
-/* THE ROW'S DENSE FONT IS THE WIDGET'S, not this consumer's -- `contexttoolbar` in ua/widgets.css, so a
- * tool's options are as dense on any surface. The builder's own toolbar is this bar's base page, so it
- * is inside the row and takes the same size. */
-
-/* NOTHING HERE FOR THE ENTRIES. They are outlined controls because every workbench control is --
- * @see `workbench button, workbench dropdown` in ua/workbench.css -- and a copy of that rule scoped to
- * this toolbar would be a second place to change it and a second place to forget. */
-
-/* ── Free Transform options ──────────────────────────────────────────────────────────────────────────
- *
- * Free Transform's page in the row above, which gives it its height, ground and gaps. */
-
-/* The page is a toolbar form: a letter per number and the unit inside the value, the pivot's grid and
- * cells all the kit's own. What is left here is the one mark the kit cannot know about. */
-
-/* Photoshop's chain between W and H: dim while each scales alone, the accent while they go together. An
- * icon button, so the workbench's outline -- a rule for LABELLED buttons -- never reaches it. */
 .__transform-link__ .__config-control__ button {
     width: 28px;
     height: 28px;
@@ -156,7 +79,6 @@ builderpane > contexttoolbar > .__context-page__ {
     color: var(--tree-dimmed-fg, #9DA0A8);
 }
 
-/* The panel header's icon hover: a brighter mark on a square behind it. */
 .__transform-link__ .__config-control__ button:hover {
     color: var(--panel-header-icon-hover, #E0E0E0);
     background: none;
@@ -169,13 +91,6 @@ builderpane > contexttoolbar > .__context-page__ {
     background: none;
 }
 
-/* The plane fills what the toolbar left. NOT height: 100% -- see the note above.
- *
- * AND IT CARRIES THE SEPARATOR, which is the panel rule's arrangement and not an accident: every panel
- * draws its hairline on the CONTENT rather than on the chrome above it, because a tool window has two
- * kinds of chrome and one line, so the line belongs to the single thing underneath both. The toolbar's
- * own `border-bottom-color` is gone with it -- it drew nothing anyway, the rounded-background path
- * taking its stroke width from `border().left` alone. @see ua/workbench.css `.__panes__`. */
 builderpane > buildersurface {
     width: 100%;
     height: 0;
@@ -186,21 +101,7 @@ builderpane > buildersurface {
     border-top-color: var(--panel-header-sep, #00000000);
 }
 
-
-/* ── Resize handles ──────────────────────────────────────────────────────────────────────────────────
- *
- * Eight real elements, each taking its own press -- which is what a painted handle could never do, and
- * why they carry a cursor here rather than a branch in the mode. The layer fills the viewport and the
- * widget places each handle inside it through a compositor override; only appearance is here.
- *
- * The cursors are the eight CSS names, and the pairing is the one every editor uses: a corner resizes
- * both axes and an edge resizes one. */
-/* NO SIZE HERE, deliberately. The layer is a zero-sized origin the widget places handles from, and a
- * full-size hittable box over the canvas is the answer to every hit test that lands on background --
- * select once and nothing on the canvas can be clicked again. Box.search names this failure outright. */
-/* ROUND, and lighter than the box that catches the press. The element's size is the hit target -- see
- * ResizeHandles.SIZE -- so the dot is made smaller here rather than there: a fully rounded 12px box with a
- * 2px ring reads as a small circle on the line without shrinking what a pointer has to hit. */
+/* No size: a full-size layer over the canvas would take every hit test that lands on background. */
 resizehandles > * {
     background-color: var(--builder-handle-bg, #FFFFFF);
     border-width: 2px;
@@ -208,22 +109,9 @@ resizehandles > * {
     border-radius: 6px;
 }
 
-/* ── Free Transform ──────────────────────────────────────────────────────────────────────────────────
- *
- * ONE COLOUR, and everything is drawn from it. The box paints itself -- its outline is rotated and
- * skewed, which four child elements cannot be -- so the only thing the sheet has to give it is `color`,
- * which paintContent reads. It shares the selection accent deliberately: the transform box replaces the
- * selection outline while it is up, and a second hue would read as a second thing being selected. */
 transformbox {
     color: var(--builder-selected, #3574F0);
-    /* The LAYOUT box, drawn under the live one as a compass: where the element sits, and where it goes
-     * back to when the transform is removed. Deliberately the quieter of the two -- it is a reference,
-     * and a second line as loud as the gesture's own reads as two things being transformed. */
     border-color: var(--builder-selected-parent, #55607A);
-    /* THE PIVOT, which is the one mark that may NOT share the accent: it sits on the element being
-     * transformed, and a selected element is usually that same blue -- so the crosshair vanished into
-     * exactly the thing it belongs to. A light mark over a dark halo reads on either. BORROWED
-     * properties: this overlay draws no outline and no text. @see TransformBox#paintPivot */
     outline-color: var(--builder-pivot, #FFFFFF);
     text-decoration-color: var(--builder-pivot-halo, #0D0F14C0);
 }
@@ -233,53 +121,28 @@ transformbox {
 .__handle-top__, .__handle-bottom__ { cursor: ns-resize; }
 .__handle-left__, .__handle-right__ { cursor: ew-resize; }
 
-
-/* ── In-place text editing ───────────────────────────────────────────────────────────────────────────
- *
- * A field over the node, not typing into the document: in design mode the artboard is `hit-test: false`,
- * so nothing inside it can take a keystroke at all. The widget matches the node's font size and position;
- * this is the ring that says the field is a field. */
-/* Zero-sized for the reason above; the field is placed from it. */
 textedit > textfield {
     border-width: 2px;
     border-color: var(--builder-selected, #3574F0);
     background-color: var(--builder-page-bg, #2B2B31);
 }
 
-
-/* ── The Hierarchy panel ─────────────────────────────────────────────────────────────────────────────
- *
- * The tree of whatever .cgui is in front. Empty rather than absent when the tab is not a builder --
- * a tool window that comes and goes moves everything beside it. */
 hierarchytoolwindow, hierarchypanel {
     width: 100%;
     height: 100%;
     flex-direction: column;
 }
 
-/* On the TREE rather than the row, for the reason projectfiletree gives: `color` inherits, so one
- * declaration reaches every label and every chevron below it. */
 hierarchypanel {
     color: var(--tree-fg, #FFFFFF);
 }
 
-/* THE TREE NEEDS THE FILL IDIOM, not a percentage -- `height: 100%` inside a parent that is still
- * distributing gives it nothing, and the panel then looks empty while its rows exist. The project tree
- * states exactly these three for the same reason. */
 .__hierarchy-content__, .__hierarchy-content__ > treeview {
     width: 100%;
     flex-basis: 0;
     flex-grow: 1;
 }
 
-/* THE PROJECT TREE'S OWN STYLING, deliberately: two trees in the same sidebar reading differently is
- * the panel telling you they are different kinds of thing, which they are not. Same row height, same
- * twisty, same selection pair, same tokens -- so a theme moves both together.
- *
- * NO padding-left. TreeView writes `padding-left: depth * indentPerDepth` at DEFAULT origin and this
- * sheet is USER_AGENT, which is higher, so a constant here pins every row at the same inset however deep
- * it is. `projectfiletree` carries the same comment, having shipped the same bug. Inset goes on the
- * content box instead. */
 .__hierarchy-row__ {
     flex-direction: row;
     align-items: center;
@@ -293,8 +156,6 @@ hierarchypanel {
     padding-right: 8px;
 }
 
-/* Two shapes rather than one rotated, matching the project tree exactly -- the twisty is chrome, and a
- * leaf keeps the slot and draws nothing so every label at a depth starts at the same x. */
 hierarchypanel .__twisty__ {
     width: 24px;
     height: 24px;
@@ -318,11 +179,6 @@ hierarchypanel .__leaf__ .__twisty__ {
     overlay: none;
 }
 
-/* What a node is, tinted by its role — a Hierarchy row's glyph and the Inspector heading's. The icon is written
- * from Java, since it follows the node's kind and computed layout; the colour is the theme's. @see GlyphView
- *
- * ON THE GLYPH ALONE: a menu's rows carry the same role classes, and a bare `.__glyph-text__` tinted their
- * labels. */
 .__glyph__ {
     width: 24px;
     height: 24px;
@@ -337,7 +193,6 @@ hierarchypanel .__leaf__ .__twisty__ {
 .__glyph__.__glyph-overlay__ { color: var(--kind-glyph-overlay, #68C4BE); }
 .__glyph__.__glyph-addon__ { color: var(--kind-glyph-addon, #7AC0A0); }
 
-/* The Insert menu's rows: the same marks in the same role colours, and the brighter twins on the selected row. */
 insertmenu .__entry-icon__.__glyph-layout__ { color: var(--kind-glyph-layout, #AEA79C); }
 insertmenu .__entry-icon__.__glyph-text__ { color: var(--kind-glyph-text, #CAA875); }
 insertmenu .__entry-icon__.__glyph-control__ { color: var(--kind-glyph-control, #75B1ED); }
@@ -351,7 +206,6 @@ insertmenu .__selected__ .__entry-icon__.__glyph-collection__ { color: var(--kin
 insertmenu .__selected__ .__entry-icon__.__glyph-overlay__ { color: var(--kind-glyph-overlay-selected, #8CEFE8); }
 insertmenu .__selected__ .__entry-icon__.__glyph-addon__ { color: var(--kind-glyph-addon-selected, #9EF2CB); }
 
-/* The placement band: Inside [glyph] Card #profile ........ [Tab] 1/3 */
 insertmenu .__insert-relation__ {
     flex-shrink: 0;
     white-space: nowrap;
@@ -373,7 +227,6 @@ insertmenu .__insert-spacer__ {
     width: 0;
     flex-grow: 1;
 }
-/* A key, drawn as one: the chip says Tab changes the place without a sentence saying so. */
 insertmenu .__keycap__ {
     flex-shrink: 0;
     padding: 2px 8px 2px 8px;
@@ -390,15 +243,10 @@ insertmenu .__insert-cycle__ {
     color: var(--insertmenu-count-fg, #7A7A7A);
 }
 
-/* The Element tab's heading: [glyph] words ........ tag. The band is the section header's own; the glyph sits
- * where a row's does, and the tag is code — the name a selector types — so it takes the code face, a size down
- * and the hint colour, where it reads as an annotation rather than a second title. */
 .__kind-header__ .__glyph__ {
     margin-right: 12px;
 }
 
-/* The free space between the words and the tag: the band stretches, the spacer takes it, and every other part
- * keeps its natural width — which is what the panel measures a band by. */
 .__kind-header__ .__kind-spacer__ {
     width: 0;
     flex-grow: 1;
@@ -414,7 +262,6 @@ insertmenu .__insert-cycle__ {
     color: var(--fg-hint, #7A7A7A);
 }
 
-/* On the focused selection band, each role's brighter twin, so the glyph stays legible on the accent. */
 hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-layout__ { color: var(--kind-glyph-layout-selected, #E2D9CB); }
 hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-text__ { color: var(--kind-glyph-text-selected, #FFDA98); }
 hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-control__ { color: var(--kind-glyph-control-selected, #92E8FF); }
@@ -422,10 +269,6 @@ hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-c
 hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-overlay__ { color: var(--kind-glyph-overlay-selected, #8CEFE8); }
 hierarchypanel .__focused__ .__hierarchy-row__.__selected__ .__glyph__.__glyph-addon__ { color: var(--kind-glyph-addon-selected, #9EF2CB); }
 
-/* THE PROJECT TREE'S SHAPE HERE TOO, which it was not: `flex-grow: 1` with `width: 0` pins the label to
- * exactly the free space, so its box can never stick out past the row -- and a row that cannot overflow
- * has nothing to scroll to, whatever the list is set to. `min-width: 0` is the shrinkable version of the
- * same idea and is what the project tree carries. */
 hierarchypanel .__hierarchy-row__ .__label__ {
     flex-shrink: 1;
     min-width: 0px;
@@ -433,16 +276,11 @@ hierarchypanel .__hierarchy-row__ .__label__ {
     text-overflow: ellipsis;
 }
 
-/* A HIDDEN NODE'S ROW, and every row under it: the name and its glyph in the disabled tone. The tree is the
- * only place a hidden node can still be seen, and dimming says why it is missing from the canvas. A selected
- * row keeps its selected tint, which is the more specific rule. */
 hierarchypanel .__hierarchy-row__.__hidden-node__ .__label__,
 hierarchypanel .__hierarchy-row__.__hidden-node__ .__glyph__ {
     color: var(--fg-disabled, #5A5D63);
 }
 
-/* The id being renamed, in the row -- the project tree's field, so the two trees rename alike. Shown by
- * RowEditing in place of the label. */
 hierarchypanel .__hierarchy-row__ .__rename__ {
     flex-grow: 1;
     flex-shrink: 1;
@@ -457,27 +295,14 @@ hierarchypanel .__hierarchy-row__ .__rename__ {
     border-radius: 4px;
 }
 
-/* TextField's conflict edge, restated here only because the rule above outranks `textfield.__conflict__`. */
 hierarchypanel .__hierarchy-row__ .__rename__.__conflict__ {
     border-color: var(--field-conflict-border, #F14C4C);
 }
 
-/* AND THIS TREE ALWAYS SCROLLS SIDEWAYS, so the label never gives way -- it is the thing being scrolled
- * to. `flex-shrink: 0` is the whole switch: a shrinkable item contributes ZERO to its row's min-content
- * width, so with it on there is no overflow, the range is always exactly the viewport, and the bar can
- * never appear however long the id.
- *
- * `text-overflow` stays and simply never fires; nothing clamps the label now. ListView writes the class
- * from setHorizontalScrolling, so the two halves cannot drift apart. Same pair, same reason, as
- * `projectfiletree` and `problemspanel`. */
 hierarchypanel .__h-scroll__ .__hierarchy-row__ .__label__ {
     flex-shrink: 0;
 }
 
-/* THE UNFOCUSED STATE IS THE BASE RULE, as the project tree writes it: a selection answers "which row
- * will the keys act on", so a panel that does not hold focus must not say it in the same voice as one
- * that does. `.__focused__` is put on the list by ListView while focus is inside it -- a class, because
- * the engine has no `:focus-within`. */
 hierarchypanel .__hierarchy-row__.__selected__ {
     background-color: var(--tree-selected-inactive-bg, #3A3D41);
     color: var(--tree-selected-inactive-fg, #CCCCCC);
@@ -488,14 +313,6 @@ hierarchypanel .__focused__ .__hierarchy-row__.__selected__ {
     color: var(--tree-selected-fg, #FFFFFF);
 }
 
-
-/* Preview is a TOGGLE and has to look like one. Its visible effect is that the document's widgets go
- * live, so on a document with nothing to press an unstyled toggle is indistinguishable from a button
- * that does nothing. */
-/* AT THE TRAILING EDGE, by its own auto margin — the panel header's hide button is pinned the same way
- * and for the same reason: one auto margin means one claimant, so it takes all the slack rather than
- * sharing it with the row's gaps. The dropdowns before it are settings ABOUT the page; this one changes
- * what the editor is, and IntelliJ separates the same switch on a Markdown file. */
 buildertoolbar > .__preview__ {
     margin-left: auto;
 }
@@ -506,11 +323,6 @@ buildertoolbar > .__preview__ button.__on__ {
     border-color: var(--tab-active-border, #4A4A4A);
 }
 
-
-/* ── The Library panel ───────────────────────────────────────────────────────────────────────────────
- *
- * Every placeable kind, filed in a tree whose leaves are strips of cards. Folder rows and compact rows are
- * the Hierarchy's rows, so the two panels in one sidebar read alike. */
 librarytoolwindow, librarypanel {
     width: 100%;
     height: 100%;
@@ -531,7 +343,7 @@ librarypanel .__search__ {
     flex-shrink: 0;
 }
 
-/* NO height and NO padding-left: the view writes both. */
+/* No height or padding-left: the view writes both. */
 .__library-row__ {
     width: 100%;
     flex-direction: row;
@@ -570,12 +382,10 @@ librarypanel .__library-row__ > .__label__ {
     text-overflow: ellipsis;
 }
 
-/* THE TREE SCROLLS SIDEWAYS, so a label keeps its width: see the Hierarchy's rule above. */
 librarypanel .__h-scroll__ .__library-row__ > .__label__ {
     flex-shrink: 0;
 }
 
-/* A heading over the cards, so it reads as one: the tree's own colour, bold. */
 .__library-folder__ > .__label__ {
     color: var(--tree-fg, #FFFFFF);
     font-weight: bold;
@@ -593,7 +403,6 @@ librarypanel .__h-scroll__ .__library-row__ > .__label__ {
     color: var(--tree-selected-fg, #FFFFFF);
 }
 
-/* SELECTED BY ITS EDGE AND NAME, not a fill: a fill round the stage swallows the sample it is choosing. */
 previewcard.__selected__ .__stage__ {
     border-color: var(--accent, #3574F0);
 }
@@ -602,30 +411,23 @@ previewcard.__selected__ .__label__ {
     color: var(--accent-hover, #4A82F2);
 }
 
-/* A user's group a dragged card would join: the selection's accent round the row, as a tree drop into a folder is. */
 .__library-row__.__drop-target__ {
     border-radius: 6px;
     outline: 2px var(--accent, #3574F0);
 }
 
-/* The foot: the selected kind drawn larger beside what it is. Hidden from Java while nothing is selected. */
 librarydetail {
-    /* OVER THE VIEW CONTENT'S OWN 2px EDGES, which it keeps transparent to draw the header's line -- so this
-     * line meets the panel's sides as that one does. Stretched rather than 100%, which the margins would shift. */
     margin-left: -2px;
     margin-right: -2px;
     flex-shrink: 0;
     flex-direction: row;
     gap: 12px;
     padding: 12px;
-    /* THE PANEL HEADER'S LINE, the way it is drawn: a rect's stroke takes its width from the left edge alone,
-     * so a top-only width paints nothing. @see `.__view-content__` in ua/workbench.css */
     border-width: 2px;
     border-color: #00000000;
     border-top-color: var(--panel-header-sep, #00000000);
 }
 
-/* SHRINKS TO A FLOOR in a narrow panel, so the words keep a column wide enough to read. The card fills it. */
 .__detail-preview__ {
     width: 192px;
     min-width: 96px;
@@ -645,8 +447,6 @@ librarydetail previewcard .__label__ {
     display: none;
 }
 
-/* The words column scrolls rather than growing the strip: a long description in a narrow panel would otherwise
- * push the strip past the panel. Its height is the preview's, from the strip's own. */
 librarydetail > scrollerview {
     width: 0;
     min-width: 128px;
@@ -672,10 +472,6 @@ librarydetail > scrollerview {
     color: var(--tree-dimmed-fg, #9DA0A8);
 }
 
-/* ── Library cards ───────────────────────────────────────────────────────────────────────────────────
- *
- * A card draws its kind as itself in a stage, scaled down to fit, with the name under it. The width is the
- * one the panel divides its rows by. */
 previewcard {
     width: 144px;
     flex-shrink: 0;
@@ -686,9 +482,6 @@ previewcard {
     border-radius: 16px;
 }
 
-/* Centred, for the glyph a card shows when its kind draws nothing; a sample is out of flow and placed from Java.
- * A tile on the builder's own dark ground, edged a device pixel at 2x; the card's radius is this one plus its padding,
- * so the two curves run parallel. */
 previewcard .__stage__ {
     width: 100%;
     height: 104px;
@@ -702,13 +495,11 @@ previewcard:hover .__stage__ {
     border-color: var(--border-strong, #5A5D63);
 }
 
-/* AFTER THE HOVER EDGE, which ties the selected ring on specificity and would win by order. */
+/* After the hover edge: they tie on specificity, and the later rule wins. */
 previewcard.__selected__:hover .__stage__ {
     border-color: var(--accent-hover, #4A82F2);
 }
 
-/* Where a sample is cropped: 4px inside the stage's rounded edge, which keeps its corners inside the curve, and
- * square, so the crop is a scissor rather than a mask. Inside the card's shadow root. */
 .__preview-clip__ {
     position: absolute;
     left: 4px;
@@ -720,7 +511,6 @@ previewcard.__selected__:hover .__stage__ {
     justify-content: center;
 }
 
-/* NOTHING TO SHOW: the kind's own glyph, large and quiet, in its role's colour. Inside the card's shadow root. */
 .__glyph__.__preview-glyph__ {
     width: 40px;
     height: 40px;
@@ -737,8 +527,7 @@ previewcard .__label__ {
     color: var(--tree-fg, #CCCCCC);
 }
 
-/* INSIDE THE CARD'S SHADOW ROOT, reached by the copy of this sheet the card group carries. Out of flow, so
- * the sample lays out at its own size rather than the stage's; the card scales and centres it. */
+/* Inside the card's shadow root, reached by the copy of this sheet the card group carries. */
 .__preview-frame__ {
     position: absolute;
     left: 0;
@@ -752,8 +541,6 @@ previewcard .__label__ {
     color: var(--tree-fg, #CCCCCC);
 }
 
-/* The live size readout during a resize. Sits below the box's bottom-left, placed by the widget, so
- * nothing here positions it -- only what it looks like. */
 .__resize-badge__ {
     padding: 2px 6px 2px 6px;
     font-size: 18px;
@@ -761,28 +548,18 @@ previewcard .__label__ {
     background-color: var(--builder-selected, #3574F0);
 }
 
-/* A HOLLOW HANDLE MEANS THE PARENT DECIDES. A flex-grow child's main-axis size is the parent's to
- * compute, so a size written from that handle is discarded -- the handle says so before the drag rather
- * than after it, and the badge spells it out. */
+/* Hollow means the parent decides: a flex-grow child's main-axis size is the parent's to compute. */
 .__handle-overruled__ {
     background-color: var(--builder-page-bg, #2B2B31);
 }
 
-
-/* Smart guides: what a gesture snapped to -- aligned points and matched gaps -- drawn while the drag runs
- * and gone the moment it ends. Red rather than the accent, because they are not a selection -- they are
- * the reason the box stopped where it did, and every editor draws them in the one colour nothing else
- * uses. */
 smartguides {
     width: 100%;
     height: 100%;
     color: var(--builder-guide, #F5555D);
-    /* The outline of whatever a guide's point belongs to: the quiet reference colour the transform box
-     * draws the layout box in, so it names the owner without competing with the guide. */
     border-color: var(--builder-selected-parent, #55607A);
 }
 
-/* A matched gap's length, beside its bar. Placed by the widget, so nothing here positions it. */
 .__snap-gap-label__ {
     padding: 2px 6px 2px 6px;
     font-size: 18px;
@@ -791,17 +568,8 @@ smartguides {
     background-color: var(--builder-guide, #F5555D);
 }
 
-
-/* ── The inspector's box model ──────────────────────────────────────────────────────────────────
- * DevTools' metrics diagram: margin around border around padding around the content size, a number on
- * every edge. The layers are told apart by an outline in DevTools' order of hues — margin warm, padding
- * green, content blue — rather than by fills, which on a dark panel read as four shades of the same grey.
- * A value set inline is bold, and a double-click turns it into a field. */
 .__boxmodel__ {
     padding-block: 8px;
-    /* THE PANEL'S OWN INSET, which a ROW gets on its parts and a custom element gets from nobody: the panel has no
-     * horizontal padding by design (@see inspector.css `.__configurator-panel__`), so a diagram appended to it ran
-     * to the edge and under the scrollbar wherever the tab was long enough to have one. */
     padding-left: var(--cfg-pad-x);
     padding-right: var(--cfg-pad-x);
 }
@@ -822,12 +590,6 @@ smartguides {
     justify-content: center;
     gap: 8px;
 }
-/* A ZERO BASIS THAT GROWS, AND A FLOOR AT WHAT IT HOLDS. The engine's minimum size is 0 where CSS's is auto, so
- * without `min-width: auto` a narrow panel squeezed every layer until the numbers sat on top of each other. With
- * it each box stops at its content, and the panel's own scroller carries the diagram as it does a wide row.
- *
- * The zero is on `flex-basis`, never `width`, and the diagram states no width: CSS §4.5 clamps the automatic
- * minimum to a definite width, so `width: 0` or `100%` gave the floor back. @see inspector.css `.__label__` */
 .__boxmodel__,
 .__boxmodel__ .__bm-row__,
 .__boxmodel__ .__bm-layer__ {
@@ -839,14 +601,12 @@ smartguides {
     flex-grow: 1;
 }
 .__boxmodel__ .__bm-content__ {
-    /* A floor of its own: the automatic one leaves the row's gaps out, and "0 × 36" spilled past both edges. */
     min-width: 128px;
     height: 44px;
     border-radius: var(--radius-control, 6px);
     outline: 2px var(--info, #3794FF);
     background: var(--accent-soft, #2E436E);
 }
-/* The layer's name sits in its top-left corner, out of the flow, so the top value stays centred. */
 .__boxmodel__ .__bm-head__ { position: relative; }
 .__boxmodel__ .__bm-head__ > .__bm-label__ {
     position: absolute;
@@ -860,33 +620,21 @@ smartguides {
     color: var(--fg-secondary, #9DA0A8);
 }
 .__boxmodel__ .__bm-value__.__authored__ { color: var(--fg, #DFE1E5); font-weight: bold; }
-/* THREE CHARACTERS WIDE, which is what a box value is: a wider field pushes the diagram's column out of line
- * for the moment it is open. A longer number scrolls inside it. */
 .__boxmodel__ .__bm-editor__ { width: 48px; min-width: 48px; height: 28px; flex-shrink: 0; }
-/* NOTHING LAID OUT — a hidden node, or one under something hidden. The numbers are what the style says, not what
- * layout measured, so they read as quieter and a double-click opens nothing. */
 .__boxmodel__.__no-box__ .__bm-value__,
 .__boxmodel__.__no-box__ .__bm-value__.__authored__ {
     color: var(--fg-disabled, #5A5D63);
     cursor: default;
 }
 
-/* A ROW WITH NO EFFECT RIGHT NOW — Grow on an absolute node. Readable, so what it will do stays visible, and
- * quieter than a live row; its control takes no input. */
 .__configurator__.__inactive__ > .__label__ { color: var(--fg-disabled, #5A5D63); }
 .__configurator__.__inactive__ > .__inline__ { opacity: 0.5; }
 
-/* A ROW THIS NODE SETS — Unity's override marker: a bold label and an accent bar at the row's edge, so the
- * values a node changes are what the eye lands on. The bar is an OUTLINE gradient, which paints and takes
- * no space, so the label column does not move; a border would, and the engine has no per-edge left colour. */
 .__configurator__.__set__ > .__label__ {
     font-weight: bold;
     outline: linear-gradient(to right, var(--accent, #3574F0) 0%, var(--accent, #3574F0) 2%, transparent 2%);
 }
 
-/* ───────────────────────────── The Styles tab ─────────────────────────────
- * Where an edit lands is the first thing on it, because a style editor that guesses which rule you meant
- * writes to the wrong file eventually and cannot show that it did. */
 .__style-targets__ {
     flex-direction: row;
     flex-wrap: wrap;
@@ -910,19 +658,13 @@ smartguides {
     cursor: pointer;
 }
 .__style-target__:hover { background: var(--list-hover-bg, #393B40); }
-/* THE ONE BEING WRITTEN TO, in the accent every other "this is live" mark uses. */
 .__style-target__.__active__ {
     background: var(--accent, #3574F0);
     color: var(--fg-on-accent, #FFFFFF);
 }
-/* Readable, and plainly not writable: the engine's own sheet and anything inside a jar. */
 .__style-target__.__read-only__ { opacity: 0.75; }
 .__style-target-sheet__ { color: var(--fg-hint, #7A7A7A); font-size: 16px; }
 
-/* A GLYPH IN A BOX, CENTRED, and nothing else. These are plain elements rather than Buttons: a Button
- * brings the theme's own box with it -- a background, a radius, and 2px of padding at the top against 4px
- * at the bottom -- and at sixteen pixels that asymmetry IS the box. Centring by flex, with no padding to
- * argue with, is the whole rule. */
 .__style-row-action__ {
     width: 32px;
     height: 32px;
@@ -932,14 +674,10 @@ smartguides {
     border-radius: 6px;
     color: var(--fg-hint, #7A7A7A);
     cursor: pointer;
-    /* Held until the pointer is on the row: a column of x down the panel is the loudest thing on it. NO FADE: an eye
-     * rebuilds its row under the pointer, and the new row's buttons faded in from nothing. */
     opacity: 0;
 }
 .__configurator__.__style-row__:hover .__style-row-action__ { opacity: 1; }
 .__style-row-action__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
-/* THE EYE: hides a declaration without deleting it. Held up while hidden, so a switched-off row is found by its
- * slashed eye rather than by hovering every row. */
 .__style-row-eye__ {
     padding: 4px;
     overlay: icon("crystalgui:general/show");
@@ -947,20 +685,11 @@ smartguides {
     overlay-origin: content-box;
 }
 .__style-row-eye__.__off__ { overlay: icon("crystalgui:general/hide"); opacity: 1; }
-/* THE EYE TAKES THE NAME'S INSET: it sits at the row's edge, a short gap before the name, and the name column gives
- * back the eye's width so the values stay where they were. */
 .__configurator__.__style-row__.__eyed__ > .__style-row-eye__ { margin-left: 0px; margin-right: -4px; }
-/* The column less the eye before it: 24px under a plain row's share, cap and floor alike. */
 .__configurator__.__style-row__.__eyed__ > .__label__ { padding-left: 0px; flex-basis: 34%; max-width: 240px; min-width: 128px; }
-/* A HIDDEN DECLARATION, greyed whole: name and editor together, the eye left bright to bring it back. */
-/* A HIDDEN DECLARATION, greyed whole: a veil in the panel's colour over its editor, and its name in the disabled grey.
- * NOT OPACITY: that made the name and the editor a layer each, and an editor holding a chip nested the chip's own
- * layer inside, so the row redrew as composited layers on every hover and eye click. */
-/* WITH `__style-row__`: the Style tab's own label colour below has the same weight and comes later, and won. */
 .__configurator__.__style-row__.__hidden-declaration__ > .__label__ { color: var(--fg-disabled, #5A5D63); }
 .__configurator__.__hidden-declaration__ > .__inline__ { overlay: var(--hidden-veil, #191A1C99); }
 
-/* DevTools' blank line at the end of a rule: the one place anything is added from. */
 .__style-add-row__ {
     flex-direction: row;
     align-items: center;
@@ -970,31 +699,22 @@ smartguides {
     cursor: pointer;
 }
 .__style-add__ { color: var(--fg-hint, #7A7A7A); }
-/* IT IS A BUTTON, not a passage: pressing it selected its own words, which is what the blue fill was. */
 .__style-add-row__ text { selection-color: #00000000; }
 .__style-add-row__:hover .__style-add__ { color: var(--accent, #3574F0); }
-/* A single glyph is never elided: there is nothing left of it once it is. A layer row's actions are Buttons. */
 .__style-row-action__::part(label), .__style-target-action__::part(label) {
     text-overflow: clip;
     overflow: visible;
 }
-/* A DECLARATION THAT LOST: struck through where it is written, as a browser's own pane draws it. */
 .__configurator__.__overridden__ > .__label__ {
     text-decoration-line: line-through;
     color: var(--fg-disabled, #5A5D63);
 }
 
-/* Add property: the quick-input look, plus a property this target already declares, dimmed. */
 .__quick-input__ .__entry__.__declared__ .__label__ { color: var(--insertmenu-hint-fg, #7A7A7A); }
 
-/* Edit as CSS: the sheet's own buffer, so this is the file rather than a copy of it. */
 .__rule-editor__ { width: 960px; height: 480px; }
 .__rule-editor__-popover { padding-left: 0px; padding-right: 0px; padding-top: 0px; padding-bottom: 0px; }
 
-/* ─────────────────────────── The labs ───────────────────────────
- * A row shows what a value IS; the lab is where it is changed, at the size the work needs. */
-/* A LONG VALUE WRAPS, as DevTools' Styles pane wraps one: the chip grows down and the row with it, the swatch staying
- * on the first line. One line's height is the floor, so a short value is the row it always was. */
 .__style-chip__ {
     flex-direction: row;
     align-items: flex-start;
@@ -1005,20 +725,10 @@ smartguides {
     min-height: var(--cfg-ctrl-h);
     cursor: pointer;
 }
-/* PRESSABLE, AND IT SAYS SO: the swatch takes a rim and the value brightens, as a link does. */
 .__style-chip__:hover .__style-chip-swatch__ { outline: 2px var(--fg-hint, #7A7A7A); }
 .__style-chip__:hover .__style-chip-text__ { color: var(--fg, #DFE1E5); }
-/* ONE COLUMN FOR EVERY PROPERTY NAME. The kit's label column is `min-width: auto`, so a label wider than
- * the column cannot shrink and pushes its value right -- true of `text-stroke-width` and `text-stroke-color`
- * and of nothing else in the panel, which is why two rows out of five sat ten pixels off. Config labels are
- * short by nature; CSS property names are not, so the Style tab pins the column and lets a name that will
- * not fit end in an ellipsis. */
 .__configurator__.__style-row__ > .__label__ {
-    /* The rows are the detail under their heading, one step down in brightness. */
     color: var(--fg-secondary, #9DA0A8);
-    /* A SHARE OF THE PANEL, capped at the full column: every row still agrees on where values start, and a narrow
-     * panel gives up the column's empty space before it scrolls sideways. A flat 264px scrolled a 560px panel with
-     * seventy pixels of nothing after "background". */
     flex-basis: 38%;
     max-width: 264px;
     min-width: 152px;
@@ -1026,36 +736,19 @@ smartguides {
     text-overflow: ellipsis;
 }
 
-/* A ROW WITH BUTTONS AFTER ITS CONTROL has less room than an ordinary one, and the control's own floor is
- * what pushed the row past the panel. */
 .__configurator__.__style-row__ > .__inline__ > .__config-control__ {
     min-width: 120px;
     padding-right: 0px;
 }
-/* One gutter for every action, so + and x sit in a column. */
 .__configurator__.__style-row__ { padding-right: var(--cfg-pad-x); }
-/* TOP-ALIGNED, so a value that wraps grows the row downward with the name and its buttons on the first line. The
- * margins put each part where centring put it in a one-line row: the 32px buttons and swatch 2px into the 36px
- * control, a 26px line 5px. */
 .__configurator__.__style-row__ { align-items: flex-start; }
 .__configurator__.__style-row__ > .__label__ { margin-top: 5px; }
 .__configurator__.__style-row__ > .__style-row-action__ { margin-top: 2px; }
 .__style-chip__ > .__style-chip-swatch__ { margin-top: 2px; }
-/* THE VALUE SHRINKS TO ITS COLUMN, so a long one ends in its own ellipsis rather than under the row's buttons. */
-/* A VALUE IS NEVER SQUEEZED: a field's column stops at what its widest keyword and a slider's track need, and the
- * name at its own column, so a panel narrower than a row scrolls sideways rather than cutting "flex-start" short or
- * taking the slider's track away. */
 .__configurator__.__style-row__ > .__inline__ { min-width: 220px; }
 .__configurator__.__style-row__ > .__label__ { flex-shrink: 0; }
-/* A CHIP'S VALUE IS AS WIDE AS ITS LONGEST LINE, AND THAT IS ITS FLOOR: the column and the chip are sized by their
- * content and never shrink. */
 .__configurator__.__style-row__.__chip-row__ > .__inline__,
 .__configurator__.__style-row__.__chip-row__ .__style-chip__ { width: auto; flex-shrink: 0; }
-/* The swatch is the declaration, applied: a gradient chip is the gradient, a colour chip is the colour.
- *
- * A FIXED COLUMN, pinned at both ends. Its content sizes it otherwise — a sample of text made it wider than
- * a gradient's strip — and then every value in the family starts at a different x, which is the thing that
- * makes a form look broken however well the rows are built. */
 .__style-chip-swatch__ {
     width: 56px;
     min-width: 56px;
@@ -1066,12 +759,9 @@ smartguides {
     border-radius: 4px;
     align-items: center;
     justify-content: center;
-    /* A sample set at 68px would otherwise paint straight through the row below it. */
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
 }
-/* AN EDGE ROW'S ELEMENT: the element in small inside the swatch, with room round it for its outline. Every color on
- * it is written from the element's own style. @see BorderSample */
 .__border-sample-box__ {
     position: absolute;
     left: 10px;
@@ -1081,8 +771,6 @@ smartguides {
     background: var(--configkit-field-bg, #2B2D30);
 }
 .__border-sample-box__.__lit__ { background: var(--configkit-field-border, #4A4D52); }
-/* A GLASS SWATCH IS A SCENE: glass over the swatch's flat band has nothing to filter. The lab's in small -- two shapes
- * on the dark plate reaching in from opposite corners, each seen plain at the swatch's edge and through the pane. */
 .__glass-sample-scene__ {
     position: absolute;
     left: 0px;
@@ -1102,29 +790,19 @@ smartguides {
     bottom: 4px;
     border-radius: 6px;
 }
-/* The sample inside it is a specimen, not the value's own size -- and big enough to cast a shadow the
- * swatch can show, which a 18px glyph is not. */
-/* NOT BOLD: the sample is set in the element's own weight, which is what a weight chip is there to show. */
 .__style-chip-swatch__ text { font-size: 24px; }
-/* A LINE A LAYER, AND NO NARROWER THAN THE LONGEST: the column is the floor, and a panel narrower than it scrolls
- * sideways rather than breaking a shadow inside its hex. 5px above and below centres a 26px line in the 36px control. */
 .__style-chip-value__ {
     flex-grow: 1;
     flex-direction: column;
     padding-top: 5px;
     padding-bottom: 5px;
-    /* NO ROOM KEPT FOR THE PANEL'S BAR: the row's remove button and its own inset come after the value, and 20px
-     * here was only width the column claimed and nothing drew in. */
 }
 .__style-chip-text__ {
     flex-shrink: 0;
     white-space: nowrap;
     color: var(--fg-secondary, #9DA0A8);
 }
-/* An argument of a function opened on the line above, indented under its name. */
 .__style-chip-text__.__style-chip-continued__ { margin-left: 24px; }
-/* A COLOUR ROW IS A CHIP, like every other value with something to show: the swatch in the chip's column and the
- * hex beside it. The swatch keeps the kit's alpha strip under the colour, which is drawn over a checkerboard. */
 .__configurator__.__style-row__ .__config-control__.__color__ {
     flex-direction: row;
     align-items: center;
@@ -1146,39 +824,20 @@ smartguides {
 }
 .__configurator__.__style-row__ .__config-control__.__color__:hover .__color-hex__ { color: var(--fg, #DFE1E5); }
 
-/* ONE CONTROL EDGE FOR EVERY ROW: the kit's column is at least as wide as its label, so a lab's labels are kept
- * short enough to fit this. The BASIS, not the token: a variable here is the whole sheet's, and redefining it
- * moved every panel's column. */
 .__style-lab__ .__configurator__ > .__label__ { flex-basis: 220px; }
 .__style-lab__ {
-    /* WIDE ENOUGH FOR THE FIELDS, which is what a lab is mostly made of: 220px of it is the label column and a
-     * pivot's row spends 76 more on the pad and the nine cells, so at 320 the two numbers were left with fifty
-     * pixels each and `150.0%` came out `150.0'`. The pixels have to come from the lab, not from the gaps
-     * between its controls. */
     width: 696px;
-    /* A LAB SCROLLS RATHER THAN OVERFLOWING. Its content ran to ~1400px in a 754px window, and a panel
-     * whose rows are wider than it scrolls horizontally too -- which is what put the hit boxes somewhere
-     * other than the paint: a press then lands on whichever control has scrolled under the pointer. */
     max-height: 920px;
 }
-/* ON THE CONTENT, not the dialog: padding on the root would inset the title bar with it, and the title
- * bar is the thing you drag the lab by. A CHILD, for the reason `dialog > .__content__` records: the
- * canvas on the stage names its own plane `__content__` too. */
 .__style-lab__ > .__content__ {
     padding-left: 16px;
     padding-right: 16px;
     padding-top: 16px;
     padding-bottom: 16px;
-    /* TIGHT BETWEEN THE BLOCKS, so the caption's hairline is as near the last row as a separator is; the stage
-     * and the readout take their own margins below. */
     gap: 6px;
-    /* SHRINKS TO THE CAP, so the rows below can scroll: the engine's flex-shrink is 0, and a content box that
-     * kept its full height ran past the dialog's max-height and was cut off with nothing to scroll. */
     flex-shrink: 1;
     min-height: 0px;
 }
-/* THE ROWS ARE WHAT SCROLLS -- the kit's panel is already a scroll view. The stage, caption and readout keep
- * their size, so the specimen stays in view while the rows under it move. */
 .__style-lab__ > .__content__ > .__lab-content__ {
     flex-shrink: 1;
     min-height: 0px;
@@ -1188,9 +847,6 @@ smartguides {
 .__style-lab__ > .__content__ > .__lab-css__ { flex-shrink: 0; }
 .__style-lab__ > .__content__ > .__lab-stage__ { margin-bottom: 8px; }
 .__style-lab__ > .__content__ > .__lab-css__ { margin-top: 8px; }
-/* ONE STAGE, and the ground is a choice rather than a plate. Two fixed grounds existed because a stroke
- * that reads on one vanishes on the other; a picker answers that in half the width, and lets the specimen
- * carry the element's real colour instead of one chosen to contrast with whichever plate it sat on. */
 .__lab-stage__ {
     width: 100%;
     height: 264px;
@@ -1201,7 +857,6 @@ smartguides {
 .__lab-stage__.__dark__ { background: var(--lab-ground-dark, #000000); }
 .__lab-stage__.__light__ { background: var(--lab-ground-light, #FFFFFF); }
 
-/* The two plates, as a segmented pair in the corner. An overlay, so panning the plane leaves it put. */
 .__lab-grounds__ {
     position: absolute;
     right: 12px;
@@ -1215,12 +870,8 @@ smartguides {
 .__lab-ground-pick__ { width: 44px; height: 24px; border-radius: 6px; }
 .__lab-ground-pick__.__light__ { background: var(--lab-ground-light, #FFFFFF); }
 .__lab-ground-pick__.__dark__ { background: var(--lab-ground-dark, #000000); }
-/* The chosen one is ringed rather than moved: a segmented control that reflows on every press is a
- * target that walks away from the pointer. */
 .__lab-ground-pick__.__active__ { outline: 2px var(--accent, #3574F0); }
 
-/* A mid grey, because the same rule labels a near-black plate and a near-white one -- white at low
- * alpha vanished on the light ground. Copied from the gallery's own text-lab canvas, which says so. */
 .__lab-zoom__ {
     position: absolute;
     right: 16px;
@@ -1229,10 +880,6 @@ smartguides {
     color: var(--fg-hint, #7A7A7A);
 }
 
-/* A MINIMUM, not a size. The specimen is a canvas NODE, so it self-sizes on an unbounded plane and a
- * long line runs off the side to be panned to rather than wrapping or being clipped -- but a lab whose
- * value needs no subject (a gradient, a transform) puts nothing inside it, and a box that self-sizes
- * around nothing is nothing. Over the backdrop shapes, which are siblings on that same plane. */
 .__lab-specimen__ {
     padding: 8px;
     border-radius: 12px;
@@ -1240,27 +887,13 @@ smartguides {
     align-items: center;
     justify-content: center;
 }
-/* THE PLATE IS FOR A SPECIMEN THAT IS THE VALUE -- a transform or a glass filter on a transparent box
- * of nothing draws nothing, so those need a surface and a size to have one on. A specimen holding a
- * line of text is its own subject, and a panel behind it is a grey rectangle around what you came to
- * look at. */
 .__lab-specimen__.__bare__ {
     min-width: 168px;
     min-height: 112px;
     background: var(--lab-specimen-bg, #FFFFFF14);
 }
-/* WHAT THE SPECIMEN ACTS ON. A shadow and a stroke are things text does, so a lab for one has to put
- * some in the box -- an empty specimen draws nothing however the value is set, which is why the shadow
- * lab's plates were blank. No colour here: the lab copies the element's own. */
-/* NEVER WRAPPED. The specimen is a node on an unbounded plane, so a line too long for the view runs off
- * the side to be panned to -- which is the whole reason it is a canvas. Wrapping instead broke
- * "Handgloves" across two lines and clipped the second. */
 .__lab-sample__ { font-size: 56px; font-weight: bold; white-space: nowrap; }
 
-/* Something worth filtering behind the glass lab's specimen: the gallery's glass stage, scaled to the lab. The
- * shapes are larger than the card, so it always has an edge of colour to cross, and drift as one. */
-/* SIZED TO ITS SHAPES, not a zero box they overflow: the drift moves this box, and what a moving box paints is
- * judged from its bounds. */
 .__lab-shapes__ { position: absolute; left: -144px; top: -104px; width: 672px; height: 392px; }
 .__lab-shape__ { position: absolute; border-radius: 1998px; }
 .__lab-shape__0 { left: 0px; top: 16px; width: 192px; height: 192px; background: var(--lab-shape-1, #E0398A); }
@@ -1268,7 +901,6 @@ smartguides {
 .__lab-shape__2 { left: 320px; top: 0px; width: 208px; height: 208px; background: var(--lab-shape-2, #F08A24); }
 .__lab-shape__3 { left: 432px; top: 152px; width: 240px; height: 240px; background: var(--lab-shape-3, #2BC7A8); }
 .__lab-shape__4 { left: 224px; top: 192px; width: 176px; height: 176px; background: var(--lab-shape-5, #8B3CF0); }
-/* STRAIGHT EDGES, which a circle has none of: a refraction is legible where it bends one. */
 .__lab-backdrop-text__ {
     position: absolute;
     left: -120px;
@@ -1291,12 +923,8 @@ smartguides {
 .__lab-content__ {
     gap: 10px;
     width: 100%;
-    /* SIZED BY ITS CONTENT, capped: the lab is content-sized too, so a flex-grow child has nothing to grow
-     * into and collapsed to two pixels. The cap is what makes it scroll instead of running off. */
     max-height: 600px;
 }
-/* THIS ENGINE'S flex-shrink DEFAULTS TO 0, so a row of buttons keeps its natural width and overflows
- * instead of fitting. Wrapping is what a lab wants anyway: a keyword set reads as a block. */
 .__lab-row__ {
     flex-direction: row;
     align-items: center;
@@ -1305,18 +933,9 @@ smartguides {
     width: 100%;
 }
 .__lab-row__ > * { flex-shrink: 1; }
-/* AIR UNDER THE STACK, the same eight the separator and the caption keep: the first row sat flush against the
- * box above it, so it read as the last line of the list rather than as the first of the form. */
 .__lab-content__ > .__layer-stack__ { margin-bottom: 16px; }
-/* THREE PIXELS AT EVERY BOUNDARY IN THE SCROLL: under the stack's box, either side of a separator, and under
- * the last row. A row began flush against the box above it and sat eight below the caption's hairline, so the
- * same row read as pressed against one edge and adrift from the other. Measured, not guessed. */
 .__lab-content__ > .__layer-stack__ { margin-bottom: 6px; }
-/* The kit's own rows, at the lab's width -- a few pixels wider than the inspector's floor, because a lab's
- * fields carry a unit and `150.0%` came out as `150.0'`. */
 .__lab-content__ .__configurator__ > .__inline__ > .__config-control__ { min-width: 148px; }
-/* A PILL: a choice among several, set apart from the square fields below it by its shape. A flat fill and no
- * hairline -- a 2px outline on a fully rounded box drew as a thick dark ring. */
 .__lab-keyword__ {
     height: 40px;
     min-height: 40px;
@@ -1328,49 +947,27 @@ smartguides {
 }
 .__lab-keyword__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__lab-row__.__lab-presets__ { gap: 6px; margin-bottom: 2px; }
-/* BETWEEN the stage and the first header, measured: 8px above (this gap and the panel's 2px inset), 6px below
- * (the row's margin and the group's own inset -- the panel's scrolled rows take no gap). The gap is taken back and returned
- * above the readout. Not a negative margin: on the row it lifted it past the panel's clip, and on the stage it
- * collapsed the content-sized lab. */
-/* THE TRANSFORM LAB'S SPECIMEN IS A PLATE WITH A MARK ON IT. The plate is what a translate moves and a scale
- * grows; the mark is what says which way up it ended, since a rotate and a flip both leave a rectangle.
- *
- * THE PLATE IS A TINT OF THE GROUND'S OPPOSITE, and the mark is the ground's own text colour: a translucent white
- * plate under white text is nothing at all on the white plate, which is a plate a person picks. */
 .__style-lab__.__transform-lab__ .__lab-specimen__ {
     min-width: 168px;
     min-height: 112px;
     background: var(--lab-specimen-bg, #FFFFFF14);
-    /* SQUARE CORNERS, because a corner is what the pivot is measured to: at 100% 100% the mark sits where the two
-     * edges meet, and a rounded plate cuts that point away and reads as a mark that has missed. */
     border-radius: 0px;
 }
 .__style-lab__.__transform-lab__ .__lab-specimen__ .__lab-sample__ { color: var(--lab-mark, #DFE1E5); }
 .__lab-stage__.__light__ .__lab-specimen__ { background: var(--lab-specimen-on-light, #00000014); }
 .__lab-stage__.__light__ .__lab-specimen__ .__lab-sample__ { color: var(--lab-mark-on-light, #1E1F22); }
 .__lab-stage__.__light__ .__lab-ghost__ { outline: 2px var(--lab-ghost-on-light, #8C8F94); outline-offset: -1px; }
-/* WHERE IT STARTED: an outline of the same box, under the specimen's own z-index. The OUTLINE reads at full
- * strength -- it is the reference every offset is judged against, and dimmed as a whole it was a rectangle you
- * had to look for -- while the mark inside it stays a ghost of the one on the specimen. */
 .__style-lab__.__transform-lab__ .__lab-ghost__ {
     background: none;
     outline: 2px var(--lab-ghost, #7A7A7A);
-    /* STRADDLING THE EDGE, not sitting outside it: an outline is drawn outside the border box, so its centre line
-     * ran half a pixel past the corner the pivot measures to and the mark's arms missed it. Half of it back. */
     outline-offset: -1px;
 }
 .__style-lab__.__transform-lab__ .__lab-ghost__ .__lab-sample__ { opacity: 0.25; }
-/* THE MARKS' OWN LAYER: the element's box with nothing applied to it, over both. No plate and no padding -- it
- * holds marks placed on the box's own edges, so its content box IS the box. @see StyleLab#mark */
 .__style-lab__.__transform-lab__ .__lab-marks__ {
     background: none;
     padding: 0px;
     z-index: 3;
 }
-/* THE PIVOT, on the element's own box: the mark the canvas draws, from the same painter. A zero-sized anchor
- * carries the position, and the drawing is centred in a box a little larger than it, which is also what there is
- * to grab. The two colours are LENT to it -- it draws neither an outline nor text -- as they are on the canvas's
- * own box. @see PivotMark */
 .__lab-pivot__ {
     position: absolute;
     width: 0px;
@@ -1383,24 +980,14 @@ smartguides {
     top: -14px;
     width: 28px;
     height: 28px;
-    /* THE CANVAS'S OWN CURSOR for the canvas's own mark. */
     cursor: pivot;
-    /* THE ACCENT HERE, not the canvas's white: the stage is a white ghost outline and a white mark, and a white
-     * pivot on top of them is a mark you have to hunt for. The painter is the same; the colours are lent. */
     outline-color: var(--accent, #3574F0);
     text-decoration-color: var(--builder-pivot-halo, #0D0F14C0);
 }
 
-/* NOTHING LEAVES A SWATCH. A transform is the one value that moves what it is drawn on, and unclipped it drew a
- * rotated plate across the panel and over the rows either side of it. `clip` and not `hidden`: a swatch is not a
- * scroll container, and this engine's `hidden` is. The value is applied to what is INSIDE the swatch, since an
- * element's own transform is not clipped by its own overflow. */
 .__style-chip-swatch__ { overflow: clip; }
 .__layer-sample__ { overflow: clip; }
-/* The preset the value currently is. */
 .__lab-keyword__.__active__ { background: var(--accent-soft, #2E436E); color: var(--fg, #DFE1E5); }
-/* The footer: what was measured, then what will be written. A hairline above it, so the readout reads as
- * a statement about the lab rather than another control in it. */
 .__lab-caption__ {
     color: var(--fg-hint, #7A7A7A);
     font-size: 18px;
@@ -1408,7 +995,6 @@ smartguides {
     padding-top: 10px;
     outline: linear-gradient(to bottom, var(--configkit-field-border, #4A4D52) 0%, transparent 1%);
 }
-/* What will be written, printed: a lab whose readout and write can differ is one you check by hand. */
 .__lab-css__ {
     color: var(--fg-secondary, #9DA0A8);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
@@ -1416,8 +1002,6 @@ smartguides {
     white-space: normal;
 }
 
-/* The gradient bar IS the gradient, and a stop is a handle on it. */
-/* THE RAMP AND ITS TRACK, inset by half a swatch each side so a stop at 0% or 100% is whole. */
 .__gradient-bar__ {
     margin-left: 14px;
     margin-right: 14px;
@@ -1425,11 +1009,9 @@ smartguides {
     margin-bottom: 4px;
     flex-shrink: 0;
 }
-/* Over a checkerboard, drawn in Java: a transparent stop reads as transparent rather than as the panel. */
 .__gradient-ramp__ { height: 44px; border-radius: 6px; position: relative; cursor: pointer; }
 .__gradient-fill__ { position: absolute; left: 0px; top: 0px; width: 100%; height: 100%; border-radius: 6px; }
 .__gradient-track__ { height: 40px; position: relative; cursor: pointer; }
-/* BESIDE THE RAMP, pointing up at where the stop sits, as Photoshop's and DevTools' stops do. */
 .__gradient-stop__ {
     position: absolute;
     top: 0px;
@@ -1453,20 +1035,10 @@ smartguides {
 }
 .__gradient-stop__.__active__ .__gradient-stop-pointer__ { color: var(--accent, #3574F0); }
 .__gradient-stop__.__active__ .__gradient-stop-swatch__ { outline: 4px var(--accent, #3574F0); }
-/* Far enough off the track that letting go removes it. */
 .__gradient-stop__.__removing__ { opacity: 0.35; }
 
-/* A ROW'S CONTROL: the dial, then the degrees. */
-/* Right-aligned: the degrees field is sized to its number, and the dial and directions sit beside it. */
-/* THE SAME EDGE AS EVERY OTHER ROW: the dial starts where the pad and the nine cells do, and the number takes
- * what is left, so the angle row reads as one form with the pivot's under it. Pushed to the right it lined its
- * field up with theirs and left its gizmos floating in the middle of the row. */
 .__angle-field__ { flex-direction: row; align-items: center; gap: 12px; width: 100%; }
-/* AS WIDE AS AN ANGLE, no wider: a degree field carries four characters, and grown to the row's own width it
- * was a field with an inch of nothing in it. The row ends before the others do, which is what a control that
- * does not need the width looks like. */
 .__angle-field__ > numbercontrol, .__angle-field__ > .__config-control__ { width: 112px; flex-grow: 0; flex-shrink: 0; }
-/* AT THE PAD'S OWN SIZE, so the angle row's first block and the pivot row's line up as a column. */
 .__angle-dial__ {
     width: 76px;
     height: 76px;
@@ -1479,7 +1051,6 @@ smartguides {
     justify-content: center;
     cursor: pointer;
 }
-/* THE NEEDLE'S FOOT ON THE CENTRE, and it turns about its foot: centred whole, it swung about a point 14px below. */
 .__angle-needle__ {
     position: absolute;
     left: 36px;
@@ -1489,8 +1060,6 @@ smartguides {
     background: var(--accent, #3574F0);
     transform-origin: center bottom;
 }
-/* The eight directions around an empty middle, each an arrow turned to the way it points. */
-/* As tall as the dial beside it, so the row is no taller than a field. */
 .__angle-presets__ {
     flex-direction: row;
     flex-wrap: wrap;
@@ -1513,8 +1082,6 @@ smartguides {
 .__angle-preset__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__angle-preset__.__active__ { color: var(--accent, #3574F0); }
 
-/* TWO NUMBERS WITH A CHAIN BETWEEN THEM, the free transform bar's W and H as a row's control: the letter, the
- * field, the chain, the other letter and field. @see LinkedPair */
 .__linked-pair__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
 .__linked-pair__ > numbercontrol { width: 0px; flex-grow: 1; min-width: 0px; }
 .__linked-axis__ { color: var(--cfg-label-text); flex-shrink: 0; }
@@ -1535,7 +1102,6 @@ smartguides {
 .__linked-chain__:hover { background-color: var(--panel-header-icon-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__linked-chain__.__active__ { color: var(--accent, #3574F0); }
 
-/* A LENGTH: the number, and the unit it is in -- a chip that is pressed rather than a word to spell. @see LengthField */
 .__length-field__ { flex-direction: row; align-items: center; gap: 8px; width: 100%; }
 .__length-field__ > numbercontrol { width: 0px; flex-grow: 1; min-width: 0px; }
 .__length-unit__ {
@@ -1555,10 +1121,8 @@ smartguides {
     color: var(--fg, #DFE1E5);
 }
 
-/* A ROW'S CONTROL: the pad, then X and Y beside it. */
 .__offset-field__ { flex-direction: row; align-items: center; gap: 12px; width: 100%; }
 .__offset-field__ > .__vector__ { width: 0px; flex-grow: 1; }
-/* The offset pad: the dot is where the shadow falls, the crosshair is no offset at all. */
 .__offset-pad__ {
     width: 76px;
     height: 76px;
@@ -1576,15 +1140,7 @@ smartguides {
 .__offset-axis__.__horizontal__ { left: 0px; top: 36px; width: 100%; height: 2px; }
 .__offset-axis__.__vertical__ { top: 0px; left: 36px; width: 2px; height: 100%; }
 .__offset-dot__ { width: 18px; height: 18px; border-radius: 1998px; background: var(--accent, #3574F0); }
-/* A PAD THAT IS THE BOX: the dot sits at a fraction of it rather than an offset from its middle, and the nine
- * places anyone means are cells in front of it -- at the pad's own size, since the two are one control and read
- * as a pair. @see OffsetPad.Space#BOX */
-/* RAW: nine cells and nothing round them. Framed like the pad beside it, the grid read as a field holding a
- * picture of a box rather than as the nine places themselves. It keeps the pad's size, which is what lines the
- * two up. */
 .__offset-field__.__box__ > .__config-control__.__anchor__ {
-    /* THE PAD'S COLUMN, with the cells CENTRED in it rather than filling it: unframed, a grid grown to the pad's
-     * own size reads as the loudest thing in the row, when it is the shorthand beside the real control. */
     width: 76px;
     height: 76px;
     flex-shrink: 0;
@@ -1602,8 +1158,6 @@ smartguides {
 }
 .__offset-pad__.__box__ .__offset-dot__ { position: absolute; margin-left: -9px; margin-top: -9px; }
 
-/* THE CORNER BOX, centred: the shape it rounds, a handle inside each corner as far in as the corner is round, and
- * the chain between them in the middle. A border rather than an outline, which drew as a thick ring on a round box. */
 .__corner-stage__ {
     flex-direction: row;
     justify-content: center;
@@ -1632,15 +1186,12 @@ smartguides {
     margin-right: -10px;
     margin-bottom: -10px;
     border-radius: 1998px;
-    /* HOLLOW, so the curve it sits on shows through. A border, not an outline: an outline on a round box drew thick. */
     background: none;
     border-width: 3px;
     border-color: var(--accent, #3574F0);
     cursor: pointer;
 }
 .__corner-puck__:hover { border-color: var(--accent-hover, #4A82F2); }
-/* A SIDE'S HANDLE, at the inner edge of its border and centred along it: a short bar across the side, hollow as the
- * corners' are. Only the offset from its own side is written from Java; the centring is here. */
 .__side-puck__ {
     position: absolute;
     border-radius: 1998px;
@@ -1656,7 +1207,6 @@ smartguides {
 .__side-puck__.__left__, .__side-puck__.__right__ { top: 50%; width: 12px; height: 32px; margin-top: -16px; }
 .__side-puck__.__left__ { margin-left: -6px; }
 .__side-puck__.__right__ { margin-right: -6px; }
-/* Photoshop's chain, as the transform bar's: dim while each corner goes alone, the accent while they go together. */
 .__corner-link__ {
     width: 40px;
     height: 40px;
@@ -1674,11 +1224,6 @@ smartguides {
 .__corner-link__:hover { background-color: var(--panel-header-icon-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__corner-link__.__active__ { color: var(--accent, #3574F0); }
 
-/* THE STACK: one inset box, as a list in a property panel is, holding a header and its rows. Order is the value,
- * so a row moves rather than sorts. */
-/* INSET ON THE RIGHT AS A FORM ROW'S CONTROL IS, so the box's edge lines up with the fields' and clears the lab's
- * bar. Padding on a full-width stack rather than a margin on the box: a margin beside `width: 100%` overflows, and
- * without the width the box took its longest row's. */
 .__layer-stack__ {
     width: 100%;
     flex-shrink: 0;
@@ -1702,7 +1247,6 @@ smartguides {
 }
 .__layer-stack__ .__layer-title__ { font-size: 18px; color: var(--fg-secondary, #9DA0A8); }
 .__layer-stack__ .__layer-count__ { font-size: 18px; color: var(--fg-hint, #7A7A7A); flex-grow: 1; }
-/* GHOST, as a header's actions are: a filled button above the rows read as one more row. */
 .__layer-add__ {
     height: 32px;
     min-height: 32px;
@@ -1714,12 +1258,10 @@ smartguides {
 }
 .__layer-add__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
 .__layer-stack__ .__layer-add__ text { font-size: 18px; }
-/* THREE ROWS, THEN IT SCROLLS: a row is 48px. The right padding keeps the bar off the rows' remove buttons. */
 .__layer-list__ {
     width: 100%;
     max-height: 144px;
     padding-right: 10px;
-    /* A spin past the last layer stays here: the lab around it moving mid-list read as the list jumping. */
     overscroll-behavior: contain;
 }
 .__layer-row__ {
@@ -1734,7 +1276,6 @@ smartguides {
     cursor: pointer;
 }
 .__layer-row__:hover { background: var(--list-hover-bg, #393B40); }
-/* SELECTED IS A LIFT, not the accent: a saturated slab behind one row was the loudest thing in the lab. */
 .__layer-row__.__active__ { background: var(--list-selected-inactive-bg, #43454A); }
 .__layer-sample__ {
     width: 60px;
@@ -1743,23 +1284,17 @@ smartguides {
     border-radius: 6px;
     align-items: center;
     justify-content: center;
-    /* A 32px blur would otherwise paint across the rows above and below, as the chip swatch says. */
     overflow: hidden;
     background: var(--configkit-band-bg, #3A3D42);
     outline: 2px var(--lab-specimen-bg, #FFFFFF14);
 }
 .__layer-row__.__active__ .__layer-sample__ { outline: 2px var(--accent, #3574F0); }
-/* WHAT A LAYER IS APPLIED TO when nothing else is given: a plate inside the frame, so a translate or a rotate moves
- * the plate and the frame clips it, where applied to the frame itself it carried the frame out of the row. */
 .__layer-sample-plate__ {
     width: 28px;
     height: 20px;
     border-radius: 4px;
     background: var(--fg-hint, #7A7A7A);
 }
-/* Bigger than a row label, because a shadow is cast BY the mark: a 18px glyph casts a 18px-wide one.
- * UNDER THE STACK, which is a config control: the kit's `.__config-control__ text` (specificity 11) reaches
- * its rows and would otherwise set these at the form's size. */
 .__layer-stack__ .__layer-sample-text__ { font-size: 24px; font-weight: bold; color: var(--fg, #DFE1E5); }
 .__layer-stack__ .__layer-text__ { font-size: 18px; }
 .__layer-text__ {
@@ -1769,8 +1304,6 @@ smartguides {
     text-overflow: ellipsis;
 }
 .__layer-row__.__active__ .__layer-text__ { color: var(--fg, #DFE1E5); }
-/* A HIDDEN LAYER stays in its place, quieter, with its eye held up and slashed. */
-/* Veiled rather than faded, as a hidden declaration is: the sample is a clipped layer already, and opacity nests one. */
 .__layer-row__.__off__ .__layer-sample__ { overlay: var(--hidden-veil-recessed, #13141699); }
 .__layer-row__.__off__ .__layer-text__ { color: var(--fg-disabled, #5A5D63); }
 .__layer-eye__ {
@@ -1791,7 +1324,6 @@ smartguides {
 .__layer-eye__.__off__ { opacity: 1; }
 .__layer-eye__.__off__ { overlay: icon("crystalgui:general/hide"); }
 .__layer-eye__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
-/* Borderless glyphs held until the row is pointed at or picked: three filled boxes per row was a toolbar. */
 .__layer-action__ {
     width: 32px;
     height: 32px;

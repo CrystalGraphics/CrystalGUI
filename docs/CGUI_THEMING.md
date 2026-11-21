@@ -1,9 +1,7 @@
 # CGUI Theming — Themes, Schemes, and the Token Vocabulary
 
-*The reference for CrystalGUI's appearance layer. Architecture and rationale live in
-`plan/style-overhaul.md`; this is the working guide: how to author a theme, how to author an editor
-colour scheme, what every token means, and the rules that keep the system from rotting. The token
-table at the bottom is GENERATED and machine-checked — see §6.*
+*How to author a theme and an editor colour scheme, what every token means, and the rules that keep the
+system from rotting. The token table (§6) is generated and machine-checked.*
 
 ---
 
@@ -91,17 +89,15 @@ theme may define none of them. Both directions are build-enforced; the split is 
 ## 5. Process rules (the anti-rot half)
 
 - **A new colour is an existing token until proven otherwise.** The review question for a new
-  system token: "which existing surface/fg/accent is this, really?" 161 unrelated greys is how
-  the old default.css died.
+  system token: "which existing surface/fg/accent is this, really?"
 - **Adding a widget** = its component tokens in base.css + function rules + look rules + this
   doc regenerated, in the same commit. The governance tests fail on a missed step.
 - **The vocabulary is a public API.** Append-mostly; renames ship as manager-resolved aliases
   for a full release cycle before the old name dies.
 - **No `!important`, no `asset()`, no bare hex** in the engine's `ua/` parts — a hex may appear
   only as a `var()` fallback. `StyleGovernanceTest` enforces all of it.
-- **The user-agent sheet is nine files, one sheet** (`StyleSheetRegistry.DEFAULT_SHEET_PARTS`).
-  Order across the parts is as load-bearing as order within one — files split at section
-  boundaries and never reorder.
+- **The user-agent sheet is fifteen files, one sheet** (`StyleSheetRegistry.DEFAULT_SHEET_PARTS`).
+  Order across the parts matters as much as order within one.
 
 ## 6. Token reference — GENERATED
 

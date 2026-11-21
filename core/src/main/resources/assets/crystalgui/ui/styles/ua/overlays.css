@@ -1,50 +1,23 @@
 /* ua/overlays.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
- *
- * TextField, the generic layout helpers, Tooltip, Dialog, popovers/menus/dropdowns, resize handles, cursors.
- *
- * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
- * one sheet the engine loads — rule order across files is as load-bearing as within one
- * (:disabled after :hover ties), so files split at section boundaries and never reorder.
- * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
- * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+ * Text fields, layout helpers, tooltips, dialogs, popovers and menus, the modal scrim, resize handles, cursors, Paste Attributes and the frame stats plate.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
+ */
 
-/* ── TextField ──────────────────────────────────────────────────────────────────────────────────
- * No internal children — caret, selection and placeholder are all painted, so `color` does double
- * duty as the text and caret colour. Height is set here because a field with no content would
- * otherwise collapse to nothing.
- *
- * Note the padding does NOT have to leave room for the text vertically: the field paints its text
- * centred on the BORDER box and clips only horizontally, precisely because a one-line field is
- * routinely shorter than its font's line box once padding comes out (Ore's 28px field with 6px
- * padding leaves 16px for 20px text). The padding here positions the text's left edge and nothing
- * more. */
 textfield {
     height: 32px;
     padding: 6px;
     align-items: center;
     background: var(--field-bg, #2A2A2A);
     color: var(--field-fg, #EEEEEE);
-    /* The one rounded widget here that also CLIPS (it scissors its own text horizontally), so it is
-     * the only one this sheet moves onto resolveOverflowClip()'s FBO mask path. Worth it on a field,
-     * which is the widget a square corner reads worst on; not worth it on a scroll viewport, which is
-     * why the containers above stay square. */
     border-radius: var(--radius-control, 4px);
 }
-/* :blank is driven by TextField.isBlank(), already wired into PseudoClasses — so the placeholder,
- * which reuses `color`, dims itself with no widget-specific support. */
 textfield:blank {
     color: var(--field-placeholder, #7A7A7A);
 }
-/* :invalid comes from TextField.isInvalid() — content that fails its validator, or a number outside
- * its range. The value stays editable; only the styling changes. */
 textfield:invalid {
     background: var(--field-invalid-bg, #4A2A2A);
     color: var(--field-invalid-fg, #FF9A9A);
 }
-/* .__conflict__ is TextField.setConflicting: the text names something that already exists. A red edge rather
- * than :invalid's fill, because the text is well-formed and its owner may still offer a free name for it.
- * THE FOCUS RING TOO: a field being typed into is focused, and :focus-visible's 2px ring is drawn inside the
- * border box, over the border -- so a red border alone stayed blue until focus left. */
 textfield.__conflict__ {
     border-width: 2px;
     border-color: var(--field-conflict-border, #F14C4C);
@@ -54,11 +27,6 @@ textfield:disabled {
     background: var(--field-disabled-bg, #232323);
     color: var(--field-disabled-fg, #6E6E6E);
 }
-
-/* ── Generic layout helpers ─────────────────────────────────────────────────────────────────────
- * NOT a browser concept — these are a deliberate convenience so callers (and every harness scene)
- * stop re-declaring the same three rules. Note that shipping them claims these class names for every
- * consumer of the library, which is why the list is kept short and generic. */
 
 .row {
     flex-direction: row;
@@ -72,40 +40,13 @@ textfield:disabled {
 .label {
     color: var(--label-fg, #FFFFFF);
 }
-/* Eats the leftover space in a row/column — the usual "push the rest to the far end" trick. */
 .spacer {
     flex-grow: 1;
 }
 
-/* ── Tooltip ────────────────────────────────────────────────────────────────────────────────────
- * A `tooltip` is promoted into the top layer (CSS Position 4 §top-layer, the mechanism behind
- * <dialog> and popovers), so it is NOT clipped by an ancestor's `overflow` — that is the entire
- * reason the top layer exists. Placement is computed per frame in Tooltip.reposition().
- *
- * `margin-top` is load-bearing, not decoration: Java positions the tooltip flush against the
- * anchor's bottom edge and this is what creates the visual gap. Widgets write structure, the
- * cascade writes geometry — so the gap is tunable here, per theme, without touching Java.
- * A theme that flips a tooltip above its anchor will want margin-bottom instead, and one placed BESIDE
- * its anchor wants neither -- see `tooltip.__beside__` below. */
-
 tooltip {
-    /* INSTANT BY DEFAULT, and the wait is opted into by whatever needs it (tooltip.__wait__ below).
-     *
-     * This read 1 for a long time, on the argument that a hover is not a request: the pointer crosses
-     * a dozen controls on its way somewhere, and waiting for it to STOP is what turns "passed over"
-     * into "asked about". That is a real distinction and it is still why __wait__ exists -- but it
-     * describes a MINORITY of the tooltips here. Most label something small and deliberate: a data
-     * point on a chart, a status entry, a swatch, a glyph button that says nothing else about itself.
-     * Reaching one of those IS the question, and answering a second later reads as the label being
-     * broken rather than as restraint.
-     *
-     * So the default is the common case and the wait is stated where it earns itself. Note it can only
-     * be stated as a CLASS: a tooltip is a child of the document, not of its anchor, so no selector
-     * describing where the anchor lives can reach it.
-     *
-     * The property, not a constant in the widget: this class's own doc asked for it that way. */
+    /* Instant by default; a wait is opted into with __wait__, a class because a tooltip is not its anchor's child. */
     tooltip-delay: 0;
-    /* IntelliJ's tooltip: the overlay surface, a hairline border, 8px corners and room around the words. */
     background: var(--tooltip-bg, #2B2D30);
     outline: 2px var(--tooltip-border, #43454A);
     border-radius: var(--radius-control, 8px);
@@ -114,8 +55,6 @@ tooltip {
     padding-top: 6px;
     padding-bottom: 8px;
     margin-top: 6px;
-    /* FADED IN, every tooltip: the closed state is a declared 0 so the fade has a start (Tooltip.OPEN_CLASS).
-     * Hiding has no fade, for the reason it has no delay: the pointer has moved on. */
     opacity: 0;
     transition: opacity 120ms ease;
 }
@@ -124,14 +63,10 @@ tooltip.__open__ {
     opacity: 1;
 }
 
-/* ABOVE ITS ANCHOR it sits flush on the edge: the downward gap would push it back over the anchor.
- * @see Tooltip#ABOVE_CLASS */
 tooltip.__above__ {
     margin-top: 0px;
 }
 
-/* THE HELP TOOLTIP -- IntelliJ's HelpTooltip: the name, its shortcut beside it in the dimmer tone, and a
- * description under both. Tooltip.setShortcut / setDescription fill the parts; empty ones take no space. */
 tooltip::part(heading) {
     align-items: center;
     gap: 12px;
@@ -153,19 +88,6 @@ tooltip::part(description) {
     white-space: normal;
     flex-shrink: 0;
 }
-/* A WAIT, for a tooltip whose anchor the pointer CROSSES rather than aims at -- see
- * Tooltip.WAIT_CLASS, which is what puts this class on one. A window caption's controls are the
- * standing example: three marks in a corner that nobody reads, where a label arriving at once lands
- * over the button you are already clicking.
- *
- * A CLASS, not a selector on the anchor. A tooltip is a child of the DOCUMENT rather than of what it
- * describes, so `.__window__ .__title-bar__ .__controls__ tooltip` can never match -- and both this
- * sheet's siblings had been written that way, asking for two seconds and getting whatever the rule
- * above said. */
-/* BESIDE ITS ANCHOR, where the gap is horizontal and the top margin is simply an offset: it would put
- * the words below the thing they name, which is what the activity bar's labels were doing. The gap on
- * this axis is the placement's own `gap` argument, which is the caller's to set -- a rail passes one.
- * @see Tooltip#BESIDE_CLASS */
 tooltip.__beside__ {
     margin-top: 0px;
 }
@@ -174,113 +96,26 @@ tooltip.__wait__ {
     tooltip-delay: 0.5;
 }
 
-
-/* max-width goes on the LABEL, not on the tooltip box. UIText wraps against a width it can see on
- * itself — an ancestor's max-width is not one, because a self-sizing UIText reports its full
- * unwrapped run and the ancestor would only ever clip the box while the glyphs spilled out of it.
- * Bounding the label instead makes it wrap, and the tooltip box then shrink-wraps the wrapped text,
- * which is also what keeps edge-clamping honest — placement measures the box, so the box has to be
- * the size of what actually draws. */
+/* max-width goes on the label: UIText wraps against its own width, not its box's. */
 tooltip .__label__,
 tooltip::part(label) {
-    /* UNDER THE SHELL'S 10, as IntelliJ's tooltips sit under its UI font -- a tooltip is read in
-     * passing, beside the text it explains, and at the same size it reads as more of that text. */
     font-size: 16px;
     color: var(--tooltip-fg, #FFFFFF);
     max-width: 340px;
-    /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
-     * it describes. Anchor it to a status-bar item, a table header, a graph node title — anything that
-     * carries `white-space: nowrap` so its own label ellipsizes — and the tooltip inherits the prohibition
-     * and lays its whole sentence out on one line. `max-width` then clamps the BOX while the glyphs run
-     * straight past it, which is a background two thirds the length of its own text.
-     *
-     * No amount of sizing fixes that from the tooltip's side: you cannot wrap text that has been told not
-     * to wrap. A tooltip is not part of its anchor's text flow — it only lives there so the cascade gives
-     * it colour and font — so the one thing it must not inherit is how that anchor breaks lines. */
+    /* Set explicitly: white-space inherits, and a tooltip lives as an internal child of whatever it is on. */
     white-space: normal;
-    /* NEVER SHRUNK. The box shrink-wraps the label, so a label that gives way leaves the background
-     * narrower than the glyphs drawn on it — which is what a tooltip on a short status item looked like.
-     * The wrap is `max-width`'s job; shrinking is nobody's. */
     flex-shrink: 0;
 }
 
-/* ── Resize handle ──────────────────────────────────────────────────────────────────────────────
- * The `__resizer__` internal child, added to any element whose `resize` is not `none`. CSS UI 4
- * leaves the grabber's size, position and appearance entirely to the UA, so all of it is here.
- *
- * Pinned to the bottom-right corner via `position: absolute` (set in Java, since being out of flow
- * is structural — a handle that took a slot in its parent's layout would reflow the content the
- * moment `resize` was set). Everything else is a theme's to change.
- *
- * Deliberately square and small: it has to be grabbable without covering content, and it is drawn
- * INSIDE the element (unlike a browser's, which lives in the scrollbar gutter — see Resize's
- * javadoc for why we don't inherit that constraint). */
-
-/* ── Dialog ─────────────────────────────────────────────────────────────────────────────────────
- * A floating, movable panel — the web's `<dialog>`, modeless form. `position: absolute` is set in
- * Java because being out of flow is structural, not cosmetic: a dialog that participated in its
- * parent's layout would shove siblings around every time it moved.
- *
- * Deliberately NOT in the top layer. Per the HTML spec only showModal() promotes; a modeless dialog
- * stacks normally, which is what lets several editor panels coexist and order among each other and
- * ordinary content via z-index.
- *
- * The title bar is the drag handle, so it needs enough height to be grabbable — that is functional
- * geometry, which is why it lives here rather than in a theme. */
-
-/* NEUTRAL grey throughout — not the earlier #2A2F36/#3A4450 blue-grey. Same reasoning as the popover
- * and config-kit repaint: a dialog is chrome the same way a menu or a dropdown's face is, and it was
- * the last widget left in its own tinted family after those moved to grayscale.
- *
- * `color` is stated explicitly here rather than left to the property's own inherited default (white) —
- * that default is what the title label was quietly relying on, and an inherited value a widget merely
- * happens to agree with is not the same as one it actually states; see `dialog .__close__` below for
- * exactly the case where relying on it silently goes wrong. */
 dialog {
     min-width: 160px;
     min-height: 80px;
     background: var(--dialog-bg, #2E2E2E);
-    /* NO EDGE ON THE DIALOG ITSELF -- the BODY carries it, three sides only. @see .__content__ below.
-     *
-     * THE RING IS KEPT AT ZERO ALPHA rather than removed: `.__pulse__` eases `outline-color` from
-     * whatever rests here, and a property with no resting value declines to transition and snaps, so
-     * the blocked-modal pulse would lose the half of it that is an edge. It costs nothing -- an outline
-     * never affects layout, and a transparent stroke draws nothing.
-     *
-     * `#00000000`, not `transparent`: that keyword does not parse in this shorthand and a value it
-     * cannot read degrades to the initial one, which is an OPAQUE edge. CSS order, alpha last. */
     outline: 2px #00000000;
     color: var(--dialog-fg, #DDDDDD);
     z-index: 5;
-    /* THE RESTING END of the blocked pulse — __pulse__ below carries what it eases FROM, which is the
-     * way round a transition has to be written: a value written once from Java is itself transitionable,
-     * so the engine eases toward it and the cleanup retargets it back. Both ends name the same transform
-     * function, because a list that does not line up snaps at the halfway point instead of lerping. */
     transform: scale(1, 1);
-    /* FADED IN AND OUT BY DEFAULT, where a dialog used to appear and vanish on a single frame.
-     *
-     * THE PAIR IS THE MECHANISM: `opacity: 0` here and `1` on `.__open__` below. A box coming out of
-     * `display: none` has no previous opacity to interpolate from — the problem `@starting-style` exists
-     * to solve on the web — so the closed state has to be a real declared value rather than an absence.
-     *
-     * `display` IS IN THE LIST, and it is what makes the fade OUT exist at all. display is discrete, so
-     * without naming it the box snaps to `none` on the frame the close happens and takes the opacity
-     * transition down with it: the dialog fades in and then vanishes. Naming it holds the element laid
-     * out for the same duration and hides it at the end — CSS `transition-behavior: allow-discrete`,
-     * implemented in the style engine (LayoutProperties.DISPLAY) rather than in `Dialog`, so this is a
-     * default any sheet can restate and nothing in Java can disagree with.
-     *
-     * ONE LIST, not two declarations: `transition` is a single property whose value is the whole list,
-     * so a second declaration REPLACES this one rather than adding to it.
-     *
-     * OPACITY ALONE, no scale. Every other overlay that appears here — menus, the notification balloon,
-     * Preferences — fades and does not move, and a dialog is the one overlay that can be DRAGGED: a
-     * scale runs through the same compositor transform the pulse and the window animator write, and two
-     * writers on one property is the arrangement this engine documents as the way to lose a gesture. */
     opacity: 0;
-    /* The two entries in front belong to the blocked-modal pulse and stay in the list at their own
-     * 120ms: that is a twitch saying "the click did nothing", not an appearance, and it has to be over
-     * before the eye goes looking for a cause. */
     transition: transform 120ms ease-out, outline-color 120ms ease-out, opacity 240ms ease, display 240ms ease;
 }
 
@@ -288,151 +123,56 @@ dialog.__open__ {
     opacity: 1;
 }
 
-/* Says "this dialog is why that click did nothing" — Windows' own answer, and the thing that keeps
- * window-scoped modality from reading as a hung window. A brief swell and a brightened edge; the class
- * is dropped on the next frame, so pressing repeatedly re-plays rather than latching. */
 dialog.__pulse__ {
     transform: scale(1.03, 1.03);
     outline: 2px var(--dialog-pulse-border, #3574F0);
 }
-/* `ColorControl`'s popup only. Translucent-over-OPAQUE composites right back to opaque (tinted, but
- * alpha 1.0) — colorselector's own `#1E1E1E76` sitting directly on this element's normal `#2E2E2E`
- * (full alpha) had nothing behind IT to show through either, so nothing ever read as see-through no
- * matter what colorselector's own alpha was. This is the layer that has to give first: with the root
- * itself translucent too, both layers now compound against whatever is actually behind the dialog —
- * the same two-layer shape `graphnode`'s fully transparent root plus its translucent `.__inputs__`/
- * `.__outputs__` bands already uses. Scoped to `.__picker__` so every other `Dialog` in the engine
- * (draggable panels, etc.) stays fully opaque; `.__title-bar__` keeps its own separate `#393939`. */
 dialog.__picker__ {
     background: var(--dialog-picker-bg, #2E2E2E76);
 }
 
-/* 28px, not 16 — matches the base `button, dropdown` row height already used everywhere else in this
- * sheet, rather than a number picked just for this one bar. Against a 20px title, 16 read as a band of
- * dead air above and below the text; 14 is the smallest this convention already commits to. */
 dialog .__title-bar__ {
-    /* THE FRAME'S CAPTION, to the pixel. A dialog and a window sit side by side on the same desktop, so
-     * a caption of a different height and a different grey reads as one of them being wrong rather than
-     * as the two being different kinds of thing. 40px is the frame's own derivation: a 32px control plus
-     * the 4px above and below it. `min-height`, not `height`, so a longer title can still grow it. */
     min-height: 40px;
     width: 100%;
     padding-left: 12px;
-    /* NO RIGHT PADDING. The close button stretches to the caption's full height and sits flush against
-     * its end, exactly as the frame's controls do -- the hover fill is meant to reach the corner. */
     padding-right: 0px;
-    /* Explicit `row`: this engine's Taffy default is COLUMN, not CSS's `row` (see AGENTS.md), so
-     * without this the close button stacks underneath the title instead of beside it. */
     flex-direction: row;
     align-items: center;
-    /* Title left, close button hard right, whatever the dialog's width. */
     justify-content: space-between;
     background: var(--dialog-title-bg, #26282B);
     color: var(--dialog-title-fg, #DFE1E5);
-    /* PAINTED AFTER THE BODY, which is what hides the body's fourth edge. Children paint in z-index
-     * order (Box#paintOrder sorts by it), and the body's outline puts a 2px segment on this bar's last
-     * row -- so the caption's own background covers it and the header and body read as one surface.
-     * They do not overlap otherwise, so nothing else changes by raising it. */
     z-index: 1;
 }
 
-/* ── Popovers, menus and dropdowns ──────────────────────────────────────────────────────────────
- * `position: absolute` is forced at IMPORTANT origin by top-layer promotion, and `left`/`top` are written
- * by AnchoredPlacement — so nothing here may set either, or it would fight placement every frame.
- *
- * A popover is a bare box on the web (the UA sheet gives `<dialog>`/`[popover]` little more than borders),
- * so this is our chrome: enough for a menu to be legible with no theme loaded. */
 popover,
 menu,
 dropdown .__menu__,
 dropdown::part(menu) {
     min-width: 120px;
-    /* LIGHTER than the panels it floats over, with a LIGHT hairline. Both matter, and the first version
-     * got both backwards: #2A2F36 with a #00000060 outline is within a few points of every dark surface in
-     * this sheet, so a menu rendered perfectly and was simply invisible — reported from the harness as
-     * "I right-clicked but no menu". A popup that cannot be told apart from what is behind it has failed at
-     * the one job it has, so being separable is a functional requirement here, not styling.
-     *
-     * NEUTRAL grey, not the earlier #3F4A57 blue-grey — a dropdown's closed face (`--cfg-popup`, the
-     * config kit and every graph node share it) is the same grayscale family as this open menu, and a
-     * tinted menu on top of a grayscale face read as two different materials the instant it opened. */
     background: var(--menu-bg, #4B4B4B);
     outline: 2px var(--menu-border, #8C8C8C);
-    /* Light text, set on the POPOVER so it inherits to every item and to arbitrary popover content.
-     * Needed because a Dropdown is a Button, so its menu — an internal child — inherits the button's dark
-     * `color: #222222`, which on this surface renders as barely-legible grey. Colour is inheritable, so the
-     * fix belongs at the top of the popover rather than repeated on each item. */
     color: var(--menu-fg, #DDDDDD);
-    /* Transparent while closed, opaque once `:open` holds — see the rule below. The pair is what gives the
-     * transition a real value to start from; a popover coming out of `display: none` otherwise has no previous
-     * opacity to interpolate from, which is the problem `@starting-style` exists to solve on the web.
-     *
-     * QUICK, deliberately: the pause before a submenu appears is the hover delay doing its job, and a slow
-     * fade stacked on top of it reads as lag rather than polish. The timing lives here and not in Java because
-     * the stylesheet owns durations — drop this line and popovers snap in, with nothing broken.
-     *
-     * `display` IN THE LIST is the fade OUT: it holds the closed box laid out for the fade, as a dialog's, and
-     * the popover leaves the top layer once it has no box. */
     opacity: 0;
     transition: opacity 120ms ease, display 120ms ease;
-    /* ONE, AND THE BORDER TAKES IT. An `outline` is painted INSET over the box's own last pixel -- the
-     * rule the window caption records for its close button -- so this pixel is the border's and the
-     * highlight begins immediately after it. There is no surface between the two by design: measured
-     * against IntelliJ, what looks like a gap there is the border itself.
-     *
-     * It was 2 for one round, which leaves a pixel of surface showing, and that read as the bar floating.
-     * The row adds nothing either way -- it used to pull in 8px more, so the highlight sat 12px inside a
-     * popup that looked like a wide box around a narrow list.
-     *
-     * Vertical is NOT this number: `menu { padding-top/bottom }` below states it separately, because the
-     * vertical inset is tied to the row rhythm (row padding + gap) and the horizontal one is not. */
     padding: 4px;
     flex-direction: column;
-    /* A long menu must scroll rather than run off the screen. AnchoredPlacement clamps the BOX into the
-     * containing block, which without this would just squash the items instead. */
     overflow: hidden;
 }
 
-/* NO `width: 100%` on the items container or the items, deliberately. A percentage width against a
- * shrink-to-fit parent cannot contribute to that parent's intrinsic size, so the menu had no way to learn
- * how wide its items wanted to be and collapsed to `min-width` — clipping every label. Letting the default
- * `align-items: stretch` do the work instead means the menu sizes to its widest item and the items then
- * fill it, which is the standard CSS idiom for exactly this and the reason the idiom exists. */
-/* `:open` AND NOT A CLASS, and the difference is what a shadow tree makes of it.
- *
- * This was `popover.__open__, menu.__open__, dropdown .__menu__.__open__`, which works for a popover in
- * the light tree and cannot work for one inside a shadow tree: a class does not cross that boundary. A
- * Dropdown's menu therefore matched the base rule above through `::part(menu)` -- picking up its
- * `opacity: 0` -- and matched nothing that lifted it again, so the menu opened, promoted, placed itself
- * correctly and drew at zero alpha. Every observable said it was open; the screen said nothing had
- * happened.
- *
- * A pseudo-class is legal after `::part()` where a class is not, which is exactly why the web spells
- * this one `:popover-open`. The class is still flipped by the widget for any theme that reads it; this
- * rule no longer depends on it. */
+/* :open, not a class: a class does not cross a shadow boundary, and a pseudo-class is legal after ::part(). */
 popover:open,
 menu:open,
 dropdown::part(menu):open {
     opacity: 1;
-    /* IN SLOWER THAN OUT: a transition plays the list of the state it goes to, so this is the fade in. */
     transition: opacity 180ms ease, display 180ms ease;
 }
 
-/* THE GAP MATCHES THE POPUP'S PADDING, and that equality is the whole rule.
- *
- * They were 2px and 4px, so the first row sat 4px from the frame while every row after it sat 2px from
- * its neighbour -- and with the focus highlight being an inset BAR rather than a full-width strip, the
- * difference is drawn rather than merely spaced, which is why it reads as the first item being mis-set
- * instead of as the menu being a pixel loose. Even means the first bar is inset from the frame by the
- * same amount it is separated from the next one. */
 menu .__items__,
 menu::part(items) {
     flex-direction: column;
     gap: 4px;
 }
 
-/* NO TALLER THAN THE WINDOW: past that the rows scroll, as the font list's do, rather than running off the bottom.
- * The scroller gives way to the cap; a menu that fits never shows a bar. */
 menu {
     max-height: 100%;
 }
@@ -441,26 +181,11 @@ menu::part(scroller) {
     min-height: 0;
 }
 
-/* The gap stays 4px while the rows tightened, and that is deliberate: it is what keeps two focus bars
- * from touching, which is a different job from the space around the text. Tightening it as well is what
- * would make a run of highlighted rows read as one block. */
-
-/* THE FRAME INSET IS THE ROW'S PADDING PLUS THE GAP, which is what makes the first label sit the
- * same distance from
- * the top of the menu as two labels sit from each other. See menuitem for the derivation. Vertical only:
- * the horizontal inset is the popup padding plus the row's own 8px margin, which is the inset-bar look
- * and has nothing to do with the vertical rhythm. */
 menu {
     padding-top: 6px;
     padding-bottom: 6px;
 }
 
-/* A grouping rule, as every native context menu uses. Margins rather than padding on the neighbours:
- * the rule belongs to the GAP between two groups, and giving it to the rows either side means every row
- * has to know whether it happens to sit next to one.
- *
- * Inset from the menu's edges — a rule running the full width reads as the bottom of the menu rather
- * than as a divider inside it, which is why Windows insets its own. */
 menu .__separator__,
 menu::part(separator) {
     height: 2px;
@@ -469,36 +194,11 @@ menu::part(separator) {
     flex-shrink: 0;
     margin-top: 6px;
     margin-bottom: 6px;
-    /* AS WIDE AS A ROW, which is what it divides -- these track `menuitem`'s own margins above and are
-     * not free numbers. At 6 the rule was inset further than the highlight it sits between, so a menu
-     * read as two different widths stacked: a bar running nearly to the border, and a short line
-     * floating above the next one.
-     *
-     * Still inset rather than edge to edge: a rule touching both borders reads as the BOTTOM of the
-     * menu rather than as a divider inside it, which is why Windows insets its own. Matching the rows
-     * keeps that and takes the disagreement out. */
     margin-left: 4px;
     margin-right: 4px;
     background: var(--menu-separator, #6E6E6E);
 }
 
-/* Items are Buttons, so they inherit the button rule above; these overrides make them read as rows
- * rather than as a stack of separate controls — full width, left-aligned, no rounding between them. */
-/* ON THE TEXT, NOT ON THE ROW, and this is the one rule about font-size in this engine worth restating:
- * `* { font-size: 10 }` in core.css is a candidate at STYLESHEET origin on EVERY element, and inheritance
- * only applies where there is no candidate at any origin — so a size declared on `menuitem` computes
- * correctly on the row and every label inside it still draws at 10. A MenuItem is a Button, so its label
- * and its accelerator are both `text` children; one selector reaches the pair, which is why they stay the
- * same size as each other for free.
- *
- * Not on `menu text`, which would also catch anything a caller puts in a row. */
-/* AND THE ACCELERATOR, which is a `text` too and is NOT reached by `menuitem text`: it is handed to
- * `setPostIcon`, so it sits in the Button's shadow tree where a descendant selector cannot go. Without
- * this the label shrank to 8 and the shortcut beside it stayed at the universal 10 -- the one pair in
- * the row that the comment above says stays the same size as each other for free. */
-/* A PIXEL UNDER THE BAR'S OWN TITLES, which is the relation IntelliJ has: the titles are chrome you aim
- * at and a row is a line you read, and at the same size the menu read as heavier than the bar that
- * opened it. The accelerator and the chevron take it too -- they are the row's, not the label's. */
 menuitem text,
 menuitem::part(label),
 menuitem::part(post-icon) {
@@ -506,139 +206,34 @@ menuitem::part(post-icon) {
 }
 
 menuitem {
-    /* PADDING RATHER THAN SLACK, and this is what makes the rhythm even in the only place it can be
-     * judged -- between the TEXT, not between the row boxes.
-     *
-     * The row was 26px tall around a 20.8px label with the label flush to its top, so every row carried
-     * 5.2px of dead space UNDERNEATH it: the first label sat 4px from the frame while consecutive labels
-     * sat 9.2px apart. The boxes were evenly spaced the whole time, which is why measuring them said
-     * nothing was wrong.
-     *
-     * Expressed as padding so the slack is symmetric and known, and the menu's own vertical padding is
-     * then set to the row's padding plus the gap -- the one relation that makes the first label's inset
-     * equal the distance between two labels, whatever the font measures. Padding 1 + gap 2 = the menu's 3.
-     *
-     * MIN-HEIGHT HAS TO COME DOWN WITH THE PADDING or none of this shows. It is a DIFFERENT PROPERTY, so
-     * it does not compete with the padding above -- it wins outright whenever it is the larger number, and
-     * at 26px around a 20.8px label it was: dropping the padding from 2 to 1 would have left every row
-     * exactly as tall as before, with nothing in the cascade to look at. It stays as a floor for a row
-     * whose content is shorter than a label (a separator's neighbour, an icon-only entry), which is what
-     * it is for; it is simply no longer the number that decides an ordinary row. */
     align-items: center;
     padding-top: 2px;
     padding-bottom: 2px;
     min-height: 22px;
     padding-left: 12px;
-    /* ASYMMETRIC, because the two sides hold different things: the left is the label's inset and the
-     * right is where a chevron or an accelerator ENDS. `margin-left: auto` puts the arrow at the end of
-     * the CONTENT box, so this padding is its distance from the row's edge -- and on top of it the shape
-     * sits inset inside its own 18px box, which is why a 6 here read as the arrow stopping well short. */
     padding-right: 8px;
     justify-content: flex-start;
     background: #00000000;
 
-    /* THE INSET ROUNDED ROW — the single most recognisable trait of IntelliJ's new UI, and of every
-     * modern menu since. The highlight is a rounded BAR sitting inside the popup's padding rather
-     * than a strip running edge to edge, which is what stops a menu reading as a table of cells.
-     *
-     * The radius is the whole of it. The bar used to be pulled in 8px from the popup's padding as well,
-     * on the reasoning that a rounded highlight flush to the edge has its corners cut by the popup's own
-     * rounding -- true when the popup's inset was zero, and not the shape IntelliJ actually draws: there
-     * the bar runs to within a pixel of the border and the popup's 2px of padding is what keeps the two
-     * radii apart. Six pixels of gap either side made the rows read as a list inside a box. */
-    /* A PIXEL UNDER --radius-control, and deliberately not the token: a control's 8px arc is drawn on
-     * something with a border and a fill of its own, while this is a bar of colour inside a rounded
-     * popup, and at 4 it read as noticeably softer than the menu it sits in. 3 is IntelliJ's. */
     border-radius: 6px;
     margin-left: 4px;
     margin-right: 8px;
 }
-/* The active row is highlighted by :focus and DELIBERATELY NOT by :hover.
- *
- * There is exactly one active row in a menu, and hover cannot express that: CSS `:hover` correctly stays on
- * whatever the mouse is over, so hovering one row and then arrowing down lit up two at once — reported from
- * the harness as "I hover Add node, press down, and can still focus the ones below". Since Menu does
- * focus-follows-hover, the hovered row IS the focused row in the normal case, which makes a :hover rule pure
- * redundancy that can only ever disagree with the truth. Focus is the single source of it.
- *
- * A disabled row therefore shows no highlight at all, which is right — it cannot be focused, and inviting a
- * click on something inert would be worse than being unresponsive.
- *
- * The highlight is also the ONLY focus affordance here: no ring. A ring would trail the mouse across every
- * row it passed over, which is the noise :focus-visible exists to avoid, so it is suppressed explicitly
- * rather than left to depend on which focus path happened to fire.
- *
- * NEUTRAL grey, not the earlier #4A6E9A blue — same reasoning as the menu's own background above: a
- * saturated blue highlight on an otherwise grayscale popup was the one part of the whole widget that
- * still looked like a leftover accent colour. Lighter than the #4B4B4B menu surface is what still reads
- * as "raised" without reaching for hue. */
 menuitem:focus,
-/* AND UNDER THE POINTER. The highlight was focus-only, so a menu lit up for the keyboard and gave a
- * pointer no feedback at all until the click landed -- which reads as the rows not being clickable. Every
- * native menu, IntelliJ's and VS Code's included, highlight the row the cursor is on.
- *
- * THE SAME COLOUR as :focus deliberately: they are one state arriving two ways, and two shades would read
- * as two different kinds of selection. `menuitem:disabled` follows this rule and so still wins, which is
- * what keeps an unavailable row from lighting up. */
 menuitem:hover {
     background: var(--menu-item-focus-bg, #606060);
 }
-/* A row that leads somewhere: label left, arrow hard right, and a gap so the two never touch on a short
- * label. `space-between` overrides the `flex-start` above, which is why this rule follows it. */
-/* NOT `space-between`, which is what this said and what centred the label. That distributes ALL the
- * children, and a menu row has THREE rather than two -- every item carries a `__mark__` pre-icon
- * unconditionally, zero-width until a checkable menu gives it a size. So the mark took the left edge, the
- * arrow took the right, and the label was spaced into the MIDDLE: `New` came out centred while every
- * plain row beside it stayed left. It read as a rule about the label, and the label had nothing to do
- * with it.
- *
- * `margin-left: auto` on the arrow alone is the fix and the general form of it -- an auto margin absorbs
- * the free space at ONE point rather than dividing it between however many children happen to exist, so
- * a fourth slot added later cannot move the label again.
- *
- * There is deliberately NO `gap` beside it either. A gap applies between every pair, so it
- * spaced the zero-width mark away from the label as well, and the label stayed indented after
- * `space-between` was gone -- the same too-broad-a-lever mistake in a second form. An auto
- * margin already guarantees the arrow cannot touch the label, because it absorbs whatever free
- * space is left. */
-/* Dimmer than the label — it is an affordance, not content. Colour is inheritable, so this only needs to
- * override, not restate. */
-/* THE TWIN NAMES THE PART THAT EXISTS, and scopes itself by the HOST's class. The arrow is handed to
- * `setPostIcon`, so it is the Button's `post-icon` part -- the same slot an accelerator uses, which is
- * why this cannot be a bare `menuitem::part(post-icon)`: that would put a chevron overlay on every row
- * with a shortcut. A row has one or the other, and `__has-submenu__` is which. */
 menuitem .__submenu-arrow__,
 menuitem.__has-submenu__::part(post-icon) {
     margin-left: auto;
-    /* 9, not 8: measured against IntelliJ's, which is a pixel bigger than ours was and reads as an
-     * affordance rather than as punctuation at the end of the label. */
     width: 18px;
     height: 18px;
-    /* AND NOT THE ACCELERATOR'S 48px GUTTER. `menuitem::part(post-icon)` in ua/workbench.css reserves
-     * that so a shortcut cannot touch its label -- and an arrow is the SAME slot, so it took the gutter
-     * too. Padding cannot be compressed, so the 18px box grew to 24 and the chevron, fitted and centred
-     * in it, drew a dozen pixels short of the row's end: measured at 48px wide with a zero content box.
-     * It reads as an arrow that gave up before the edge, which is exactly what it was. */
     padding-left: 0px;
     flex-grow: 0;
     flex-shrink: 0;
     color: var(--menu-arrow, #A8B0B8);
     overlay: shape("chevron-right");
 }
-/* A SUBMENU ROW RESERVES ITS TRAILING GAP, and it has to be a fixed margin on the LABEL rather than
- * anything on the arrow.
- *
- * `margin-left: auto` on the arrow absorbs FREE space, and a menu is content-sized: a popup holding one
- * short row has none, so the chevron came to rest against the last letter of the word. That is the trap
- * the accelerator's own 48px records -- an auto margin contributes nothing to min-content, so the row
- * that sets the menu's width is exactly the row that ends up with nothing between its two halves.
- *
- * The arrow cannot carry it as padding: padding cannot be compressed, so the box grows to it and the
- * shape, fitted and centred, stops short of the end -- which is the bug above this one. A fixed margin
- * on the label does contribute to min-content, so a narrow menu widens to fit, while a wide one is
- * unchanged because the auto margin still collects everything left over at the arrow.
- *
- * 48px: the accelerator's gutter, so a menu holding both kinds of row reserves one trailing column. */
 menuitem.__has-submenu__::part(label) {
     margin-right: 48px;
 }
@@ -646,20 +241,6 @@ menuitem.__has-submenu__::part(label) {
 menuitem:focus-visible {
     outline: 0;
 }
-/* `Menu.onOpened` parks focus on the menu itself so nothing looks pre-selected on open (see that
- * method's doc) — but `requestFocus` RINGS by default, and a ring around the whole popup the instant
- * it appears is exactly the affordance this was trying to avoid. Every real highlight in a menu is the
- * row's own `menuitem:focus` background; the container never needs a ring of its own.
- *
- * RESTATES the border rather than zeroing it, and that is the whole point of this rule now.
- * `outline: 0` suppressed the focus ring correctly and took the menu's own 2px chrome with it, because
- * in this engine they are the same property — so a menu opened straight into focus had NO border, and
- * grew one the moment you hovered a row and focus moved off the container. It read as "the border only
- * appears on hover", which points at `:hover` and is nowhere near the cause.
- *
- * The value is repeated literally from the base rule above rather than shared through a custom property:
- * `outline` is a shorthand, and a `var()` inside a shorthand silently resolves to nothing here — the
- * same trap that produced zero padding on the main preview's header. */
 menu:focus-visible {
     outline: 2px var(--menu-border, #8C8C8C);
 }
@@ -667,13 +248,6 @@ menuitem:disabled {
     background: #00000000;
     color: var(--menu-item-disabled-fg, #6E6E6E);
 }
-/* Zero footprint outside a selectable context — see MenuItem's "Selection mark" javadoc. A plain
- * context-menu row ("Cut", "Copy") never calls `setSelected`, so this never draws for it, and giving
- * it zero width here (rather than leaving the check up to `dropdown .__menu__` alone) means an ordinary
- * menu's rows stay exactly as wide as their label, with no dead gutter reserved for a checkmark that
- * item can never show. */
-/* THE MARK IS THE PRE-ICON, which is the part name that exists -- `::part(mark)` was generated from the
- * CLASS and names nothing. @see the accelerator, which had the same slip. */
 menuitem .__mark__,
 menuitem::part(pre-icon),
 menuitem::part(mark) {
@@ -682,10 +256,6 @@ menuitem::part(mark) {
     flex-grow: 0;
     flex-shrink: 0;
 }
-/* `Dropdown`'s own menu, however, IS a selectable context — every row is a candidate value, so the
- * gutter is reserved for ALL of them, checked or not. Without a shared gutter the checked row's label
- * would sit one glyph to the right of every other row's, which reads as misaligned text rather than as
- * "this one has a mark". `:checked` only ever changes the overlay, never the box. */
 dropdown .__menu__ menuitem::part(pre-icon),
 dropdown .__menu__ menuitem .__mark__,
 dropdown .__menu__ menuitem::part(mark) {
@@ -693,9 +263,6 @@ dropdown .__menu__ menuitem::part(mark) {
     height: 24px;
     flex-grow: 0;
     flex-shrink: 0;
-    /* menuitem's own cross-axis alignment is engine-default `stretch`, which — for a child with an
-     * explicit, non-auto cross size like this one — degenerates to top-aligned rather than centred, so
-     * without this the mark sat flush with the row's top edge instead of level with the label's text. */
     align-self: center;
     margin-right: 2px;
     color: var(--menu-mark, #DDDDDD);
@@ -706,20 +273,6 @@ dropdown .__menu__ menuitem:checked::part(mark) {
     overlay: shape("checkmark");
 }
 
-/* A menu containing a toggle — a context menu's "Lighting", say. Same gutter and same mark as a
- * dropdown's rows, granted to the WHOLE menu rather than to the checkable row alone.
- *
- * Menu-level is the only alignment that works. Reserving the gutter on just the checkable item indents
- * that one row against its neighbours, which reads as broken alignment rather than as a checkmark — and
- * reserving it on every menu would carry a dead column through ordinary context menus whose rows can
- * never show a mark. Windows does exactly this: its context menu reserves one icon column, so `Refresh`
- * and `Paste` line up with the rows that have icons.
- *
- * The gutter is reserved whether or not a row is currently checked, so ticking one does not shift its
- * label sideways. */
-/* THE GUTTER, and it is what a menu's left inset actually IS. With the part unreachable every row's
- * mark measured zero, so labels sat flush against the row's own 12px padding instead of a glyph's width
- * further in -- which reads as the menu having lost its padding rather than its gutter. */
 menu.__has-checkable__ menuitem .__mark__,
 menu.__has-checkable__ menuitem::part(pre-icon),
 menu.__has-checkable__ menuitem::part(mark) {
@@ -731,28 +284,15 @@ menu.__has-checkable__ menuitem::part(mark) {
     margin-right: 2px;
     color: var(--menu-mark, #DDDDDD);
 }
-/* The mark itself is still the ITEM's business: only a checkable row ever shows one, even though every
- * row in the menu reserves the space for it. */
 menu.__has-checkable__ menuitem.__checkable__:checked::part(pre-icon),
 menu.__has-checkable__ menuitem.__checkable__:checked .__mark__,
 menu.__has-checkable__ menuitem.__checkable__:checked::part(mark) {
     overlay: shape("checkmark");
 }
-/* Same trim the dropdown rule below makes, and for the same reason: the base `menuitem` rule's 12px
- * left padding was sized for a bare label sitting straight against the row's edge. Put a 24px gutter
- * in front of it and the two stack — the mark floats clear of the edge and the label ends up 38px in,
- * which reads as the menu being indented rather than as a column of marks.
- *
- * On the ROW, never on the mark. Narrowing `__mark__` would shrink the checkmark glyph itself, and
- * trimming its margin alone would move the mark without moving the label — either one breaks the
- * shared gutter that is the whole point of reserving it at menu level. Padding shifts mark and label
- * together, so every row in the menu keeps the same left edge. */
 menu.__has-checkable__ menuitem {
     padding-left: 0px;
 }
 
-/* A menu with icons: the same menu-level gutter, holding each row's icon — Windows' icon column, so a row
- * without one lines up with the rows that have one. */
 menu.__has-icons__ menuitem .__mark__,
 menu.__has-icons__ menuitem::part(pre-icon),
 menu.__has-icons__ menuitem::part(mark) {
@@ -768,36 +308,20 @@ menu.__has-icons__ menuitem {
     padding-left: 8px;
 }
 
-/* A kind's glyph in a menu, tinted by its role as the Hierarchy tints it. @see GlyphRole */
 menuitem.__glyph-layout__::part(pre-icon) { color: var(--kind-glyph-layout, #AEA79C); }
 menuitem.__glyph-text__::part(pre-icon) { color: var(--kind-glyph-text, #CAA875); }
 menuitem.__glyph-control__::part(pre-icon) { color: var(--kind-glyph-control, #75B1ED); }
 menuitem.__glyph-collection__::part(pre-icon) { color: var(--kind-glyph-collection, #B38FD8); }
 menuitem.__glyph-overlay__::part(pre-icon) { color: var(--kind-glyph-overlay, #68C4BE); }
 menuitem.__glyph-addon__::part(pre-icon) { color: var(--kind-glyph-addon, #7AC0A0); }
-/* The base `menuitem` rule's 12px left padding was sized for a bare label with no mark before it — once
- * the 24px gutter above sits in front of it, the checkmark reads as floating well clear of the row's
- * edge rather than beside it. Tightened for every row in a dropdown's menu (checked or not), so the
- * whole column — mark and label alike — shifts left together instead of the mark alone moving and
- * throwing off the shared gutter's alignment. */
 dropdown .__menu__ menuitem {
     padding-left: 2px;
-    /* Same trim on the trailing edge — the base sheet's 12px was sized for a generic context-menu row
-     * with a submenu arrow to clear; a dropdown row has neither, so it just left dead air between the
-     * label and the menu's own edge. */
     padding-right: 4px;
 }
 
-/* The closed-state marker on the button, so a theme can point an arrow at it. */
 dropdown {
     justify-content: space-between;
 }
-/* `__chevron__` is Dropdown's post-icon (Button.setPostIcon) — a real element, not a pseudo-element,
- * for the same reason every other twisty in this sheet is one: no ::after exists in this engine. Fixed
- * width and `flex-shrink: 0` so a long selected label ellipsizes before it ever pushes the chevron off
- * the button. Always chevron-DOWN: unlike a foldout, a dropdown's popup can open above or below
- * depending on room, so there is no "open" direction for the glyph to point at (see
- * AnchoredPlacement's flip). */
 dropdown .__chevron__,
 dropdown::part(post-icon),
 dropdown::part(chevron) {
@@ -810,18 +334,7 @@ dropdown::part(chevron) {
     overlay: shape("chevron-down");
 }
 
-/* The modal scrim — our stand-in for `::backdrop`, which cannot exist here because the style engine has
- * no pseudo-elements (the same divergence recorded for the top layer). It is an internal child promoted
- * to the top layer alongside its dialog, so `100%` resolves against the initial containing block — the
- * whole window — rather than against the dialog's own box.
- *
- * `left`/`top` are set explicitly rather than relying on `position: absolute`'s static position: the top
- * layer forces `position: absolute` at IMPORTANT origin, and an absolutely positioned box with all-auto
- * offsets sits where it would have been in flow, which for an internal child of a moved dialog is the
- * dialog's corner. Pinning both to zero is what makes it cover the viewport.
- *
- * Deliberately semi-transparent rather than opaque: the point of a modal backdrop is to say "that is
- * still there but not yours right now", which needs the content to remain visible. */
+/* Our ::backdrop. left/top are pinned: the top layer forces absolute, and auto offsets would sit at the dialog's corner. */
 dialog .__backdrop__ {
     left: 0;
     top: 0;
@@ -830,33 +343,7 @@ dialog .__backdrop__ {
     background: var(--dialog-backdrop, #00000080);
 }
 
-/* An ellipsized title, and the one place in this sheet that truncates text by default.
- *
- * CSS does NOT do this for you: `text-overflow`'s initial value is `clip`, and no browser user-agent
- * sheet ellipsizes generic text — overflowing content spilling is the correct CSS default, because
- * content is the author's and silently hiding it would be a worse failure than an ugly one.
- *
- * A title bar is not content, though. It is chrome: a fixed 32px strip with a close button pinned to
- * its right edge, and a title long enough to reach that button paints straight over it. Every native
- * window manager ellipsizes window titles for exactly this reason, and a widget user-agent sheet is
- * the right layer to encode it — an author who wants the full title can still override, which is what
- * makes this a default rather than a policy.
- *
- * This is the web's canonical truncation recipe verbatim — `flex: 1 1 0; min-width: 0; overflow: hidden;
- * text-overflow: ellipsis` — and every part of it is load-bearing:
- *   flex-grow/basis — sizes the label to WHAT IS LEFT after the close button, not to its own text. The
- *                     obvious alternative (`flex-shrink: 1` and let it shrink from its intrinsic width)
- *                     works but makes the label's box depend on its own measured glyphs, so a title that
- *                     fits by a fraction of a pixel truncates anyway and loses a whole character to an
- *                     ellipsis it did not need. Growing from zero has no such edge.
- *   min-width       — a flex item's automatic minimum is its min-content size, which for a nowrap line is
- *                     the entire line; 0 is what allows the box to be smaller than its text at all.
- *   white-space     — ellipsis only means something on a line that does not wrap.
- *   overflow        — clips the glyphs the ellipsis stands in for, on exactly the box it measured
- *                     against. */
 dialog .__title-bar__ .__label__ {
-    /* A caption names the window it is on, and at the same weight as the content below it the two read
-     * as one column of text broken by a rule. */
     font-weight: bold;
     flex-grow: 1;
     flex-basis: 0;
@@ -866,82 +353,18 @@ dialog .__title-bar__ .__label__ {
     text-overflow: ellipsis;
 }
 
-/* THE DIALOG'S OWN BODY, and the child combinator is what says so. Six widgets name a part
- * `__content__` -- CanvasView, ConfiguratorGroup, QuickPick, ProblemsPanel, WindowFrame and this one
- * -- so as a DESCENDANT selector this reached into any of them put inside a dialog and gave it the
- * body's padding, `width: 100%` and edge. A canvas in a dialog came out with a border round its plane
- * and its content width capped, which wrapped and clipped a line meant to run off an unbounded plane.
- * The content is `appendStructural`ed straight onto the dialog, so `>` loses nothing. */
 dialog > .__content__ {
     flex-grow: 1;
-    /* AND IT SHRINKS, which this engine makes opt-in: flex-shrink defaults to 0 here, unlike CSS. A
-     * dialog with a max-height therefore capped its OWN box and left this one at its full content size
-     * -- measured as a content box of 1921 in a window at its cap -- so everything below the fold, the button
-     * row included, drew outside the window. `overflow: hidden` below cannot help: it clips what is
-     * inside this box, and the box itself was the thing hanging out of the window.
-     *
-     * `min-height: 0` for the same reason it is needed on any shrinkable flex child: without it the
-     * automatic minimum keeps the content at its natural height and the shrink has no room to act. */
     flex-shrink: 1;
     min-height: 0;
     width: 100%;
     padding: 12px;
-    /* THE EDGE, AND ONLY THREE SIDES OF IT.
-     *
-     * The BODY is the half that needs one: --dialog-bg is --surface-panel and the editor a dialog
-     * floats over is --surface-editor, the same #191A1C. The CAPTION is --surface-base, thirteen levels
-     * up, and stands clear on its own -- and a line between them would say they are two surfaces when
-     * they are one window.
-     *
-     * PER-EDGE WIDTH DOES NOT EXIST, so the fourth side is not dropped, it is COVERED: BoxPainter
-     * strokes a border with `border().left` for all four sides, and `outline` has one width. The
-     * caption carries a z-index so it paints after this element (see `.__title-bar__`), and the top
-     * edge is pushed up onto the caption's last row for it to cover.
-     *
-     * The top offset at 0 IS THAT PUSH, and it is one pixel. Outlines here are drawn INSIDE the
-     * border box -- ua/core.css sets `outline-offset: -2px` on `*` so a focus ring survives an
-     * ancestor's `overflow: hidden` -- so at the inherited -2px this edge sits on the body's FIRST ROW,
-     * below the caption and impossible to cover. At 0 the stroke lands in the band just outside the
-     * box, which is the caption's last row. The other three keep the inherited inset and do not move.
-     *
-     * It also keeps the close control clear of a line: the caption's top and right are the two sides it
-     * sits flush against, and neither has one.
-     *
-     * Not clipped by the `overflow: hidden` below, though it looks as though it should be: BoxPainter
-     * pushes the scissor inside paintChildren and pops it before paintOutline, so a box's own
-     * decorations are never clipped by its own overflow. */
     outline: 2px var(--dialog-edge, #26282B);
     outline-offset: 0 -2px -2px -2px;
-    /* A dialog contains its content: it is user-movable and user-resizable, and an unclipped panel
-     * spills the moment either shrinks it below the content. Same lesson as the resize page. */
     overflow: hidden;
 }
 
-/* The dialog's close affordance. Browsers ship no dialog chrome at all — a `<dialog>` is a bare box —
- * so this is ours. A floating panel with a draggable title bar and no way to dismiss it is simply
- * broken, and Escape is not the answer: only a MODAL dialog establishes a close watcher, so a
- * modeless one does not respond to Escape on the web either.
- *
- * Scoped through `.__title-bar__`, not just `dialog .__close__` — that shorter form ties on specificity
- * (11) with the config kit's `.__config-control__ button { height: var(--cfg-ctrl-h) }` (also 11), and a
- * `Dialog` opened from `ColorControl` (this one) is a genuine DOM descendant of `.__config-control__`:
- * promotion to the top layer moves the dialog's Taffy parent, never its DOM parent, so the cascade
- * still reaches straight through. On a tie the LATER rule in source order wins, and the kit section is
- * declared after this one — so the close button silently inherited an 36px floor no edit here appeared
- * to touch, the same "won a specificity fight nobody knew was happening" trap `colorselector`'s own
- * comments document repeatedly. One more class component (specificity 21) settles it outright. */
 dialog .__title-bar__ .__close__ {
-    /* THE FRAME'S CLOSE CONTROL, rule for rule -- see `.__window__ .__title-bar__ .__close__` in
-     * desktop.css, whose comment carries the derivation of every number. Transparent until hovered, when
-     * it fills red to the caption's edges; the mark is the same `crystalgui:x` icon rather than a typed
-     * "x", which is why the glyph-centring correction that used to live here is gone with it.
-     *
-     * Scoped through `.__title-bar__` and not just `dialog .__close__`: the shorter form ties on
-     * specificity (11) with the config kit's `.__config-control__ button`, and a Dialog opened from
-     * ColorControl is a genuine DOM descendant of it -- promotion moves a dialog's Taffy parent, never
-     * its DOM parent, so the cascade reaches straight through. On a tie the later rule wins and the kit
-     * is declared after this one, so the button silently inherited an 36px floor no edit here appeared
-     * to touch. One more class component settles it outright. */
     width: var(--activity-bar-w, 40px);
     align-self: stretch;
     min-height: 0px;
@@ -953,8 +376,7 @@ dialog .__title-bar__ .__close__ {
     flex-shrink: 0;
     border-radius: 0px;
     background: none;
-    /* No token: there is nothing to theme about being invisible, and a component token may only
-     * derive from the system vocabulary, which has no word for `transparent`. */
+    /* No token: there is nothing to theme about being invisible. */
     background-color: transparent;
     overlay: icon("crystalgui:x");
     overlay-origin: content-box;
@@ -970,29 +392,10 @@ dialog .__title-bar__ .__close__:hover {
     background: var(--dialog-close-hover-bg, #C05050);
 }
 
-/* ── Resize handles ─────────────────────────────────────────────────────────────────────────────
- * Eight of them: four edges and four corners, added to any element whose `resize` is not `none`.
- * Which ones exist depends on the axes the mode allows, so `resize: horizontal` gets the two side
- * edges only.
- *
- * NOT a divergence from CSS UI 4, despite browsers shipping a single corner grabber: the spec says
- * only that the UA "presents a bidirectional resizing mechanism" and leaves the mechanism entirely
- * open. Browsers have one because theirs is drawn in the scrollbar gutter and has nowhere else to
- * go — ours are our own elements, so edges cost nothing.
- *
- * Edges are deliberately invisible: a background is not what makes something hittable, so a bare
- * grab strip works and does not put four bars around every resizable panel. Corners are tinted,
- * because a corner is the one people look for.
- *
- * `position: absolute` comes from Java (structural — a handle in flow would reflow the content).
- * Everything else, including which handles are visible at all, is a theme's to change. */
-
 .__resizer__ {
-    /* Above content, or a filled panel buries its own handles. Corners raise further, below. */
     z-index: 10;
 }
 
-/* Edges: full-length grab strips, 8px thick. */
 .__resizer-top__,
 .__resizer-bottom__ {
     width: 100%;
@@ -1010,8 +413,6 @@ dialog .__title-bar__ .__close__:hover {
 .__resizer-left__   { left: 0; }
 .__resizer-right__  { right: 0; }
 
-/* Corners sit ON TOP of the edges they overlap — dragging a corner must resize both axes, so it has
- * to win the hit test against the two edge strips crossing underneath it. */
 .__resizer-top-left__,
 .__resizer-top-right__,
 .__resizer-bottom-left__,
@@ -1021,144 +422,37 @@ dialog .__title-bar__ .__close__:hover {
     z-index: 11;
 }
 
-/* NO HANDLE DRAWS ANYTHING. All eight are invisible grab areas, and the corners are still 16px and still
- * win the hit test against the edges crossing under them — this is about paint, not about hit area.
- *
- * The bottom-right one used to carry a tinted grip, on the reasoning that one visible mark says "this
- * resizes" the way a browser's `textarea` grabber does. It reads as clutter on a UI made mostly of
- * panels that are resizable by default: a small square in the corner of every one of them says nothing
- * you did not already know from dragging the edge, and it lands on top of whatever the panel is showing
- * there. The cursor is the affordance now, which is what the edges have always relied on.
- *
- * A theme that wants the mark back sets `background` here; nothing in Java knows about it either way. */
 .__resizer-top-left__     { top: 0;    left: 0; }
 .__resizer-top-right__    { top: 0;    right: 0; }
 .__resizer-bottom-left__  { bottom: 0; left: 0; }
 .__resizer-bottom-right__ { bottom: 0; right: 0; }
 
-/* ── Cursors ────────────────────────────────────────────────────────────────────────────────────
- * CSS `cursor`, assigned to the things whose affordance is otherwise invisible. `cursor` INHERITS,
- * so setting it on a container would leak into its whole subtree — every rule here targets the exact
- * element that owns the affordance.
- *
- * The bidirectional keywords are the right ones for handles: a handle resizes in both directions
- * along its axis, so `ew-resize` rather than `e-resize`. The four single-direction diagonal keywords
- * (`nw-resize` and friends) exist in CSS but say less than `nwse-resize` does.
- *
- * Whether any of this is VISIBLE is a platform question — see UICursorService. LWJGL3/GLFW has
- * standard cursors for all of these; LWJGL2 has none at all and needs bitmaps. The property still
- * cascades and resolves correctly either way. */
-
 .__resizer-left__,
 .__resizer-right__   { cursor: ew-resize; }
 .__resizer-top__,
 .__resizer-bottom__  { cursor: ns-resize; }
-/* Diagonals: top-left/bottom-right share an axis, as do top-right/bottom-left. */
 .__resizer-top-left__,
 .__resizer-bottom-right__ { cursor: nwse-resize; }
 .__resizer-top-right__,
 .__resizer-bottom-left__  { cursor: nesw-resize; }
 
-/* A dialog is a WINDOW, so it starts the cursor afresh rather than inheriting one.
- *
- * This is the exception the note above implies but does not spell out. `cursor` inherits, and a dialog
- * keeps its DOM parent when it is promoted to the top layer — promotion moves the Taffy parent, the
- * transform and the paint entry, never the cascade. So a dialog opened from anything carrying an
- * affordance inherits it across the whole picker, list or form inside: the Color node's swatch says
- * `cursor: pointer`, quite correctly, and every control in the colour picker it summons then claimed to
- * be a button — ring, square, sliders and text fields alike.
- *
- * On the dialog rather than at each summoning site, because the summoning site is not wrong: the rule
- * is that a window does not inherit its opener's cursor, and stating it once is the difference between
- * a property of dialogs and a fix every future caller has to remember. Controls inside still declare
- * their own — this is the floor, not a lid.
- *
- * `auto`, NOT `default`, and the difference is load-bearing: `auto` is the property's initial value, so
- * this restores what an un-inherited element would have had. `default` is the arrow specifically, and
- * would defeat the rule below that `textfield` deliberately declares nothing because "`auto` already
- * resolves to `text` over an editable element" — every field in a dialog would lose its caret cursor,
- * trading one wrong cursor for another. */
 dialog { cursor: auto; }
-/* A title bar is the drag handle for the whole dialog, so it advertises a move rather than a grab. */
 dialog .__title-bar__ { cursor: move; }
-/* SplitView's divider resizes its two panes along one axis.
- *
- * The `__dragging__` rules keep that cursor up for the whole gesture. The drag captures the pointer on the
- * SplitView ROOT rather than on the divider — the drag maths live in the root's local space — and the cursor
- * resolves from the capture target, so without these the cursor reverts to the arrow the instant you press
- * and only returns if you happen to release back over the divider. */
 splitview > .__divider__ { cursor: ew-resize; }
 splitview.__dragging__ { cursor: ew-resize; }
 splitview.__vertical__ > .__divider__ { cursor: ns-resize; }
 splitview.__vertical__.__dragging__ { cursor: ns-resize; }
 
-/* A canvas advertises the grab only while it is actually being panned. Deliberately NOT `cursor: grab`
- * on the canvas at rest: a bare left-drag does not pan (that gesture is reserved for the marquee), so a
- * permanent open-hand would promise a drag that does nothing. The class goes on while the pan drag is
- * live, and the pointer is captured for its duration, so the cursor holds even when the drag leaves the
- * canvas — the same reason splitview repeats its cursor on `.__dragging__` above. */
-/* `graphview` is named alongside `canvasview` for the reason this file keeps repeating: a widget's
- * cascade identity is its TAG, never its Java supertype. GraphView extends CanvasView and matches none
- * of its rules. */
 canvasview.__panning__, graphview.__panning__ { cursor: grabbing; }
 
-/* A drag-scrub handle — the `X` letter beside a vector component, an inspector row's label.
- *
- * `slide-arrow` is the one cursor keyword in this engine with no CSS behind it. The gesture has no web
- * equivalent, so CSS never had reason to name a shape for it; every desktop tool that HAS the gesture
- * ships one. Deliberately not `ew-resize`: in a node editor a scrubbable number sits inside a resizable
- * panel, so "this value slides" and "this edge moves" appear pixels apart and have to be distinguishable.
- *
- * No `.__scrubbing__` companion rule here, unlike splitview and canvasview above — and the difference is
- * worth stating because those two look like precedent. Their gestures capture the pointer on a parent
- * (the SplitView root, the canvas), so the cursor resolves from an element that never carried the
- * keyword. A scrub captures on the HANDLE ITSELF, which is the element this rule already matches, so it
- * holds for the whole drag no matter how far outside the letter the pointer travels. The class is still
- * set, as a hook for a theme that wants to show the gesture. */
 .__scrub-handle__ { cursor: slide-arrow; }
 
-/* ── Paste Attributes ────────────────────────────────────────────────────────────────────────────────
- *
- * Premiere's and Resolve's window: a checkbox per copied property under the group its owner filed it in.
- * The indent is the whole of the hierarchy -- a group and its members are ordinary checkboxes, so nothing
- * but the offset says which owns which, and it has to be unmistakable at one glance. */
 dialog.__paste-attributes__ {
-    /* Wide enough for THREE columns of property names, which is what makes the wrap useful at all: at
-     * two the window is nearly as tall as a plain list and the indent has bought nothing.
-     *
-     * DEFINITE, not a minimum and not a cap. A minimum is a floor and the window sizes to its content,
-     * so the widest row set it instead and it came out the full width of the screen. A cap fails the
-     * same way for a subtler reason: the scroller's slot and the sections inside it are `min-width:
-     * 100%`, which a content measurement resolves against the space on offer rather than against a
-     * width nobody has decided yet -- so every copy asked for the whole area and every copy came out at
-     * exactly the cap. A wrap needs a width to wrap AT; leaving it to the content means there is nothing
-     * to wrap against. It is a STARTING size, not the only one -- see `resize` below. */
     width: 760px;
-    /* RESIZABLE, all eight handles. A dialog is out of flow, which is what makes the leading edges
-     * meaningful: left and top move the origin as they size, and `Dialog` already owns its position, so
-     * the resizer has somewhere to write. How much there is to read depends on what was copied, and
-     * only the reader knows how much room to give it. */
     resize: both;
-    /* THE CAP IS HERE, not on the scroller. A window is as tall as what was copied until that would be
-     * too tall to read, and past that the groups scroll. It is a STARTING ceiling and not a permanent
-     * one -- see the rule below, which is what makes that true. */
     max-height: 800px;
 }
 
-/* AN OPENING SIZE IS NOT A LIMIT, and a cap that outlives the opening makes the handle dead.
- *
- * `max-height` above says how tall to COME UP, and nothing more: dragging the bottom edge past it did
- * nothing at all, because a max binds the box whatever origin the drag writes its height at, and
- * `Resizer` reads that same computed max to predict the size the box will settle at. So the window
- * stopped at 400 with a grip still under the pointer.
- *
- * `__user-sized-height__` is written by `UIElement.markUserSized` the moment a drag sizes that axis, so
- * this says exactly "the user has taken the decision" without the sheet knowing anything about drags.
- * The width half is here for the same reason though nothing caps a width today: it is one statement,
- * and the mirror bug would be found the same expensive way.
- *
- * ORDER-DEPENDENT, and deliberately so: it weighs the same as the `dialog.__paste-attributes__` rule it
- * lifts, so it has to come after it. A dialog declaring its own cap below this would keep it. */
 dialog.__user-sized-height__ {
     max-height: auto;
 }
@@ -1166,39 +460,6 @@ dialog.__user-sized-width__ {
     max-width: auto;
 }
 
-/* WHAT SCROLLS, and the reason it has to. A composite offers a section per function, so how tall this
- * window wants to be is a property of what was copied -- an element carrying a transform, a gradient and
- * a border fills a screen. The header and the buttons stay put either side of it: they are the two
- * things you navigate BY, what this is about and the way out.
- *
- * `height: 0; flex-grow: 1` is this engine's fill idiom, not `height: 100%` -- flex-shrink defaults to 0
- * here, so a growing child keeps its content size and overflows its parent instead of scrolling inside
- * it. That is the failure this exact rule shape exists to avoid. @see AGENTS.md */
-/* IT TAKES WHATEVER THE WINDOW HAS LEFT, and the three declarations are one idea.
- *
- * `height: 0; flex-grow: 1` -- this engine's usual fill idiom -- is wrong here, because it makes the
- * scroller's BASIS zero: the window then measures itself as header plus rule plus nothing plus buttons,
- * has no free space to grow into, and comes up with an empty band where the groups are. Measured at
- * 368x0 with four sections correctly laid out inside it.
- *
- * An `auto` basis fixes that half: the window wants to be as tall as everything it holds. The cap then
- * belongs on the WINDOW rather than here, so that a window the reader has made taller gives the extra
- * room to this rather than leaving it blank.
- *
- * `flex-shrink: 1` is the half that is easy to miss, and this engine is why: flex-shrink defaults to 0
- * here, unlike CSS. Without it a window at its cap cannot squeeze the scroller, so the groups overflow
- * past the buttons and out of the window -- which is exactly what a resize downward looked like. */
-/* NARROWER WHEN THREE COLUMNS ARE NOT NEEDED. A copy whose biggest group holds one or two properties
- * used the full three-column width and opened with a third of the window empty.
- *
- * The COUNT is Java's and the WIDTH is here: `PasteAttributesDialog` can see how many properties the
- * biggest group holds and a sheet cannot -- there is no `:nth-child`, and a selector cannot count -- but
- * it has no business knowing what a column is worth. So it says only "fewer than three", the way it
- * already says "the reader has sized this".
- *
- * 300 rather than the two columns' 270, and the footer is why: its own row is 562px of checkbox and
- * buttons that neither wrap nor shrink, so it is the real floor and no arrangement of the grid gets
- * under it. */
 dialog.__paste-attributes__.__paste-narrow__ {
     width: 600px;
 }
@@ -1208,33 +469,10 @@ dialog.__paste-attributes__ .__paste-groups__ {
     flex-grow: 1;
     flex-shrink: 1;
     min-height: 0;
-    /* A GUTTER FOR THE SCROLLBAR, on BOTH sides so the sections stay centred in the band.
-     *
-     * The bar is an absolute overlay pinned to the right edge and takes no layout width, so a section
-     * spanning the band ran underneath it and the thumb drew on top of the box's own right border. The
-     * bar cannot move -- it is what `right: 0` means -- so the content has to come in.
-     *
-     * It comes in on both sides, because the alternative is a band whose left inset and right inset
-     * differ by the width of a scrollbar that is only sometimes there. 12px for a 8px bar leaves it clear
-     * of the border rather than touching it, which is the same reserve `.__completion-row__` makes.
-     *
-     * PADDING RATHER THAN A MARGIN ON THE SECTIONS: a margin is outside the box, so `min-width: 100%`
-     * would still measure the full band and the two together would overflow it -- a horizontal scrollbar
-     * that appears because of the vertical one. Padding narrows what 100% MEANS, and Taffy resolves an
-     * absolute child's inset against the border box with padding NOT subtracted (FlexboxComputer,
-     * `insetRelativeWidth`), which is exactly why the bar stays out at the edge while the sections
-     * move in. */
     padding-left: 12px;
     padding-right: 12px;
 }
 
-/* ONE STEP DOWN, everywhere inside. This window is a dense list of property names rather than prose, and
- * at the shared 10 it reads as heavier than the dialog it sits in.
- *
- * THREE RULES, because font-size does not effectively inherit here: `ua/core.css` opens with
- * `* { font-size: 10 }`, which is a candidate on every element, so setting it on the dialog alone reaches
- * nothing. The descendant rule outspecifies that for the light tree, and the two `::part` rules are for
- * the labels of Checkbox and Button, which live in shadow trees an ordinary selector cannot enter. */
 dialog.__paste-attributes__,
 dialog.__paste-attributes__ * {
     font-size: 18px;
@@ -1245,8 +483,6 @@ dialog.__paste-attributes__ button::part(label) {
     font-size: 18px;
 }
 
-/* FROM and TO, each a dimmed key beside the name it is about. The key column is fixed so the two names
- * line up: ragged, the pair reads as two unrelated sentences rather than as one before-and-after. */
 .__paste-header__ {
     width: 100%;
     gap: 4px;
@@ -1267,39 +503,22 @@ dialog.__paste-attributes__ button::part(label) {
     font-weight: bold;
 }
 
-/* The rule under the header: above it is WHAT is being pasted, below it is HOW MUCH of it. */
 .__paste-rule__ {
     width: 100%;
     height: 2px;
     margin-top: 16px;
-    /* SHORTER BELOW THAN ABOVE, because what follows brings its own: the first group's heading has an
-     * 16px margin of its own, so an even 8 here put 32px between the rule and the first word under it
-     * while two groups inside the band sit 12 apart. Matched pairs of margins are the usual answer and
-     * this is the case they are wrong for -- the space a reader sees is the SUM. */
     margin-bottom: 8px;
     background-color: var(--dialog-border, #43454A);
 }
 
-/* THE HEADING, above its box and in bold. Resolve's arrangement: inside the box it becomes the first
- * cell of the grid and stops looking like a heading at all. */
 .__paste-group__ {
     font-weight: bold;
     margin-top: 16px;
     margin-bottom: 8px;
-    /* Indented to the box's own content, so the heading and the first property share a left edge. */
     margin-left: 8px;
 }
 
-/* THE GRID: the properties of one group, three across, boxed so it is unmistakable which heading owns
- * them. An indent cannot do that job here -- a wrapped row's second line starts back at the left.
- *
- * 31%, not 33%. Three at a third plus the gaps between them is over the width, and since flex-shrink
- * defaults to 0 in this engine nothing gives: the third item wraps and every row holds two. */
 .__paste-section__ {
-    /* AT LEAST the width available, and more when its contents need it. `width: 100%` would pin it to
-     * the scroller and leave the items to be squeezed, which is the one thing they must not be: a
-     * truncated property name is neither readable nor searchable, and nobody recognises half of
-     * `border-bottom-left-radius-x`. Wider than the window is what the scroller is there to carry. */
     min-width: 100%;
     border-width: 2px;
     border-color: var(--dialog-border, #43454A);
@@ -1308,53 +527,17 @@ dialog.__paste-attributes__ button::part(label) {
     padding-bottom: 12px;
     padding-left: 36px;
     padding-right: 12px;
-    /* ENOUGH TO SEPARATE AND NO MORE: the box and the heading above it already carry the separation. */
     margin-bottom: 8px;
-    /* COLUMNS, not even gaps -- and the two cannot both be had.
-     *
-     * Spreading items to fill the row is only "even" when the row is full: a group of two then puts one
-     * against each edge, and nothing lines up with the group above or below it. Fixed thirds cost a
-     * trailing gap on a short row and buy alignment down the whole window, which is what makes a list of
-     * property names scannable at all.
-     *
-     * The gap is on the ROW axis only. A column gap would come out of the same hundred percent the
-     * thirds are measured in, so three would no longer fit and the last would wrap. */
     row-gap: 14px;
     column-gap: 0;
 }
 
-/* A THIRD, OR ITS OWN NAME -- whichever is wider, decided PER ITEM.
- *
- * Three columns while three fit and fewer where they do not, and the rule is a row's rather than the
- * grid's: a row of short names keeps its three even when the row above it holds one long one. A single
- * floor for every item cannot express that. It was 300px, which is wider than a third of the default
- * window, so one long name in the whole list took every row down to two.
- *
- * The breathing room is padding INSIDE the column rather than a gap between columns -- border-box, so
- * it comes out of the third and cannot push the third item onto the next row. */
 .__paste-item__ {
-    /* ITS OWN CONTENT is the base size (`auto` flex-basis over an `auto` width), and the label under it
-     * neither wraps nor truncates, so this is the width of the whole name. An item is never narrower
-     * than what it says. */
     width: auto;
-    /* AND NEVER NARROWER THAN A THIRD, which is what buys both halves at once.
-     *
-     * It aligns: a short name is exactly a third, so the columns line up down the window and a list of
-     * forty property names stays scannable. And it caps the row at three, since a fourth would need
-     * 132% of the row -- so "never more than three" is a consequence of the floor rather than a second
-     * rule that could disagree with it.
-     *
-     * A PERCENTAGE, not the pixels this was: pixels are a floor on every item alike, and one item that
-     * needs more takes the whole grid down with it. `min-width: auto` -- CSS's content-based automatic
-     * minimum -- would say this directly, but this engine's min-size default is 0 and `auto` is not a
-     * value it accepts (@see AGENTS.md), which is what the `width: auto` above is standing in for. */
     min-width: 33%;
     padding-right: 16px;
 }
 
-/* NEVER TRUNCATED AND NEVER WRAPPED. The base `checkbox::part(label)` ellipsizes, which is right for a
- * value in a dropdown and wrong for the name of the thing being asked about: an ellipsis here removes
- * exactly the part that tells `border-bottom-left-radius-x` from `-y`. */
 .__paste-item__::part(label) {
     flex-shrink: 0;
     min-width: auto;
@@ -1363,17 +546,12 @@ dialog.__paste-attributes__ button::part(label) {
     overflow: visible;
 }
 
-/* MORE AIR BETWEEN THE BOX AND ITS WORD than a bare checkbox wants. These are property names read as a
- * list rather than one label answering one control, and at the stock 4px the tick crowds the first
- * letter. */
 .__paste-group__,
 .__paste-item__,
 .__paste-remember__ {
     gap: 6px;
 }
 
-/* NOT a property: a question about the WINDOW rather than about the copy, which is why it sits on the
- * button row and not under the last group of checkboxes. */
 .__paste-remember__ {
     align-self: center;
 }
@@ -1381,10 +559,7 @@ dialog.__paste-attributes__ button::part(label) {
 .__paste-actions__ {
     width: 100%;
     align-items: center;
-    /* The standing choice at one end, the two ways out at the other. */
     justify-content: space-between;
-    /* THE SAME AIR ABOVE THE ROW AS BELOW IT, and below it is the content box's own 12px padding -- so
-     * this is that number and not a round one. At 12 the footer sat visibly low in its own margin. */
     margin-top: 12px;
 }
 
@@ -1392,86 +567,42 @@ dialog.__paste-attributes__ button::part(label) {
     gap: 12px;
 }
 
-/* WIDER THAN THEIR WORDS. A dialog's two ways out are aimed at rather than read, and Cancel being the
- * longer word should not make it the larger target. */
 .__paste-buttons__ > button {
     min-width: 152px;
     justify-content: center;
 }
 
-/* ── Frame stats ────────────────────────────────────────────────────────────────────────────────
- * The debug readout (`FrameStatsOverlay`): promoted, so the insets place it against the surface's
- * own corner rather than a panel's.
- *
- * MONOSPACED, and that is not taste: every number here is rewritten ten times a second, and in a
- * proportional face each rewrite shifts everything to its right — which reads as the readout
- * flickering rather than as the digits changing.
- */
 framestats {
     top: 4px;
     right: 160px;
     padding: 8px 12px;
     background-color: var(--framestats-bg, #0C0C0C96);
     border-radius: 6px;
-    /* A CAP, because the readout is drawn OVER the application: the rows are cut to a width in
-     * FrameStats, and this is the guard that keeps a row nobody cut from growing the plate across the
-     * menu bar. A row past it WRAPS, which is ugly and visible -- the two ways of making it not wrap
-     * are both worse, see the row rule below. */
     max-width: 600px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
     color: var(--framestats-fg, #C3CCD4);
 }
 
-/* THE SIZE GOES ON THE ROW, NOT ON THE BOX, and that is the engine's own rule rather than a style
- * preference: `default.css` opens with `* { font-size: 10 }`, so font-size does not effectively
- * inherit -- every row already has a candidate of its own and a size on the container reaches none of
- * them. Stated here because the container rule LOOKS like it works: the headline carries its own size
- * and reads correct while every row below it silently keeps the universal 10. */
-/* NO `white-space: nowrap` HERE, AND NO `overflow: clip` ON THE PLATE -- together they make the whole
- * readout disappear, which is how this was found. A non-wrapping UIText measures ZERO width by design
- * (it draws one line however long, past its own box, and truncates at paint), so the plate's
- * max-content width collapses to its padding and the clip then hides every row that is drawn outside
- * it. Either alone is merely untidy; the pair is invisible. The rows are cut to a character budget in
- * FrameStats instead, which is the one place that knows what it is about to write. */
 framestats .__row__ {
     font-size: 14px;
 }
 
-/* The headline row - the rate, read at a glance. After the row rule, since the two carry equal
- * specificity and this is the one that must win. */
 framestats .__head__ {
     font-size: 16px;
     color: var(--framestats-head-fg, #F0F4F8);
 }
 
-/* GREEN / AMBER / RED, and the row decides which by asking FrameStats.Health -- inside the budget, past
- * it, or past twice it. The threshold is the engine's so every host agrees what a 40ms frame is; the
- * colour is here so a theme can say it differently. Last, so a verdict beats the headline's own colour
- * at equal specificity. */
-/* HIDDEN, for the plate and for a row the readout has stopped needing. A row is hidden rather than
- * removed so the tree stops churning, and the engine sets a CLASS rather than writing display into the
- * cascade -- EngineBoundaryTest forbids the second, and a sheet that could not override the first
- * would be a sheet that cannot theme the readout at all. */
+/* The row's colour is chosen by FrameStats.Health. */
 framestats.__hidden__,
 framestats .__hidden__ {
     display: none;
 }
 
-/* THE FRAME-TIME BARS. Green like the verdict rows above, because they answer the same question about
- * the same budget -- a second neutral colour here would read as a second kind of statement. The two
- * highlights below then say which columns were not.
- *
- * The bars are block glyphs (U+2581..U+2588) and the font is asked for by the plate; JetBrains Mono
- * carries all eight, which was checked against the file's own character map rather than assumed. */
 framestats .__spark__ {
     color: var(--framestats-good, #7FD08C);
-    /* A DOOR: a press on a bar opens that frame in the Frame Profiler. @see FrameStatsOverlay#onOpenFrame */
     cursor: pointer;
 }
 
-/* A COLUMN AT A TIME, through the Custom Highlight API -- the alternative is a node per bar, forty-six
- * of them rebuilt ten times a second, inside the readout that exists to measure that sort of thing.
- * Colour only: `::highlight()` allows it, and nothing here wants to move a glyph. */
 .__spark__::highlight(framestats-warn) { color: var(--framestats-warn, #E8C061); }
 .__spark__::highlight(framestats-bad)  { color: var(--framestats-bad,  #E86A5C); }
 

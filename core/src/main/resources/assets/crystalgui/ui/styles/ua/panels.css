@@ -1,54 +1,18 @@
 /* ua/panels.css — one part of StyleSheet.DEFAULT, the user-agent sheet.
- *
- * Status bar, notifications, balloons, the Problems rows and tree.
- *
- * The parts concatenate IN MANIFEST ORDER (StyleSheetRegistry.DEFAULT_SHEET_PARTS) into the
- * one sheet the engine loads — rule order across files is as load-bearing as within one
- * (:disabled after :hover ties), so files split at section boundaries and never reorder.
- * The sheet-wide contract (no !important, no asset(), colours only as var() fallbacks)
- * lives at the top of ua/core.css and is enforced by StyleGovernanceTest. */
+ * The status bar, notifications and their balloons, the Problems panel, the Run console, empty states, progress and the radar chart.
+ * Parts join in StyleSheetRegistry.DEFAULT_SHEET_PARTS order; rule order across them matters.
+ */
 
-/* ── Status bar ──────────────────────────────────────────────────────────────────────────────────────
- *
- * The line along the bottom of the workbench. GEOMETRY ONLY, like everything else in the user-agent
- * sheet: a theme gives it a colour.
- *
- * A fixed height, and it is load-bearing rather than cosmetic — the bar sits in the shell's column above
- * nothing, so a height that varied with its content would re-measure every region above it whenever a
- * status item appeared. The same rule the plan states for the main toolbar's two states. */
 statusbarview {
     flex-direction: row;
     align-items: center;
     height: 44px;
     flex-grow: 0;
     flex-shrink: 0;
-    /* TIGHTER ON THE LEADING EDGE THAN THE TRAILING ONE, and not symmetrical for symmetry's sake. The
-     * left edge is where the TRAIL starts, and a path is read from its first segment -- so space in
-     * front of it is space before the sentence begins. The right edge ends in readouts, which want to
-     * stand off the corner.
-     *
-     * What is left in front of the first crumb after this is the icon's own doing: the glyph is drawn
-     * `overlay-size: contain` inside its box and does not fill it, so the visible inset is this padding
-     * plus whatever margin the artwork carries. Below this, tighten the artwork rather than the bar. */
     padding-left: 8px;
-    /* AND THE TRAILING EDGE STOPS WHERE THE PANELS DO. The bar runs the full width of the window while
-     * the content above it ends short of the rail on the right, so readouts flush to the bar's own edge
-     * sit past the column they belong under.
-     *
-     * Nothing trails the readouts to make this out of: the progress item is at the HEAD of that group,
-     * not its tail. So this is the whole of the trailing inset, and it is a number to look at rather
-     * than derive -- the rail's width is not something the sheet can ask for. */
     padding-right: 48px;
     gap: 16px;
     overflow: hidden;
-    /* THE SAME SURFACE AS THE RAILS, which is what makes it read as chrome rather than as the bottom of
-     * whichever panel happens to sit above it. Without a band of its own the line looked like loose text
-     * lying on the panel -- which is exactly how it first shipped.
-     *
-     * AND NO RULE ABOVE IT. It carried a 2px --divider along its top edge, from when the band was the only
-     * thing separating it from a panel. The chrome around it IS this surface now -- the rails, the window
-     * and this bar are all --surface-base -- so the line was drawn across the middle of one continuous
-     * plane, cutting the workbench in half for no boundary that exists. The band does the separating. */
     background: var(--statusbar-bg, #2B2B2B);
     color: var(--statusbar-fg, #9DA0A8);
 }
@@ -57,28 +21,16 @@ statusbarview .__left__,
 statusbarview .__right__ {
     flex-direction: row;
     align-items: center;
-    /* The ITEM carries its own leading space, so the gap only has to keep the divider off its neighbour;
-     * 24px in both would put 48px between every pair. */
     gap: 24px;
     flex-shrink: 0;
 }
 
-/* THE SPACER IS WHAT PUTS THE RIGHT GROUP AT THE TRAILING EDGE, rather than either group being
- * positioned. `margin-left: auto` on the right group would do it with one item and not with two: auto
- * margins SHARE the free space between every auto margin in the row, which is the trap the activity
- * bar's groups already spent a session on. One growing spacer has exactly one claimant. */
 statusbarview .__spacer__ {
     flex-grow: 1;
     flex-shrink: 1;
     min-width: 0px;
 }
 
-/* A DIVIDER BEFORE EVERY ITEM BUT THE FIRST, which is what makes four readouts read as four things
- * rather than one run-on line: at 24px of gap alone, `6:1 UTF-8 LF 4 spaces` scanned as a single phrase.
- * The divider itself is an element -- see `.__status-sep__` below for why it cannot be a border. */
-/* LEVEL WITH THE TRAIL, not a size of their own. These were 18px against the path's 14px, which put the
- * ambient readouts -- a caret position, an indent, an encoding -- above the thing that says where you
- * are. Everything in the bar is glanced at; nothing in it is a heading. */
 statusbarview .__status-item__ {
     flex-shrink: 0;
     white-space: nowrap;
@@ -86,9 +38,6 @@ statusbarview .__status-item__ {
     color: var(--statusbar-item-fg, #9DA0A8);
 }
 
-/* The rule between two readouts. An ELEMENT, because a border cannot be asymmetric here: the paint path
- * takes border().left as the width and strokes a uniform box, so `border-left-width` drew a rectangle
- * around every item instead of a line between two. Breadcrumbs spells its separators the same way. */
 statusbarview .__status-sep__ {
     width: 2px;
     height: 24px;
@@ -96,46 +45,28 @@ statusbarview .__status-sep__ {
     background-color: var(--statusbar-sep, #3C3F41);
 }
 
-/* The trail is quieter than the readouts: it says where you are, which you already know, while the
- * right-hand items are what you look down to check. IntelliJ draws the same difference. */
-/* RAISED WITH THE READOUTS, deliberately -- the two halves of the bar were both 14px and the difference
- * between them is COLOUR, which is what the note above describes. Lifting only the right-hand items
- * would have introduced a size split nobody chose, on a single line of chrome. */
 statusbarview .__left__ breadcrumbs .__crumb__ {
     font-size: 14px;
     color: var(--statusbar-crumb-fg, #8A8D94);
 }
 
-/* The trail gives way before the readouts do: a path is the one thing here that has a sensible short
- * form, and Breadcrumbs already elides its own middle. */
 statusbarview .__left__ breadcrumbs {
     flex-shrink: 1;
     min-width: 0px;
-    /* TIGHTER IN A BAR THAN IN A HEADER. The widget's own sizes are a navigator header's, where a trail
-     * is the heading; here it runs along a 44px strip beside the readouts, and every segment costs an
-     * icon, a word and a chevron. Nothing below changes what a crumb IS -- only how much room it takes
-     * to say it -- which is why it is scoped here rather than written on the widget. */
     gap: 4px;
 }
 
-/* A GLYPH THE SIZE OF THE TEXT BESIDE IT. 20px against 14px text read as an icon with a label rather than
- * a labelled step. */
 statusbarview .__left__ breadcrumbs .__crumb-icon__ {
     width: 20px;
     height: 20px;
     margin-right: 0px;
 }
 
-/* AND THE CHEVRON NO LARGER THAN WHAT IT SEPARATES. It was 24px against 20px icons -- punctuation drawn
- * bigger than the words either side of it, which is what made the trail read as a row of arrows. */
 statusbarview .__left__ breadcrumbs .__crumb-sep__ {
     width: 18px;
     height: 18px;
 }
 
-/* ── Notifications ───────────────────────────────────────────────────────────────────────────────────
- *
- * IntelliJ's Notifications tool window: a section head with Clear all, then a column of cards. */
 notificationsview {
     flex-direction: column;
     flex-grow: 1;
@@ -151,9 +82,6 @@ notificationsview > .__head__ {
     padding-bottom: 12px;
 }
 
-/* THE ONE THING HERE THAT MAY GIVE WAY. `min-width: 0` lets it shrink; without the nowrap it spends that
- * on WRAPPING, and at a narrow panel "Timeline" came apart into one character per line. Truncation is the
- * right answer for a heading whose words are already known -- the cards below scroll instead. */
 notificationsview > .__head__ > .__title__ {
     font-size: 14px;
     color: var(--notifications-title-fg, #9DA0A8);
@@ -164,8 +92,6 @@ notificationsview > .__head__ > .__title__ {
     text-overflow: ellipsis;
 }
 
-/* A LINK, not a button — matching the entries' own actions, which is what IntelliJ does throughout this
- * panel. A button here would out-weigh the actions on the notifications themselves. */
 notificationsview .__clear__ {
     font-size: 14px;
     color: var(--notifications-link-fg, #4A88C7);
@@ -176,10 +102,7 @@ notificationsview .__clear__:hover {
     color: var(--notifications-link-hover-fg, #6BA5DE);
 }
 
-/* NO `gap` HERE, and it is not an omission: a ScrollerView puts a caller's children in a SLOT in its
- * own shadow tree, so a gap on the view falls between that slot and the bars -- which are absolutely
- * positioned and contribute nothing -- and never between the cards. It sat here reading as the spacing
- * and doing nothing at all, which is worse than absent. The cards space themselves; see below. */
+/* No gap: a ScrollerView slots its children in its shadow tree, so a gap here falls between the slot and the bars. */
 notificationsview > .__notification-list__ {
     width: 100%;
     height: 0px;
@@ -187,89 +110,34 @@ notificationsview > .__notification-list__ {
     flex-direction: column;
 }
 
-/* THE PANEL'S COPY OF A CARD, and only the panel's. A balloon is capped by its layer, so it wants none of
- * this -- which is why it is scoped rather than written on the shared card rule.
- *
- * A FLOOR, NOT A FIXED WIDTH. The card follows the panel down and its lines re-wrap as it goes, which is
- * what a narrowing panel should do; below this it stops, becomes wider than the viewport, and the
- * scroller picks up from there. A card measured for horizontal scroll is measured by its OWN box --
- * getScrollWidth reads direct children only -- so this floor is what the extent is made of.
- *
- * Without it there was no floor at all: the card shrank with the panel until the detail was coming apart
- * one character per line, and the scroller had nothing wider than itself to scroll.
- *
- * SET BY THE HEAD ROW, not by the detail. Past the floor the card is wider than the viewport, and what
- * hangs off the right is its rounded corner and its timestamp -- so a floor chosen to fit the DETAIL
- * (180) left an ordinary panel showing a card cut down its right side with no time on it. This fits
- * icon, an elided heading and the timestamp; the detail wraps, which it is allowed to do and the head row
- * is not. Below this the scroller still takes over, and then the right edge is genuinely off-view --
- * there is no width at which a thing past the viewport is also on screen. */
 notificationsview .__notification__ {
-    /* RAISED WITH THE HEAD ROW when the attribution moved into it: the row now carries icon, heading,
-     * who and when, and 130 was measured against a row without the third of those. */
     min-width: 320px;
-    /* THE SPACE BETWEEN CARDS, on the card because the list cannot express it -- see the note above the
-     * list. A margin rather than a gap also means the last card carries one, which is wanted here: it
-     * keeps the stack off the panel's bottom edge the same way the first is kept off the head. */
     margin-bottom: 12px;
 }
 
-/* One card, WHEREVER IT IS DRAWN. Scoped to the card and not to the panel, because the history and the
- * balloons share it: rules written as `notificationsview .__x__` reached the list and silently missed
- * every balloon, which then fell back to the engine's COLUMN default and stacked its title, its timestamp
- * and its close button one above the other. A shared widget's own look cannot be keyed to one of its
- * hosts. */
 .__notification__ {
     flex-direction: column;
     width: 100%;
     flex-shrink: 0;
     background: var(--notification-bg, #2B2B2B);
     border-radius: 8px;
-    /* ONE INSET ON ALL FOUR EDGES. The bottom was tighter than the top, from when the last line was the
-     * attribution and carried a margin of its own; that line is in the head row now, so the shorter
-     * bottom was left holding up nothing and simply read as lopsided.
-     *
-     * The sides are tuned against the HEAD ROW'S GAP rather than picked: the run is edge, glyph, heading,
-     * and when the first step is bigger than the second it reads as a misalignment rather than as
-     * spacing. The two are not the same measurement, which is why this needed an eye and not arithmetic
-     * -- the gap is between boxes, while the glyph is drawn `overlay-size: contain` inside a 20px box and
-     * does not fill it, so the visible inset is this padding plus whatever margin the SVG carries. If it
-     * ever needs to go below this, shrink the icon box or tighten the artwork rather than keep spending
-     * the card's padding on it. */
     padding: 10px;
     gap: 8px;
 }
 
-/* HOVER HIGHLIGHTS THE WHOLE CARD, which is what tells you the entry is a thing rather than a paragraph
- * — IntelliJ lifts the row the pointer is over. It works from anywhere inside the card because :hover is
- * evaluated over the entered chain, not only the exact element hit, so the labels staying untargetable
- * costs nothing here. */
 .__notification__:hover {
     background: var(--notification-hover-bg, #323232);
 }
 
-/* Title and timestamp at opposite ends, with the title taking the slack. `min-width: 0` is what lets a
- * long title give way rather than pushing the time off the card. */
 .__notification__ .__entry-head__ {
     flex-direction: row;
-    /* CENTRED ON THE HEADING, which is one line and can only be one line.
-     *
-     * This was `flex-start`, against a message that WRAPPED: a four-line one put the severity glyph level
-     * with line two and a half, floating beside the text rather than introducing it -- which is the state
-     * the panel is back in now that its heading genuinely wraps, and the balloons never left. Against a
-     * single line it costs the glyph looking slightly high, which is the cheaper of the two. */
     align-items: flex-start;
     gap: 8px;
     width: 100%;
 }
 
 .__notification__ .__message__ {
-    /* A step above the detail, not level with it: the heading is the line you read first and the size
-     * says so along with the weight. */
     font-size: 16px;
-    /* THE OPERATION, and the one thing read at a glance -- "New File", "Directory Moved". The line under
-     * it is the detail and the line under that is who; weight is what says which of the three to read
-     * first. @see ChangeNotice */
     font-weight: bold;
     color: var(--notification-message-fg, #DFE1E5);
     flex-grow: 1;
@@ -286,55 +154,23 @@ notificationsview .__notification__ {
     padding-right: 8px;
 }
 
-/* HUNG OFF THE HEADING'S TEXT EDGE, not the card's. The icon column is the severity glyph (20px) plus
- * the head row's gap (12px), so everything under the heading is inset by that and the whole card reads as
- * one block of text with a glyph beside it rather than three rows starting in two different places.
- * IntelliJ's balloons align the same way, actions included.
- *
- * PADDING, NEVER MARGIN: box-sizing is border-box here, so this comes out of the 100% instead of adding
- * to it -- a margin would push the line 32px past the card's own edge. */
 .__notification__ .__detail__ {
     font-size: 14px;
     color: var(--notification-detail-fg, #9DA0A8);
     width: 100%;
     padding-left: 28px;
-    /* THE EXTRA SPACE BELOW A CARD LIVES HERE, not on the card, because it is only wanted under TEXT.
-     * Equal padding is not even at the two ends: the top edge sits above a 20px ICON standing proud of
-     * the 16px heading, so the eye reads that gap as larger than the number, while the bottom sits under
-     * 14px text with descenders and nothing standing proud of anything.
-     *
-     * On the card it also landed under the ACTIONS row, which has weight of its own and did not want it.
-     * Here it falls under the detail wherever the detail happens to end -- the card's own bottom when
-     * there is nothing after it, and the gap above the actions when there is. */
     margin-bottom: 6px;
-    /* SET APART FROM THE HEADING, and only from the heading. The card's 8px gap is what separates the
-     * lines of the body from each other; this is on top of it, so the heading reads as a heading and the
-     * detail and the attribution stay a block under it rather than three evenly spaced rows. */
     margin-top: 4px;
 }
 
-/* WHO, not what. It sat under the detail as a third line of its own, which read as a third statement of
- * equal weight and gave "on disk" more say than the change it describes. It belongs with the timestamp:
- * both are about the event rather than about what happened. */
 .__notification__ .__attribution__ {
     flex-direction: row;
     align-items: center;
     gap: 8px;
-    /* IN THE HEAD ROW, beside the timestamp, and never the thing that gives way: the heading is what
-     * elides when the card narrows. Both of these say something ABOUT the event rather than what it was,
-     * so they read as one cluster on the right. */
     flex-shrink: 0;
     margin-left: 12px;
 }
 
-/* A DRAWN MARK, not a character. It was a middle dot inside the string, which is two problems: a glyph
- * that small is at the mercy of the font -- the bundled face has no U+2026, and a missing glyph draws a
- * blank advance rather than failing, which is how a separator became a mystery gap in config-kit.css --
- * and a character cannot be sized apart from the words beside it, so "make the dot bigger" had no
- * answer at all.
- *
- * A rounded box needs no font and takes its own size. CgUiShape is the other way to draw a mark and its
- * catalog has no circle; a radius at half the side already is one. */
 .__notification__ .__attribution-dot__ {
     width: 6px;
     height: 6px;
@@ -343,9 +179,6 @@ notificationsview .__notification__ {
     background-color: var(--notification-attribution-fg, #8A8D95);
 }
 
-/* LIFTED off the old #7A7D85. It is the least important line and was dim enough to read as disabled
- * rather than as quiet -- at 14px on this surface that is a legibility question, not an emphasis one.
- * Still under the detail's #9DA0A8, which is what keeps the three lines in order. */
 .__notification__ .__attribution-text__ {
     font-size: 14px;
     color: var(--notification-attribution-fg, #8A8D95);
@@ -355,47 +188,27 @@ notificationsview .__notification__ {
     flex-direction: row;
     gap: 24px;
     flex-shrink: 0;
-    /* FLUSH WITH THE DETAIL, not merely clear of the glyph: the links read as belonging to the message
-     * they act on, and a two-pixel step between them and the text above is visible at this size.
-     * @see .__detail__ */
     padding-left: 28px;
 }
 
-/* AND THE TEXT'S OWN BOTTOM SPACE GOES AWAY when a row of controls follows it. That margin exists to
- * sit under a last LINE; here it only pushes the links away from the sentence they belong to, and the
- * card's padding already holds them off its edge. */
 .__notification__.__has-actions__ .__detail__ {
     margin-bottom: 0px;
 }
 
-/* PADDING IS LOAD-BEARING, not spacing. A UIText has no MeasureFunc, so it is sized by its own
- * post-layout recompute -- which only runs from onLayoutChanged, which only fires on a GENUINE geometry
- * change. A link with no width, no padding and no content size computes 0x0, never changes, and therefore
- * never gets measured at all: invisible, unhittable, and permanent. The sibling labels escape it only
- * because `width: 100%` and `flex-grow: 1` hand them a box to start from. The dock banner's own action
- * links carry padding for the same reason. */
+/* Padding is load-bearing: a UIText with no size of its own computes 0x0 and is never measured. */
 .__notification__ .__action__ {
     font-size: 14px;
     color: var(--notifications-link-fg, #4A88C7);
     flex-shrink: 0;
     padding-bottom: 4px;
-    /* A LINK ANSWERS TO THE POINTER, whether or not it is under one at this instant -- the cursor is what
-     * the element IS, not a hover state, and putting it on :hover only would leave the shape to be
-     * resolved on the frame the pointer arrives. */
     cursor: pointer;
 }
 
-/* UNDERLINED ON HOVER, which is the half that says "this is a link" rather than "this is blue text".
- * IntelliJ underlines on hover rather than at rest for the same reason its balloons do: a row of
- * permanently underlined actions reads as a paragraph of links, and there are usually two or three. */
 .__notification__ .__action__:hover {
     color: var(--notifications-link-hover-fg, #6BA5DE);
     text-decoration-line: underline;
 }
 
-/* A SECONDARY ACTION, and "Don't show again". Quieter rather than hidden: VS Code puts its secondaries
- * behind a `...` menu, which costs a click to discover a verb that already fits on the card. Grey rather
- * than blue, so the row reads as one primary verb with alternatives beside it rather than three equals. */
 .__notification__ .__action__.__action-secondary__ {
     color: var(--notification-secondary-fg, #8A8D94);
 }
@@ -404,9 +217,6 @@ notificationsview .__notification__ {
     color: var(--notification-secondary-hover-fg, #B4B7BE);
 }
 
-/* THE SEVERITY GLYPH COMES FROM THE CLASS, never from Java — the same split graph.css makes for port
- * types and filetypes.css for file icons. A dozen producers share three glyphs and each needs its own
- * colour, which is the thing keying colour to the drawable cannot express. */
 .__notification__ .__severity__ {
     width: 20px;
     height: 20px;
@@ -414,9 +224,6 @@ notificationsview .__notification__ {
     overlay-size: contain;
 }
 
-/* A FAILING status item reads as a failure. "compiled 12n/9e" and "1 error(s)" are both ambient and both
- * replaced by the next compile, so both belong in the bar — but rendered identically the failure reads as
- * a statistic. The same three severities, the same palette, the third surface to use it. */
 .__status-bar__ .__status-item__.severity-error {
     color: var(--statusbar-error-fg, #C75450);
 }
@@ -425,10 +232,6 @@ notificationsview .__notification__ {
     color: var(--statusbar-warning-fg, #C7A54A);
 }
 
-/* AN ENTRY THAT RUNS A COMMAND. Both references make most of the bar clickable — VS Code's encoding entry
- * runs `changeEncoding`, IntelliJ's line-separator widget opens a popup — so an entry carrying a command
- * has to look different from the readouts beside it, which do nothing. Only the hover says so: a status
- * bar that highlighted every actionable entry at rest would be louder than what it sits under. */
 .__status-bar__ .__status-item__.__clickable__ {
     cursor: pointer;
 }
@@ -437,10 +240,6 @@ notificationsview .__notification__ {
     color: var(--statusbar-hover-fg, #D5D7DB);
 }
 
-/* THE SEVERITY MARK CARRIES ITS OWN COLOUR, now that the dialog icons are drawn in currentColor instead
- * of a literal red/amber/blue apiece. That is the upgrade the conversion buys: a severity colour is the
- * THEME's to decide -- it already owns --error/--warning/--info for every other consumer -- where before
- * it was baked into two drawings per icon that differed only in the shade each theme wanted. */
 .__notification__ .__severity__.severity-info {
     overlay: icon("crystalgui:general/informationDialog");
     color: var(--notification-info-fg, #4682FA);
@@ -462,61 +261,17 @@ notificationsview .__notifications-empty__ {
     padding: 16px;
 }
 
-/* ── Notification balloons ───────────────────────────────────────────────────────────────────────────
- *
- * The transient half. Anchored to the bottom-right corner of the workbench's content, above the status
- * bar, which is where both references put them.
- *
- * SIZED TO ITS CONTENT, never to the corner it sits in: the layer is hit-testable (its balloons carry
- * close buttons and action links, and setHitTest(false) would disable those too, since it applies to the
- * whole subtree), so a layer stretched across the workbench would swallow every click in it. */
 .__balloons__ {
     position: absolute;
-    /* THE SHELL'S CORNER: the desktop's work area, above every window and above the taskbar's edge. */
     right: 16px;
     bottom: 16px;
     flex-direction: column;
-    /* GROWS UP AND LEFT, NEVER DOWN OR RIGHT.
-     *
-     * Up is free: only `bottom` is anchored, so a taller stack extends away from the corner. Left is what
-     * `align-items: flex-end` buys — a balloon narrower than this layer sits against its trailing edge, so
-     * widening one moves its LEFT edge and leaves the corner where it is. Setting `top` or `left` here
-     * would pin the opposite edge and make a long message push out of the window instead. */
     align-items: flex-end;
     gap: 12px;
-    /* The cap a balloon may grow to, not the width it takes -- see the balloon rule. Sized against this
-     * sheet's own 14px text rather than a pixel count read off an IntelliJ screenshot, since the two are
-     * nowhere near the same scale.
-     *
-     * WIDE ENOUGH THAT SHORT MESSAGES DO NOT WRAP, and no wider. The text column is what is left after
-     * the icon and the close button, so the balloon's width and the length it can hold are not the same
-     * number — at 170 a three-word message broke across two lines, and at 240 the same message left half
-     * the card empty. Dropping the timestamp (below) is what made a sensible width possible at all.
-     *
-     * The binding case is the DETAIL line, not the title: titles here are one or two words ("Opened",
-     * "Save failed"), and the detail is the longest thing a balloon routinely carries.
-     *
-     * A FILE CHANGE SAYS WHERE IT HAPPENED, so the detail is now a path rather than a filename --
-     * `README.md was moved to proj:src/main/java/com/example/util/`. Widening to fit one was tried and
-     * is wrong: at 420 a balloon was a banner across the editor, at 280 still half of it, for a message
-     * that is gone in seconds and is glanced at rather than read.
-     *
-     * So the cap stays name-sized and a path WRAPS, which was the original reasoning and survives the
-     * detail getting longer: a wrapped balloon grows upward, away from the corner, and costs nothing.
-     * A balloon's width is what it takes from everything behind it; its height is free. */
     width: 360px;
 }
 
-/* THE RESTING VALUE LIVES HERE, and that is what makes the fade work at all. A balloon arrives carrying
- * `__hidden__`, and dropping that class on the next frame leaves the cascade easing from 0 to this 1.
- *
- * Writing the opaque value from Java instead would not animate: the write is itself transitionable, so
- * the engine eases toward it and the cleanup retargets it back — an invariant this project already
- * records, and one that fails silently with no test able to see it. */
 .__balloons__ > .__balloon__ {
-    /* SIZED TO ITS CONTENT, capped by the layer. `width: 100%` would make every balloon the full 170
-     * whatever it says, and a long one would then wrap rather than widen — which is the opposite of
-     * growing leftwards. `max-width` is what stops it growing past the layer and out of the corner. */
     max-width: 100%;
     min-width: 180px;
     flex-shrink: 0;
@@ -524,64 +279,30 @@ notificationsview .__notifications-empty__ {
     background: var(--balloon-bg, #3C3F41);
     outline-width: 2px;
     outline-color: var(--balloon-border, #4E5254);
-    /* MUST MATCH NotificationBalloons.FADE_MS, which is how long it waits before detaching the element.
-     * Detaching early cuts the fade off part-way through. */
+    /* Must match NotificationBalloons.FADE_MS, which waits that long before detaching. */
     transition: opacity 150ms;
 }
 
-/* A NOTIFICATION CARD WRAPS ITS TITLE TOO, rather than gaining a horizontal scroller like the Problems
- * rows next to it — and the difference is the shape of the thing, not an inconsistency. A problem is a
- * dense single-line row in a column you scan down, where a wrapped entry breaks the rhythm and sideways is
- * the only direction left. A notification is a card that already wraps its detail and grows downward, so a
- * title that wraps costs nothing and a horizontal scrollbar under a stack of cards would be strange. */
 notificationsview .__notification__ .__message__ {
     white-space: normal;
     text-overflow: clip;
-    /* AND IT NEEDS A DEFINITE BASIS TO WRAP AGAINST. `white-space: normal` has been here all along and
-     * did nothing: with `flex-grow: 1` over an `auto` basis the heading is asked for its own size,
-     * answers one unbroken line, and the card grows to fit it -- 668px inside a 400px panel, measured.
-     * There was no width for the text to wrap at, because the text was what decided the width.
-     *
-     * ON `flex-basis`, NOT `width`. A definite `width` would clamp the item's own content minimum away,
-     * which is the trap `.__configurator__ > .__inline__` records; the basis carries the zero and `width`
-     * stays auto.
-     *
-     * NOTHING HERE REACHES THE SCROLLER, and that is the engine's answer rather than a choice made here:
-     * a run with no break opportunity in it is broken mid-word, so 72 unbroken characters wrap to three
-     * lines at 266px rather than pushing the card out. There is no width a heading can demand. */
     flex-basis: 0;
     width: auto;
 }
 
-/* A BALLOON WRAPS; A LIST ROW ELLIPSIZES. The shared rule truncates, which is right in the panel — rows
- * there are scanned down a fixed-width column and a wrapped one breaks that rhythm. A balloon has no
- * column and no neighbours to line up with, so truncating just loses the message: "opened gradle...."
- * told you nothing about which file. Wrapping is also what makes it grow UPWARD, away from the corner,
- * which is the only direction it is allowed to grow. */
 .__balloons__ .__message__ {
     white-space: normal;
     text-overflow: clip;
 }
 
-/* NO TIMESTAMP ON A BALLOON. It is the one thing copied from the list that does not belong here: a
- * balloon IS now — you are watching it arrive — so the time says nothing, while in the history "when" is
- * the entire reason the column exists. Both references agree; IntelliJ's balloons carry a title, a body
- * and actions, and no clock.
- *
- * It also cost about a third of the text column, which is what forced the balloon wider and wider while
- * short messages still wrapped. */
 .__balloons__ .__time__ {
     display: none;
 }
 
-/* HOVER LIFTS THE WHOLE BALLOON. It needs its own rule rather than inheriting `.__notification__:hover`:
- * that rule and the balloon's own background rule have equal specificity (two class-weight components
- * each), so the later one in this file wins outright and the balloon would never highlight at all. */
 .__balloons__ > .__balloon__:hover {
     background: var(--balloon-hover-bg, #4A4E50);
 }
 
-/* And the dismiss button lights on its own, so it reads as a control rather than as part of the text. */
 .__notification__ .__close__:hover {
     color: var(--notification-close-hover-fg, #FFFFFF);
     background-color: var(--notification-close-hover-bg, #5A5F62);
@@ -592,11 +313,7 @@ notificationsview .__notification__ .__message__ {
     opacity: 0;
 }
 
-/* The dismiss cross. Only balloons draw one — the list dismisses with Clear all. */
 .__notification__ .__close__ {
-    /* A SHAPE, not the character U+2715. The bundled MinecraftRegular.otf has no such glyph and drew
-     * tofu -- the same trap the breadcrumb chevron was just moved off, and the reason UIText carries a
-     * whole ellipsis fallback path. */
     overlay: shape("cross");
     width: 24px;
     height: 24px;
@@ -605,19 +322,11 @@ notificationsview .__notification__ .__message__ {
     margin-left: 8px;
 }
 
-/* A STATUS-BAR TOOLTIP GETS MORE ROOM. 340px is tuned for a label or a toolbar button, where the tooltip
- * is a few words; a status item's tooltip is the sentence its four-word readout left out — a compile
- * summary, a driver's refusal — and at the default width that is five or six lines of very short measure. */
 .__status-bar__ tooltip .__label__,
 .__status-bar__ tooltip::part(label) {
     max-width: 510px;
 }
 
-/* ── Problems rows ───────────────────────────────────────────────────────────────────────────────────
- *
- * IntelliJ's shape: one line per problem, not three columns. The severity is the icon, the message is the
- * line, and the row it sits on is a dim suffix — which is the whole of what the header, the Severity
- * column and the Line column were spending space to say. */
 problemspanel .__problem__ {
     flex-direction: row;
     align-items: center;
@@ -631,47 +340,16 @@ problemspanel .__problem__:hover {
     background: var(--list-hover-bg, #2A2D2E);
 }
 
-/* THE SELECTED ROW, and its absence is why clicking a problem did nothing visible.
- *
- * `ListView` puts `__selected__` on the row and every tree styles it **scoped to its own tag** —
- * `projectfiletree .__project-row__.__selected__`, `navigatorview treeview .__row__.__selected__`,
- * `quickpick .__row__.__selected__`. This panel was simply never given one, so selection was working
- * perfectly and painting nothing: a click focused the row, selected it, and left the panel looking
- * completely inert. Indistinguishable from a dead widget, and it sent two rounds of debugging at the
- * input layer before anyone asked whether the state was merely invisible.
- *
- * SELECTION WINS OVER HOVER where both apply, spelled as an explicit compound. The two are the same
- * kind of signal — a filled row — so at equal specificity they take turns being wrong, and the pointer
- * resting on the selected row must not repaint it as merely hovered. `projectfiletree` answers this by
- * dropping hover altogether (IntelliJ's Project view has no hover state); `quickpick` answers it with
- * the compound below. This panel already ships hover, so it takes quickpick's answer rather than
- * losing an affordance to gain consistency with the other tree.
- *
- * THE BASE RULE IS THE UNFOCUSED ONE, and that ordering is the whole trick — see the focused pair
- * below. A selection is a statement about where a keystroke will land, so a panel that does not own
- * focus must not make it in the same voice as one that does. Exactly what the tabs already do with
- * --tab-active-bg against --tab-focused-bg. */
 problemspanel .__problem__.__selected__,
 problemspanel .__problem__.__selected__:hover {
     background: var(--list-selected-inactive-bg, #2E3033);
 }
 
-/* ...AND THE PANEL THAT OWNS FOCUS GETS THE REAL COLOUR.
- *
- * `:focus-within` is the signal — the focus owner having an ancestor — and it is registered in
- * `PseudoClasses` precisely so any container can ask it; the tabs' own rule records the two wrong turns
- * (`dockgroup.__active__`, then a hand-maintained `__focused__` class) taken before landing here.
- *
- * Scoped to `problemspanel` rather than to the `viewcontainer` around it, deliberately: the panel is the
- * thing whose focus this is about, the rule then holds wherever it is hosted, and a test can build one
- * without a dock. */
 problemspanel:focus-within .__problem__.__selected__,
 problemspanel:focus-within .__problem__.__selected__:hover {
     background: var(--list-selected-bg, #04395E);
 }
 
-/* Same class convention, same three glyphs, as the notification cards — a severity is a severity, and a
- * second palette for it would drift the first time either was touched. */
 problemspanel .__problem__ .__severity__ {
     width: 18px;
     height: 18px;
@@ -694,17 +372,6 @@ problemspanel .__problem__ .__severity__.severity-error {
     color: var(--problems-error-fg, #DB5C5C);
 }
 
-/* THE TRAILING SLOT FOLLOWS THE TEXT, not the row's edge — `:17` on a problem, the count on a file
- * heading. Growing the message pushes whatever comes after it to the far right of a wide panel, where it
- * reads as a column of its own rather than as a fact about the line beside it; at any real panel width
- * that is most of a screen away from the message it belongs to.
- *
- * This rule was already written once, scoped to `.__problem-file__` so only the heading's count came
- * back — the problem rows underneath kept pushing their line number away, which is the half you actually
- * read. It belongs on both, so it is stated once here and the heading-only copy is gone.
- *
- * `flex-shrink` stays 1: with nothing growing, a long message is sized to its own content and simply
- * shrinks when the row runs out of room, ellipsising as before with the line number still on screen. */
 problemspanel .__problem__ .__message__ {
     font-size: 14px;
     color: var(--problems-message-fg, #DFE1E5);
@@ -715,56 +382,24 @@ problemspanel .__problem__ .__message__ {
     white-space: nowrap;
 }
 
-/* THE MESSAGE KEEPS ITS WIDTH once the list scrolls sideways, which is the whole of the switch: a
- * shrinkable item contributes ZERO to its row's min-content width, so with it on there is never any
- * overflow to scroll and the bar can never appear. `text-overflow` stays and simply never fires — nothing
- * clamps the label now. Same pair, same reason, as the project tree's rows. */
 problemspanel .__h-scroll__ .__problem__ .__message__ {
     flex-shrink: 0;
 }
 
-/* DIMMER, and it carries its own colon. It answers "where", which you read second — and a problem with
- * nothing to point at renders it empty rather than reserving the space. */
 problemspanel .__problem__ .__line__ {
     font-size: 14px;
     color: var(--problems-line-fg, #6E7076);
     flex-shrink: 0;
 }
 
-/* A TAGGED PROBLEM IS DRAWN DIFFERENTLY, not ranked differently — LSP's DiagnosticTag, VS Code's
- * MarkerTag. Deprecated code is struck through and keeps whatever severity its producer gave it; folding
- * that into the severity ladder would force a choice between showing a squiggle you cannot act on and
- * losing the rendering entirely.
- *
- * UNNECESSARY IS NOT DIMMED HERE, and that is the difference between the two surfaces. In the text the
- * fade IS the report — it says "nothing reads this" in place of a mark. A row in this panel is not the
- * code; it is a LIST OF THINGS TO DO, every entry equally worth reading, and dimming three of five rows
- * says they matter less rather than that the code they point at is dead. IntelliJ's panel lists an unused
- * import at full strength for the same reason. The tag is still carried — the editor draws it. */
 .__problem__.tag-deprecated .__message__ {
     text-decoration-line: line-through;
 }
 
-/* ── The Problems tree ──────────────────────────────────────────────────────────────────────────
- * Two row kinds through one pooled template — a file heading and the problems under it. The heading
- * carries `__problem-file__`, which is the only thing distinguishing them to the cascade. */
-
-/* A FILE HEADING READS AS A GROUP, not as a louder problem: brighter than the rows beneath, because it
- * is what you scan down when looking for a file, and the messages are what you read once you have found
- * it. VS Code and IntelliJ both weight the heading and quieten the children. */
 problemspanel .__problem__.__problem-file__ .__message__ {
     color: var(--problems-message-fg, #DFE1E5);
 }
 
-/* THE FOLDER, beside the filename — VS Code's second column, dim because it disambiguates rather than
- * identifies. The same slot carries `:591` on a problem row, which is why one rule serves both.
- *
- * NO PADDING OF ITS OWN. The row already sets `gap: 12px`, which applies between EVERY pair of
- * children — so a padding here is added to a gap that is already there, and the number drifted ten
- * pixels off the message it belongs to. It is not a separate column: a message and its line number are
- * one location, read as one thing, and IntelliJ sets them a single space apart. The 12px that remains is
- * the row's gap, and cancelling that for this one pair would take a negative margin here rather than a
- * change to the row — the gap is wanted between the icon and the message. */
 problemspanel .__problem__ .__line__ {
     font-size: 14px;
     color: var(--problems-tree-line-fg, #6B6E76);
@@ -772,8 +407,6 @@ problemspanel .__problem__ .__line__ {
     padding-left: -6px;
 }
 
-/* HOW MANY PROBLEMS ARE IN THIS FILE. Trailing, so it sits at a fixed place down the column rather than
- * after a filename of unpredictable length. */
 problemspanel .__problem__ .__problem-count__ {
     font-size: 14px;
     color: var(--problems-count-fg, #6B6E76);
@@ -781,11 +414,6 @@ problemspanel .__problem__ .__problem-count__ {
     padding-left: 12px;
 }
 
-
-/* THE CHEVRON, and it is its own hit target so a file folds on ONE click — IntelliJ's rule, and the
- * affordance the first pass of this panel shipped without: the tree grouped correctly, and there was
- * nothing to press. A problem row keeps the slot and draws nothing, so every message in the tree starts
- * at the same x rather than stepping left of the headings above it. */
 problemspanel .__problem__ .__twisty__ {
     width: 24px;
     height: 24px;
@@ -804,31 +432,14 @@ problemspanel .__problem__.__leaf__ .__twisty__ {
     overlay: none;
 }
 
-
-/* ── Run console ─────────────────────────────────────────────────────────────────────────────────────
- *
- * A TEXT AREA, not a list. This was a virtualised list of rows first, and the disproof was selection: an
- * IDE console lets you drag from the middle of one line to the middle of another and copy exactly that,
- * which a row-based list cannot express because its selection unit is the row. So the transcript is a
- * read-only `texteditor`, and everything below that used to style rows is gone with them.
- *
- * The rules live here rather than in a sheet of their own because the widget is a panel and this is the
- * panel part of the user-agent sheet. It is authored in `language/` -- a selector that matches nothing
- * costs nothing, and the alternative is a second sheet somebody has to remember to install. */
 runpanel {
     width: 100%;
-    /* The fill idiom, and it is the whole reason this measures at all: flex-shrink defaults to 0 here,
-     * so a grow-1 child with no basis keeps its content size and overhangs its parent. */
     height: 0;
     flex-grow: 1;
     flex-direction: column;
     overflow: hidden;
 }
 
-/* The rail and the transcript, side by side. A plain ROW rather than a SplitView: a split cannot go below
- * two panes, so "no rail until there is something to choose between" would have to be a pane sized to
- * nothing -- which applySplit cannot express, since it writes flex-grow and that only divides FREE space.
- * Attaching and detaching one child of a row says it exactly, and costs no divider nobody asked for. */
 runpanel .__run-body__ {
     width: 100%;
     height: 0;
@@ -837,47 +448,24 @@ runpanel .__run-body__ {
     overflow: hidden;
 }
 
-/* The rail and its toolbar, as one column. IntelliJ puts the RUN controls in a horizontal bar above the
- * tree and the CONSOLE controls in a vertical stripe beside the output, and the split is not decorative:
- * rerun and stop act on a SCRIPT, which is what the rail lists, while wrap and scroll act on the
- * TRANSCRIPT. Each toolbar sits with the thing it operates on. */
 runpanel .__run-left__ {
     flex-direction: column;
-    /* FILLS ITS PANE now that a SplitView owns the width. The minimum is stated HERE rather than on the
-     * pane, because `split.first()` is the `__split-pane__` wrapper the SplitView makes for itself -- the
-     * divider's clamp reads the pane's CONTENT, so a rule on the wrapper lands one level above where it
-     * looks and the drag can take the rail below its own minimum. */
     width: 100%;
     height: 100%;
     min-width: 300px;
     background-color: var(--run-rail-bg, #191A1C);
-    /* NO BORDER ON THIS EDGE. The SplitView's own divider is the boundary now, and a `border-right-width`
-     * here would draw nothing anyway -- the paint path takes `border().left` as its stroke width, so
-     * naming any other edge resolves and draws nothing at all. */
 }
 
-/* The run controls, on a strip spanning the panel directly under its header -- IntelliJ's arrangement,
- * and it is about what the controls BELONG to: rerun and stop act on the run as a whole, so they sit
- * above everything the run produced rather than inside the list of scripts. Its own separator, the same
- * weight as the header's, so the strip reads as a band and not as the first row of the rail. */
 runpanel .__run-bar__ {
     flex-direction: row;
     align-items: center;
     flex-shrink: 0;
     width: 100%;
-    /* THE PANEL HEADER'S OWN HEIGHT, read from the same token rather than guessed at, so the two bands
-     * above the transcript are the same weight and stay that way if a theme changes one. */
     height: var(--panel-header-h, 44px);
     padding-left: 4px;
-    /* NO GAP. The buttons carry their own padding, so a gap on top of it separates the GLYPHS by padding
-     * + gap + padding -- three sources for one visual distance, and tuning the one named "gap" moves it
-     * least. Tightening is the button box's job; see `.__run-action__`. */
     gap: 0;
 }
 
-/* The rule under it. An ELEMENT and not a border: the paint path takes `border().left` as the stroke
- * width and strokes a uniform box, so a bottom-only hairline resolves, lays out and draws NOTHING. The
- * find bar paid for that once and `statusbarview` spells its separators this way for the same reason. */
 runpanel .__run-sep__ {
     width: 100%;
     height: 2px;
@@ -891,8 +479,6 @@ runpanel .__run-rerun__ {
 
 runpanel .__run-rail__ {
     width: 100%;
-    /* THE FILL IDIOM IN A COLUMN -- a basis of zero and grow, or the rail keeps its content size and
-     * overhangs the column by however many scripts have run. */
     height: 0;
     flex-grow: 1;
     flex-direction: column;
@@ -923,16 +509,6 @@ runpanel .__run-rail__ .__row__.__selected__ {
     background-color: var(--run-rail-selected-bg, #2E436E);
 }
 
-/* The state mark. AN ICON WHERE AN ICON SAYS IT BETTER, and a dot where it does not.
- *
- * Finished and failed are the two states with a settled, universally-read symbol -- a tick and an error
- * badge -- and both are ENDINGS, which is what a reader scanning a finished list is looking for. The live
- * states have no such symbol: a spinner would be the obvious one and is wrong here, because a script that
- * is LIVE has handlers registered and is executing nothing (see RunRail). So they stay a plain dot, whose
- * only claim is "this one is still on".
- *
- * The box is the icon's size, and the dot states shrink INSIDE it rather than the box changing -- a mark
- * that moved the name left or right depending on state would make the column ripple as scripts finish. */
 runpanel .__run-rail__ .__run-rail-glyph__ {
     width: 24px;
     height: 24px;
@@ -961,32 +537,15 @@ runpanel .__run-rail__ .__run-rail-glyph__.runstate-stopped {
     background-color: var(--run-rail-stopped, #FFAF0F);
 }
 
-/* THE TICK CARRIES ITS OWN COLOUR and the error badge does NOT, which is not a distinction anybody would
- * guess from the file names. `greenCheckmark.svg` names its green; `errorDialog.svg` fills its disc with
- * `currentColor`, so it takes whatever `color` resolves to at the element — and `color` inherits, so on a
- * rail row that is the row's near-white text. A failed script was marked with a plain white disc: not
- * obviously an icon at all, and certainly not an error.
- *
- * The Problems panel's own severity rule pairs the same icon with a colour for exactly this reason (see
- * `.__severity__.severity-error` above). `--run-rail-failed` was declared for this and never used. */
 runpanel .__run-rail__ .__run-rail-glyph__.runstate-finished {
     overlay: icon("crystalgui:general/greenCheckmark");
 }
 
-/* THE SAME ARTWORK THE PROBLEMS PANEL USES, which is `statusError` and not `errorDialog`. They are two
- * drawings of one idea and they do not read alike: `errorDialog` is a disc with a white exclamation
- * PAINTED on it, while `statusError` is a single `currentColor` path with the exclamation CUT OUT of it,
- * so the mark takes the colour of whatever is behind — dark on a dark row. Two error marks a few pixels
- * apart in the same window, one with a white bang and one with a black one, read as two different
- * severities rather than as one severity drawn twice. */
 runpanel .__run-rail__ .__run-rail-glyph__.runstate-failed {
     overlay: icon("crystalgui:general/statusError");
     color: var(--run-rail-failed, #DB5C5C);
 }
 
-/* THE FILL IDIOM IN A ROW is `width: 0; flex-grow: 1` -- neither flex-grow alone nor width: 100% works,
- * and flex-shrink defaults to 0 here so without a basis of zero the name keeps its content size and
- * pushes the duration off the end. */
 runpanel .__run-rail__ .__run-rail-name__ {
     width: 0;
     flex-grow: 1;
@@ -996,8 +555,6 @@ runpanel .__run-rail__ .__run-rail-name__ {
     text-overflow: ellipsis;
 }
 
-/* The elapsed time, quieter than the name. It ticks, so it must not compete with the thing it qualifies --
- * a counter as loud as the filename makes the rail look like it is changing when only a clock is. */
 runpanel .__run-rail__ .__run-rail-time__ {
     flex-shrink: 0;
     font-size: 16px;
@@ -1005,162 +562,55 @@ runpanel .__run-rail__ .__run-rail-time__ {
     white-space: nowrap;
 }
 
-/* The transcript. It IS a `texteditor` -- a plain one, configured, not a subclass -- so it already
- * carries the editor's monospace family, the document's surface and ink, the caret and the selection
- * band. That is the whole point of repurposing: a console inherits every decision the editor has already
- * made about drawing text, including the ones nobody remembers making.
- *
- * It was a SUBCLASS first and the panel came up blank on a paler background than the editor above it.
- * A widget's cascade identity is its tag and a tag is its lowercased class name, so `runconsoleview`
- * matched none of the twelve `texteditor` rules -- no surface colour, no font, no line height. Nothing
- * below compensates for that; the fix was to stop subclassing. */
-/* THE SPLIT IS A FLEX ITEM TOO, and it is in the body's ROW -- so it takes the row idiom, `width: 0;
- * flex-grow: 1`, exactly as the bare console did before it moved in here.
- *
- * A `splitview` is `width: 100%` by default, which in a row means "as wide as the body" and leaves the
- * 52px control stripe beside it nothing at all -- and `flex-shrink` defaults to 0 here, so the stripe is
- * not squeezed, it is pushed clean outside the box. The buttons did not move or restyle; they were
- * off-screen. */
 runpanel .__run-body__ > splitview {
     width: 0;
     flex-grow: 1;
     height: 100%;
 }
 
-/* A PANE IS A FLEX COLUMN whatever the split's orientation, so its child grows by HEIGHT -- reasoning
- * from the split instead ("this one is horizontal, so grow by width") collapses whichever guess is wrong,
- * and it fails as a sibling problem rather than a sizing one. */
 runpanel splitview .__split-pane__ {
     flex-direction: column;
 }
 
-/* NO WRAPPER AROUND THE TRANSCRIPT. One was tried, to give the `System.in` row somewhere to sit under
- * the output rather than across the whole panel, and it cost a session: the transcript stopped rendering
- * entirely, in both the split and the no-split case, with nothing wrong with the wrapper's own box that
- * an isolated layout probe could reproduce. The input row lives in the split's second pane instead --
- * already a flex column, already laid out correctly, and always present when a script can be blocked on
- * a read. @see RunPanel#refreshInput */
 runpanel .__run-console__ {
-    /* IN A SPLIT PANE, WHICH IS A FLEX COLUMN -- whatever the split's orientation. So this is the COLUMN
-     * fill idiom and not the row one: `width: 100%; height: 0; flex-grow: 1`.
-     *
-     * It was `width: 0` while the console sat in a plain row beside the rail, and moving it into the pane
-     * without turning the idiom round left it exactly zero pixels wide -- the rail rendered, the divider
-     * dragged, and the transcript was simply not there. Reasoning from the split ("this one is
-     * horizontal, so grow by width") is the same mistake in a different hat. */
     width: 100%;
     height: 0;
     flex-grow: 1;
 }
 
-/* NO INSPECTION WIDGET. It reports what the analysis found in the document, and a console's document is
- * output -- nothing analyses it, so the widget can only ever show its clean mark: a green tick in the
- * corner of a transcript, permanently, meaning nothing. Scoped to the console class so a real editor
- * keeps its own. */
 runpanel .__run-console__ .__inspection__ {
     display: none;
 }
 
-/* THE POINTER OVER A NAVIGABLE SPAN. Written as a class the view swaps rather than a `cursor` set from
- * Java, which agrees with the house rule and is also the only option: `CgCursor` lives in CrystalGraphics'
- * platform module, which `core` takes as `compileOnly` and so does not pass on to `language/`.
- *
- * The underline itself is NOT here — it belongs to the `link` capture in the colour scheme, so a console
- * hyperlink is coloured by the same scheme as everything else the editor draws. */
 runpanel .__run-console__.__over-link__ {
     cursor: pointer;
 }
 
-/* A NAVIGABLE SPAN — `Foo.java:42` inside a stack frame.
- *
- * Underlined ALWAYS, not on hover, which is what IntelliJ's console does and here is also what the
- * machinery allows: the editor caches tokens per row and clears that cache wholesale, so restyling one
- * span under the pointer would discard every realised row's tokens on every mouse move. Hover changes the
- * cursor and nothing else.
- *
- * Scoped under `runpanel` rather than added to the scheme's global capture list, because `link` is emitted
- * by the console's tokenizer and by nothing else — a global rule would be a promise to colour something no
- * other producer makes. The colour is still a `var`, so a theme can take it over without this moving. */
 runpanel .__run-console__ .__syntax__::highlight(link) {
     color: var(--run-link-fg, #4A88C7);
     text-decoration-line: underline;
 }
 
-/* WHERE A RUN BEGINS. Two runs of one script print the same thing twice, so the seam between them is the
- * only thing saying where the last one ended -- and it used to be the same faded grey as the line that
- * closed the run before it, in a transcript that already has quiet lines in it. A reader had to parse the
- * text to find a boundary that should be visible while scrolling past.
- *
- * So the pair is a HEADING and a FOOTNOTE: the opening line is coloured to be found, and the closing one
- * stays `comment` grey because it is a remark about a run already read. The blank line above it does the
- * rest -- vertical space is what every terminal and log viewer uses to mean "a new section", and it needs
- * no glyph anybody's font might lack.
- *
- * The accent rather than the link colour, though both are blue: a link is UNDERLINED and this is not,
- * which is the distinction that matters when one of them is clickable and the other is a caption. */
 runpanel .__run-console__ .__syntax__::highlight(run.start) {
     color: var(--run-boundary-fg, #3574F0);
 }
 
-/* WHAT THE READER TYPED. It is in the transcript because a terminal echoes -- without it the exchange
- * reads as the script having answered its own question -- but it is the one line in a console that did
- * not come from the program, and drawing it like output makes a conversation indistinguishable from a
- * monologue. IntelliJ colours its own input echo green for exactly this.
- *
- * ITALIC AS WELL AS COLOURED, because colour alone is not a distinction everybody can see. `font-style`
- * reaches the glyphs here for the same reason it does on `comment`: the editor draws its captures as
- * styled spans, and the two faces are synthesised from the one family. (The engine's warning about
- * weight and style painting nothing is about the PLAIN text path -- a `TextField`, or a `UIText` drawing
- * an unspanned string -- not about this one.) */
 runpanel .__run-console__ .__syntax__::highlight(run.input) {
     color: var(--run-input-fg, #6A9955);
     font-style: italic;
 }
 
-/* The controls, as a vertical stripe on the console's TRAILING edge -- IntelliJ's console keeps them
- * there and the reason is space: a full-width bar spends 44px of height to hold four glyphs, on a panel
- * whose entire job is showing as many lines as it can. A stripe spends 48px of width instead, next to a
- * transcript that already has room at the right of most lines. */
 runpanel .__run-stripe__ {
     flex-direction: column;
     align-items: center;
     flex-shrink: 0;
-    /* Just wide enough for a button and a hair either side -- an 36px button in a 40px column. It was
-     * 52px, which put 14px of dead ground beside a 24px glyph and read as a wide empty band rather than a
-     * column of controls. IntelliJ's is the button's width and nothing more. */
     width: 40px;
     height: 100%;
     padding-top: 4px;
     gap: 0;
-    /* NO BORDER AND NO FILL OF ITS OWN.
-     *
-     * `border-left-width: 2px` here drew a grey frame around the whole stripe -- top, right and bottom
-     * included -- because the paint path takes `border().left` as the stroke width and strokes a UNIFORM
-     * box. That is the same property that makes a bottom-only hairline draw NOTHING: name the left and
-     * you get all four sides, name any other and you get none. Two opposite wrong results from one
-     * mistake, and only the left-hand spelling looks like it is working.
-     *
-     * The fill went with it. IntelliJ's console stripe sits on the panel's own ground -- a band of its own
-     * colour makes it read as a separate region rather than as controls belonging to the transcript. */
 }
 
-/* A console control is a glyph, not a labelled button. `min-height` is a DIFFERENT PROPERTY from
- * `height`, so the base `button` rule's minimum wins at any specificity until it is cleared here --
- * which is what held earlier attempts at a compact toggle open at 28px through three rounds of shrinking
- * `height`. The padding has to go for the same reason.
- *
- * THE DRAWING IS 24px AND THE TARGET IS 40px, which is what the padding is for. `overlay-size: contain`
- * scales the artwork to the box it is given, so a 40px button drew a 40px glyph -- huge beside 18px row
- * text. `overlay-origin: content-box` moves that box inside the padding, which shrinks and centres the
- * drawing without shrinking the thing you have to hit. */
 runpanel .__run-action__ {
-    /* 36px BOX AROUND A 24px GLYPH. The padding is what actually sets the spacing between two icons --
-     * 6px below one and 6px above the next -- so this is the number to change when they look loose, not
-     * the parent's `gap`. The glyph size is held at 12 by the content box: 18 - 3 - 3.
-     *
-     * `min-height`/`min-width` are cleared because `button` carries `min-height: 28px` in the base sheet,
-     * and a minimum is a DIFFERENT PROPERTY from a height -- it wins at any specificity without ever
-     * appearing to compete, which is how three rounds of shrinking `height` once changed nothing. */
     width: 36px;
     height: 36px;
     min-height: 0;
@@ -1173,18 +623,12 @@ runpanel .__run-action__ {
     overlay-size: contain;
 }
 
-/* `background` and `background-color` are separate properties, and a rule setting only the colour is
- * painted over by whatever drawable won -- which is how a placeholder red survived on a hover state for
- * a whole release. Both, every time. */
 runpanel .__run-action__:hover {
     background: none;
     background-color: var(--run-action-hover-bg, #2E3033);
     color: var(--run-action-hover-fg, #DFE1E5);
 }
 
-/* AFTER the hover rule, because `:disabled` and `:hover` are both one pseudo-class and therefore tie on
- * specificity -- the later rule wins. A Stop that lights up while dead is the exact thing that teaches
- * people a control does nothing. */
 runpanel .__run-action__:disabled,
 runpanel .__run-action__:disabled:hover {
     background: none;
@@ -1192,17 +636,6 @@ runpanel .__run-action__:disabled:hover {
     color: var(--run-action-disabled-fg, #5A5D63);
 }
 
-/* RERUN AND STOP SWAP THEIR ARTWORK, because `color` cannot reach them.
- *
- * Both are JetBrains' own drawings and carry their own palette -- `#208A3C` green, `#DB3B4B` red, baked
- * into the file. `currentColor` is bound at draw time and a hard fill is not, so the rule above dimmed
- * every glyph in the panel except the two that most needed it: a dead Rerun stayed as green as a live
- * one, and Stop stayed red with nothing to stop. Nothing in the cascade was wrong and nothing was
- * missing, which is why it read as the enablement not working at all.
- *
- * The disabled twins are the same geometry recoloured to `currentColor`, so THEY take the tone above --
- * one file serves any future state rather than one file per state per theme. `overlay-size` is inherited
- * from the base rule and deliberately not repeated. */
 runpanel .__run-rerun__:disabled {
     overlay: icon("crystalgui:general/action/rerunDisabled");
 }
@@ -1210,11 +643,6 @@ runpanel .__run-rerun__:disabled {
 runpanel .__run-stop__:disabled {
     overlay: icon("crystalgui:general/action/stopDisabled");
 }
-
-/* NO `.__run-filter__` RULES. The head carried a `dropdown` picking which script's output to show, and
- * the rail replaced it rather than joining it -- both answer the same question, and two controls for one
- * question is the arrangement where they drift apart. The rules outlived the widget by a release, which
- * is how a stylesheet comes to describe a UI nobody can see. */
 
 runpanel .__run-stop__ {
     overlay: icon("crystalgui:general/action/stop");
@@ -1230,13 +658,6 @@ runpanel .__run-wrap__ {
     overlay-size: contain;
 }
 
-/* A TOGGLE THAT IS ON, said with a class the widget writes rather than `:checked` -- the engine
- * re-evaluates a pseudo-class on its terms, and both of these are states the panel PULLS once a frame
- * from what it is a view of. That distinction has cost a round here before.
- *
- * Written against `.__run-action__` rather than one button at a time, because there are now two of them:
- * soft wrap, and the tail-follow lock behind Scroll to End. IntelliJ's console draws both the same way,
- * and a per-button rule is how the second one comes to look different from the first. */
 runpanel .__run-action__.__on__ {
     background: none;
     background-color: var(--run-action-hover-bg, #2E3033);
@@ -1248,36 +669,20 @@ runpanel .__run-end__ {
     overlay-size: contain;
 }
 
-/* The System.in row. Present only while something is actually blocked on a read, so it needs no empty
- * state and no label: a field that appears IS the prompt. Monospace, because what is typed becomes a
- * line of the transcript and would otherwise jump fonts the moment it was echoed. */
 runpanel .__run-input__ {
-    /* FULL WIDTH AND NO MARGIN. `box-sizing` is border-box here, which covers padding and border and
-     * NOT margin -- so `width: 100%` beside a 12px margin each side is 100% of the content box PLUS 24px:
-     * shifted 12px right and spilling 12px past the panel, which is exactly how it first shipped. The row
-     * spans the panel like a terminal's input does, and its left edge lines up with the transcript. */
     width: 100%;
     flex-shrink: 0;
     height: 40px;
     min-height: 0;
-    /* Resource paths rather than family names, so the bundled faces are used on every machine. The same
-     * two entries the editor above uses, so the line typed and the line echoed into the transcript are
-     * the same face; the sans behind covers glyphs the mono lacks. */
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
                  "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
     font-size: 20px;
     background-color: var(--field-bg, #131416);
     color: var(--field-fg, #DFE1E5);
-    /* THE EDGE THAT SAYS "answer here". A console's input is the one place in the panel that takes typing,
-     * and without a border it reads as another row of output that happens to have a caret. */
     border-width: 2px;
     border-color: var(--accent, #3574F0);
 }
 
-/* WHAT A PANEL SAYS WHILE IT HAS NOTHING TO SHOW -- `EmptyState`, IntelliJ's `StatusText`.
- *
- * Absolute and inset to nothing, so it sits over the panel's own surface rather than taking a share of
- * its height from the content it stands in for. */
 emptystate {
     position: absolute;
     left: 0;
@@ -1289,37 +694,24 @@ emptystate {
     justify-content: center;
 }
 
-/* Never wraps: a panel being resized would reflow the note on every pixel. Each line is centred on its own
- * and the block on the panel, so a panel narrower than the note clips every line evenly at both ends and a
- * short line survives whole. */
 emptystate::part(lines) {
     flex-direction: column;
     align-items: center;
     gap: 6px;
 }
 
-/* A list whose dashes should form a column. Clips from the right-hand end instead. */
 emptystate.__start-aligned__::part(lines) {
     align-items: flex-start;
 }
 
-/* EXCEPT THE HEADING, which is a title for the list rather than a member of it. Left-aligning the block
- * is about the DASHES lining up; the sentence introducing them is not a dash and reads as a ragged first
- * row when it takes the same edge. Centred over whatever the widest line turns out to be, which is what
- * `align-self` on a column child means and why this needs no width anywhere. */
 emptystate.__start-aligned__::part(heading) {
     align-self: center;
 }
 
-/* EXCEPT THE EDITOR'S WATERMARK, which is the one note that is not a caption over a list: it owns the
- * whole work area, the lines under it are the ways IN rather than examples of one thing, and the
- * sentence opening them belongs on the same edge -- IntelliJ's watermark is flush left end to end. */
 dockgroup emptystate.__start-aligned__::part(heading) {
     align-self: flex-start;
 }
 
-/* Each line states its own size: `* { font-size: 10 }` is a candidate on every element, so a rule on the
- * block would not inherit. */
 emptystate::part(heading),
 emptystate::part(line) {
     font-size: 18px;
@@ -1327,26 +719,18 @@ emptystate::part(line) {
     white-space: nowrap;
 }
 
-/* THE EDITOR'S WATERMARK, which is not a panel's note and should not read like one: it has the whole work
- * area to itself and is the only thing on screen, so it takes the readable foreground and the larger of
- * the two sizes. Everything else about it -- the chord's dimming, the row layout -- is shared. */
 dockgroup emptystate::part(heading),
 dockgroup emptystate::part(line) {
     font-size: 20px;
     color: var(--editor-watermark-fg, #DFE1E5);
 }
 
-/* A LINE IS A ROW NOW -- words, then the chord they are performed with. Direction stated because the
- * engine's default is COLUMN, which would stack the chord under its own instruction. */
 emptystate::part(line) {
     flex-direction: row;
     align-items: baseline;
     gap: 10px;
 }
 
-/* THE WORDS READ, THE CHORD RECEDES. They are two kinds of thing on one line -- an instruction and the
- * key that performs it -- and painting them the same weight makes the chord parse as part of the
- * sentence. IntelliJ's watermark and VS Code's both dim it. */
 emptystate::part(chord) {
     font-size: 18px;
     color: var(--empty-state-chord-fg, #6B6B6B);
@@ -1357,8 +741,6 @@ dockgroup emptystate::part(chord) {
     font-size: 20px;
 }
 
-/* The ring's eviction notice. Never hidden when non-empty: a transcript that quietly begins in the
- * middle reads as the console having missed something. */
 runpanel .__run-notice__ {
     width: 100%;
     flex-shrink: 0;
@@ -1369,23 +751,6 @@ runpanel .__run-notice__ {
     text-overflow: ellipsis;
 }
 
-/* ── Progress: the status bar indicator and the Processes popup ──────────────────────────────────
- *
- * Functional geometry only, as everywhere in this sheet. Every colour is a token with a fallback, so a
- * theme owns the appearance and this still renders with none loaded.
- *
- * The bar's fill is sized by ProgressBar in PERCENT at IMPORTANT -- that is the data, not a style, and
- * it is the one number the widget writes. Nothing here may set the fill's width.
- */
-
-/* THE POINTER, which the shared rule cannot give this one.
- *
- * `.__status-bar__ .__status-item__.__clickable__` is a COMPOUND selector and this element deliberately
- * does not wear `__status-item__` — that class marks a registry entry and `contents` collects by it, so
- * wearing it made a reserved slot count as an entry and shifted every index in the bar. So the entry
- * carrying the most obviously clickable thing in the bar was the one entry with no pointer, and the class
- * that would have fixed it is the one it must not have. A reserved slot styles itself, as breadcrumbs
- * does. */
 .__progress-item__,
 .__progress-item__ .__cancel__ {
     cursor: pointer;
@@ -1412,7 +777,6 @@ runpanel .__run-notice__ {
     white-space: nowrap;
 }
 
-/* A track needs a width of its own: it has no content, so content-sizing gives it zero. */
 progressbar {
     width: 240px;
     height: 8px;
@@ -1429,44 +793,22 @@ progressbar::part(fill) {
     border-radius: 4px;
 }
 
-/* ── RadarChart ─────────────────────────────────────────────────────────────────────────────────
- * A size, because a chart has no content to be sized by: its labels are out of flow, so an unsized
- * one measures zero and draws nothing. Square, since the plot is a circle inscribed in the box.
- *
- * `color` IS THE WEB. The rings and the spokes read the element's computed colour, which is the one
- * property a chart-shaped widget can carry without inventing a part that exists only to hold a
- * value -- and it inherits, so a panel setting a colour dims its charts with it. Each axis's own
- * colour is DATA and arrives inline on its label, which is why nothing here names one.
- *
- * `--radar-web` is defined in no theme on purpose: it is the same neutral line in every one shipped,
- * so it rides this fallback and a theme that wants otherwise simply defines it. */
 radarchart {
     width: 320px;
     height: 320px;
-    /* THE WEB'S COLOUR, and only its colour. border-WIDTH is deliberately not set: a border box is
-     * drawn whether or not the element has a background, so any width here puts a rectangle around
-     * the plot. The stroke thickness is the `web` part's height instead. */
     border-color: var(--radar-web, #3C3F41);
 }
-/* Not drawn. It carries the web's stroke thickness as its height, which is the one way to state that
- * in CSS for a widget whose lines are not its border. Absolute and zero-width, so it costs nothing. */
+/* Not drawn: its height carries the web's stroke thickness. */
 radarchart::part(web) {
     height: 2px;
     width: 0;
 }
-/* Not drawn either. The ALPHA of this colour is how strongly a wedge fills; its rgb is ignored,
- * because the hue is the axis's. Faint on purpose: the rim is drawn opaque, and the contrast between
- * a washed fill and its own saturated outline is what stops a wedge chart reading as a pie. */
+/* Not drawn: its alpha is how strongly a wedge fills; the hue is the axis's. */
 radarchart::part(fill) {
     height: 0;
     width: 0;
     background-color: var(--radar-fill, #FFFFFF6D);
 }
-/* The marker on each value vertex, and the ONE thing in a chart that can be hovered -- which is
- * why it is an element rather than something the paint pass draws: hit testing works on boxes.
- * SQUARE, so 50% is a circle, the same reason the slider thumb can use a percentage radius and a
- * tab cannot. Its colour is the axis's and arrives inline; only the size and the shape are the
- * theme's. */
 radarchart::part(point) {
     width: 10px;
     height: 10px;
@@ -1474,21 +816,9 @@ radarchart::part(point) {
 }
 radarchart::part(axis-label) {
     font-weight: bold;
-    /* THE GAP BETWEEN A LABEL AND ITS VERTEX -- Chart.js's pointLabels.padding, and it needs no Java
-     * because the placement already works off the label's OUTER box: whichever edge faces the chart
-     * sits on the vertex, so padding on that edge is the gap. Without it "WIL" touches the bottom
-     * point of the polygon it names. */
     padding: 8px;
 }
 
-/* THE GLYPH GOES IN `overlay`, NOT `background` — which is what lets it have a hover chip at all.
- *
- * `background` and `background-color` are separate properties and the drawable wins the paint, so an
- * icon in the background channel means a `background-color` on hover is painted straight over. That is
- * why these two crosses were the only close-shaped controls in the application that lit up by changing
- * colour and nothing else: not a missing rule, an occupied channel. `.__notification__ .__close__` has
- * always drawn its cross with `overlay: shape("cross")` for exactly this reason, and this now matches it
- * — same chip, same radius, same idea. */
 .__progress-item__ .__cancel__ {
     width: 24px;
     height: 24px;
@@ -1503,8 +833,6 @@ radarchart::part(axis-label) {
     background-color: var(--progress-cancel-hover-bg, #5A5F62);
 }
 
-/* The Processes popup. */
-
 .__processes__ {
     flex-direction: column;
     min-width: 640px;
@@ -1516,9 +844,6 @@ radarchart::part(axis-label) {
     border-radius: 8px;
 }
 
-/* WIDTH FIRST, then alignment. text-align centres text within the element's box, and a UIText in a
- * column is sized to its own content -- so there is nothing to centre within and the rule reads as
- * having been ignored. The fill idiom is the answer here as everywhere: width 0, grow 1. */
 .__processes__ .__title__ {
     font-size: 18px;
     color: var(--menu-fg, #BBBBBB);
@@ -1528,10 +853,6 @@ radarchart::part(axis-label) {
     margin-bottom: 8px;
 }
 
-/* Inter-row separation must clearly exceed intra-row, or the rows read as one block: a row's own parts
- * are 6px apart and the rows 24px, so the eye groups by proximity the way it should. Padding on the row
- * rather than a gap on the list, because a gap applies between EVERY pair of children and the list has a
- * title above it that wants its own spacing. */
 .__processes__ .__process-row__ {
     flex-direction: column;
     gap: 6px;
@@ -1553,13 +874,11 @@ radarchart::part(axis-label) {
     text-overflow: ellipsis;
 }
 
-/* The row's bar fills the row; only the status bar's is a fixed 240px. */
 .__processes__ .__process-row__ progressbar {
     width: 0;
     flex-grow: 1;
 }
 
-/* Same as the status bar's, and for the same reason — see the note there. */
 .__processes__ .__process-row__ .__cancel__ {
     width: 24px;
     height: 24px;
@@ -1575,7 +894,6 @@ radarchart::part(axis-label) {
     background-color: var(--progress-cancel-hover-bg, #5A5F62);
 }
 
-/* Asked for and not yet acknowledged: inert, but the bar stays -- the work has not stopped. */
 .__processes__ .__process-row__.__cancelling__ .__label__ {
     color: var(--statusbar-item-dim-fg, #6E7178);
 }
@@ -1584,8 +902,6 @@ radarchart::part(axis-label) {
     color: var(--progress-cancelling-fg, #4E5254);
 }
 
-/* The foot: IntelliJ's "Hide processes (N)". A link, not a button -- it dismisses a popup rather than
- * acting on anything, which is the distinction both references draw. */
 .__processes__ .__hide__ {
     font-size: 18px;
     color: var(--progress-hide-fg, #548AF7);

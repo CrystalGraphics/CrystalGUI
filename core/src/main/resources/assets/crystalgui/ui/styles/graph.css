@@ -1,84 +1,18 @@
-/* CrystalGUI — node graph theme.
- *
- * The Unity Shader Graph look, deliberately and literally: the target is that a screenshot of ours and
- * a screenshot of theirs differ in content, not in construction. Load it on top of default.css, which
- * carries the geometry this file assumes:
- *
- *     window.getStyleEngine().addStylesheet(StyleSheet.DEFAULT);
- *     window.getStyleEngine().addStylesheet(StyleSheetRegistry.of("crystalgui:graph"));
- *
- * WHY THE PALETTE IS THE IMPORTANT HALF. Unity gives each data type a colour and applies it to the port
- * AND to every edge leaving it. That is what makes a dense graph readable at a glance — you can see a
- * float feeding a vec3 slot without reading a single label. The box is just a box; the colour coding is
- * the feature.
- *
- * HOW A WIRE GETS ITS COLOUR FROM HERE. `CgCurveBatch` needs an ARGB int, so something has to hand
- * it a number. `NodePort.typeColor()` reads back the computed `border-color` of `.__dot__` — so the
- * number's source is still this stylesheet, and adding a type is a rule here plus a `PortType`
- * registration, with no Java colour anywhere. `border-color` rather than `background-color` because the
- * fill is a fixed dark hole regardless of type or connection state (see the `.__dot__` fill rule below)
- * — the ring is the only part of the dot that ever carries the type's colour.
- *
- * TYPE COLOURS. Unity's, from its Data Types documentation: Float light blue, Vector 2 green,
- * Vector 3 yellow, Vector 4 pink, Matrix blue, Boolean purple, textures red, and grey for the
- * opaque handles (Gradient, SamplerState, Virtual Texture). The ids below are conventions, not
- * something core/ knows — a consumer registers whatever `PortType.id()` values it likes and adds the
- * matching rules. */
+/* graph.css — the node graph's theme: Unity Shader Graph's look, its colours sampled as they appear.
+ * Loaded over StyleSheet.DEFAULT, whose geometry it assumes; its --node-* tokens open the sheet.
+ */
 
-/* THE PALETTE, sampled from Unity screenshots. These are how the surfaces APPEAR, not what is written
- * below — every one of them is translucent.
- *
- *     canvas          #202020      header / input panel / controls row   #393939
- *     output panel    #2B2B2B      preview (opaque)                      #313131
- *     every 2px seam  #232323
- *
- * Header, input panel and controls row are the SAME colour; the layering comes from the output panel
- * being darker and the preview lighter.
- *
- * ── Writing a colour here: solve, do not paste ──
- *
- * What you see is `base * a + backdrop * (1 - a)`, so a base only means anything alongside its alpha and
- * its backdrop. Pasting a sampled colour in directly is wrong — it is already composited.
- *
- * One alpha for everything translucent: 0x76 (0.4627). Unity measures at 0.824; ours is lighter so a wire
- * crossing behind a node stays visible. They must all share it — two surfaces at different alphas drift
- * apart by an amount that depends on what is behind them, and the header and input panel have to stay
- * identical.
- *
- *     on the canvas    base = (target - 0x20  * 0.5373) / 0.4627
- *                      #393939 -> #565656      #232323 -> #262626
- *
- *     on the BAND      base = (target - 34.78 * 0.5373) / 0.4627
- *                      #393939 -> #535353      #2B2B2B -> #353535
- *
- * The two port columns paint over the ports band, not the canvas, so they composite twice and take the
- * second formula — the backdrop is whatever is directly behind, which here is another translucent
- * surface. Change the alpha and BOTH sets have to be re-solved. */
-/* ── The theme's tokens ─────────────────────────────────────────────────────────────────────────
- *
- * The palette named in prose at the top of this file, made usable. Appearance only — every SIZE the
- * graph editor uses is a token in `default.css`, and the two blocks cannot see each other because
- * this engine collects `var()` definitions PER SHEET (`DeclarationParser.collectVariables`). That
- * separation is not a limitation to work around: it is the project's geometry/appearance split
- * enforced by the parser, so a theme physically cannot move a box and this sheet physically cannot
- * recolour one.
- *
- * Declared on `*` because these are sheet-global regardless of the selector they sit under — see the
- * same block in `default.css` for the three rules of this engine's `var()` that decide the shape of
- * both. */
 * {
     --node-canvas: var(--graph-canvas, #202020);
-    --node-header: var(--graph-header, #393939);    /* header, input panel, controls row — the "raised" surfaces */
-    --node-panel: var(--graph-panel, #2B2B2B);     /* output panel */
-    --node-seam: var(--graph-seam, #232323);      /* every 2px separator between regions */
-    --node-edge: var(--graph-edge, #1A1A1A);      /* the node's own outer border */
+    --node-header: var(--graph-header, #393939);
+    --node-panel: var(--graph-panel, #2B2B2B);
+    --node-seam: var(--graph-seam, #232323);
+    --node-edge: var(--graph-edge, #1A1A1A);
 
-    /* The hairline that rings a control. #282828, NOT black: a line's apparent weight is contrast as
-     * much as thickness, and near-black against the panel read as a heavy rule at any width. This
-     * sits a hair darker than the panel — it separates without drawing attention. */
+    /* Not black: a line's weight is its contrast, and black on these greys reads twice as heavy. */
     --node-hairline: var(--graph-hairline, #282828);
 
-    --node-field: var(--graph-field, #1E1E1E);     /* the recessed surface a value is typed or dragged on */
+    --node-field: var(--graph-field, #1E1E1E);
     --node-text: var(--graph-text, #C4C4C4);
     --node-text-bright: var(--graph-text-bright, #D4D4D4);
 }
@@ -87,17 +21,7 @@ graphview {
     background: var(--node-canvas);
 }
 
-/* ── The node box ──────────────────────────────────────────────────────────────────────────────── */
-
-/* THE NODE PAINTS NO BACKGROUND OF ITS OWN. Each region paints its own instead, and the port band
- * paints NOTHING — so a wire, which is drawn under every node, is visible right through that band and
- * reads as reaching its dot rather than being cut off at the border. That is Unity's own construction,
- * and it is the difference between "a wire near a port" and "a wire plugged into a port".
- *
- * The consequence to know about: a region that forgets to paint itself is see-through, and a node whose
- * last region is the port band has a transparent bottom edge. That is correct here (the border still
- * outlines it) and would be a surprise anywhere else, which is why the regions are all named together
- * below rather than left to inherit. */
+/* The node paints no background: each region paints its own, so the port band can differ per side. */
 graphnode {
     background: #00000000;
     border-radius: 10px;
@@ -106,33 +30,10 @@ graphnode {
     color: var(--node-text);
     font-size: 16px;
 
-    /* IT CLIPS, so the radius reaches the REGIONS and not just the border. A radius alone rounds the
-     * element's own fill, and this node deliberately has none -- so every region inside it (the port
-     * band, the controls, the preview) drew its square corner straight over the curve, and only the
-     * title bar looked right because it hand-rounds its own two. Clipping promotes the node to
-     * OverflowClip.MASK, which masks the whole subtree to the rounded box: whichever region happens to
-     * be last is cut to the curve without knowing it is last.
-     *
-     * The transparent background is not a problem for the mask -- a mask that would reveal nothing
-     * reveals the whole shape instead, which is what UIElement.maskFill guarantees.
-     *
-     * A promoted popup opened from inside a node (a ColorControl swatch) is NOT clipped by this: the
-     * box tree hosts a promoted box on the top layer rather than on its DOM parent, so it paints
-     * outside this subtree. The hover/selection outline is not clipped either -- it is painted after
-     * the mask composite. */
+    /* It clips, so the radius reaches the regions inside and not just the border. */
     overflow: hidden;
 }
 
-/* Three ring states, ADDITIVE, sampled off the reference. Hover alone is a dimmer colour so it does not
- * compete with a real selection; hover on top of one adds only width.
- *
- *     hover 2px #327090      selected 4px #44C0FF      both 6px #44C0FF
- *
- * An OUTLINE, not a recoloured `border-color`: that would replace the node's own edge colour, so a selected
- * node lost its outline exactly when it gained emphasis.
- *
- * ORDER IS LOAD-BEARING. `:hover` and `:checked` both weigh 11, so source order decides between them and
- * `:checked` has to come second. */
 graphnode:hover {
     outline: 2px var(--graph-node-hover-ring, #327090);
     outline-offset: 2px;
@@ -146,14 +47,6 @@ graphnode:checked:hover {
     outline-offset: 2px;
 }
 
-/* The title bar carries the node's top corners itself, because the root no longer paints a background
- * to round. Without this a square bar sits over a rounded border and the two disagree at exactly the
- * two corners a user looks at first. 8px, not 5: it is inset by the 2px border.
- *
- * `>`, not a bare descendant combinator — see default.css's own `graphnode > .__title-bar__` note.
- * `Dialog` reuses the exact same `__title-bar__` class, and a popup opened from this node (a
- * `ColorControl` swatch, say) is a genuine DOM descendant of it even once promoted — a bare descendant
- * selector painted the popup's title bar in this node-header colour/radius too. */
 graphnode > .__title-bar__ {
     background: var(--graph-title-bg, #56565676);
     color: var(--node-text-bright);
@@ -161,32 +54,15 @@ graphnode > .__title-bar__ {
     border-top-right-radius: 8px;
 }
 graphnode .__title__ { font-size: 18px; }
-/* Hidden until the node itself is hovered — NOT `:checked`/selected, which is a held state a node can
- * sit in for the whole session, while the chevron is a hover affordance like a window's own close button.
- * Tying it to selection would leave it permanently on for whatever you clicked last and permanently off
- * for everything else, which is backwards from "reveal on demand". */
 graphnode .__collapse__ { color: var(--graph-collapse-fg, #9A9A9A); opacity: 0; }
 graphnode:hover .__collapse__ { opacity: 1; }
 graphnode .__collapse__:hover { color: var(--graph-collapse-hover-fg, #E0E0E0); }
 
-/* The fill sits on the two COLUMNS, not on the band holding them, because the two sides get different
- * greys — that is what makes the direction of flow legible. The greys differ; the alpha never does. */
 graphnode .__inputs__ { background-color: var(--graph-inputs-bg, #53535376); }
 graphnode .__outputs__ { background-color: var(--graph-outputs-bg, #35353576); }
 
-/* The band shows through the three 2px separators default.css opens up (under the title bar, above the
- * section below, between the columns). Darker than either panel so the seams read as seams. */
 graphnode .__ports__ { background-color: var(--graph-ports-bg, #26262676); }
 
-/* Same trick as `.__ports__` above, not a border — this engine has no per-edge `border-*-width`
- * property (only the 4-edge `border-width` shorthand and its own `border-width-{edge}` longhands), so a
- * `border-top-width`/`border-bottom-width` declaration is silently unrecognized and paints nothing. The
- * real mechanism is: the CONTAINER (`.__controls__`) is the darker tone, each ROW gets its own lighter
- * fill, and `.__controls__`'s `padding-top`/`padding-bottom` (default.css) plus its 2px `gap`
- * (already there, for the multi-row case) expose the darker tone as a frame around them — exactly how
- * `.__ports__`'s own 2px-darker-than-its-columns band reads as a seam. Before this, `.__controls__` and
- * `.__control-row__` were the SAME flat colour, so there was nothing for that padding to expose: touching
- * a differently-coloured preview read as a bare colour jump ("kissing") rather than a framed line. */
 graphnode .__controls__ { background: var(--graph-ports-bg, #26262676); }
 graphnode .__control-row__ {
     background: var(--graph-control-row-bg, #56565676);
@@ -194,49 +70,25 @@ graphnode .__control-row__ {
 }
 
 graphnode .__preview__ {
-    /* OPAQUE, unlike everything above it: a preview is a rendered image, and something showing through
-       it is a second picture mixed into the one it exists to display. So the sampled colour goes in
-       flat, with no solving. */
     background: var(--graph-preview-bg, #313131);
-    /* Its seam with `.__controls__` above is now that element's own darker padding-frame — see the note
-     * there. `border-top-width` was tried here first and does nothing: this engine has no per-edge
-     * `border-*-width` property, only the 4-edge `border-width` shorthand and `border-width-{edge}`
-     * longhands, so it silently parsed to a no-op. Left as history in the sibling comment, not repeated
-     * here. */
     border-bottom-left-radius: 8px;
     border-bottom-right-radius: 8px;
 }
 
-/* The rubber band. Drawn in the VIEWPORT rather than the plane, so this 2px border stays 2px at any
- * zoom — a band inside the transform would be four physical pixels at 4x and invisible at 0.25x. */
 graphview .__marquee__ {
     background-color: var(--graph-marquee-bg, #2C79C433);
     border-width: 2px;
     border-color: var(--graph-marquee-border, #44C0FF);
 }
 
-/* THE SELECTED WIRE'S COLOUR, read back out of the cascade by NodeWireLayer.selectedWireColor() —
- * the same pattern NodePort.typeColor() established, and the same token the node's :checked ring
- * uses, so a theme that moves the selection accent moves the ring and the wire TOGETHER. The layer
- * paints rather than lays out, so `selection-color` on the layer element is its one styleable knob. */
+/* Read back by NodeWireLayer.selectedWireColor(): the wire follows the node's selection ring. */
 graphview .__wire-layer__ {
     selection-color: var(--graph-selection-ring, #44C0FF);
 }
 
-/* -- Ports -────────────────────────────────────────────────────────────────────────────────────── */
-
 nodeport { color: var(--node-text); }
 nodeport:hover .__label__ { color: var(--graph-port-label-hover-fg, #FFFFFF); }
 
-/* The type palette. `border-color` is the type's colour and the wire's.
- *
- * Vector 3 is YELLOW and Vector 4 is PINK. They are adjacent in Unity's own table, easy to transpose,
- * and a transposed pair looks entirely plausible in a screenshot — while vec3 is the type a shader
- * graph carries most (positions, normals, colours), so it is the one a user reads as "the main
- * signal". Worth checking against the reference rather than against memory. */
-/* A dynamic port takes its type from whatever is connected, so it has no colour of its own until the
- * compiler resolves one. Neutral grey states that honestly — colouring it as float would be a lie in the
- * one direction that matters, since float is the NARROWEST numeric type and reads as "scalar only". */
 nodeport.type-dynamic .__dot__ { border-color: var(--graph-port-dynamic, #B4B4B4); }
 
 nodeport.type-float .__dot__,
@@ -254,24 +106,8 @@ nodeport.type-cubemap .__dot__ { border-color: var(--graph-port-cubemap, #FF8B8B
 nodeport.type-gradient .__dot__,
 nodeport.type-sampler .__dot__ { border-color: var(--graph-port-sampler, #C1C1C1); }
 
-/* The gap. Unity's dots do NOT go solid-colour when connected — a screenshot of a wired-up graph shows
- * every dot, blank or connected, with the exact same dark hole between the ring and the core; only the
- * ring and the core carry the type colour, and only a wire (drawn separately, under the node) tells you
- * it's connected at all. So this is one flat rule, not a per-type "filled" set knocked back out for
- * `:blank` — an earlier version of this file matched border-color and background-color per type, which
- * made a connected port a solid disc and looked like a different (heavier, target-shaped) widget from an
- * unconnected one instead of the same dot in two functional states.
- *
- * #212121 is darker than every panel it can sit on (`--node-header` composited is ~#565656,
- * `--node-panel` ~#353535) specifically so the hole always reads as a hole and never blends into
- * whatever's behind it. */
 nodeport .__dot__ { background-color: var(--graph-dot-bg, #212121); }
 
-/* The core. Sits centred inside the gap (`NodePort` adds it as `.__dot-core__`, a plain internal child —
- * see that class's own javadoc for why this dot gets a real child element instead of the flat
- * three-layer stack `PortDefaultEditor`'s floating dot uses). Small enough, against a 14px outer dot with
- * a 2px ring, to leave the gap visible as its own ring rather than touching the border — that gap is
- * what turns this into Unity's ring-hole-core "target" instead of a smaller solid dot. */
 nodeport .__dot-core__ {
     width: 6px;
     height: 6px;
@@ -296,26 +132,8 @@ nodeport.type-cubemap .__dot-core__ { background-color: var(--graph-port-cubemap
 nodeport.type-gradient .__dot-core__,
 nodeport.type-sampler .__dot-core__ { background-color: var(--graph-port-sampler, #C1C1C1); }
 
-/* An unconnected port shows the core only while its own dot is being interacted with — hovered here,
- * or (see `PortDefaultEditor`) its floating default-value editor is focused, which lands here the same
- * way any other typing-driven state does: through the port's own pseudo-classes, not a separate rule.
- * At rest a blank port is a plain hollow ring — the gap's own colour standing in for the core, same as
- * it always did before this dot had a core at all — so "does this look connected" stays an honest
- * signal instead of every unconnected port wearing the full connected-looking target by default.
- *
- * Same specificity as the base per-type rules above (`nodeport:blank` and `nodeport.type-X` both weigh
- * one type selector plus one pseudo/class), so source order decides and this MUST come after them —
- * declared earlier, the type rule would win the tie and every blank port would show its core regardless.
- * The `:hover` rules below outrank this one on specificity alone (they add a second class/pseudo to the
- * same compound), so hovering a blank port still lights it up without needing a `:blank:hover` rule of
- * its own. */
 nodeport:blank .__dot-core__ { background-color: #00000000; }
 
-/* Hover brightens the core toward white — the "glossy button" bevel Unity's reference shows — rather
- * than the core staying flat. This has to be its own rule per type (no way to say "this element's
- * border-color, lighter" from CSS alone), so it mirrors the palette above one-for-one: each tint here is
- * that type's colour blended 50% toward white. The ring and the gap are untouched by hover — only the
- * core lights up. */
 nodeport.type-dynamic:hover .__dot-core__ { background-color: var(--graph-port-dynamic-hover, #DADADA); }
 nodeport.type-float:hover .__dot-core__,
 nodeport.type-vec1:hover .__dot-core__    { background-color: var(--graph-port-vec1-hover, #C2F2F3); }
@@ -332,69 +150,23 @@ nodeport.type-cubemap:hover .__dot-core__ { background-color: var(--graph-port-c
 nodeport.type-gradient:hover .__dot-core__,
 nodeport.type-sampler:hover .__dot-core__ { background-color: var(--graph-port-sampler-hover, #E0E0E0); }
 
-/* `PortDefaultEditor` — Unity's little floating `X 0 •` beside an unconnected input. Not a descendant of
- * `nodeport` at all: it floats on the plane beside the port, rather than sharing the port's own row
- * inside the node. Scoped under `graphview` instead — still true (it is a plane child of the view).
- *
- * `.__editor__` IS `PortDefaultEditor`'s box — the rounded, panel-toned frame wrapping the axis label
- * and the bare `ConfigControl` `NodePort.getDefaultEditor()` returns. Its dot (`.__editor-dot__`, below)
- * is NOT a descendant of it, despite reading as attached to it visually: it is a wholly separate plane
- * element `PortDefaultEditor.reposition()` places independently every tick, off the box's own live
- * bounds. See that class's own javadoc for why a flex-child dot could not be made to do this instead — a
- * flex margin does not move a flex child relative to its own container, it changes what the CONTAINER
- * measures itself as, and `reposition()` anchors the box's world position off exactly that measurement —
- * so the fix a web developer reaches for first quietly moved the whole box instead of the dot. Same
- * greys the rest of a node uses (`--node-header`, `--node-edge`), because a value floating beside a node
- * should read as part of the same object, not a dialog that arrived from somewhere else — the same
- * reasoning `ColorSelector`'s own construction note gives. */
 graphview .__editor__ {
     flex-direction: row;
     align-items: center;
     gap: 8px;
-    /* NOT a fixed height — auto, sized to its own content (the field's 22px plus this padding). A fixed
-     * height here once clamped the box to exactly the field's own 22px with nothing left over for the
-     * padding below, so the rounded corners clipped to an 22px band while the field inside — still
-     * demanding its own 22px, from INSIDE that padding — visibly overflowed past the bottom edge. Auto
-     * is what every other sized-to-its-children container in this stylesheet already does. */
-    /* 4px, not 3 — small enough that two ports stacked in the same node (their editors necessarily
-     * stacked too, one per row) keep a sliver of visible gap between boxes rather than nearly touching. */
     padding-top: 4px;
     padding-bottom: 4px;
-    /* Symmetric, unlike the field's own narrow padding — 8px more than the vertical sides so the axis
-     * label and the field read as centred inside the box rather than hugging its left edge. Right is
-     * wider still: the box's own trailing edge, which is what the dot overlaps and the stub leaves
-     * from, needs room for both without either crowding the field. */
     padding-left: 14px;
     padding-right: 34px;
-    /* Translucent, matching the SAME composited "header" surface the node's own title bar and control
-     * row use on the canvas — `#393939` composited at this engine's one shared alpha (0x76) over
-     * `--node-canvas` solves to `#565656` — see this file's own alpha-solving note near the top. A flat
-     * opaque `var(--node-header)` looked like a different material entirely sitting on the same canvas
-     * every other translucent surface shares. */
     background: var(--graph-inline-editor-bg, #56565676);
     border-width: 2px;
     border-color: var(--node-edge);
     border-radius: 8px;
 }
-/* The axis prefix. Deliberately plain — no field chrome of its own — because it reads as part of the
- * box the way Unity's does, and only the value field inside it is the thing you type into. Same dim
- * shade as a port's own label (`nodeport { color: var(--node-text); }`), since it is naming the exact
- * same thing from the outside. */
 graphview .__editor__ .__editor-label__ {
     color: var(--node-text);
     font-size: 14px;
 }
-/* `PortDefaultEditor`'s dot, three concentric layers, dark to coloured — a TOP-LEVEL rule, not a
- * descendant of `.__editor__`, because it genuinely is not one in the tree; see `.__editor__`'s own
- * comment and `PortDefaultEditor`'s own javadoc for why. `reposition()` places its centre
- * `PortDefaultEditor.DOT_OVERLAP` inside the box's own right edge every tick — this rule only supplies
- * its fixed size and look, never its position.
- *
- * THIS outermost element is the static dark backdrop — `--node-edge`, a shade darker than the canvas
- * rather than the canvas's own tone. It was `--node-canvas` first, which is exactly the colour of the
- * plane behind it — visually indistinguishable from "no backdrop at all", so what was meant to be
- * three concentric rings read as only two. `--node-edge` is the same dark the node's OWN border uses,
- * so the ring stays legible against the canvas without introducing a fourth colour into the dot. */
 graphview .__editor-dot__ {
     width: 16px;
     height: 16px;
@@ -407,9 +179,6 @@ graphview .__editor-dot__ {
     flex-grow: 0;
     flex-shrink: 0;
 }
-/* The middle, neutral ring — deliberately not black or the coloured core: a third tone between the two
- * is what keeps the centre from reading as a coloured dot floating with a dark halo, rather than a
- * deliberate three-layer target. */
 graphview .__editor-dot-ring__ {
     width: 12px;
     height: 12px;
@@ -422,9 +191,6 @@ graphview .__editor-dot-ring__ {
     flex-grow: 0;
     flex-shrink: 0;
 }
-/* The coloured core, at the very centre. Java sets its `background-color` every tick, the same
- * `NodePort.typeColor()` the stub and the port's own dot read, one number for all three rather than a
- * fourth copy of the per-type palette living in this file. */
 graphview .__editor-dot-core__ {
     width: 8px;
     height: 8px;
@@ -433,10 +199,6 @@ graphview .__editor-dot-core__ {
     flex-grow: 0;
     flex-shrink: 0;
 }
-/* Narrow on purpose. These hold a component of a vector — "0", "0.5", "-1.2" — not prose, and Unity's
- * own floating field is about this size for the same reason: four or five characters is the whole
- * vocabulary. A floor, not a cap — VECTOR's two cells each claim their own, so a vec2 port editor is
- * legitimately wider than a scalar one. */
 graphview .__editor__ textfield,
 graphview .__editor__ dropdown {
     min-width: 48px;
@@ -448,43 +210,9 @@ graphview .__editor__ dropdown {
     color: var(--node-text-bright);
     font-size: 14px;
 }
-/* VECTOR's own components collapse to literal ZERO width here, not merely narrow — the bug the
- * `min-width` above cannot reach on its own. `.__config-control__.__vector__ .__number__` (and
- * `.__vector-cell__` around it) is `width: 0; flex-grow: 1`, which is the correct shape everywhere
- * ELSE a vector control lives: the inspector column and a node's own control row are both a BOUNDED
- * flex context, so `flex-grow` has real slack to distribute and the field ends up sized to its share
- * of it. `.__editor__` is not — it is `position: absolute`, sized to its OWN content — so a
- * `flex-grow: 1` item inside it has nothing to grow into. In real CSS a flex item's default
- * `min-width` is `auto`, which floors it at its own content's minimum size regardless (the textfield's
- * `min-width: 48px` above would still win). This engine's `min-size` default is `0`, not `auto` — a
- * deliberate divergence recorded in AGENTS.md's own "Taffy defaults diverge from CSS" table — so
- * nothing stops the collapse here the way it would in a browser. Scoped to `graphview .__editor__`
- * rather than fixed on the base `.__vector__` rule itself: nowhere else a vector control is used is
- * missing the bounded ancestor this depends on, so a global floor would be defending against a bug
- * that cannot occur there. */
 graphview .__editor__ .__vector__ .__vector-cell__ { min-width: 60px; }
 graphview .__editor__ .__vector__ .__number__ { min-width: 48px; }
-/* Cells size to their OWN content instead of stretching to whatever height the box currently has, and
- * this is a correctness fix rather than a cosmetic one.
- *
- * This engine's flex `align-items` default is STRETCH, so without this a `__vector-cell__` takes the
- * cross size of the `__vector__` row — which takes it from the box. The box is `position: absolute`
- * with an auto height, and on the pass right after it is mounted (before `reposition()`'s inline
- * left/top have been applied) it is laid out against the whole plane, so the cells were briefly ~1100px
- * tall. Their own `align-items: center` then parked the axis label and the number field at y≈269 —
- * exactly (550-12)/2 — and when the box settled back to its real ~36px, Taffy repositioned the cells
- * but NOT the grandchildren inside them, so those two kept the centred-in-550 offset for good. That is
- * the whole "the X/Y boxes render hundreds of pixels below their own frame" bug: the label and field
- * were correct in x, correct in size, and correctly parented — just vertically centred in a box that
- * had not existed for many frames.
- *
- * The scalar editor never showed it because its label and field are DIRECT children of the box, one
- * level up, and that level does get repositioned. Pinning the cell's height to its content removes the
- * two-level dependency entirely, so no intermediate box height can reach the grandchildren at all. */
 graphview .__editor__ .__vector__ { align-items: center; }
-/* BOOLEAN: same "square, and smaller than the row" exception the inspector and the control row both
- * make — `--cfg-check` (26px, from the config kit's OWN unscoped rule) would otherwise win here too,
- * same specificity trap `everyKind()` already caught for the control row. */
 graphview .__editor__ checkbox,
 graphview .__editor__ checkbox .__mark__,
 graphview .__editor__ checkbox::part(mark) {
@@ -492,11 +220,6 @@ graphview .__editor__ checkbox::part(mark) {
     height: 22px;
     min-height: 22px;
 }
-/* COLOR: a vec3/vec4 input CAN carry an inline literal (widgetKindFor maps both to COLOR), so this is
- * reachable even though Unity itself rarely puts a colour picker inline on a port — a swatch this
- * small is still legible as "a colour, not a number", which is the one thing it has to say. Not the
- * inspector's `.__swatch__` sizing (`--cfg-ctrl-h`) or the control row's (`--graph-ctrl-h`) — a THIRD
- * scale, because a port editor is tighter than either. */
 graphview .__editor__ .__color__ .__swatch__ {
     width: 80px;
     height: 22px;
@@ -504,29 +227,11 @@ graphview .__editor__ .__color__ .__swatch__ {
     outline: 2px var(--node-hairline);
     outline-offset: 0px;
 }
-/* `ColorControl` itself needs somewhere to be that size — same "FULL_WIDTH_CLASS has no sizing of its
- * own" gap the control row hit, except a port editor never adds FULL_WIDTH_CLASS at all (there is no
- * separate label to skip — the axis prefix above is not it), so this reaches the control directly
- * instead. A real descendant selector now that the control sits one level inside the row — see this
- * section's opening note. */
 graphview .__editor__ .__color__ { width: 80px; }
-
-/* ── ColorSelector ──────────────────────────────────────────────────────────────────────────────
- * No bare `colorselector { ... }` rule here any more. There used to be one — background, border,
- * text colour, font-size, all restated for the node's own palette — but it tied on specificity (1)
- * with default.css's own bare `colorselector` rule and, being loaded after it, silently won for
- * EVERY colorselector in the whole window, not just ones opened from a node: any change to
- * default.css's own colorselector background was completely invisible on any page, anywhere, for as
- * long as this file was also loaded. default.css's own rule is what every picker uses now, node
- * context included. What's left below are the genuinely graph-specific touches — the descendant
- * selectors don't collide with anything in default.css and were never the problem. */
 
 colorselector .__channel-row__ text { color: var(--colorpicker-channel-fg, #9A9A9A); }
 colorselector .__hex-row__ text     { color: var(--colorpicker-channel-fg, #9A9A9A); }
 
-/* Both handles carry a dark outer ring as well as the white one, so they stay visible against a
- * white square corner and against a yellow band alike. Without it the handle vanishes exactly where
- * the colour is brightest, which is where it is most often dragged. */
 colorselector .__ring-handle__,
 colorselector .__square-handle__{
     outline: 2px var(--colorpicker-handle-shadow, #00000080);
@@ -541,96 +246,36 @@ colorselector .__hex-row__ textfield {
     font-size: 12px;
 }
 
-/* Unity outlines every channel track and its thumb. It is not decoration: a track is a gradient that
- * runs to near-white at one end, and without an edge it bleeds into the panel so the bar's true extent
- * — which is what the thumb's position is read against — becomes a guess. The thumb takes a light
- * border for the mirror-image reason: it is white, and against the pale end of a track it disappears. */
-/* An OUTLINE rather than `border-width`: the track's fill is a CgUiColorField covering the whole box and
- * it paints over the border layer, so a border here draws nothing. Note an outline is measured in
- * LOGICAL pixels and then multiplied by uiScale like everything else — at uiScale 2 this is two physical
- * pixels, which is correct and is not the stylesheet disagreeing with itself. */
-/* The ring colour is `--node-hairline`; the reasoning for that value lives with the token. */
 colorselector .__channel-row__ slider {
     outline: 2px var(--node-hairline);
     outline-offset: 0px;
 }
-/* The pair is ringed as ONE object, not as two — the outline goes on the container, so no line falls
- * between the halves. That seam is the whole point: the eye compares two adjacent colours far better
- * than two separated ones, and a divider would turn the comparison into two separate readings.
- *
- * `border-radius` matches the swatches' own — those round via `CgUiColorField.setCornerRadius` in
- * Java, not CSS (see that method's doc for why), so nothing here derives it automatically the way a
- * `CgUiRect`-backed pair would. Without it this outline was a sharp rectangle drawn around
- * properly rounded content — invisible back when the container's own background was close enough in
- * tone to hide the mismatch, and an obvious squared-off corner poking out past the pill the moment
- * that background changed. */
 colorselector .__swatches__{
     outline: 2px var(--node-hairline);
     outline-offset: 0px;
     border-radius: 6px;
 }
 
-/* ── The Color node's field ─────────────────────────────────────────────────────────────────────
- * Since P6.1.8 step 7: the swatch is `ColorControl`'s (`__swatch__`, `__color-bar__`, `__alpha-bar__`,
- * `__alpha-fill__`), not a hand-rolled widget of this node's own — default.css already gives it the
- * right HEIGHT, geometry and alpha-gauge backdrop for a node
- * (`graphnode .__config-control__.__color__ .__swatch__`). The one thing worth restating here is this
- * THEME's own hairline colour, `--node-hairline`, in place of the inspector's `#1A1A1A`. */
 graphnode .__config-control__.__color__ .__swatch__ {
     outline: 2px var(--node-hairline);
     outline-offset: 0px;
-    /* `Color` has no preview to lean on for width the way a previewed node does, but its swatch is
-     * real content the same way a long port label is — `width: 100%` alone contributes nothing to the
-     * node's own max-content sizing (it's a zero flex basis, same trap `graphnode`'s own comment
-     * documents), so without an explicit min-width here `Color` would shrink to the bare 80px floor
-     * along with every other preview-less node. It should not: it has a control, `Time`/`Split` do not. */
     min-width: 266px;
 }
-/* NO outline on the thumb. An outline is stroked on BOTH sides, so a 2px edge on a 2px thumb is 6px of
- * apparent width — the outline was the whole of what remained after the thumb itself was already a
- * single pixel. A hairline cannot afford one, and it does not need it here: the track carries its own
- * dark edge, so a white mark on it stays legible. */
 colorselector .__channel-row__ slider .__thumb__,
 colorselector .__channel-row__ slider::part(thumb) {
     outline: none;
 }
 
-/* ── THE PROPERTY NODE ──
- * Unity reference: docs/research/unity-blackboard/14-drag-property-to-node.png and the side-by-side in
- * the 6.3.14 notes.
- *
- * ONE ROW, not a node box. A property node is a name and a dot: it has no input column, no controls row
- * and no preview, so the title bar and the single output sit SIDE BY SIDE rather than stacked. That is
- * done by turning the node itself into a flex row -- the same children an ordinary node has, laid out
- * along the other axis -- rather than by rebuilding the widget, so a property node stays an ordinary
- * GraphNode and keeps selection, dragging, hit testing and wires for free.
- *
- * The radius is half the node's height, which is what makes the ends semicircles rather than soft
- * corners. Keep the two in step if either moves. */
 graphnode.__property-node__ {
     flex-direction: row;
     align-items: center;
-    /* BRIGHTER than --node-header (#393939), which every other node's header uses. Unity lifts a
-     * property node above the ordinary ones on purpose: it is a reference rather than a computation, and
-     * the extra lift is what separates it from the canvas at a glance without a border. */
     background: var(--graph-property-node-bg, #565656);
     border-radius: 26px;
     min-height: 52px;
-    /* SYMMETRIC. Both edges frame a dot -- the green exposed dot on the left, the port dot on the right
-     * -- so equal padding reads as equal. It was 10/8 on the assumption the port needed less room, which
-     * only made the right side look tighter. */
     padding-left: 20px;
     padding-right: 20px;
 }
 
-/* Every region paints its own background normally -- the node paints none -- so these have to be cleared
- * rather than left to inherit, or the pill reads as stacked bands again.
- *
- * BOTH `background` AND `background-color`, because they are two different properties here: one is a
- * drawable and the other a colour, and clearing only the drawable leaves the colour painting. The
- * output column uses `background-color: #35353576`, so with only `background: none` the port kept a
- * darker block behind its dot -- the node was the right colour everywhere except the one place a
- * separate rule was still painting. */
 graphnode.__property-node__ .__title-bar__,
 graphnode.__property-node__ .__ports__,
 graphnode.__property-node__ .__outputs__,
@@ -640,14 +285,7 @@ graphnode.__property-node__ .__inputs__ {
     border-radius: 0;
 }
 
-/* CONTENT-SIZED, and emphatically NOT `width: 0; flex-grow: 1`.
- *
- * A graphnode's width comes from its content. A zero-basis title bar therefore contributes NOTHING to
- * that content width, so the node shrank to just its two dots -- and with no slack left there was
- * nothing for flex-grow to grow into. The name vanished entirely: a pill with a green dot, a port dot
- * and no text at all.
- *
- * The pill is meant to be the width of its name, which is what `auto` already gives. */
+/* Content-sized, not width 0 plus flex-grow: a node's width comes from its content, and a zero basis gives it none. */
 graphnode.__property-node__ .__title-bar__ {
     flex-direction: row;
     align-items: center;
@@ -657,7 +295,6 @@ graphnode.__property-node__ .__title-bar__ {
     padding-left: 0;
     padding-right: 0;
 }
-/* The gap between the name and its port dot. On the NODE, since the two are siblings there. */
 graphnode.__property-node__ {
     gap: 12px;
 }
@@ -676,8 +313,6 @@ graphnode.__property-node__ .__outputs__ {
     padding-bottom: 0;
 }
 
-/* Nothing else a node normally carries applies: no inputs to show, nothing under the title to fold
- * away, no settings and no preview. */
 graphnode.__property-node__ .__inputs__,
 graphnode.__property-node__ .__collapse__,
 graphnode.__property-node__ .__controls__,
@@ -685,8 +320,6 @@ graphnode.__property-node__ .__preview__ {
     display: none;
 }
 
-/* The port shows its DOT only. Unity labels the NODE, not the port -- the arity is already in the title
- * (ShaderPropertyNodes.titleFor), so a port label would say it twice. */
 graphnode.__property-node__ nodeport .__label__ {
     display: none;
 }
@@ -695,19 +328,6 @@ graphnode.__property-node__ nodeport {
     padding-right: 0;
 }
 
-/* LINKED -- this node reads the property picked on the Blackboard. GREEN, deliberately not the selection
- * blue: a link and a selection are different answers ("where is this used" versus "what am I about to
- * move"), and green is already this feature's colour, carried by the exposed dot on both the pill and
- * the node.
- *
- * SPECIFICITY, NOT SOURCE ORDER, decides against the selection rules -- and getting that backwards is
- * what made a selected node stay green. `graphnode.__property-node__.__property-linked__` weighs 21;
- * `graphnode:checked` weighs 11, so the link won outright wherever both applied and there was no way to
- * tell which of several linked nodes was the selected one. Every combined state therefore needs a rule
- * of its own, each heavier than the one it must beat.
- *
- * SELECTION ALWAYS READS BLUE. It is the more urgent state: linkage says where a property is used,
- * selection says what the next keystroke acts on. */
 graphnode.__property-node__.__property-linked__ {
     outline: 4px var(--graph-exposed-ring, #7BD64B);
     outline-offset: 2px;
@@ -725,9 +345,6 @@ graphnode.__property-node__.__property-linked__:checked:hover {
     outline-offset: 2px;
 }
 
-/* EXPOSED. The same green dot the Blackboard pill carries, and drawn the same way -- a plain element
- * with a full corner radius, exactly as NodePort draws its own. Whether a property is exposed is
- * otherwise invisible once it is on the graph. */
 graphnode.__property-node__ .__exposed-dot__ {
     width: 10px;
     height: 10px;
@@ -738,17 +355,6 @@ graphnode.__property-node__ .__exposed-dot__ {
     border-radius: 6px;
 }
 
-/* ── Main Preview (P6.3.12) ─────────────────────────────────────────────────────────────────────
- * Unity's floating preview panel: a title strip over a dark stage.
- *
- * The stage is deliberately DARKER than the node canvas rather than matching it. A preview is a
- * picture, and a picture needs a border of its own to read as one — matching the canvas would make a
- * dark shader look like a hole in the editor. */
-/* BOTH panels, one rule. The Blackboard is meant to be visually identical to the Main Preview, and the
- * look actually lives HERE rather than in default.css -- which is where three rounds of "it looks
- * nothing like it" came from: the shared frame went into the user-agent sheet while the theme, loaded
- * after it and therefore winning, still named only one panel. A theme is where a panel's palette lives;
- * default.css gives it geometry. Both files have to name both panels or neither does. */
 .__main-preview__,
 .__blackboard__ {
     background: var(--node-canvas);
@@ -758,24 +364,15 @@ graphnode.__property-node__ .__exposed-dot__ {
     border-radius: 6px;
 }
 
-/* The NODE palette's header colours, not the configurator's band. Reverted deliberately: --cfg-band
- * (#383838) sits too close to this panel's own --node-canvas body for the strip to read as a separate
- * surface, and the contrast that made the header legible went with it. The configurator's SHAPE is what
- * was worth copying here (see default.css) — its palette is tuned against an inspector's lighter panel,
- * not against a graph canvas. */
 .__main-preview__ > .__head__,
 .__blackboard__ > .__head__ {
     background: var(--node-header);
     color: var(--node-text-bright);
 }
 
-/* The Blackboard's own parts, in the theme's palette rather than invented greys. */
 .__blackboard__ .__titles__ > .__title__ {
     color: var(--node-text-bright);
 }
-/* DARKER than the title. The two lines are a heading and its caption; equal weight makes them read as
- * two competing labels, which is exactly how the side-by-side against Unity showed up. Same grey as
- * a pill's type column, so every caption on this panel is one colour. */
 .__blackboard__ .__titles__ > .__subtitle__ {
     color: var(--blackboard-subtitle-fg, #676767);
 }
@@ -785,13 +382,9 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__blackboard__ .__empty__ {
     color: var(--node-text);
 }
-/* The graph's own accent, the same one a selected node is outlined in -- a drop target in a second
- * colour would be a second vocabulary for "this is what you are about to act on". */
 .__blackboard__ .__drop-line__ {
     background-color: var(--blackboard-drop-line, #44C0FF);
 }
-/* A heading is BRIGHTER than the pills under it, and the arrow dimmer than the heading. Unity's own
- * ordering, and it is what makes the list read as sections rather than as rows of two kinds. */
 .__blackboard__ .__category__ > .__name__ {
     color: var(--node-text-bright);
 }
@@ -802,22 +395,9 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__blackboard__ .__category__:hover > .__arrow__ {
     color: var(--blackboard-arrow-hover-fg, #FFFFFF);
 }
-/* NO row-level fill. The row is the full width of the panel, so filling it on hover reads as a table
- * row highlighting while the thing under the pointer is the chip. Both states ring the capsule instead.
- *
- * An OUTLINE rather than a fill, in the graph's own accent: a selected NODE is outlined #44C0FF, and a
- * selected pill reading differently would be two vocabularies for one idea. */
 .__property-pill__ > .__capsule__ {
     background: var(--node-header);
 }
-/* THE NODE'S OWN THREE STATES, values and all: hover 2px #327090, selected 4px #44C0FF, both 6px
- * #44C0FF. A pill and a node are the same idea -- a thing you hover, select and act on -- so they say it
- * the same way; a second vocabulary for one concept is what makes an editor feel assembled rather than
- * designed.
- *
- * ORDER IS LOAD-BEARING, exactly as it is for graphnode above. `> .__capsule__:hover` and
- * `.__selected__ > .__capsule__` weigh the same (30 each), so source order alone decides between them
- * and selected has to come second. The combined rule outweighs both at 40 and wins outright. */
 .__property-pill__ > .__capsule__:hover {
     outline: 2px var(--graph-node-hover-ring, #327090);
 }
@@ -833,17 +413,10 @@ graphnode.__property-node__ .__exposed-dot__ {
 .__property-pill__ .__name__ {
     color: var(--node-text-bright);
 }
-/* Greyer than the name on purpose -- it is a caption, not a second label. Measured against Unity's own
- * board rather than picked. */
 .__property-pill__ > .__type__ {
     color: var(--blackboard-type-fg, #676767);
 }
 
-/* Solid, not a checkerboard — yet. With `Alpha` now a real master port, a transparent material over a
- * flat colour is genuinely ambiguous, and a checkerboard is the standard answer. It is not here because
- * the honest ways to draw one are a repeating texture asset (which does not exist) or a grid of quads
- * painted in Java (which would put two colours in Java, against this project's rule). Worth doing
- * properly rather than quickly. */
 .__main-preview__ .__surface__ {
     background: var(--preview-surface-bg, #1A1A1A);
 }

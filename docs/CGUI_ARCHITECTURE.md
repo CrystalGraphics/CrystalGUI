@@ -1,625 +1,307 @@
 # CrystalGUI — modules and packages
 
-Where everything lives: what each module is, and what each package of `core/` owns. Moved from [`AGENTS.md`](../AGENTS.md), which keeps a one-line summary of each.
+Where everything lives: each module, and what each package of `core/` owns.
 
 ## Module layout — what actually compiles
 
 `settings.gradle.kts` includes the engine modules, the loader trees and `gl-debug-harness`. `taffy` and
-`gl-debug-harness` are **git submodules** that are ordinary Gradle subprojects (no settings file of their
-own); CrystalGraphics is a submodule included as a composite `includeBuild`, whose
-`dependencySubstitution` entries resolve `com.crystalgraphics:*:<version>` — and each modern node's
-common — to local source (`gradle/module_integration/composite.settings.gradle.kts`).
+`gl-debug-harness` are git submodules built as ordinary subprojects; CrystalGraphics is a submodule included as a
+composite build, whose `dependencySubstitution` resolves `com.crystalgraphics:*` and each modern node's common to
+local source (`gradle/module_integration/composite.settings.gradle.kts`).
 
-| Module | In build? | State |
-|---|---|---|
-| `core/` | ✅ | The engine. Java 25, an abstract module (above). Everything below lives here. |
-| `language/` | ✅ | The language stack — everything with a native or an engine behind it. Depends on `core/`; **`core/` must never depend on it**, which is what keeps tree-sitter's `.so`s and ECJ's ~13MB off a dedicated server. **Since J8 it ships as its OWN MOD, `crystalgui_language`**, and the rule now reaches the loader hosts too: `:language` is on their `lang` source sets and not on `main`, so no host class can name it. Its hosts are the `lang` source sets of `runtime/mc/1710`, the legacy tree and the modern tree (`common`, plus one entry class per loader). `.grammar` (six tree-sitter grammars), `.engine` (band selection, the ONE shared loader per band — `EngineHost` — the language-neutral `Analysis` answer and the `AnalysedLanguageServices` attachment every engine extends), `.java` (everything Java, split by what a class is FOR — `.ecj` the adapters, `.classpath` what a script compiles against, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog over `.fix.catalog`/`.fix.ast`/`.fix.edit`, `.exec` the `ScriptHost` runtime), `.js` (everything JavaScript, split by WHICH LOADER defines a class — `.host` may name `language.run`/`language.java` and never Rhino, `.rhino` is the reverse and holds `.rhino.resolve`/`.rhino.fix`/`.rhino.exec`), `.map` (the readable↔runtime boundary, on ASM), `.run` (the **engine-neutral** Run shell: `ScriptRuntime` SPI + `ScriptRuntimes` registry and `ScriptPolicy` at the root — which lives there because three of its four consumers are not JavaScript — over `.exec` (capture, stop, cache), `.console` (the transcript, UI-free) and `.view` (the only one that may import `com.crystalgui.ui`). `RunShellIsEngineNeutralTest` forbids the whole tree naming `.java`, `.js`, ECJ or Rhino, and still needs no change after the split because it matches by path PREFIX). `.resolve` is reserved. *(Was `syntax-treesitter/` until M4.)* |
-| `taffy/` | ✅ | **The layout engine, VENDORED.** Git submodule ([`CrystalGraphics/taffy-java`](https://github.com/CrystalGraphics/taffy-java), branch `master`) — so `git clone --recursive`, like the other two. A fork of the published sources of `dev.vfyjxf:taffy:1.1.4` (MIT), carrying our own fixes to its measure path — see `taffy/MODIFICATIONS.md`, which is the statement of changes MIT requires, and `plan/engine-rewrite.md` D3. The package stays `dev.vfyjxf.taffy` because the shipped jar relocates it, so 165 call sites needed no edit and a stock copy in another mod cannot win a classloader race. **Depends on nothing** since 2026-09-10: the seven fastutil types it used are reimplemented in `dev.vfyjxf.taffy.collection`, which took the merged jar from 31.20 MB to 8.44 — fastutil was 63% of it. `MODIFICATIONS.md` §2 has the two behaviours that are silent when wrong. |
-| `gl-debug-harness/` | ✅ | Git submodule (branch `master`), Java 25. It takes CrystalGraphics and CrystalGUI's `core` as libraries, by coordinates the including build supplies, and builds on its own from `local.properties` (its `README.md`). The fastest way to run the UI — [Render testing](../AGENTS.md#render-testing--the-gl-debug-harness). |
-| `harness-scenes/` | ✅ | CrystalGUI's scenes for the harness (`com.crystalgui.harness`), reaching it as a `HarnessExtension`. Java 25. Its build script puts it on `:gl-debug-harness:runHarness` — engines, `crystalgui.*` flags, asset roots — so the run command is unchanged. Included whenever the harness is. |
-| `CrystalGraphics/` | ✅ (composite) | The rendering backend. Consumed, never reimplemented. |
-| `runtime/mc/1710/` | ✅ | **In `settings.gradle.kts` and compiling** (`./gradlew :runtime:mc:1710:compileJava`). The 1.7.10 node, with **no source**: its dev run, `serverSmoke` and the reobfuscated thin jar. The mod's `@Mod` is `runtime/mc/forge-stubs`'s `CrystalGUIForge` (put into the dev jar by `shadowJar`), and everything starts from `core`'s lifecycle listeners. GTNH's layout check is off (`gtnh.modules.structureCheck`), since it requires a `src/main/java/<modGroup>`. **It stays a module of its own on RetroFuturaGradle, deliberately** (legacy D3): it is aligned with the legacy host rather than folded into it — what the two share is in CrystalGraphics and `core`, and the rest is how each version spells it. **Verified by `serverSmoke` and by running the client**; a green compile was never the claim. |
-| `runtime/mc/modern/` | ✅ | **Forge 1.13.2+, NeoForge 1.20.2+, Fabric 1.14.4+**, a Stonecutter tree — one source tree, a node per Minecraft version, `:runtime:mc:modern:<branch>:<version>`; **read `runtime/mc/modern/README.md` before touching it**. **It holds no code of CrystalGUI's** but the Forge and NeoForge `@Mod` classes: everything starts from `core`'s lifecycle listeners (`runtime/mc/CLAUDE.md`). `common` is an empty branch. Each loader node compiles against the `common` node of its own version, and against CrystalGraphics' node of that version, and builds a **thin** jar, which is what the root merge consumes. |
-| `runtime/mc/shared/` | ✅ | **Java 8, merged once and never relocated**, for anything every loader variant must share without naming Minecraft. Empty today: the HUD and screen hooks it once gated are CrystalGraphics' (a node mixin's plugin must load on every loader, 1.7.10 included). A dev run takes it as a library, not a mod. `LoaderProbe`, `CrashVariant` and (since J11.0) the whole **variant selector** are CrystalGraphics': CrystalGUI requires CrystalGraphics on every loader, so a second copy bought nothing. The hosts register under their own heading, `CrashVariant.label(NAME)`, and `checkSingleJar` forbids `com/crystalgraphics/` so a copy cannot creep back in as a split package. |
-| `runtime/mc/legacy/` | ✅ | **Forge 1.8–1.12.2**, a second Stonecutter tree: one branch, `forge`, a node per SRG plateau (`1.8.9`, `1.10.2`, `1.12.2`), MCP names through Unimined, each shipping in `com.crystalgui.mc.v<digits>`. It holds no class of CrystalGUI's: `CrystalGUIForge` is the mod, and everything starts from `core`'s lifecycle listeners. **No mixin**: Forge 1.8 added the cancellable screen input events 1.7.10 lacked. It claims every Forge version from 1.8.8 to 1.12.2 — not 1.8, which no MixinBooter boots — and prodSmoke has drawn on all eleven (`188forge` … `1122forge` in `local.properties`). The language host is `src/lang`'s `com.crystalgui.mc.legacy.lang`: MCP stable names per Minecraft version, fetched through `forge/mcp-stable/{version}`. The player needs MixinBooter. **There is no legacy dev `serverSmoke`**: `runtime/mc/legacy/server_smoke.py` boots the shipped jars on a real installed Forge server per version instead, which is what caught the production-only defects dev servers hide (client classes absent, a `jar:` code source, FML trapping every exit). `CrystalGraphics/singlejar-logic/README.md` § *the legacy tree*. |
-| `runtime/mc/forge-stubs/` | ✅ | **What declares CrystalGUI to a loader: the `@Mod` classes for every Forge from 1.7.10 and every NeoForge**. `CrystalGUIForge` and `CrystalGUINeoForge` (`main`, into the host jar), `CrystalGUILangForge` and `CrystalGUILangNeoForge` (`lang`, into the language jar). Each Forge class carries FML 1.7.10's `cpw.mods.fml.common.Mod` and the `net.minecraftforge.fml.common.Mod` every later Forge scans for, so one class per mod serves every era. Each names no loader type beyond its annotation, compiles against CrystalGraphics' `forge-stubs`, and hands off to `ForgeStart` or `NeoForgeStart`, which pick the running version's variant and construct nothing. Java 8, merged once, never relocated — `singlejar-logic/README.md` has the pattern. Fabric needs none. |
+| Module | What it is |
+|---|---|
+| `core/` | The engine. Java 25, with a Java 8 copy. Everything below lives here. |
+| `language/` | The language stack: everything with a native or an engine behind it. Ships as its own mod, `crystalgui_language`. **`core/` never depends on it**, and it is on the loader trees' `lang` source sets only, so no host class can name it. Packages: `.grammar` (tree-sitter grammars), `.engine` (band selection, the one shared loader per band `EngineHost`, the `Analysis` answer, `AnalysedLanguageServices`), `.java` (`.ecj` adapters, `.classpath`, `.assist` completion and Quick Documentation, `.fix` the Alt+Enter catalog, `.exec` the `ScriptHost` runtime), `.js` (`.host` never names Rhino; `.rhino` is child-side, with `.resolve`/`.fix`/`.exec`), `.map` (readable↔runtime names, on ASM), `.run` (the engine-neutral Run shell: `ScriptRuntime`, `ScriptRuntimes`, `ScriptPolicy`, `.exec`, `.console`, `.view`; `RunShellIsEngineNeutralTest`). |
+| `taffy/` | The layout engine, vendored: a fork of `dev.vfyjxf:taffy:1.1.4` (MIT), our changes in `taffy/MODIFICATIONS.md`. The package stays `dev.vfyjxf.taffy`, relocated in the jar. Depends on nothing: its collections are `dev.vfyjxf.taffy.collection`. |
+| `gl-debug-harness/` | Submodule, Java 25. Takes CrystalGraphics and CrystalGUI's `core` as libraries; builds on its own from `local.properties`. |
+| `harness-scenes/` | CrystalGUI's harness scenes (`com.crystalgui.harness`), a `HarnessExtension` its build puts on `:gl-debug-harness:runHarness`. |
+| `CrystalGraphics/` | The rendering backend (composite build). Consumed, never reimplemented. |
+| `runtime/mc/1710/` | The 1.7.10 node on RetroFuturaGradle, with no source: its dev run, `serverSmoke` and the thin jar. The `@Mod` is `forge-stubs`' `CrystalGUIForge`; everything starts from `core`'s lifecycle listeners. |
+| `runtime/mc/modern/` | Forge 1.13.2+, NeoForge 1.20.2+, Fabric 1.14.4+: a Stonecutter tree, a node per version (`:runtime:mc:modern:<branch>:<version>`). Holds no CrystalGUI code; each loader node compiles against its version's `common` and CrystalGraphics' node and builds a thin jar. Read `runtime/mc/modern/README.md` first. |
+| `runtime/mc/shared/` | Java 8, merged once, never relocated, for what every variant shares without naming Minecraft. Empty today; the variant selector is CrystalGraphics', and `checkSingleJar` forbids `com/crystalgraphics/` here. |
+| `runtime/mc/legacy/` | Forge 1.8.8–1.12.2: a Stonecutter tree, a node per SRG plateau (`1.8.9`, `1.10.2`, `1.12.2`), MCP names through Unimined, no mixin. Language host: `src/lang`'s `com.crystalgui.mc.legacy.lang`. Players need MixinBooter. No dev `serverSmoke`: `runtime/mc/legacy/server_smoke.py` boots the shipped jars on real servers. |
+| `runtime/mc/forge-stubs/` | The `@Mod` classes for every Forge and NeoForge: `CrystalGUIForge`, `CrystalGUINeoForge` (host jar), `CrystalGUILangForge`, `CrystalGUILangNeoForge` (language jar). Each Forge class carries both eras' `@Mod` and hands off to `ForgeStart` / `NeoForgeStart`. Java 8, merged once. Fabric needs none. |
 
-> **The two `java`/`js` axes differ on purpose** (`language/`, above). In `.java` the loader question
-> is mechanical — a class that imports `org.eclipse.jdt` is child-side, and that is thirty-six of its
-> fifty — so directories spend themselves on the axis that is *not* readable off the file. In `.js`
-> it is the loader question that cannot be read: six classes import neither Rhino nor anything of
-> ours and are child-side only because every one of their callers is.
->
-> *Below the table on purpose: a blockquote inside a row ends the table, and this one silently
-> collapsed every module from `taffy/` down into one paragraph until 2026-09-12.*
-
-`core/build.gradle.kts` runs an **import guard** as a `doLast` on `compileJava`: any source line
-importing `net.minecraft.*`, `cpw.mods.fml.*`, `net.minecraftforge.*`, or `org.lwjgl.*` fails the
-build. There are currently **no exemptions** — the guard is clean.
+`core/build.gradle.kts` runs an **import guard** on `compileJava`: a line importing `net.minecraft.*`, `cpw.mods.fml.*`,
+`net.minecraftforge.*` or `org.lwjgl.*` fails the build, with no exemptions.
 
 ## Package map
 
 ```
-com.crystalgui.core            CrystalGuiCore — the global LOGGER, and nothing else. The platform
-                               registry it used to hold now lives in CrystalGraphics; see below.
-  .async                       UiSequence (a document's sequence; services(), the one owned services
-                               live on; forDocument, which -Dcrystalgui.ui.singleSequence=true makes
-                               one for all), Broadcast<T> (an event across sequences: posted, heard on
-                               the subscriber's), Published<T> (state as immutable generations; a document's frame pins each one it
-                               reads), Contributions<T> + Owner (what modules and applications declare:
-                               a published list of (owner, item), indices per generation, an owner's
-                               contributions leave together), JobScheduler, UiThread, UiBudget
-  .data                        CacheCell / IntCacheCell / LongCacheCell (dirty-flag memoization),
-                               ReadOnlyVec2f (immutable view over a mutable JOML Vector2f), Transform2D
-  .dispose                     Disposable, Disposable.Gl, Disposer — the ownership tree. NOT a
-                               replacement for CgGraphicsLifecycle's registry sweep; it exists to
-                               release on CLOSE rather than on exit, and to reach createOwned GL
-                               objects no registry can see. docs/CGUI_WORKBENCH_SERVICES.md
-  .provider                    Providers — every provider of a service: ServiceLoader, plus the
-                               Copies slot a host fills where its classloader cannot list a resource
-                               across mod files (ModLauncher 5). Every registry discovers through it
-  .property                    Property<T> — a value held here or DERIVED from a model (read and
-                               write through, polled or announcedBy, the history its edits go into,
-                               map), what every config control binds to; ObservableList<T>
+com.crystalgui.core            CrystalGuiCore: the global LOGGER
+  .async                       UiSequence (a document's sequence; services(); -Dcrystalgui.ui.singleSequence=true
+                               makes one for all), Broadcast<T> (an event across sequences), Published<T> (state as
+                               immutable generations), Contributions<T> + Owner (declared contributions, leaving with
+                               their owner), JobScheduler, UiThread, UiBudget
+  .data                        CacheCell / IntCacheCell / LongCacheCell, ReadOnlyVec2f, Transform2D
+  .dispose                     Disposable, Disposable.Gl, Disposer: the ownership tree (CGUI_WORKBENCH_SERVICES.md)
+  .provider                    Providers: every provider of a service, ServiceLoader plus the copies a host fills
+                               where its loader cannot list resources across mod files. Every registry uses it
+  .property                    Property<T> (held or derived from a model; what every control binds to),
+                               ObservableList<T>
   .signal                      Signal.Action/Value/Pair, SignalBase, Connection, ConnectionGroup
-  .storage                     WHERE ANYTHING PRIVATE GOES, on CrystalGraphics' `storage` package: CgConfigStorage (the key/value SPI),
-                               CgLocalConfigStorage (one real directory, atomic writes, and `scoped`
-                               answering a real SUBDIRECTORY), CgScopedConfigStorage (the default
-                               `scoped` — a key prefix), CgInMemoryConfigStorage, all CrystalGraphics'; here CrystalGuiStorage and CrystalGuiDownloads —
-                               the `crystalgui/` tree stated ONCE: workspace-config/ (durable —
-                               apps/ an application's, projects/<key>/ a workspace's, extensions/
-                               what a user made with an extension), cache/ (deletable at any
-                               moment), projects/ (the user's own files). ConfigRecord<T> is one
-                               typed JSON record in a store: codec + default, update, onChanged,
-                               an unreadable file left alone.
-                               A host answers WHERE its installation is and nothing else; nothing
-                               outside CrystalGuiStorage may spell those segments.
-                               plan/crystalgui/fs-rewrite/fs-storage-layout.md
-  .cache                       Only the CLAUDE.md of the downloads guide; the machinery (CgDownloads,
-                               CgDownloadLocations, CgCacheFiles, CgTarArchive) is CrystalGraphics',
-                               and CrystalGuiDownloads (in .storage) binds it to download/locations.json
-  .command                     Command (a named invocable action), CommandContext, Commands —
-                               what a key binding, a menu item and the palette all point at. Plus the
-                               MENU MODEL: MenuId (a named place a menu is drawn, interned, with nested
-                               submenus), MenuSection (a group + its rows — what a separator is drawn
-                               from), MenuEntry (Item/Submenu, sealed; an Item carries enabled/checkable/
-                               checked so the RENDERER decides), MenuContributor (rows computed at open
-                               time — the Window menu's editor list). Commands.sections() is the
-                               one query every menu renderer reads. Commands is a Contributions list: the lookup by id, each
-                               menu's rows and the declared keymap are indices of its generation, and a
-                               command with no document runs on the services sequence.
-                               ActionIcons is the VOCABULARY of marks a row may draw -- a constant per
-                               shipped icon, since an id naming no file draws an empty column and
-                               reports nothing -- and carriesItsOwnPalette() is the line between a
-                               chrome mark that follows the cascade and artwork that must not be tinted
-  .cursor                      CursorService (a CLASS, one static method -- resolves a keyword to a
-                               picture and hands it to CrystalGraphics' CgCursorService, whose LWJGL
-                               adapters know no keywords), Cursor (the keyword set — CSS UI 4's, plus three the web never named:
-                               slide-arrow, skew, pivot), CursorBitmaps (procedural 32x32
-                               ARGB art, AND `artFor` — the ONE keyword->picture table every platform
-                               reads), CursorArt (one picture: name, drawing, hotspot; shared across the
-                               keywords that want it, so an adapter caches one native per PICTURE),
-                               CursorService (+ its CgService slot). Was CrystalGraphics' `platform.input`
-                               / `platform.service` until CgService gave CrystalGUI a way to own a
-                               service; it names no GL and no loader
-  .trace                       WHAT A FRAME COST, and who asked. UiTrace (CrystalGUI's three channels —
-                               `crystalgui.frame` for phases and counters, `.flow` for chains that
-                               outlive a frame, `.blame` for the stack walk — and the frame boundary a
-                               UIDocument brackets its frame with -- `frameBegin`/`frameEnd`, `blame`),
-                               SlowFrameLog (the `[frame]` line, read back off the ring) and
-                               FrameStats (the readout's model — a VIEW over the ring, with no storage
-                               of its own). The capture engine itself is CrystalGraphics'
-                               `com.crystalgraphics.trace`, in its PLATFORM module rather than core, so
-                               a dedicated server and `headlessTest` can both reach it. Call sites
-                               write to it DIRECTLY -- `CgTrace.zone(UiTrace.FRAME, "...")`,
-                               `CgTrace.add` for a per-frame count, `CgTrace.stamp` + `zoneDone` for
-                               a split begin/end -- and CrystalGraphics' own on `CgChannels.TEXT`/
-                               `GL`/`WORLD`/`ASYNC`/`MISC`. There is no facade left: `FrameProfile` and
-                               `CgProfiler` were deleted in T9, and the harness reads the ring through
-                               `harness.trace.TraceReport`/`TraceDump`. TraceFiles is EXPORTED TRACES:
-                               the Frame Profiler's Export writes Chrome JSON (ui.perfetto.dev opens it)
-                               to `cache/trace-exports/`, BESIDE the runs because the run directory is
-                               pruned, and Compare's "Load trace as B" reads one back. The run
-                               directory, its exit report and hitch dumps are CrystalGraphics'
-                               `CgTraceRun`, opened by the engine's pre-init. The GPU is `CgGpuTrace` (T7): timer queries
-                               landing in the frame they were issued in, one to three frames late, as
-                               `gpuNanos` and a `gpu:<name>` counter per zone -- absent, never zero.
-                               Frame images are `CgFrameImages` (T8), on the `images` channel: the
-                               paint context's finished frame every 30 frames, read back through
-                               a graph readback without a stall.
-                               **A run writes `cache/trace/latest/`** — `trace.log` (off the frame
-                               thread, on a bounded queue that drops and COUNTS), and on exit
-                               `report.txt` (the tiered text report, with each frame's unzoned time and
-                               GAPs) and `meta.json` (which channels were and were not recording).
-                               Profiling end to end: docs/CGUI_PROFILING.md. NOTHING goes to the game console unless
-                               `-Dcrystalgui.frameprofile=true`, which adds it rather than replacing it.
-                               **The ring is sized at run time**: `CgTrace.configure(first, newest,
-                               zonesPerFrame)` keeps the FIRST frames of a recording for good (their own
-                               arenas and counters, never overwritten) and the NEWEST after them; 0
-                               newest stops once the first are full. `frames()` skips the gap between.
-                               `stopAfterHitch(ns, framesAfter)` stops recording after a slow frame.
-                               A thread's zone arena starts small and doubles up to the ceiling, so a
-                               worker never holds the frame thread's arena. The Frame Profiler's
-                               settings (`apps/crystalgui.frameprofiler/settings.json`) drive all three.
-                               A viewer refreshing on a clock reads `frameSnapshot()` (no zones) plus
-                               `zonesBetween` for its selection: a full `snapshot()` copies every zone.
-                               plan/platform-trace-engine.md
-  .undo                        Edit (one undoable change), CompositeEdit, UndoStack — one history per
-                               DOCUMENT, never per window
-  .window                      WindowState, WindowPolicy — types BOTH engines name, so a package both
-                               may name: a pure enum and a policy record, naming no engine type.
+  .storage                     CrystalGuiStorage: the crystalgui/ tree, stated once (workspace-config/ apps/,
+                               projects/<key>/, extensions/; cache/; projects/). ConfigRecord<T>: one typed JSON
+                               record. CrystalGuiDownloads binds CrystalGraphics' downloads to
+                               download/locations.json. The stores themselves are CrystalGraphics' (CgConfigStorage)
+  .cache                       the downloads guide (CLAUDE.md) only; the machinery is CrystalGraphics'
+  .command                     Command, CommandContext, Commands (a Contributions list: lookup, menu rows and keymap
+                               per generation); the menu model: MenuId, MenuSection, MenuEntry (Item/Submenu),
+                               MenuContributor. ActionIcons: the marks a row may draw, and carriesItsOwnPalette()
+  .cursor                      CursorService (keyword → picture → CrystalGraphics' CgCursorService), Cursor (CSS UI 4's
+                               keywords plus slide-arrow, skew, pivot), CursorBitmaps (the keyword→picture table),
+                               CursorArt
+  .trace                       UiTrace (channels crystalgui.frame, .flow, .blame; frameBegin/frameEnd, blame),
+                               SlowFrameLog, FrameStats (a view over the ring), TraceFiles (exported Chrome JSON in
+                               cache/trace-exports/), UiHints. The engine is CrystalGraphics' com.crystalgraphics.trace;
+                               call sites use CgTrace directly. CGUI_PROFILING.md
+  .undo                        Edit, CompositeEdit, UndoStack: one history per document, never per window
+  .window                      WindowState, WindowPolicy: types both engines may name
 
-com.crystalgui.widget.texteditor  THE EDITOR ON THE NEW ENGINE (M6.5) — TextEditor and
-                               EditorCommands (its named actions). TWO files at the root; everything
-                               else is in a sub-package below.
-  .part                    VS Code's VIEW-PART decomposition: EditorViewPart (the base + Monaco's
-                             shouldRender protocol), DecorationPool (the pool/hide idiom), and one
-                             part each -- LineNumbersPart, ViewCursorsPart, SelectionsPart,
-                             CurrentLinePart, IndentGuidesPart, WhitespacePart, RulersPart,
-                             GutterEdgePart, FoldingDecorationsPart, ZoomIndicatorPart,
-                             ErrorStripePart, SquigglesPart, QuickFixBulbPart, InspectionWidgetPart,
-                             DiffBandsPart, DiffChevronPart.
-                             `render(int, int)` is PUBLIC here, which is the boundary's whole cost and
-                             an honest statement of what it always was: the contract between an editor
-                             and the things that draw it
-  .fold                    EditorFolding — folding is VIEW STATE by the engine's own rule, and this
-                           is the package that says so
-  .diff                    DiffDecorations — the diff model the two diff view parts read
-  .suggest                 CompletionPopup, CompletionSession, CompletionRanking, EditorSuggest
-  .doc                     DocumentationPopup, HoverDocumentation
-  .find                    SearchReplaceBar, EditorFind
-  .lang                    EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
+com.crystalgui.widget.texteditor  TextEditor and EditorCommands at the root; the rest below
+  .part                        VS Code's view parts: EditorViewPart (base, Monaco's shouldRender), DecorationPool,
+                               LineNumbersPart, ViewCursorsPart, SelectionsPart, CurrentLinePart, IndentGuidesPart,
+                               WhitespacePart, RulersPart, GutterEdgePart, FoldingDecorationsPart, ZoomIndicatorPart,
+                               ErrorStripePart, SquigglesPart, QuickFixBulbPart, InspectionWidgetPart, DiffBandsPart,
+                               DiffChevronPart. render(int, int) is public: the editor's contract with what draws it
+  .fold                        EditorFolding (view state)
+  .diff                        DiffDecorations
+  .suggest                     CompletionPopup, CompletionSession, CompletionRanking, EditorSuggest
+  .doc                         DocumentationPopup, HoverDocumentation
+  .find                        SearchReplaceBar, EditorFind
+  .lang                        EditorLanguageFeatures, EditorDiagnostics, DiagnosticActions
 
-com.crystalgui.desktop         CRYSTALOS ON THE NEW ENGINE (M6.6) — Desktop (the compositor, found with
-                               `Desktop.of(document)` and never built by a caller: the engine may not
-                               name a compositor, so the compositor names the document), DesktopCommands,
-                               DesktopKinds (the layer's NodeKinds service), DesktopWindowMount, SnapPreview.
-                               The session record is `.manager.SessionRecord`.
-  .window                      WindowFrame and everything a window IS: WindowChrome, WindowCommands,
-                               WindowRegistry, WindowIcon, WindowMove, WindowKeyboardMove, SnapZones,
-                               SystemMenu
-  .motion                      WindowAnimator over WindowAnimation (transform + opacity, what a
-                               compositor does) and WindowGeometryAnimation (layout, because a size
-                               change REFLOWS), behind WindowMotion. Writes through Box's compositor
-                               overrides, never the cascade; under an async driver a WindowAnimation is
-                               a ui.service.CompositorAnimation instead, played on the render thread
-                               over the window's retained picture, recorded at rest
-  .taskbar                     Taskbar (the registry RENDERED), TaskbarEntryMotion, TaskbarPreviews,
-                               TaskbarDesigner, WindowPreview, WindowThumbnail
-  .switcher                    WindowSwitcher — Mod+Tab, MRU order, live thumbnails
-  DesktopWindowMount           where a server's windows land on this desktop
-  .launcher                    WHAT CAN RUN: LauncherButton (the taskbar's start button) and Launcher
-                               (the ApplicationRegistry, rendered -- searched by name, id and the
-                               keywords() slot that was deliberately withheld until this existed to
-                               read it). It names no concrete application, which is the whole reason
-                               a launcher can live in `desktop` at all: a launcher that named
-                               CrystalEditor would have to sit above `app` and could never be
-                               reached from the taskbar
-  .app                         WHAT AN APPLICATION IS, and it names no workbench: ApplicationKinds (the
-                               ServiceLoader SPI a layer declares its products through -- nothing
-                               installs one, the way nothing registers a widget tag), ApplicationKind (the
-                               manifest — freedesktop's .desktop entry, macOS's Info.plist: id, name,
-                               icon, keywords, the files it opens, singleInstance, a launch factory,
-                               and `autostart` -- run once per desktop the moment it has storage,
-                               before the first frame, whether or not the application ever opens:
-                               how the profiler records from launch), Application (one running instance: kind, mainWindow, open,
-                               activate, dispose — where dispose is QUITTING and closing the window is
-                               not), ApplicationRegistry (per Desktop: install/installed/launch/running/
-                               handlerFor — a launcher, "open with" and taskbar grouping all answerable
-                               with nothing running; runs the ApplicationKinds services once per
-                               DESKTOP, since discovery is per process and installing is per shell),
-                               AppContext (what a launch is handed: its windows(), storage, cache and files),
-                               AppWindows / AppWindow / WindowSpec (how an application asks for a window and
-                               holds a handle on it: it never builds or names a frame)
+com.crystalgui.desktop         CrystalOS: Desktop (found with Desktop.of(document), never built by a caller),
+                               DesktopCommands, DesktopKinds, DesktopWindowMount (where a server's windows land),
+                               SnapPreview
+  .manager                     WindowManager (stacking, the active window, placement, snapping, the HUD),
+                               WindowRecord, SessionRecord
+  .window                      WindowFrame (a WindowCaption and the content slot), WindowChrome, WindowCommands,
+                               WindowRegistry, WindowIcon, WindowMove, WindowKeyboardMove, SnapZones, SystemMenu
+  .motion                      WindowAnimator over WindowAnimation (transform + opacity) and WindowGeometryAnimation
+                               (layout), behind WindowMotion; writes Box's compositor overrides, never the cascade.
+                               Under an async driver a WindowAnimation is a CompositorAnimation
+  .taskbar                     Taskbar, TaskbarEntryMotion, TaskbarPreviews, TaskbarDesigner, WindowPreview,
+                               WindowThumbnail
+  .switcher                    WindowSwitcher: Mod+Tab, MRU order, live thumbnails
+  .launcher                    LauncherButton, Launcher (the ApplicationRegistry rendered and searched); names no
+                               application
+  .app                         ApplicationKinds (the ServiceLoader SPI), ApplicationKind (the manifest: id, name, icon,
+                               keywords, files opened, singleInstance, launch, autostart), Application (a running
+                               instance; dispose is quitting), ApplicationRegistry (per Desktop), AppContext (windows(),
+                               storage, cache, files), AppWindows / AppWindow / WindowSpec (an application asks for a
+                               window and never builds a frame)
 
-com.crystalgraphics.platform   NOT CrystalGUI's code — CrystalGraphics' platform SPI, which CrystalGUI
-                               consumes. Listed here because the engine's input, sound and clipboard
-                               seams all live in it — the CURSOR does not; see `core.cursor` above.
-  (root)                       CgPlatform (the registry, both halves), CgPlatformService (the CLOSED
-                               bundle a loader registers), CgService (the OPEN half — a slot a consumer
-                               declares, a loader fills and anyone reads, each with its own absent-value.
-                               CgCursorService.SERVICE and CgNetworkChannel.SERVICE are ours)
-  .input                       CgSystemInput (raw Mouse/Keyboard event sink + event types),
-                               CgInput (what is held, a toolkit's codes), CgClipboard,
-                               CgKeyCodes (LWJGL2-shaped, no LWJGL import), CgMouseCodes,
-                               CgModifiers (bitmask)
+com.crystalgraphics.platform   CrystalGraphics' platform SPI, consumed here
+  (root)                       CgPlatform, CgPlatformService (the closed bundle a loader registers), CgService (an open
+                               slot with its own absent value; CgCursorService.SERVICE and CgNetworkChannel.SERVICE)
+  .input                       CgSystemInput, CgInput, CgClipboard, CgKeyCodes, CgMouseCodes, CgModifiers
 
-com.crystalgui.lifecycle       CrystalGUI's two CgLifecycleListeners, one a side: CgUiClientLifecycle (the
-                               desktop, loading tasks, reloads, paint teardown), CgUiCommonLifecycle (protocols,
-                               the server workspace, the server smoke)
+com.crystalgui.lifecycle       CgUiClientLifecycle (the desktop, loading tasks, reloads, paint teardown),
+                               CgUiCommonLifecycle (protocols, the server workspace, the server smoke)
 
-com.crystalgui.render          CgUiRenderer (the global part), CgUiRenderer.View (one per document: a CgUiPaintContext
-                               recording on CrystalGraphics' CgCanvasRecorder, and the CgCanvasPresenter that shows its
-                               CgCanvasFrame), Surface (a moved box's kept picture, a CgKeptLayer), PaintSegments (a
-                               box's own paint as a CgPaintChunk), InkOverflow, UiPaintWarmup. Clips, layers, glass and
-                               icons are the canvas's
-  .text                        FontFamilyCache — (font stack, px) -> CgFontFamily
-  .image                       CgUiImage (what background/overlay/mask/outline hold: CSS's <image>,
-                               sealed records equal by value, each writing its CSS), CgUiImagePainter
-                               (the one place an image becomes canvas draws; resolved textures, sheet
-                               brushes and icon documents cached by value), CgUiMark (the sixteen
-                               marks), CgUiPainter (hand-drawn images; paint(name) in CSS)
-  .texture                     ArgbMath (colour maths)
-    .asset                     FileIconTheme — VS Code's file-icon-theme model, ui/icons/*.json.
-                               Sprite sheets and SVG are CrystalGraphics' (CgSpriteSheet, CgSvg)
+com.crystalgui.render          CgUiRenderer and its View per document (a CgUiPaintContext recording on CrystalGraphics'
+                               CgCanvasRecorder, and the CgCanvasPresenter), Surface (a moved box's kept picture),
+                               PaintSegments, InkOverflow, UiPaintWarmup
+  .text                        FontFamilyCache: (font stack, px) → CgFontFamily
+  .image                       CgUiImage (CSS's <image>, sealed records), CgUiImagePainter, CgUiMark, CgUiPainter
+                               (hand-drawn images: paint(name) in CSS)
+  .texture                     ArgbMath
+    .asset                     FileIconTheme (VS Code's file-icon-theme model)
 
-com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGroup, StyleOrigin,
-                               Styleable (what the cascade MATCHES) and StyleScope (what a sheet
-                               can be SCOPED to -- a strictly larger set, because a scope root is
-                               only walked to; a ShadowRoot is the difference),
-                               TaffyBridge, PseudoClasses, StyleEngine, CssParsingUtil, CssAngle
-  .sheet                       StyleSheet (+DEFAULT), StyleRule, DeclarationParser (var(--x)),
-                               StyleSheetRegistry
+com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGroup, StyleOrigin, Styleable (what the
+                               cascade matches), StyleScope (what a sheet can be scoped to), TaffyBridge,
+                               PseudoClasses, StyleEngine, CssParsingUtil, CssAngle
+  .sheet                       StyleSheet (+DEFAULT), StyleRule, DeclarationParser, StyleSheetRegistry
   .selector                    Selector, CompoundSelector, SelectorType
   .transition                  TransitionEngine, TransitionSpec, ActiveTransition, TransitionValue
-  .property                    StyleProperty<T>, StylePropertyRegistry, StyleSlot, StyleValue,
-                               IValueInterpolator, Shorthand, Shorthands (every shorthand),
-                               EdgeShorthand, PairShorthand
-    .general.{bools,enums,floats,ints,strings}   scalar StyleValue/StyleProperty flavors
+  .property                    StyleProperty<T>, StylePropertyRegistry, StyleSlot, StyleValue, IValueInterpolator,
+                               Shorthand, Shorthands, EdgeShorthand, PairShorthand
+    .general.{bools,enums,floats,ints,strings}   scalar flavours
     .layout                    LayoutProperties, FlexShorthand
-    .layout.{dimension,grid,length}              Taffy-shaped value types (LPA*, LPSize, Grid*)
-    .visual                    Overflow, OverflowClip, ScrollBehavior, BoxOrigin, DrawableAlign,
-                               DrawableFit, OutlineShorthand, OutlineStyle, BackgroundShorthand
+    .layout.{dimension,grid,length}              Taffy-shaped value types
+    .visual                    Overflow, OverflowClip, ScrollBehavior, BoxOrigin, DrawableAlign, DrawableFit,
+                               OutlineShorthand, OutlineStyle, BackgroundShorthand
     .visual.border             BorderRadiusProperties, BorderRadiusShorthand, BorderShorthand, BorderStyle,
-                               LengthPercent(+Property/Value)
+                               LengthPercent
     .visual.color              ColorProperty, ColorValue, StyleColor, StyleColorProperty (currentcolor)
     .visual.text               FontFamilyValue
-    .visual.image              ImageProperty, ImageValue, ImageKinds (the CSS image functions, extensible)
-    .visual.transform          Transform (the ORDERED LIST of ops -- not translate/scale/rotate
-                               fields, because CSS composes left-to-right as matrix multiplication;
-                               was `ui.Transform`, and the prefix went with the move: `style` is
-                               written against `Styleable` so a cascade bug is fixed once, and a UI
-                               prefix in it asserts an engine dependency the file does not have),
-                               TransformProperty, TransformValue, TransformOriginShorthand
+    .visual.image              ImageProperty, ImageValue, ImageKinds (the CSS image functions)
+    .visual.transform          Transform (the ordered list of ops), TransformProperty, TransformValue,
+                               TransformOriginShorthand
 
-com.crystalgui.ui.contract     WHAT A KIND OF WIDGET IS — one declaration, four readers.
-                               WidgetContract (name + ordered State slots + Event slots),
-                               State<W,V> (a wire key, a getter/setter pair, an omitted-when value and
-                               an optional sanitizer — DECLARATION ORDER IS APPLY ORDER, which several
-                               widgets depend on), Event<W,P> (a kind, a payload codec, and HOW A
-                               CLIENT LISTENS — which is what deleted the instanceof switch),
-                               StateType/StateTypes, and CrystalGraphics' CgRatePolicy (immediate/typing/dragging; a widget
-                               knows its own tempo and a handler cannot), WidgetContracts (the
-                               registry, and the local-only list with reasons). NOTE there is no kind
-                               vocabulary class: a kind is a string an Event declares, unique only
-                               within its own widget's contract, so a third party mints one without
-                               editing anything of ours. plan/engine-rewrite.md M1
+com.crystalgui.ui.contract     What a kind of widget is: WidgetContract (name, ordered State slots, Event slots),
+                               State<W,V> (declaration order is apply order), Event<W,P> (a kind, a payload codec, how a
+                               client listens), StateType/StateTypes, WidgetContracts (the registry and the local-only
+                               list). Rates are CrystalGraphics' CgRatePolicy. A kind is a string an Event declares
 
-com.crystalgui.screen          THE CLIENT'S ONE DESKTOP: CgUiScreen (static: install, open, close, Mode, the
-                               tick, the paint at HUD and SCREEN), CgUiScreenInput (the one input router),
-                               DesktopConnection, GameState, DesktopContent per Mode, HitRegions, the
-                               rehearsal; game screens: ScreenKind (a value: id, builder, background,
-                               pause, closing keys), ScreenContext, GameScreen (one shown kind, its own
-                               document), ServerScreens (a server window shown as one). Names `viewport`
-                               and `desktop`; neither names it.
+com.crystalgui.screen          The client's one desktop: CgUiScreen (install, open, close, Mode, the tick, the paint at
+                               HUD and SCREEN), CgUiScreenInput (the one input router), DesktopConnection, GameState,
+                               DesktopContent, HitRegions; game screens: ScreenKind, ScreenContext, GameScreen,
+                               ServerScreens; UiScale (the owner of the UI scale)
 
-com.crystalgui.viewport        ONE DOCUMENT ON SCREEN: CgUiViewport (owns the document's thread, input, frames,
-                               readouts) over a DocumentThread per threading (inline, lockstep, sequenced),
-                               CommitQueue and CompositorMotion. Names `ui.dom`; nothing in `ui` names it.
+com.crystalgui.viewport        One document on screen: CgUiViewport (the document's thread, input, frames) over a
+                               DocumentThread per threading (inline, lockstep, sequenced), CommitQueue,
+                               CompositorMotion. Nothing in `ui` names it
 
-com.crystalgui.ui              A NAMESPACE, with nothing at its root -- a root with no shared subject
-                               is where things land when nobody decides.
-  .dom                         The node tree. -> Stack 1
-  .box                         The box tree. -> Stack 3
-  .service                     Input, Focus, Animation, Lifecycle, Dismiss. -> Stack 4
-  .contract                    What a KIND of widget is: one declaration, four readers. See its own
-                               entry above.
-  .event                       UIEvent, PropagationPhase, and the concrete Close/DOM/Drag/Focus/
-                               Keyboard/Mouse types -- SHARED, dispatched by `service.Input`.
-  .input                       FocusPolicy, ButtonState, and the keymap (`.keymap`).
-  .text                        TextRange, HighlightRegistry -- the CSS Custom Highlight API: ranges
-                               in Java, styling in CSS through ::highlight(name).
-  .data                        UiDataKeys -- the UI layer's DataKey vocabulary. Names only `core`,
-                               which is why the SPI it points at (ClipboardActions) lives in
-                               `core.data` beside DataProvider while the KEYS stay here.
+com.crystalgui.ui              a namespace, nothing at its root
+  .dom                         the node tree
+  .box                         the box tree
+  .service                     Input, Focus, Animation, Lifecycle, Dismiss
+  .contract                    above
+  .event                       UIEvent, PropagationPhase, Close/DOM/Drag/Focus/Keyboard/Mouse events
+  .input                       FocusPolicy, ButtonState, the keymap (.keymap)
+  .text                        TextRange, HighlightRegistry (::highlight(name))
+  .data                        UiDataKeys; the SPI they point at (ClipboardActions) is core.data
 
-com.crystalgui.widget          THE WIDGETS, layered so a build fails when a layer reaches upward
-                               (LayeringTest): .control/.display/.text/.scroll < .overlay/.layout/
-                               .dnd < .collection < .composite < .config < .canvas < .graph <
-                               .texteditor. `.display` is a bottom tier not by assertion but because
-                               between them ProgressBar and SymbolIcon import `ui` and `style` and
-                               NOT ONE widget. `.scroll` is a SIBLING of `.layout`, never a child:
-                               nesting it there cannot be expressed at all, since a prefix rule makes
-                               the package fail against its own parent. -> Widgets
+com.crystalgui.widget          the widgets, layered (LayeringTest): .control/.display/.text/.scroll < .overlay/.layout/
+                               .dnd < .collection < .composite < .config < .canvas < .graph < .texteditor.
+                               .scroll is a sibling of .layout, never a child
 
-com.crystalgui.desktop         CRYSTALOS. Desktop (found with Desktop.of(document), never built by a
-                               caller: the engine may not name a compositor, so the compositor names
-                               the document), .manager (WindowManager: stacking, the active window, placement, snapping, the HUD; WindowRecord: one
-                               window's identity, state and geometry), .window (WindowFrame composes a WindowCaption, the title bar,
-                               and the content slot),
-                               .motion, .taskbar, .switcher.
-com.crystalgui.workbench       The shell, and THE ROOT IS THE HUB ONLY. Everything whose imports
-                               point at ONE sub-package now lives in it; what is left at the top is
-                               Workbench plus what genuinely coordinates several of them, which is the
-                               honest reading of a hub's own package.
-                               At the root: Workbench (the engine, implementing WorkbenchContext — the
-                               surface an extension is written against, which stays here because it is
-                               the engine's own contract), WorkbenchSession (the arrangement record —
-                               the engine owns the bytes), WorkbenchSettings (the settings the whole
-                               engine resolves), WorkbenchKinds, WorkbenchMenus, and the three that
-                               COORDINATE rather than serve — DocumentTabs (dock+editor+explorer+
-                               decoration), SaveActions (dock+diff+status), NetworkedPanels.
-  .app                         WorkbenchApplication — the runtime EVERY workbench-shaped product
-                               shares: the workbench, its window, preferences, session and initial
-                               focus, built from a manifest's list of extension ids — and
-                               WorkbenchApplicationCommands (Save File, Save/Restore Layout: the
-                               ENGINE's, resolved from the data context so two applications on one
-                               desktop each save their own)
-  .extension                   THE SEAM AND EVERY PANEL THAT SHIPS ON IT: WorkbenchExtension,
-                               WorkbenchExtensions (ServiceLoader — a jar on the classpath offers its
-                               features), SessionSlice (an extension's corner of the session record),
-                               and the engine's own five — ProjectExtension, ProblemsExtension,
-                               NotificationsExtension, PresenceExtension, InspectorExtension.
-                               `new Workbench(workspace, List.of())` has NO tool windows, which is
-                               asserted: the built-ins are the only real test of the seam, and a
-                               first-party path more capable than the public one is how an extension
-                               API rots
+com.crystalgui.workbench       The shell; the root holds only the hub: Workbench (implementing WorkbenchContext, the
+                               surface extensions are written against), WorkbenchSession (the arrangement record),
+                               WorkbenchSettings, WorkbenchKinds, WorkbenchMenus, and what coordinates several
+                               sub-packages: DocumentTabs, SaveActions, NetworkedPanels
+  .app                         WorkbenchApplication (the runtime every workbench product shares, built from a
+                               manifest's extension ids), WorkbenchApplicationCommands (Save File, Save/Restore Layout)
+  .extension                   WorkbenchExtension, WorkbenchExtensions (ServiceLoader), SessionSlice, and the engine's
+                               own: ProjectExtension, ProblemsExtension, NotificationsExtension, PresenceExtension,
+                               InspectorExtension
   .chrome .dock .explorer .region .stripe .toolwindow .view .decoration .diff .search
-                               ...and each owns the binding that serves it: ProblemsBinding and
-                               PresenceBinding are `.chrome.status` (both produce a STATUS ENTRY, not
-                               a panel, whatever their names suggest), ExplorerBinding and
-                               ProjectSourcesIndex are `.explorer`, WorkbenchOpener is `.dock`
-  .editor                      EditorService — ONE lane for opening anything — TextEditorView (a
-                               TextEditor as a DocumentEditor) and TextFileKind
-com.crystalgui.app             The MANIFESTS, and what each product declares about itself:
-                               .crystaleditor (CrystalEditor — an ApplicationKind and three choices,
-                               and no longer an element at all), .shadergraph, .machine, .screens (a worked game screen).
+                               each owns the binding that serves it (ProblemsBinding and PresenceBinding are
+                               .chrome.status; ExplorerBinding and ProjectSourcesIndex .explorer; WorkbenchOpener .dock)
+  .editor                      EditorService (one lane for opening anything), TextEditorView, TextFileKind
+com.crystalgui.app             the manifests: .crystaleditor (CrystalEditor), .shadergraph, .machine, .screens
 
-com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, Selection,
-                               SelectionModel, TextPoint, TextRange, WordClassifier, WordOperations,
-                               LineEnding — the document model, all headless. Plus the two utilities
-                               BOTH engines need and neither may own: SimilarNames (how close is close
-                               enough for a "did you mean") and DerivedNames (a name for something the
-                               author has not named). Each was in an engine until the second engine
-                               wanted it — a child-side class may not be imported across, so a shared
-                               utility is MOVED here rather than referenced in place
-  .cursor                      CursorColumns, MoveOperations, TypeOperations, LineOperations,
-                               MouseSelection, ColumnSelection — VS Code's boundaries, but NOT
-                               file-for-file: MouseSelection and LineOperations come from
-                               browser/controller/ and contrib/linesOperations/. See "Port the module
-                               boundaries too" for the full mapping and the ONE unimplemented gap left
-                               (atomic tab moves for the ARROW keys; Backspace already steps by column)
-  .syntax                      Language, LanguageRegistry, SyntaxToken, SyntaxTokenizer (SPI),
-                               KeywordTokenizer — the ENGINELESS tier, and what a dedicated server has —
-                               plus LanguageKinds, the ServiceLoader seam a jar declares its languages
-                               through. `LanguageRegistry.bootstrap()` runs it on the FIRST READ, so the
-                               grammars and engines are in front of the built-in lexers before anything
-                               is classified, and no host calls anything; a host that calls it anyway is
-                               WARMING it (443ms, measured — see the invariant row)
-  .lang                        The semantic layer's contracts, INTERFACES ONLY: LanguageServices (the
-                               per-DOCUMENT facade), SemanticTokenProvider, Resolver, CompletionProvider
-                               + CompletionItem/CompletionList, SymbolInfo/SymbolKind/SymbolModifier,
-                               TypeRef, DeclarationSite, Versioned, and TypeSearch + TypeSearchRegistry
-                               ("which types are on the classpath" — what Go to File asks, inverted for
-                               the same reason as the rest: the INDEX lives in language/ and core/ may
-                               never name it). Every engine lives in language/; this package is the whole
-                               footprint in core/, and its absence at runtime is the only feature flag.
-                               docs/CGUI_WORKBENCH_SERVICES.md
+com.crystalgui.text            Rope, TextBuffer, TextSummary, Change/ChangeSet, Selection, SelectionModel, TextPoint,
+                               TextRange, WordClassifier, WordOperations, LineEnding: the headless document model.
+                               SimilarNames and DerivedNames, shared by both engines
+  .cursor                      CursorColumns, MoveOperations, TypeOperations, LineOperations, MouseSelection,
+                               ColumnSelection: VS Code's boundaries (text/cursor/CLAUDE.md)
+  .syntax                      Language, LanguageRegistry (bootstrap() on first read), SyntaxToken, SyntaxTokenizer
+                               (SPI), KeywordTokenizer (the engineless tier), LanguageKinds (the ServiceLoader seam)
+  .lang                        interfaces only: LanguageServices (per document), SemanticTokenProvider, Resolver,
+                               CompletionProvider, CompletionItem/CompletionList, SymbolInfo/SymbolKind/SymbolModifier,
+                               TypeRef, DeclarationSite, Versioned, TypeSearch + TypeSearchRegistry
   .diagnostic                  Diagnostic, DiagnosticSet, DiagnosticSeverity, DiagnosticTag, Markers,
-                               RelatedInformation — LSP-shaped, per-owner. NOT duplicated in .lang
-  .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI),
-                               MonospaceLineBreaks, ShapedLineBreaks, BreakOpportunities, WrapIndent —
-                               soft wrap, and the model/view coordinate seam the whole editor rests on
+                               RelatedInformation: LSP-shaped, per owner
+  .wrap                        LineProjection, ProjectedLines, LineBreaksComputer (SPI), MonospaceLineBreaks,
+                               ShapedLineBreaks, BreakOpportunities, WrapIndent: soft wrap and the model/view seam
   .view                        IndentLevels, WhitespaceMarkers, RenderWhitespace
-  .fold                        FoldingRegions (+Region), FoldingModel, FoldingRangeProvider (SPI),
-                               IndentRangeProvider — folding. INDENT-based by default, which is Monaco's
-                               default too and deliberately not brackets; see the class javadoc for why
+  .fold                        FoldingRegions, FoldingModel, FoldingRangeProvider (SPI), IndentRangeProvider
+                               (indent-based by default, as Monaco's)
 
-com.crystalgui.document        WHAT AN OPEN DOCUMENT IS, headless and below `widget`. Document (the
-                               identity — a rename MOVES it, `onDidChangeResource` is the one event a
-                               store subscribes to), DocumentModel (the SPI: encode/adopt/version/
-                               history/onChanged, and `version() != savedVersion` IS dirtiness),
-                               AbstractDocumentModel (`apply(Edit)` as the one door), TextDocumentModel
-                               (a TextBuffer plus the language, the tokenizer and the services — which
-                               are the MODEL's, so two split panes share one parse tree),
-                               BytesDocumentModel, DocumentKind + DocumentKinds (one declaration: model,
-                               editor, icon, status; at most one `.fallback()`), DocumentEditor (the ONE
-                               type here that names an element, and it names UIElement), Documents +
-                               DocumentReference (open by Resource, disposed by the LAST holder — never
-                               by a tab closing, which is the "Parser is closed" defect inverted),
-                               DocumentState, EditorInput, RecentFiles.
-                               Plus the CREATION side, a separate question from opening:
-                               NewDocumentKind (one row of New -- suffix, where it is offered, its
-                               template, and VARIANTS, declaring which is what gets a contributor
-                               IntelliJ's name-and-kind prompt with no widget of its own),
-                               NewDocumentContext (where a New would land: the directory and the
-                               source root holding it, asked per CLICK rather than at registration)
-                               and NewDocumentKinds (the process-wide registry, scoped by owner, reached through
-                               WorkbenchContext.newDocuments()). Most openable things cannot be
-                               conjured from nothing and some creatable things are not documents, so
-                               the two registries do not merge
+com.crystalgui.document        What an open document is, headless: Document (the identity; onDidChangeResource),
+                               DocumentModel (the SPI), AbstractDocumentModel (apply(Edit) the one door),
+                               TextDocumentModel (owns the language services, shared by split panes),
+                               BytesDocumentModel, DocumentKind + DocumentKinds, DocumentEditor (names UIElement),
+                               Documents + DocumentReference (disposed by the last holder), DocumentState,
+                               EditorInput, RecentFiles. Creation: NewDocumentKind, NewDocumentContext,
+                               NewDocumentKinds
 
-com.crystalgui.fs              FOUR classes, and each is vocabulary every tier below names: Resource
-                               (a tab's input, whether or not it is a file — the project scheme keeps
-                               CgPath's exact text, so every saved document and session keeps parsing),
-                               CgPath, CgFileError and CgFileSystemException. They import nothing from
-                               `fs` at all, which is what makes the root a root rather than a drawer —
-                               and is why `LayeringTest` needs no entry for it. Everything else moved
-                               into a tier below; twenty top-level files became four.
-  .project                     ProjectRegistry, ProjectInfo, WorkspaceProject, SourceRoots, Excludes,
-                               ProjectProvider. The bottom tier.
-  .provider                    A FILESYSTEM AND NOTHING ABOUT A WORKSPACE: CgFileSystem (the SPI),
-                               LocalFileSystem, InMemoryFileSystem (a complete one, on a monotonic
-                               clock, which is what makes an etag reproducible), CgFileEntry (+Type),
-                               CgFileCapability, CgFileEvent (+Source) + NioFileEventSource. It names
-                               `.project` and NOT the reverse — a project is a named root and a
-                               filesystem is what resolves one to a directory
-  .protocol                    THE WIRE, shared by both halves and naming neither: FsMethods (the method
-                               names), FsMessages (every payload as a record with a codec, so a field
-                               written on one side is provably the field read on the other), FsError (a
-                               code and fields — a conflict carries the etag the file actually holds),
-                               FsHello (the greeting: case rule, reserved names, size tiers)
-  .server                      WorkspaceService (the server's own filesystem: authorise, etag, cap,
-                               trash), WorkspacePermission + WorkspaceActor + WorkspaceOperation,
-                               WorkspaceTrash, WorkspacePresence, WorkspaceConflictException,
-                               ServerWorkspace (the service with the actor already decided — what a
-                               panel is handed), WorkspaceBinding (one CONNECTION's end — decode, ask the service, encode;
-                               owns this actor's audit, its idempotency table and its entry in the hub),
-                               WatchHub (ONE subscription table for the whole server: a path is stat-ed
-                               once per tick however many peers watch it, a save's several events
-                               coalesce into one change, and a delete plus a create carrying one etag
-                               pair into a RENAME; `update` is a host's ONE call a tick, and it owns the
-                               reconcile cadence, stat-ing on its own JobScheduler off the host's thread),
-                               WorkspaceAudit, RecentOperations
-  .client                      Workspace (the desktop's owned service, one per connection, on the services
-                               sequence: wire, greeting, watches, stores, fan-out of saves),
-                               WorkspaceClient (one per application, made on its sequence; facades by
-                               noun — files(), presence(),
-                               capabilities(), health() — and the ONE door a provider is reached
-                               through, which is where UiBudget times it), FileOperations (every answer
-                               a Reply, serialised per resource, undoable), FsCall (coalescing, cancel,
-                               one failure-parse site), WorkspaceDocuments (where the headless document
-                               model meets the wire: open, save, and what a change on the server means
-                               depends on whether the document is dirty), ContentProvider +
-                               ContentProviders (where a NON-project scheme's content comes from — a
-                               decompiler, a generator; contributed statically, drained per workspace),
-                               Backup (hot exit), LocalHistory (per-save, and the merge base), Health
+com.crystalgui.fs              Resource, CgPath, CgFileError, CgFileSystemException: vocabulary every tier names
+  .project                     ProjectRegistry, ProjectInfo, WorkspaceProject, SourceRoots, Excludes, ProjectProvider
+  .provider                    CgFileSystem (SPI), LocalFileSystem, InMemoryFileSystem (monotonic clock, reproducible
+                               etags), CgFileEntry, CgFileCapability, CgFileEvent, NioFileEventSource
+  .protocol                    FsMethods, FsMessages (records with codecs), FsError, FsHello (the greeting)
+  .server                      WorkspaceService (authorise, etag, cap, trash), WorkspacePermission, WorkspaceActor,
+                               WorkspaceOperation, WorkspaceTrash, WorkspacePresence, WorkspaceConflictException,
+                               ServerWorkspace, WorkspaceBinding (one connection's end), WatchHub (one subscription
+                               table; update() once a tick), WorkspaceAudit, RecentOperations
+  .client                      Workspace (one per connection, on the services sequence), WorkspaceClient (one per
+                               application: files(), presence(), capabilities(), health(), and the provider door
+                               UiBudget times), FileOperations, FsCall, WorkspaceDocuments, ContentProvider +
+                               ContentProviders, Backup (hot exit), LocalHistory, Health
 
-com.crystalgui.serialization   style codecs only. The codecs themselves (CgCodec, CgDynamicOps, CgPlainOps,
-                               CgStateMap, CgContentHash) are CrystalGraphics' com.crystalgraphics.serialization,
-                               and JSON (CgJsonOps, CgFiles.JSON) its .format
+com.crystalgui.serialization   style codecs only; the codecs are CrystalGraphics' com.crystalgraphics.serialization
   .style                       StyleValueCodecs, InlineStyleCodec
 
-com.crystalgui.net             ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux, SheetRef,
-                               over CrystalGraphics' com.crystalgraphics.net (transports, the envelope,
-                               the router, connections, the wire). Ids live in
-                               ui.dom.UIElementTreeSource, not here. -> Server layer
-  .mirror                      ServerTreeMirror<N,T>, ClientTreeMirror<N,T>, NodeMirror<N,T> (the
-                               per-tree seam -- BOTH halves on one interface, so an encode with no
-                               matching apply is a compile error), UIElementMirror over today's tree,
-                               TreeOps. It names no widget, no session and no transport: a second
-                               engine supplies a TreeSource and a NodeMirror and nothing else.
-  .protocol                    UiMethods, the ui/* vocabulary.
-  .window                      A WINDOW'S LIFETIME, and the layer a mod actually uses: Networked<M>
-                               (one class per UI, widgets as FIELDS), UiType, ServerScope/ClientScope,
-                               ServerWindow<P>, ServerWindows/ClientWindows, WindowMount, Presentation,
-                               RowSource/RemoteRows.  -> docs/CGUI_BUILDING_UIS.md
-  .projection                  Declare a read/write pair once; the engine compares and writes only on
-                               change, and skips the set while no viewer is watching. `each` for KEYED
-                               lists; AutoProjection maps a panel field name to a model accessor and
-                               REPORTS what it could not wire.
+com.crystalgui.net             ServerUiSession, ClientUiSession, ClientUiSessions, UiWindowMux, SheetRef, over
+                               CrystalGraphics' com.crystalgraphics.net. Ids live in ui.dom.UIElementTreeSource
+  .mirror                      ServerTreeMirror<N,T>, ClientTreeMirror<N,T>, NodeMirror<N,T> (encode and apply on
+                               one interface), UIElementMirror, TreeOps
+  .protocol                    UiMethods
+  .window                      the layer a mod uses: Networked<M>, UiType, ServerScope/ClientScope, ServerWindow<P>,
+                               ServerWindows/ClientWindows, WindowMount, Presentation, RowSource/RemoteRows
+                               (CGUI_BUILDING_UIS.md)
+  .projection                  Declare a read/write pair once; written only on change and only while watched. `each`
+                               for keyed lists; AutoProjection reports what it could not wire
 
-                               NOTE the three senses of "window": UIDocument is the ENGINE for one
-                               surface, WindowFrame is the CHROME on a desktop, ServerWindow is the
-                               NETWORKED UNIT. The protocol has meant the third since windowId existed.
+                               "Window" has three senses: UIDocument (the engine for one surface), WindowFrame (the
+                               chrome on a desktop), ServerWindow (the networked unit, which the protocol means)
 
-com.crystalgui.gauntlet        CRYSTALGUI'S TESTS FOR CRYSTALGRAPHICS' GAUNTLET, the unattended run a
-                               build task launches (CrystalGraphics/docs/GAUNTLET.md). DesktopTest
-                               (crystalgui:desktop: open the desktop and photograph it, what prodSmoke
-                               plays on a SHIPPED jar; DesktopTest.onFrame is a mod's step in it),
-                               DesktopScriptTest (a scripted run through the compositor), OpenCloseTest,
-                               ConnectionTest (the whole stack over a REAL connection -- topology is a
-                               parameter, and a check that means nothing here is SKIPPED with its
-                               reason rather than silently passed), ServerTest (the workspace on a
-                               dedicated server). They SHIP: a run plays in the game, never in a test
-                               source set
+com.crystalgui.gauntlet        CrystalGUI's tests for CrystalGraphics' gauntlet (CrystalGraphics/docs/GAUNTLET.md):
+                               DesktopTest (crystalgui:desktop; DesktopTest.onFrame is a mod's step),
+                               DesktopScriptTest, OpenCloseTest, ConnectionTest (over a real connection; a
+                               meaningless check is skipped with its reason), ServerTest. They ship
 ```
 
-**Naming corrections vs. older notes:** `render/` is top-level (`com.crystalgui.render`), *not* nested
-under `core/`. There is **no `core/input/` or `core/sound/` package any more** — the raw platform I/O
-layer moved wholesale to `com.crystalgraphics.platform`, and `com.crystalgui.core` is now the logger plus
-three small utility packages. Dispatch and focus were always in `ui/input/` and stayed there. The
-three-phase event types are in `ui/event/` — there is no `core/event/` package.
-
----
+`render/` is top-level (`com.crystalgui.render`). There is no `core/input/`, `core/sound/` or `core/event/`: platform
+I/O is `com.crystalgraphics.platform`, dispatch and focus are `ui/service` and `ui/input`, event types `ui/event`.
 
 ## The headless classpath
 
-**The classpath is a dedicated server's.** A server ships CrystalGraphics `core` and `platform`, so both are here:
-`core` holds shared utilities the engine names in field and signature types (`com.crystalgraphics.easing`, which the
-style engine's transitions and the `Animation` service use). What a server lacks is a GL context and fonts, and no
-test here has either, so code that reaches the GPU outside a paint-method body fails here rather than in production.
-`HeadlessClasspathSanityTest` pins what must be present. *(Until 2026-10-02 `core` was excluded, and the guard was a
-`NoClassDefFoundError` on any core type; moving easing into core ended that.)*
+**The classpath is a dedicated server's**: CrystalGraphics `core` and `platform`, which a server ships (`core` holds
+utilities the engine names in its types, such as `com.crystalgraphics.easing`), and no GL context or fonts. Code that
+reaches the GPU outside a paint body fails here rather than in production. `HeadlessClasspathSanityTest` pins what
+must be present, `StyleSheet` included.
 
-JOML and Taffy **must stay** on the headless classpath: `UINode` and `ElementStyle` have *fields*
-of those types (`Matrix4f`, `NodeId`, `TaffyStyle`), and field descriptors resolve at class load —
-unlike method-body references, which don't. Someone will eventually try to strip them; don't.
-
-> **`StyleSheet` loads headlessly now.** `StyleSheet.DEFAULT` reads `default.css` through `CgIO` at class-init,
-> which made the whole class unloadable while `core` was off this classpath; `HeadlessClasspathSanityTest` now
-> asserts it loads.
-
----
+JOML and Taffy **must stay** on it: `UINode` and `ElementStyle` have fields of their types (`Matrix4f`, `NodeId`,
+`TaffyStyle`), and field descriptors resolve at class load.
 
 ## The platform seam: slots, and a GL bundle
 
-A loader registers one `CgPlatformService`, the GL backend and its context alone, and fills `CgService` **slots**,
-one a capability, each read through its owner and carrying its own absent-value.
+A loader registers one `CgPlatformService`, the GL backend and its context alone, and fills `CgService` **slots**, one
+per capability, each read through its owner and carrying its own absent value.
 
 | Need | Reached via | Lives in |
 |---|---|---|
-| Modifier, key and button state — **from UI code** | `document.input().modifiers()`/`isKeyDown`/`isButtonDown`, or `Input.modifiersNow()` for the running document | `ui/service/Input`: as of the event being handled. A document on its own thread answers from the events it dispatched, the modifiers reconciled with the platform once a host frame |
-| What is held, a toolkit's codes in the engine's | `CgInput` — hosts, and `Input` for a document on the client thread | `platform/input/CgInput` |
-| The clipboard | `CgClipboard`, on the client thread: from UI code `CgHostThread.CLIENT.run(() -> CgClipboard.set(text))`, and `CgHostThread.CLIENT.call(CgClipboard::get).then(paste)`, answered on the document's thread | `platform/input/CgClipboard` |
-| UI sounds | `CgSounds.play2D`, from any thread: a host sound event or a file, unplaced in the `UI` class | `com.crystalgraphics.audio.CgSounds` |
+| Modifier, key and button state, **from UI code** | `document.input().modifiers()`/`isKeyDown`/`isButtonDown`, or `Input.modifiersNow()` | `ui/service/Input`: as of the event being handled; a document on its own thread reconciles with the platform once a host frame |
+| What is held, in the engine's codes | `CgInput`: hosts, and `Input` for a document on the client thread | `platform/input/CgInput` |
+| The clipboard | on the client thread: `CgHostThread.CLIENT.run(() -> CgClipboard.set(text))`, and `CgHostThread.CLIENT.call(CgClipboard::get).then(paste)`, answered on the document's thread | `platform/input/CgClipboard` |
+| UI sounds | `CgSounds.play2D`, from any thread | `com.crystalgraphics.audio.CgSounds` |
 | Raw event sink (`Input` implements it) | — | `platform/input/CgSystemInput` |
 | Code constants | — | `platform/input/CgKeyCodes`, `CgMouseCodes`, `CgModifiers` |
-| **Presenting a cursor** | `CursorService.setCursor(...)`, from any thread (the last asked wins) | **`core.cursor`, ours** — its guide, `core/src/main/java/com/crystalgui/core/cursor/CLAUDE.md`, has why the cursor is split |
-| The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades: `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCameraManager`, `CgSounds` — never their slots | `platform/world/` |
+| **Presenting a cursor** | `CursorService.setCursor(...)`, from any thread (the last asked wins) | `core.cursor`, ours (`core/cursor/CLAUDE.md`) |
+| The world: levels, entities, players, camera, world sounds | CrystalGraphics' facades `CgWorldQueries`, `CgEntityQueries`, `CgPlayers`, `CgCameraManager`, `CgSounds` | `platform/world/` |
 
-**A slot is read through its facade, never `CgPlatform.get(X.SERVICE)`**: one SPI per concern, one static facade per
-SPI as its only reader, host objects handed out as `<V> V` getters beside ids. CrystalGraphics' `platform/CLAUDE.md`
-§ *The wiring standard* is the rule; a slot CrystalGUI adds follows it.
-
-**Every one of these is a `CgService` slot with an absent-value**, never a bundle method: CrystalGraphics' bundle
-holds only the GL backend and context. The cursor is the worked example: an
-unpresented cursor is *cosmetic*, and the engine runs where there is nothing to present to — a dedicated
-server, a headless test, a fixture with no window. Those must not register a stub to stay silent, so the
-slot answers `CursorService.NONE` and `CgService` logs the absence once, on first read.
-
-> **Why this stopped being CrystalGUI's own registry.** `CrystalGuiCore` used to hold four static fields
-> with setters. CrystalGraphics is the parent project and is always present, so two registries meant a
-> loader had to find both — and could wire up one, leaving a UI with a working GL backend and no keyboard.
-> One registry makes a capability either provided or not. `CrystalGuiCore` now holds only `LOGGER`.
-
----
+- **A slot is read through its facade**, never `CgPlatform.get(X.SERVICE)` (CrystalGraphics' `platform/CLAUDE.md`
+  § *The wiring standard*).
+- **Every one is a slot with an absent value**, never a bundle method. A host with nothing to present to (a server, a
+  headless test) registers no stub: the cursor slot answers `CursorService.NONE` and the absence is logged once.
+- CrystalGUI has no registry of its own: `CrystalGuiCore` holds only `LOGGER`.
 
 ## Docs, and when to read each
 
-`ls docs/*.md` is the list; this says which one to open. Each is written to be read on its own, so a
-row here says what a doc is **for** and nothing about what it contains — the doc's own header does that
-better and does not go stale when it changes.
-
 | Doc | For |
 |---|---|
-| **`CGUI_SETUP.md`** | **Setting up a mod on CrystalGUI**: one Minecraft version (the `com.crystalgui` plugin) or one jar across many (`targets {}`), against Maven or a checkout. What a consumer reads first |
-| **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI rather than building it.** A client-only UI, a networked one, and how to choose. The whole `Networked` authoring surface by example, ending in a symptom→cause table for the failures that are silent |
-| **`CGUI_BUILD.md`** | The build: layout, commands, what each check can see, and adding a Minecraft version |
-| **`CGUI_CROSS_VERSION.md`** | Code against every Minecraft version and loader — seams, eras, directives, verification. The `cross-version` skill is its checklist |
-| **`CGUI_PROFILING.md`** | Profiling CrystalGUI in one run: its channels, what a frame records, the Frame Profiler, scenes and the game, what is not yet instrumented. Read after CrystalGraphics' `docs/PROFILING.md`; the `profiling` skill is its checklist |
-| **`CGUI_WORKBENCH_EXTENSIONS.md`** | The other user-facing guide: getting a panel, a file type, a command or a status entry into somebody else's workbench |
-| **`CGUI_ARCHITECTURE.md`** | Where everything lives: each module, and the package map of `core/` |
-| `CGUI_SHIPPED_ASSETS.md` | Everything under `assets/crystalgui/`: sheets, themes, icons, fonts, shaders |
-| **`CGUI_INVARIANTS.md`** | What is invisible from any single class and expensive to rediscover, by subsystem. **Read the section for what you are touching** |
-| `CGUI_STYLE_RENDER_PIPELINE.md` | The cascade and the paint path in full — origins, selectors, transitions, drawables, compositing, `background:` grammar, the visual-layer FBO pass |
-| `CGUI_WIDGETS.md` | Per-widget API, `::part()` names, pseudo-classes, and the harness scene that covers each |
-| `CGUI_WORKBENCH_SERVICES.md` | What a widget may *ask* rather than reach through the application for: `Disposer`, `DataContext`, `Resource`, the document layer, `Workspace`, `EditorService`. **New service API is added here in the same commit** |
-| `CGUI_SERVER_AND_SERIALIZATION.md` | Codecs, descriptions, content hashing, sessions and RPC — and the headless contract underneath them |
-| `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up, ELI5 first: what a frame, a session and a peer each are, how a `CgProtocolConnection` is established, and how to define a packet contract on both halves |
-| `CGUI_THEMING.md` | Themes, editor colour schemes, the token vocabulary. Its token table is generated and machine-checked — regenerate it from the failing test, never by hand |
-| `CGUI_COMMANDS.md` | Every command the codebase declares, by area, with its menus and keys — the sweep behind the menu-icon pass. **A snapshot, not a contract**: it is regenerated, not maintained, so trust the code where the two disagree |
-| `CGUI_NEW_ENGINE.md` | Reading a commit or a comment that still names the old engine: what replaced what, and the six habits that are now wrong |
-| `CGUI_MODERN_UI_RENDERING_RESEARCH.md` | The primary sources behind glass, blur, gradients and the taskbar, with their exact numbers. **Read the relevant section before touching any of them** — each was first built from memory and each was wrong in a way only the source showed |
-
----
+| **`CGUI_SETUP.md`** | **Setting up a mod on CrystalGUI**: one Minecraft version (the `com.crystalgui` plugin) or one jar across many (`targets {}`) |
+| **`CGUI_BUILDING_UIS.md`** | **Using CrystalGUI**: a client-only UI, a networked one, and how to choose, by example, ending in a symptom→cause table |
+| **`CGUI_BUILD.md`** | The build: layout, commands, what each check sees, adding a Minecraft version |
+| **`CGUI_CROSS_VERSION.md`** | Code against every Minecraft version and loader; the `cross-version` skill is its checklist |
+| **`CGUI_PROFILING.md`** | Profiling CrystalGUI in one run; after CrystalGraphics' `docs/PROFILING.md`. The `profiling` skill is its checklist |
+| **`CGUI_WORKBENCH_EXTENSIONS.md`** | Getting a panel, a file type, a command or a status entry into somebody else's workbench |
+| **`CGUI_ARCHITECTURE.md`** | Where everything lives |
+| `CGUI_SHIPPED_ASSETS.md` | Everything under `assets/crystalgui/`: sheets, themes, icons, fonts |
+| **`CGUI_INVARIANTS.md`** | What is invisible from any single class, by subsystem. **Read the section for what you touch** |
+| `CGUI_STYLE_RENDER_PIPELINE.md` | The cascade and the paint path: origins, selectors, transitions, images, compositing |
+| `CGUI_WIDGETS.md` | Per-widget API, `::part()` names, pseudo-classes, and the harness scene covering each |
+| `CGUI_WORKBENCH_SERVICES.md` | What a widget may *ask* for. **New service API is added here in the same commit** |
+| `CGUI_SERVER_AND_SERIALIZATION.md` | Codecs, descriptions, content hashing, sessions, RPC, and the headless contract |
+| `CGUI_NETWORKING_PRIMER.md` | Networking from the bottom up: frames, sessions, peers, a `CgProtocolConnection`, a packet contract on both halves |
+| `CGUI_LANGUAGE_STACK.md` | How analysis resolves a name, and why it answers differently on one host than another |
+| `CGUI_THEMING.md` | Themes, editor schemes, the token vocabulary. Its token table is generated: regenerate it from the failing test |
+| `CGUI_COMMANDS.md` | Every declared command, by area, with menus and keys. A regenerated snapshot: trust the code where they disagree |
+| `CGUI_NEW_ENGINE.md` | Reading a commit or comment that names the old engine |
+| `CGUI_MODERN_UI_RENDERING_RESEARCH.md` | The sources behind glass, blur, gradients and the taskbar. **Read the section before touching any of them** |
 
 ## External references
 
-- **LDLib2** — pattern prior art for widgets and the Ore theme. An **in-repo checkout** at
-  `research_repos/LDLib2`, never a dependency. Stylesheets at
-  `research_repos/LDLib2/src/main/resources/assets/ldlib2/lss/` (`gdp.lss`, `mc.lss`, `modern.lss`).
-  Java sources under `src/main/java/com/lowdragmc/lowdraglib2/`; note `bin/` also holds compiled
-  `.class` files, so search `src/` explicitly. *(Was documented as a sibling checkout at `../LDLib2`,
-  which does not exist.)*
-- **Taffy** — consumed as the Gradle artifact `dev.vfyjxf:taffy` (version in `gradle.properties`), but
-  **extracted Java sources are checked in** at `research_repos/taffy/dev/vfyjxf/taffy/`. Read them
-  directly — there is no need to decompile through the IDE, and no need to guess at layout semantics
-  (containing blocks, absolute positioning, flex-wrap cross-sizing) that the engine's own behaviour
-  depends on. *(Previously documented as "no source checkout"; it exists.)*
-- **Monaco** — an in-repo checkout at `research_repos/monaco`, which is where every "VS Code does
-  X" claim in `com.crystalgui.text.cursor` was read rather than remembered. See *Port, don't reinvent*.
-- **Minecraft sources** — not extracted at the paths the MC modules would produce
-  (`runtime/mc/modern/*/build/mc-src/`, `build/rfg/minecraft-src/java`), since neither MC module is in the build.
-  **But an extracted 1.20.1 tree is checked in** at `research_repos/mc1201_sources/`
-  (`com/`, `mcp/`, `net/`). Cite that path, not the build ones.
+In-repo checkouts under `research_repos/`, never dependencies:
+
+- **Taffy** (`research_repos/taffy/dev/vfyjxf/taffy/`): the upstream sources our `taffy/` fork came from. Read them
+  rather than guess at layout semantics.
+- **Monaco** (`research_repos/monaco`): where every "VS Code does X" in `text.cursor` was read.
+- **Minecraft 1.20.1** (`research_repos/mc1201_sources/`): an extracted tree to cite. A real node's
+  `extractMcSources` writes `build/mc-src/` (`CGUI_CROSS_VERSION.md`).
