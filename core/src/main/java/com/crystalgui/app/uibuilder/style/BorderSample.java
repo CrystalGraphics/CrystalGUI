@@ -91,14 +91,14 @@ final class BorderSample {
             float[] offsets = new float[4];
             StyleFields.Group sides = StyleFields.group(StyleFields.OUTLINE_OFFSET);
             for (int i = 0; i < 4; i++) offsets[i] = length(style, StyleFields.propertyOf(sides.longhands().get(i)));
-            int border = style.get(StylePropertyRegistry.BORDER_COLOR);
+            int border = style.argb(StylePropertyRegistry.BORDER_LEFT_COLOR);
             return new Edge(width, height,
                     new float[] {node.box().border().top, node.box().border().right, node.box().border().bottom,
                             node.box().border().left},
-                    radii, border, edge(style, StylePropertyRegistry.BORDER_TOP_COLOR, border),
-                    edge(style, StylePropertyRegistry.BORDER_BOTTOM_COLOR, border),
-                    length(style, StylePropertyRegistry.OUTLINE_WIDTH), style.get(StylePropertyRegistry.OUTLINE_COLOR),
-                    offsets, style.isSet(StylePropertyRegistry.BORDER_COLOR),
+                    radii, border, style.argb(StylePropertyRegistry.BORDER_TOP_COLOR),
+                    style.argb(StylePropertyRegistry.BORDER_BOTTOM_COLOR),
+                    length(style, StylePropertyRegistry.OUTLINE_WIDTH), style.argb(StylePropertyRegistry.OUTLINE_COLOR),
+                    offsets, style.isSet(StylePropertyRegistry.BORDER_LEFT_COLOR),
                     style.isSet(StylePropertyRegistry.OUTLINE_COLOR));
         }
 
@@ -130,7 +130,7 @@ final class BorderSample {
 
         /** What the sample draws beyond the sides and the radii, each asked by {@link #signature}. */
         private static final StyleProperty<?>[] WATCHED = {
-                StylePropertyRegistry.BORDER_COLOR, StylePropertyRegistry.BORDER_TOP_COLOR,
+                StylePropertyRegistry.BORDER_LEFT_COLOR, StylePropertyRegistry.BORDER_TOP_COLOR,
                 StylePropertyRegistry.BORDER_BOTTOM_COLOR, StylePropertyRegistry.OUTLINE_WIDTH,
                 StylePropertyRegistry.OUTLINE_COLOR};
 
@@ -140,10 +140,6 @@ final class BorderSample {
         }
 
         /** A top or bottom override, as the engine reads it: transparent is the border color. */
-        private static int edge(ComputedStyle style, StyleProperty<Integer> property, int fallback) {
-            Integer argb = style.get(property);
-            return argb == null || (argb >>> 24) == 0 ? fallback : argb;
-        }
     }
 
     private static void paint(UIElement box, @Nullable UIElement node, Part focus) {
@@ -168,7 +164,8 @@ final class BorderSample {
         }
         boolean borderLit = focus != Part.OUTLINE && focus != Part.OFFSET;
         int border = edge.borderSet() ? visible(edge.borderColor()) : NEUTRAL;
-        LiveEdits.setInline(box, StylePropertyRegistry.BORDER_COLOR, CssValues.color(dim(border, borderLit)));
+        LiveEdits.setInline(box, StylePropertyRegistry.BORDER_LEFT_COLOR, CssValues.color(dim(border, borderLit)));
+        LiveEdits.setInline(box, StylePropertyRegistry.BORDER_RIGHT_COLOR, CssValues.color(dim(border, borderLit)));
         LiveEdits.setInline(box, StylePropertyRegistry.BORDER_TOP_COLOR,
                 CssValues.color(dim(edge.topColor() == edge.borderColor() ? border : visible(edge.topColor()), borderLit)));
         LiveEdits.setInline(box, StylePropertyRegistry.BORDER_BOTTOM_COLOR,

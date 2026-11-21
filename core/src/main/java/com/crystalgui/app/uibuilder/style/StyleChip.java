@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.style.property.visual.color.StyleColorProperty;
 import com.crystalgui.widget.composite.ColorField;
 import java.util.List;
 import java.util.function.BiConsumer;
@@ -31,7 +32,7 @@ import com.crystalgui.widget.text.UIText;
  * A declaration's row when it has a lab: the value drawn as itself, and a press opens the lab.
  *
  * <pre>{@code
- * StyleChip chip = new StyleChip(descriptor, StylePropertyRegistry.BACKGROUND);
+ * StyleChip chip = new StyleChip(descriptor, StylePropertyRegistry.BACKGROUND_IMAGE);
  * chip.onOpen(() -> GradientLab.open(chip, property, css));
  * chip.bind(fields.value("background"));
  * }</pre>
@@ -248,7 +249,7 @@ public class StyleChip extends ValueControl<String> {
         if (property == null) return;
         if (value.isEmpty()) {
             LiveEdits.clearInline(swatch, property);
-            LiveEdits.clearInline(swatch, StylePropertyRegistry.BACKGROUND);
+            LiveEdits.clearInline(swatch, StylePropertyRegistry.BACKGROUND_IMAGE);
             return;
         }
         // THE SWATCH IS THE VALUE, applied: a gradient chip draws the gradient, a radius chip is rounded.
@@ -256,7 +257,7 @@ public class StyleChip extends ValueControl<String> {
         // A COLOR IS THE EXCEPTION, and it has to be: applying `text-stroke-color` to an empty box paints
         // nothing at all, which is what made that chip an unexplainable grey rectangle. A color is shown as
         // a patch OF that color, which is what every picker in the application does.
-        if (property instanceof ColorProperty) {
+        if (property instanceof ColorProperty || property instanceof StyleColorProperty) {
             // OVER A CHECKERBOARD, which is the only way a transparent color reads as transparent rather
             // than as a swatch that failed to draw. `#972D8E00` is a color somebody picked, and flat
             // against the panel it is indistinguishable from no swatch at all -- so a picker that was
@@ -267,7 +268,7 @@ public class StyleChip extends ValueControl<String> {
             // -- #E8913A under the band came out #27180A.
             Integer argb = ColorValue.parseColor(value);
             if (argb == null) {
-                LiveEdits.setInline(swatch, StylePropertyRegistry.BACKGROUND, value);
+                LiveEdits.setInline(swatch, StylePropertyRegistry.BACKGROUND_IMAGE, value);
                 return;
             }
             paintColor(swatch, argb);

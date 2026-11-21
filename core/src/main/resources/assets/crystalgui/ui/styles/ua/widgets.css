@@ -341,7 +341,7 @@ contexttoolbar .__config-control__ text,
 contexttoolbar .__config-control__ textfield,
 .__context-overflow-panel__ .__config-control__ text,
 .__context-overflow-panel__ .__config-control__ textfield {
-    font-size: 8;
+    font-size: 8px;
 }
 
 /* A HAIRLINE BETWEEN A PAGE'S GROUPS, Photoshop's. The spacing is inside its own width rather than in
@@ -935,19 +935,20 @@ markupview .__markup-heading__ {
     margin-top: 2px;
 }
 
-markupview .__markup-h1__ { font-size: 13; }
-markupview .__markup-h2__ { font-size: 12; }
-markupview .__markup-h3__ { font-size: 11; }
-markupview .__markup-h4__ { font-size: 10; }
-markupview .__markup-h5__ { font-size: 10; }
-markupview .__markup-h6__ { font-size: 10; }
+markupview .__markup-h1__ { font-size: 13px; }
+markupview .__markup-h2__ { font-size: 12px; }
+markupview .__markup-h3__ { font-size: 11px; }
+markupview .__markup-h4__ { font-size: 10px; }
+markupview .__markup-h5__ { font-size: 10px; }
+markupview .__markup-h6__ { font-size: 10px; }
 
 /* A `<pre>` SAMPLE. Its own box, so the background covers the whole block including the ends of short
  * lines — a highlight band would stop at the glyphs, which is right for a word and wrong for a sample.
  *
- * `white-space: pre` is the point of the element: the parser deliberately does not collapse whitespace
- * inside `<pre>`, because there the identical characters are the content. A rule that let this wrap
- * would undo that decision one layer later. */
+ * No wrapping is the point of the element: the parser deliberately does not collapse whitespace inside
+ * `<pre>`, because there the identical characters are the content. A rule that let this wrap would undo
+ * that decision one layer later. `nowrap`, which is `pre`'s wrapping half; `white-space` here models only
+ * wrapping. */
 
 markupview .__markup-code__ {
     flex-direction: column;
@@ -964,7 +965,7 @@ markupview .__markup-code__ {
 }
 
 markupview .__markup-code__ > text {
-    white-space: pre;
+    white-space: nowrap;
     color: var(--markup-pre-fg, #C9D1D9);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
 }

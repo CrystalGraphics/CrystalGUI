@@ -113,7 +113,7 @@ public final class StyleFamilies {
 
     /** What a person types for something the registry spells differently. Nothing that already matches. */
     private static final Map<String, String> ALIASES = Map.of(
-            "bg", "background",
+            "bg", "background-image",
             "round", "radius",
             "corner", "radius",
             "blur", "backdrop-filter",
@@ -139,7 +139,7 @@ public final class StyleFamilies {
                 "text-shadow", "paint-order", "stroke-align")) {
             names.put(name, Family.TEXT);
         }
-        for (String name : List.of("background", "background-color", "opacity", "overlay", "mask")) {
+        for (String name : List.of("background-image", "background-color", "background-tint", "opacity", "overlay", "mask")) {
             names.put(name, Family.FILL);
         }
         for (String name : List.of("outline", "outline-color", "outline-width")) {
@@ -197,7 +197,7 @@ public final class StyleFamilies {
             "stroke-align", "text-align", "white-space", "text-overflow", "text-offset-x", "text-offset-y",
             "text-decoration-color",
             "line-height", "caret-color", "caret-width", "selection-color",
-            "background", "background-color", "opacity", "overlay", "mask",
+            "background-image", "background-color", "background-tint", "opacity", "overlay", "mask",
             // THE SHAPE, THEN EVERY ROW DRAWN AS A SAMPLE, THEN THE COLORS: the corners first, the border and outline
             // chips in one run, and the colors that paint them after.
             "border-radius", "border-width", "outline", "outline-offset",

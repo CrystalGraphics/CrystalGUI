@@ -198,7 +198,7 @@ public class TaskbarEntryMotionTest extends UiDocumentTestBase {
         settle();
 
         assertNotNull("overflow must still resolve — withdrawing its only candidate is what threw",
-                entry.getStyle().getComputed(StylePropertyRegistry.OVERFLOW));
+                entry.getStyle().getComputed(StylePropertyRegistry.OVERFLOW_X));
         assertEquals("the arrival handed over to a collapse rather than being abandoned",
                 1, collapsing());
     }

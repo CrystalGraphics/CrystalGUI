@@ -7,6 +7,7 @@ import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgui.style.property.visual.text.PaintOrder;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.color.StyleColor;
 import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.visual.BoxOrigin;
 import com.crystalgui.style.property.visual.DrawableAlign;
@@ -33,12 +34,14 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         super(elementStyle);
     }
 
+    /** {@code background-image}. */
     public CgUiImage background() {
-        return getValueSave(StylePropertyRegistry.BACKGROUND);
+        return getValueSave(StylePropertyRegistry.BACKGROUND_IMAGE);
     }
 
+    /** Sets {@code background-image}. */
     public GeneralGroup background(CgUiImage image) {
-        set(StylePropertyRegistry.BACKGROUND, image);
+        set(StylePropertyRegistry.BACKGROUND_IMAGE, image);
         return this;
     }
 
@@ -144,12 +147,13 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int outlineColor() {
-        return getValueSave(StylePropertyRegistry.OUTLINE_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.OUTLINE_COLOR).resolve(color());
     }
 
     public GeneralGroup outlineColor(int argb) {
-        set(StylePropertyRegistry.OUTLINE_COLOR, argb);
+        set(StylePropertyRegistry.OUTLINE_COLOR, StyleColor.of(argb));
         return this;
     }
 
@@ -190,13 +194,13 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    /** {@code 0} means {@code currentcolor}; resolve it against {@link #color()}. */
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int textStrokeColor() {
-        return getValueSave(StylePropertyRegistry.TEXT_STROKE_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.TEXT_STROKE_COLOR).resolve(color());
     }
 
     public GeneralGroup textStrokeColor(int argb) {
-        set(StylePropertyRegistry.TEXT_STROKE_COLOR, argb);
+        set(StylePropertyRegistry.TEXT_STROKE_COLOR, StyleColor.of(argb));
         return this;
     }
 
@@ -272,13 +276,13 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    /** The caret's colour, or 0 to follow {@code color}. @see StylePropertyRegistry#CARET_COLOR */
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int caretColor() {
-        return getValueSave(StylePropertyRegistry.CARET_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.CARET_COLOR).resolve(color());
     }
 
     public GeneralGroup caretColor(int caretColor) {
-        set(StylePropertyRegistry.CARET_COLOR, caretColor);
+        set(StylePropertyRegistry.CARET_COLOR, StyleColor.of(caretColor));
         return this;
     }
 
@@ -445,12 +449,18 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public Overflow overflow() {
-        return getValueSave(StylePropertyRegistry.OVERFLOW);
+    public Overflow overflowX() {
+        return getValueSave(StylePropertyRegistry.OVERFLOW_X);
     }
 
+    public Overflow overflowY() {
+        return getValueSave(StylePropertyRegistry.OVERFLOW_Y);
+    }
+
+    /** {@code overflow}: both axes. */
     public GeneralGroup overflow(Overflow overflow) {
-        set(StylePropertyRegistry.OVERFLOW, overflow);
+        set(StylePropertyRegistry.OVERFLOW_X, overflow);
+        set(StylePropertyRegistry.OVERFLOW_Y, overflow);
         return this;
     }
 
@@ -563,52 +573,53 @@ public class GeneralGroup extends StyleGroup<GeneralGroup> {
         return this;
     }
 
-    public int borderColor() {
-        return getValueSave(StylePropertyRegistry.BORDER_COLOR);
-    }
-
+    /** {@code border-color}: every side. */
     public GeneralGroup borderColor(int colorArgb) {
-        set(StylePropertyRegistry.BORDER_COLOR, colorArgb);
+        StyleColor c = StyleColor.of(colorArgb);
+        set(StylePropertyRegistry.BORDER_TOP_COLOR, c);
+        set(StylePropertyRegistry.BORDER_RIGHT_COLOR, c);
+        set(StylePropertyRegistry.BORDER_BOTTOM_COLOR, c);
+        set(StylePropertyRegistry.BORDER_LEFT_COLOR, c);
         return this;
     }
 
-    /** 0 when unset — the sentinel {@link UIElement} reads as "fall back to {@link #borderColor()}". */
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int borderTopColor() {
-        return getValueSave(StylePropertyRegistry.BORDER_TOP_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.BORDER_TOP_COLOR).resolve(color());
     }
 
     public GeneralGroup borderTopColor(int colorArgb) {
-        set(StylePropertyRegistry.BORDER_TOP_COLOR, colorArgb);
+        set(StylePropertyRegistry.BORDER_TOP_COLOR, StyleColor.of(colorArgb));
         return this;
     }
 
-    /** 0 when unset — the sentinel {@link UIElement} reads as "fall back to {@link #borderColor()}". */
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int borderBottomColor() {
-        return getValueSave(StylePropertyRegistry.BORDER_BOTTOM_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.BORDER_BOTTOM_COLOR).resolve(color());
     }
 
     public GeneralGroup borderBottomColor(int colorArgb) {
-        set(StylePropertyRegistry.BORDER_BOTTOM_COLOR, colorArgb);
+        set(StylePropertyRegistry.BORDER_BOTTOM_COLOR, StyleColor.of(colorArgb));
         return this;
     }
 
-    /** 0 when unset — the sentinel {@link UIElement} reads as "fall back to {@link #borderColor()}". */
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int borderLeftColor() {
-        return getValueSave(StylePropertyRegistry.BORDER_LEFT_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.BORDER_LEFT_COLOR).resolve(color());
     }
 
     public GeneralGroup borderLeftColor(int colorArgb) {
-        set(StylePropertyRegistry.BORDER_LEFT_COLOR, colorArgb);
+        set(StylePropertyRegistry.BORDER_LEFT_COLOR, StyleColor.of(colorArgb));
         return this;
     }
 
-    /** 0 when unset — the sentinel {@link UIElement} reads as "fall back to {@link #borderColor()}". */
+    /** As painted: {@code currentcolor} resolved against {@link #color()}. */
     public int borderRightColor() {
-        return getValueSave(StylePropertyRegistry.BORDER_RIGHT_COLOR);
+        return this.<StyleColor>getValueSave(StylePropertyRegistry.BORDER_RIGHT_COLOR).resolve(color());
     }
 
     public GeneralGroup borderRightColor(int colorArgb) {
-        set(StylePropertyRegistry.BORDER_RIGHT_COLOR, colorArgb);
+        set(StylePropertyRegistry.BORDER_RIGHT_COLOR, StyleColor.of(colorArgb));
         return this;
     }
 

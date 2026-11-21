@@ -28,7 +28,7 @@ import com.crystalgui.widget.config.ValueControl;
  *
  * <pre>{@code
  * Property<Integer> selected = Property.of(0);
- * GradientBar bar = new GradientBar("ramp", BACKGROUND, selected);
+ * GradientBar bar = new GradientBar("ramp", BACKGROUND_IMAGE, selected);
  * bar.bind(css.map(Gradient::parse, Gradient::toString));
  * }</pre>
  *

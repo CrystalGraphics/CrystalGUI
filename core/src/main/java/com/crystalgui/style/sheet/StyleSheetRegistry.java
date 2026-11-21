@@ -177,7 +177,7 @@ public final class StyleSheetRegistry {
     }
 
     /** {@code "namespace:path"} -> {@code "namespace:ui/styles/path.css"}. */
-    private static String toResourcePath(String namespacedPath) {
+    static String toResourcePath(String namespacedPath) {
         int colon = namespacedPath.indexOf(':');
         String namespace = colon < 0 ? "crystalgui" : namespacedPath.substring(0, colon);
         String path = colon < 0 ? namespacedPath : namespacedPath.substring(colon + 1);

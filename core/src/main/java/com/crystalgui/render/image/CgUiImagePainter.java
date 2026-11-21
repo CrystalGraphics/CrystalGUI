@@ -33,7 +33,7 @@ import com.crystalgui.style.property.visual.DrawableFit;
  *
  * <pre>{@code
  * CgUiImagePainter images = new CgUiImagePainter();
- * images.paint(ctx, style.get(BACKGROUND), 0, 0, w, h, backgroundColor, WHITE, radii, border);
+ * images.paint(ctx, style.get(BACKGROUND_IMAGE), 0, 0, w, h, tint, WHITE, radii, border);
  * images.paint(ctx, icon, x, y, 16, 16, textColor, WHITE, null, null);
  * images.fit(icon, x, y, w, h, DrawableFit.CONTAIN, align, out);                 // where a sized image lands
  * }</pre>

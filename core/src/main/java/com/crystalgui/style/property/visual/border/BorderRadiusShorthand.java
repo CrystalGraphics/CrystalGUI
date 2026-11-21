@@ -1,74 +1,67 @@
 package com.crystalgui.style.property.visual.border;
 
-import com.crystalgui.core.CrystalGuiCore;
+import com.crystalgui.style.CssParsingUtil;
+import com.crystalgui.style.property.Shorthand;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.sheet.StyleRule;
+import org.jetbrains.annotations.Nullable;
 
 import java.util.List;
 
+import static com.crystalgui.style.property.visual.border.BorderRadiusProperties.*;
+
 /**
- * Parse-time expansion for the {@code border-radius} shorthand into the 8 real longhands in
- * {@link BorderRadiusProperties} — mirrors {@code BoxEdgeShorthands}'s architecture (edge-based
- * there, corner-based here). Real CSS syntax: {@code border-radius: <h-list> [ / <v-list> ]},
- * each list a 1/2/3/4-value TL/TR/BR/BL corner shorthand. No {@code /}: both axes share the same
- * list (a plain {@code border-radius: 10px} means circular corners, rx == ry).
+ * CSS {@code border-radius: <horizontal> [ / <vertical> ]}, each a 1–4 value list from the top-left
+ * corner clockwise. With no {@code /} both radii of a corner are the same, a circular corner.
+ *
+ * <pre>
+ *   border-radius: 4px;              every corner
+ *   border-radius: 8px 0;            top-left and bottom-right, top-right and bottom-left
+ *   border-radius: 50% / 10px;       elliptical: 50% across, 10px down
+ * </pre>
+ *
+ * <p>One corner alone is {@code border-top-left-radius: h [v]}, in {@code Shorthands}.</p>
  */
-public final class BorderRadiusShorthand {
-    public static final String NAME = "border-radius";
+public final class BorderRadiusShorthand implements Shorthand {
 
-    private BorderRadiusShorthand() {
+    @Override
+    public String name() {
+        return "border-radius";
     }
 
-    public static boolean isBorderRadius(String declarationName) {
-        return NAME.equals(declarationName);
+    @Override
+    public List<StyleProperty<?>> longhands() {
+        return List.of(TOP_LEFT_X, TOP_LEFT_Y, TOP_RIGHT_X, TOP_RIGHT_Y,
+                BOTTOM_RIGHT_X, BOTTOM_RIGHT_Y, BOTTOM_LEFT_X, BOTTOM_LEFT_Y);
     }
 
-    public static void expand(List<StyleRule.Declaration> out, String rawValue, boolean important) {
-        String[] sides = rawValue.split("/", 2);
-        String[] horiz = resolveCorners(sides[0].trim(), "border-radius (horizontal)");
-        String[] vert = sides.length == 2 ? resolveCorners(sides[1].trim(), "border-radius (vertical)") : horiz;
-        if (horiz == null || vert == null) return;
-
-        out.add(cornerDeclaration(BorderRadiusProperties.TOP_LEFT_X, horiz[0], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.TOP_LEFT_Y, vert[0], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.TOP_RIGHT_X, horiz[1], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.TOP_RIGHT_Y, vert[1], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.BOTTOM_RIGHT_X, horiz[2], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.BOTTOM_RIGHT_Y, vert[2], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.BOTTOM_LEFT_X, horiz[3], important));
-        out.add(cornerDeclaration(BorderRadiusProperties.BOTTOM_LEFT_Y, vert[3], important));
+    @Override
+    public boolean expand(List<StyleRule.Declaration> out, String value, boolean important) {
+        String[] sides = value.split("/", 2);
+        String[] h = corners(sides[0]);
+        String[] v = sides.length == 2 ? corners(sides[1]) : h;
+        if (h == null || v == null) return false;
+        out.add(Shorthand.declaration(TOP_LEFT_X, h[0], important));
+        out.add(Shorthand.declaration(TOP_LEFT_Y, v[0], important));
+        out.add(Shorthand.declaration(TOP_RIGHT_X, h[1], important));
+        out.add(Shorthand.declaration(TOP_RIGHT_Y, v[1], important));
+        out.add(Shorthand.declaration(BOTTOM_RIGHT_X, h[2], important));
+        out.add(Shorthand.declaration(BOTTOM_RIGHT_Y, v[2], important));
+        out.add(Shorthand.declaration(BOTTOM_LEFT_X, h[3], important));
+        out.add(Shorthand.declaration(BOTTOM_LEFT_Y, v[3], important));
+        return true;
     }
 
-    /** @return [topLeft, topRight, bottomRight, bottomLeft] raw tokens, or {@code null} on a bad value count. */
-    private static String[] resolveCorners(String rawList, String context) {
-        String[] tokens = rawList.split("\\s+");
-        String tl, tr, br, bl;
-        switch (tokens.length) {
-            case 1 -> { tl = tr = br = bl = tokens[0]; }
-            case 2 -> { tl = br = tokens[0]; tr = bl = tokens[1]; }
-            case 3 -> { tl = tokens[0]; tr = bl = tokens[1]; br = tokens[2]; }
-            case 4 -> { tl = tokens[0]; tr = tokens[1]; br = tokens[2]; bl = tokens[3]; }
-            default -> {
-                CrystalGuiCore.LOGGER.warn("Invalid {}-value shorthand '{}' for {} — expected 1-4 values",
-                        tokens.length, rawList, context);
-                return null;
-            }
-        }
-        return new String[]{tl, tr, br, bl};
-    }
-
-    private static StyleRule.Declaration cornerDeclaration(StyleProperty<LengthPercent> property,
-                                                            String rawValue, boolean important) {
-        return new StyleRule.Declaration(property, property.valueParser.parse(rawValue), important);
-    }
-
-    /** Whether {@code transition: border-radius ...} should animate {@code longhand}. */
-    public static boolean transitionNameMatches(String transitionPropertyName, StyleProperty<?> longhand) {
-        return NAME.equals(transitionPropertyName) && (
-                longhand == BorderRadiusProperties.TOP_LEFT_X || longhand == BorderRadiusProperties.TOP_LEFT_Y
-                || longhand == BorderRadiusProperties.TOP_RIGHT_X || longhand == BorderRadiusProperties.TOP_RIGHT_Y
-                || longhand == BorderRadiusProperties.BOTTOM_RIGHT_X || longhand == BorderRadiusProperties.BOTTOM_RIGHT_Y
-                || longhand == BorderRadiusProperties.BOTTOM_LEFT_X || longhand == BorderRadiusProperties.BOTTOM_LEFT_Y
-        );
+    /** [top-left, top-right, bottom-right, bottom-left], or null on a bad value count. */
+    @Nullable
+    private static String[] corners(String list) {
+        List<String> t = CssParsingUtil.splitTopLevelSpaces(list);
+        return switch (t.size()) {
+            case 1 -> new String[]{t.get(0), t.get(0), t.get(0), t.get(0)};
+            case 2 -> new String[]{t.get(0), t.get(1), t.get(0), t.get(1)};
+            case 3 -> new String[]{t.get(0), t.get(1), t.get(2), t.get(1)};
+            case 4 -> new String[]{t.get(0), t.get(1), t.get(2), t.get(3)};
+            default -> null;
+        };
     }
 }

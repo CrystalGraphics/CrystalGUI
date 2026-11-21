@@ -183,7 +183,7 @@ public class UIElementStylePassTest extends UiDocumentTestBase {
 
     @Test
     public void fontSizeInheritsFromRootAndEmResolvesAgainstIt() {
-        UIDocument document = document(":root { font-size: 20 } :root.large { font-size: 30 } .wide { width: 2em }");
+        UIDocument document = document(":root { font-size: 20px } :root.large { font-size: 30px } .wide { width: 2em }");
         UIElement child = node("child");
         UIElement wide = node("wide", "wide");
         document.append(child).append(wide);

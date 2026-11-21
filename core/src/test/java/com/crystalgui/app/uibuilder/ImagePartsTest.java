@@ -68,13 +68,13 @@ public class ImagePartsTest extends UiDocumentTestBase {
 
         AttributeSet copied = new StyleAttributes(source).copyAttributes();
 
-        assertTrue("copied at all: " + idsOf(copied), idsOf(copied).contains("background/gradient"));
+        assertTrue("copied at all: " + idsOf(copied), idsOf(copied).contains("background-image/gradient"));
         assertTrue("and under its own heading: " + copied.groups(),
                 copied.groups().contains("Gradient"));
         for (AttributeSet.Entry entry : copied.entries()) {
-            if (!entry.slot().id().equals("background/gradient")) continue;
+            if (!entry.slot().id().equals("background-image/gradient")) continue;
             assertEquals("the row is named after the property, since the section names the kind",
-                    "background", entry.slot().label());
+                    "background-image", entry.slot().label());
         }
     }
 
@@ -85,7 +85,7 @@ public class ImagePartsTest extends UiDocumentTestBase {
 
         AttributeSet copied = new StyleAttributes(source).copyAttributes();
 
-        assertTrue(idsOf(copied).toString(), idsOf(copied).contains("background/icon"));
+        assertTrue(idsOf(copied).toString(), idsOf(copied).contains("background-image/icon"));
         assertTrue(copied.groups().toString(), copied.groups().contains("Icon"));
     }
 
@@ -100,7 +100,7 @@ public class ImagePartsTest extends UiDocumentTestBase {
                 copied.keeping(slot -> slot.id().startsWith("background"))));
         document.update(W, H);
 
-        CgUiImage landed = target.getStyle().computed().get(StylePropertyRegistry.BACKGROUND);
+        CgUiImage landed = target.getStyle().computed().get(StylePropertyRegistry.BACKGROUND_IMAGE);
         assertEquals("the same image arrives on the other side",
                 ImageValue.parse("linear-gradient(to bottom, #FF0000FF, #0000FFFF)"), landed);
     }
@@ -121,7 +121,7 @@ public class ImagePartsTest extends UiDocumentTestBase {
         AttributeSet copied = new StyleAttributes(source).copyAttributes();
 
         assertTrue("copyable at all, which it was not before: " + idsOf(copied),
-                idsOf(copied).contains("background/color"));
+                idsOf(copied).contains("background-image/color"));
         assertTrue("and filed as the colour it is: " + copied.groups(),
                 copied.groups().contains("Color"));
     }

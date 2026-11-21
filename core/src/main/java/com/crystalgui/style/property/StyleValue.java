@@ -50,6 +50,16 @@ public abstract class StyleValue<T> {
 
     protected abstract @Nullable T doCompute(String rawValue);
 
+    /** A value already parsed: {@code raw} is how it is written, {@code value} what it is. */
+    public static <T> StyleValue<T> of(String raw, T value) {
+        return new StyleValue<T>(raw) {
+            @Override
+            protected T doCompute(String ignored) {
+                return value;
+            }
+        };
+    }
+
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;

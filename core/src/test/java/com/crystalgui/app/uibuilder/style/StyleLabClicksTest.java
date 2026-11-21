@@ -61,7 +61,7 @@ public class StyleLabClicksTest extends UiDocumentTestBase {
         document.update(W, H);
         frame();
 
-        GradientLab.open(anchor, StylePropertyRegistry.BACKGROUND, css);
+        GradientLab.open(anchor, StylePropertyRegistry.BACKGROUND_IMAGE, css);
         for (int i = 0; i < 6; i++) frame();
     }
 

@@ -550,7 +550,7 @@ UINode slot = new UINode().layout(l -> l.width(58));
 slot.append(new UIText("label"));
 ```
 
-Consumes `color`, `font-size`, `font-family`, plus `text-offset-x`/`text-offset-y` (paint-time glyph
+Consumes `color`, `font-size`, `font-family`, plus `text-offset` (paint-time glyph
 nudge, applied *after* the wrap width is read so it can never affect geometry; percentages resolve
 per-axis against this element's own box). Wraps at the font's own metrics and does **not** honour
 `line-height` yet.
@@ -576,7 +576,7 @@ their thickness — which is geometry, not a defect. Full account in
 `docs/CGUI_STYLE_RENDER_PIPELINE.md` §8d.
 
 **The trap:** declaring `font-size` on a WRAPPER does not reach a widget's label, because
-`default.css` opens with `* { font-size: 10 }` and that is a candidate on every element — put the
+`default.css` opens with `* { font-size: 10px }` and that is a candidate on every element — put the
 size on the element that draws, or on the `::part()`.
 
 - Tag `text` · no shadow parts

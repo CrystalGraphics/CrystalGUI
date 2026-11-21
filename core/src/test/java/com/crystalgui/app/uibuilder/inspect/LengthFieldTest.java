@@ -31,7 +31,7 @@ public class LengthFieldTest {
                 LengthField.unitsOf(LayoutProperties.GAP).isEmpty());
         assertFalse("though one axis of it is", LengthField.unitsOf(LayoutProperties.ROW_GAP).isEmpty());
         assertTrue("nor is a colour", LengthField.unitsOf(StylePropertyRegistry.COLOR).isEmpty());
-        assertTrue("nor a keyword", LengthField.unitsOf(StylePropertyRegistry.OVERFLOW).isEmpty());
+        assertTrue("nor a keyword", LengthField.unitsOf(StylePropertyRegistry.OVERFLOW_X).isEmpty());
     }
 
     @Test

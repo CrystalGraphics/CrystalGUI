@@ -1,5 +1,7 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.style.property.visual.color.StyleColorProperty;
+import com.crystalgui.style.property.visual.color.StyleColor;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -26,7 +28,7 @@ import com.crystalgui.widget.config.control.ColorControl;
  * DeclarationEditors.Field field = DeclarationEditors.of(property, fields.value(property.name));
  * form.prop(field.descriptor(), field.value());
  *
- * DeclarationEditors.register(StylePropertyRegistry.BACKGROUND, new GradientEditor());   // a bespoke one
+ * DeclarationEditors.register(StylePropertyRegistry.BACKGROUND_IMAGE, new GradientEditor());   // a bespoke one
  * }</pre>
  *
  * <p>By TYPE, with per-property overrides — the same shape as the Element tab's {@code descriptorFor}. A
@@ -161,10 +163,18 @@ public final class DeclarationEditors {
             ConfigDescriptor descriptor = ConfigDescriptor.color(id, label).tooltip(tooltip);
             Property<Integer> argb = css.map(text -> parsed(color, text, 0), value -> hex(value));
             ColorControl control = new ColorControl(descriptor, null);
-            // ZERO IS "THE TEXT'S OWN COLOR" for these two, which a transparent swatch misreports.
-            if (property == StylePropertyRegistry.CARET_COLOR || property == StylePropertyRegistry.TEXT_DECORATION_COLOR) {
-                control.zeroLabel("currentColor");
-            }
+            control.bind(argb);
+            return new Field(descriptor, argb, control);
+        }
+        if (property instanceof StyleColorProperty color) {
+            // ZERO IS currentcolor on the swatch, which the control labels rather than showing as transparent.
+            ConfigDescriptor descriptor = ConfigDescriptor.color(id, label).tooltip(tooltip);
+            Property<Integer> argb = css.map(text -> {
+                StyleColor value = parsed(color, text, StyleColor.CURRENT);
+                return value.isCurrentColor() ? 0 : value.literalArgb();
+            }, value -> value == null || value == 0 ? "currentcolor" : hex(value));
+            ColorControl control = new ColorControl(descriptor, null);
+            control.zeroLabel("currentColor");
             control.bind(argb);
             return new Field(descriptor, argb, control);
         }

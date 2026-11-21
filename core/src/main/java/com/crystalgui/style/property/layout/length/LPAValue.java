@@ -1,5 +1,6 @@
 package com.crystalgui.style.property.layout.length;
 
+import com.crystalgui.style.CssLength;
 import com.crystalgui.style.property.FontRelative;
 import com.crystalgui.style.property.StyleValue;
 import dev.vfyjxf.taffy.style.LengthPercentageAuto;
@@ -48,32 +49,14 @@ public class LPAValue extends StyleValue<LengthPercentageAuto>
                 case "fit-content" -> LengthPercentageAuto.fitContent();
                 case "stretch" -> LengthPercentageAuto.stretch();
                 default -> {
-                    // Check for percentage
-                    if (trimmed.endsWith("%")) {
-                        String numberPart = trimmed.substring(0, trimmed.length() - 1).trim();
-                        float percentage = Float.parseFloat(numberPart);
-                        // CSS percentages are 0-100, but Taffy uses 0.0-1.0
-                        yield LengthPercentageAuto.percent(percentage / 100f);
-                    }
-
-                    // BEFORE "px", because "em" would otherwise never be reached -- and before the plain
-                    // number fallback, which would throw on the letters. Answered against the reference
-                    // size; the real per-element answer is resolveAgainst, called from StyleEngine.
-                    float em = FontRelative.multipleIn(trimmed);
-                    if (!Float.isNaN(em)) {
-                        yield LengthPercentageAuto.length(em * FontRelative.REFERENCE_FONT_SIZE);
-                    }
-
-                    // Check for length with "px" unit
-                    if (trimmed.endsWith("px")) {
-                        String numberPart = trimmed.substring(0, trimmed.length() - 2).trim();
-                        float length = Float.parseFloat(numberPart);
-                        yield LengthPercentageAuto.length(length);
-                    }
-
-                    // Try parsing as plain number (assume pixels)
-                    float length = Float.parseFloat(trimmed);
-                    yield LengthPercentageAuto.length(length);
+                    CssLength length = CssLength.parse(trimmed);
+                    if (length == null) yield null;
+                    yield switch (length.unit()) {
+                        case PX -> LengthPercentageAuto.length(length.value());
+                        case PERCENT -> LengthPercentageAuto.percent(length.fraction());
+                        // Against the reference size; the per-element answer is resolveAgainst, from StyleEngine.
+                        case EM -> LengthPercentageAuto.length(length.value() * FontRelative.REFERENCE_FONT_SIZE);
+                    };
                 }
             };
         } catch (NumberFormatException e) {

@@ -83,7 +83,7 @@ public class ButtonPortTest extends UiDocumentTestBase {
         // ua/widgets.css: `button::part(label) { overflow: hidden; ... }` -- the twin of the old
         // `button text` rule, which reaches the label by TAG and therefore cannot see into a shadow.
         assertEquals("the ::part rule found it", Overflow.HIDDEN,
-                label.computedStyle().get(StylePropertyRegistry.OVERFLOW));
+                label.computedStyle().get(StylePropertyRegistry.OVERFLOW_X));
     }
 
     /**

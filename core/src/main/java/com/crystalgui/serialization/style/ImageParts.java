@@ -16,7 +16,7 @@ import com.crystalgui.style.property.visual.image.ImageValue;
  *
  * <pre>{@code
  * // background: grid(...), shape(chevron-down), linear-gradient(...)  ->  three rows: Grid, Shape, Gradient
- * List<Part> rows = ImageParts.INSTANCE.parts(style.get(BACKGROUND));
+ * List<Part> rows = ImageParts.INSTANCE.parts(style.get(BACKGROUND_IMAGE));
  * T layer = ImageParts.INSTANCE.encodePart(ops, value, "layer-2");
  * CgUiImage pasted = ImageParts.INSTANCE.mergePart(ops, target, "layer-2", layer);   // into the target's third layer
  * }</pre>

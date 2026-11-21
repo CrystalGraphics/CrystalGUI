@@ -92,7 +92,7 @@ public class ClassInvalidationTest extends UiDocumentTestBase {
     @Test
     public void aJoiningSubtreeIsMatchedOnce() {
         build();
-        document.styleEngine().addStylesheet(StyleSheet.parse("* { font-size: 10; }\n"));
+        document.styleEngine().addStylesheet(StyleSheet.parse("* { font-size: 10px; }\n"));
         frame();
         UIElement popup = new UIElement();
         for (int i = 0; i < 20; i++) popup.append(new UIElement().addClass("__row__"));
@@ -109,7 +109,7 @@ public class ClassInvalidationTest extends UiDocumentTestBase {
     @Test
     public void aFontSizeChangeStillReachesItsSubtree() {
         build();
-        document.styleEngine().addStylesheet(StyleSheet.parse("* { font-size: 10; }\n.__big__ { font-size: 20; }\n"));
+        document.styleEngine().addStylesheet(StyleSheet.parse("* { font-size: 10px; }\n.__big__ { font-size: 20px; }\n"));
         frame();
         document.styleEngine().resetRematchCountForTesting();
 

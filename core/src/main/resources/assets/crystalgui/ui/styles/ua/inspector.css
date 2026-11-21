@@ -976,7 +976,7 @@ configuratorpanel.__scroll-view__.__v-gutter__ {
     width: 13px;
     height: 13px;
     min-width: 10px;
-    padding-right: -2;
+    padding-right: -2px;
     flex-grow: 0;
     flex-shrink: 0;
     overlay: shape("plus");

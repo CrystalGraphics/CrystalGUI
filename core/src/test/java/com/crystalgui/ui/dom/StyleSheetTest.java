@@ -1,5 +1,8 @@
 package com.crystalgui.ui.dom;
 
+import static org.junit.Assert.assertNotEquals;
+import com.crystalgui.style.property.visual.OutlineStyle;
+import com.crystalgui.style.property.visual.color.StyleColor;
 import com.crystalgui.render.image.CgUiImage;
 import com.crystalgui.style.property.visual.stacking.ZIndex;
 import com.crystalgui.style.sheet.StyleRule;
@@ -105,12 +108,12 @@ public class StyleSheetTest extends UiDocumentTestBase {
         var all = StyleSheet.parse(".a { margin: 3px; }").getRules().get(0).declarations();
         assertEquals(4, all.size());
 
-        var horizontal = StyleSheet.parse(".a { margin-horizontal: 7px; }").getRules().get(0).declarations();
+        var horizontal = StyleSheet.parse(".a { margin-inline: 7px; }").getRules().get(0).declarations();
         assertEquals(2, horizontal.size());
         assertEquals(LengthPercentageAuto.length(7), findValue(horizontal, LayoutProperties.MARGIN_LEFT));
         assertEquals(LengthPercentageAuto.length(7), findValue(horizontal, LayoutProperties.MARGIN_RIGHT));
 
-        var vertical = StyleSheet.parse(".a { margin-vertical: 9px; }").getRules().get(0).declarations();
+        var vertical = StyleSheet.parse(".a { margin-block: 9px; }").getRules().get(0).declarations();
         assertEquals(2, vertical.size());
         assertEquals(LengthPercentageAuto.length(9), findValue(vertical, LayoutProperties.MARGIN_TOP));
         assertEquals(LengthPercentageAuto.length(9), findValue(vertical, LayoutProperties.MARGIN_BOTTOM));
@@ -194,7 +197,7 @@ public class StyleSheetTest extends UiDocumentTestBase {
 
     @Test
     public void fontSizeParsesToFloat() {
-        var sheet = StyleSheet.parse(".a { font-size: 20; }");
+        var sheet = StyleSheet.parse(".a { font-size: 20px; }");
         var decls = sheet.getRules().get(0).declarations();
         assertEquals(1, decls.size());
         assertEquals(StylePropertyRegistry.FONT_SIZE, decls.get(0).property());
@@ -249,35 +252,43 @@ public class StyleSheetTest extends UiDocumentTestBase {
         return decls.stream().anyMatch(d -> d.property() == property);
     }
 
+    /** What {@code property} was set to, or fails when the shorthand did not set it. */
+    private static Object valueOf(java.util.List<StyleRule.Declaration> decls,
+                                  com.crystalgui.style.property.StyleProperty<?> property) {
+        return decls.stream().filter(d -> d.property() == property).findFirst()
+                .orElseThrow(() -> new AssertionError("not set: " + property.name)).value().compute();
+    }
+
+    /** Every form sets all four longhands, as a CSS shorthand resets what it omits. */
     @Test
     public void outlineWithFunctionValueResolvesToTheDrawableSlot() {
         var decls = outlineDecls("asset(\"crystalgui:ore\", \"focus-ring\")");
-        assertEquals(1, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE));
+        assertEquals(4, decls.size());
+        assertNotEquals(CgUiImage.NONE, valueOf(decls, StylePropertyRegistry.OUTLINE));
     }
 
     @Test
     public void outlineWithWidthAndColorExpandsToBothLonghands() {
         var decls = outlineDecls("2px #4488ff");
-        assertEquals(2, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
-        assertFalse(declares(decls, StylePropertyRegistry.OUTLINE));
+        assertEquals(4, decls.size());
+        assertEquals(LengthPercent.px(2f), valueOf(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertEquals(StyleColor.of(0xFF4488FF), valueOf(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertEquals(CgUiImage.NONE, valueOf(decls, StylePropertyRegistry.OUTLINE));
     }
 
     @Test
     public void outlineShorthandIsOrderIndependent() {
-        var decls = outlineDecls("#4488ff 2px");
-        assertEquals(2, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        var decls = outlineDecls("#4488ff solid 2px");
+        assertEquals(LengthPercent.px(2f), valueOf(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertEquals(StyleColor.of(0xFF4488FF), valueOf(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertEquals(OutlineStyle.SOLID, valueOf(decls, StylePropertyRegistry.OUTLINE_STYLE));
     }
 
     @Test
-    public void outlineWidthOnlyExpandsToWidth() {
+    public void outlineWidthOnlyResetsTheColourToCurrentColor() {
         var decls = outlineDecls("1px");
-        assertEquals(1, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertEquals(LengthPercent.px(1f), valueOf(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertEquals(StyleColor.CURRENT, valueOf(decls, StylePropertyRegistry.OUTLINE_COLOR));
     }
 
     /** A bare color means outline-color, never a solid-fill drawable — a solid drawable outline
@@ -285,25 +296,25 @@ public class StyleSheetTest extends UiDocumentTestBase {
     @Test
     public void outlineBareColorExpandsToColorNotDrawable() {
         var decls = outlineDecls("#4488ff");
-        assertEquals(1, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
-        assertFalse(declares(decls, StylePropertyRegistry.OUTLINE));
+        assertEquals(StyleColor.of(0xFF4488FF), valueOf(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertEquals(CgUiImage.NONE, valueOf(decls, StylePropertyRegistry.OUTLINE));
+        assertEquals("an omitted width is CSS's medium", LengthPercent.px(3f),
+                valueOf(decls, StylePropertyRegistry.OUTLINE_WIDTH));
     }
 
     /** rgb()/rgba() are colors, not drawable functions, despite having parens. */
     @Test
     public void outlineRgbFunctionIsTreatedAsColorNotDrawable() {
         var decls = outlineDecls("2px rgb(68, 136, 255)");
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_COLOR));
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
-        assertFalse(declares(decls, StylePropertyRegistry.OUTLINE));
+        assertEquals(StyleColor.of(0xFF4488FF), valueOf(decls, StylePropertyRegistry.OUTLINE_COLOR));
+        assertEquals(CgUiImage.NONE, valueOf(decls, StylePropertyRegistry.OUTLINE));
     }
 
     @Test
-    public void outlineNoneExpandsToZeroWidth() {
+    public void outlineNoneIsStyleNone() {
         var decls = outlineDecls("none");
-        assertEquals(1, decls.size());
-        assertTrue(declares(decls, StylePropertyRegistry.OUTLINE_WIDTH));
+        assertEquals(OutlineStyle.NONE, valueOf(decls, StylePropertyRegistry.OUTLINE_STYLE));
+        assertEquals(CgUiImage.NONE, valueOf(decls, StylePropertyRegistry.OUTLINE));
     }
 
     /** {@code outline-offset} is edge shorthand (4 longhands); width/colour are single properties. */
@@ -381,8 +392,7 @@ public class StyleSheetTest extends UiDocumentTestBase {
     private static CgUiImage.Picture parseSpriteValue(String extraArgs) {
         var decls = StyleSheet.parse(".a { background: sprite(\"t.png\", \"0 0 16 16\", \"4 4 4 4\""
                 + extraArgs + "); }").getRules().get(0).declarations();
-        assertEquals(1, decls.size());
-        Object value = decls.get(0).value().compute();
+        Object value = valueOf(decls, StylePropertyRegistry.BACKGROUND_IMAGE);
         assertTrue("expected a picture, got " + value, value instanceof CgUiImage.Picture);
         return (CgUiImage.Picture) value;
     }

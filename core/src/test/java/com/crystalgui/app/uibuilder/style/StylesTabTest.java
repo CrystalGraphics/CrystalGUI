@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.style.property.visual.color.StyleColor;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
@@ -301,7 +302,7 @@ public class StylesTabTest extends UiDocumentTestBase {
         assertNotNull(list);
         list.pick("caret-color");
         frame();
-        assertEquals("the caret starts at the text's color", Integer.valueOf(0xFF12AB34),
+        assertEquals("the caret starts at the text's color", StyleColor.of(0xFF12AB34),
                 drawn(card).getStyle().getComputed(StylePropertyRegistry.CARET_COLOR));
     }
 

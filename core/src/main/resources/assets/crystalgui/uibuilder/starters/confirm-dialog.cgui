@@ -25,7 +25,7 @@
         "kind": "text",
         "style": {
           "font-weight": "bold",
-          "font-size": "13"
+          "font-size": "13px"
         },
         "state": {
           "text": "Delete world?"

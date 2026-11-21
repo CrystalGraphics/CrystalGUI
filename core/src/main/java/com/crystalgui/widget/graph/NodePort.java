@@ -436,7 +436,7 @@ public class NodePort extends UIElement {
      * unconnected, so its fill is transparent exactly when a theme author would be surprised to find
      * the wire colour missing.</p> */
     public int typeColor() {
-        return dot.getStyle().getGeneralGroup().borderColor();
+        return dot.getStyle().getGeneralGroup().borderTopColor();
     }
 
 

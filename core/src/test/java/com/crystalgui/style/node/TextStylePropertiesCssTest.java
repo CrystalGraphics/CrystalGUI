@@ -110,7 +110,7 @@ public class TextStylePropertiesCssTest extends UiDocumentTestBase {
         Button button = new Button("hi");
         root.append(button);
         document.append(root);
-        document.styleEngine().addStylesheet(StyleSheet.parse("#host { text-offset-y: 1px; }"));
+        document.styleEngine().addStylesheet(StyleSheet.parse("#host { text-offset: 0 1px; }"));
         document.styleEngine().calculateStyle(0f);
 
         // The label is a PART in the button's shadow tree now, not an internal child of it -- so it
@@ -123,7 +123,7 @@ public class TextStylePropertiesCssTest extends UiDocumentTestBase {
     /** Percent and px both parse, matching outline-offset / mask-offset's LengthPercent grammar. */
     @Test
     public void textOffsetAcceptsPxAndPercent() {
-        GeneralGroup style = styled("textfield { text-offset-x: 2px; text-offset-y: 50%; }");
+        GeneralGroup style = styled("textfield { text-offset: 2px 50%; }");
         assertFalse(style.textOffsetX().percent);
         assertEquals(2f, style.textOffsetX().value, 0.0001f);
         assertTrue(style.textOffsetY().percent);

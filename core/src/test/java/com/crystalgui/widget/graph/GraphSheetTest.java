@@ -62,7 +62,7 @@ public class GraphSheetTest {
         assertEquals("and changed nothing about what was already styled", before,
                 button.getStyle().getComputed(StylePropertyRegistry.COLOR));
         assertNotNull("the ore theme still reaches a button",
-                button.getStyle().getComputed(StylePropertyRegistry.BACKGROUND));
+                button.getStyle().getComputed(StylePropertyRegistry.BACKGROUND_IMAGE));
     }
 
     /**
@@ -84,7 +84,7 @@ public class GraphSheetTest {
         window.update(800f, 600f);
 
         Object colour = button.getStyle().getComputed(StylePropertyRegistry.COLOR);
-        Object background = button.getStyle().getComputed(StylePropertyRegistry.BACKGROUND);
+        Object background = button.getStyle().getComputed(StylePropertyRegistry.BACKGROUND_IMAGE);
         assertNotNull("the ore theme reaches a button before the graph is opened", background);
 
         pages.selectTab(graph);
@@ -94,6 +94,6 @@ public class GraphSheetTest {
         assertEquals("opening the graph changed a button's colour", colour,
                 button.getStyle().getComputed(StylePropertyRegistry.COLOR));
         assertSame("opening the graph changed a button's background", background,
-                button.getStyle().getComputed(StylePropertyRegistry.BACKGROUND));
+                button.getStyle().getComputed(StylePropertyRegistry.BACKGROUND_IMAGE));
     }
 }

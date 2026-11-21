@@ -987,7 +987,7 @@ public final class TransformBox extends UIElement {
         // identity, since the two outlines then coincide exactly and the second one only thickens the
         // first.
         if (!gesture.isIdentity()) {
-            int reference = getStyle().computed().get(StylePropertyRegistry.BORDER_COLOR);
+            int reference = getStyle().computed().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
             Vector2f[] base = {
                     toViewportUntransformed(0f, 0f),
                     toViewportUntransformed(gesture.width(), 0f),
@@ -1024,8 +1024,8 @@ public final class TransformBox extends UIElement {
         Vector2f pivot = toViewport(gesture.originX(), gesture.originY());
         if (pivot != null) {
             PivotMark.paint(paint, pivot.x, pivot.y,
-                    getStyle().computed().get(StylePropertyRegistry.OUTLINE_COLOR),
-                    getStyle().computed().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));
+                    getStyle().computed().argb(StylePropertyRegistry.OUTLINE_COLOR),
+                    getStyle().computed().argb(StylePropertyRegistry.TEXT_DECORATION_COLOR));
         }
     }
 

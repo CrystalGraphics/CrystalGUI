@@ -32,11 +32,11 @@ public class StyleChipReentryTest extends UiDocumentTestBase {
     @Before
     public void openTheLab() {
         css = Property.of("linear-gradient(180deg, #6AA9FF, #8A8AFF 50%, #C86AFF)");
-        chip = new StyleChip(ConfigDescriptor.text("bg", "background"), StylePropertyRegistry.BACKGROUND);
+        chip = new StyleChip(ConfigDescriptor.text("bg", "background"), StylePropertyRegistry.BACKGROUND_IMAGE);
         chip.bind(css);
         chip.onOpen(() -> {
             opens++;
-            GradientLab.open(chip, StylePropertyRegistry.BACKGROUND, css);
+            GradientLab.open(chip, StylePropertyRegistry.BACKGROUND_IMAGE, css);
         });
         chip.layout(l -> l.width(120).height(16));
         document.append(chip);

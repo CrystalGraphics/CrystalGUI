@@ -104,7 +104,7 @@ graphnode {
     border-width: 1px;
     border-color: var(--node-edge);
     color: var(--node-text);
-    font-size: 8;
+    font-size: 8px;
 
     /* IT CLIPS, so the radius reaches the REGIONS and not just the border. A radius alone rounds the
      * element's own fill, and this node deliberately has none -- so every region inside it (the port
@@ -157,12 +157,10 @@ graphnode:checked:hover {
 graphnode > .__title-bar__ {
     background: var(--graph-title-bg, #56565676);
     color: var(--node-text-bright);
-    border-top-left-radius-x: 4px;
-    border-top-left-radius-y: 4px;
-    border-top-right-radius-x: 4px;
-    border-top-right-radius-y: 4px;
+    border-top-left-radius: 4px;
+    border-top-right-radius: 4px;
 }
-graphnode .__title__ { font-size: 9; }
+graphnode .__title__ { font-size: 9px; }
 /* Hidden until the node itself is hovered — NOT `:checked`/selected, which is a held state a node can
  * sit in for the whole session, while the chevron is a hover affordance like a window's own close button.
  * Tying it to selection would leave it permanently on for whatever you clicked last and permanently off
@@ -205,10 +203,8 @@ graphnode .__preview__ {
      * `border-*-width` property, only the 4-edge `border-width` shorthand and `border-width-{edge}`
      * longhands, so it silently parsed to a no-op. Left as history in the sibling comment, not repeated
      * here. */
-    border-bottom-left-radius-x: 4px;
-    border-bottom-left-radius-y: 4px;
-    border-bottom-right-radius-x: 4px;
-    border-bottom-right-radius-y: 4px;
+    border-bottom-left-radius: 4px;
+    border-bottom-right-radius: 4px;
 }
 
 /* The rubber band. Drawn in the VIEWPORT rather than the plane, so this 1px border stays 1px at any
@@ -386,7 +382,7 @@ graphview .__editor__ {
  * same thing from the outside. */
 graphview .__editor__ .__editor-label__ {
     color: var(--node-text);
-    font-size: 7;
+    font-size: 7px;
 }
 /* `PortDefaultEditor`'s dot, three concentric layers, dark to coloured — a TOP-LEVEL rule, not a
  * descendant of `.__editor__`, because it genuinely is not one in the tree; see `.__editor__`'s own
@@ -450,7 +446,7 @@ graphview .__editor__ dropdown {
     background: var(--node-field);
     border-radius: 2px;
     color: var(--node-text-bright);
-    font-size: 7;
+    font-size: 7px;
 }
 /* VECTOR's own components collapse to literal ZERO width here, not merely narrow — the bug the
  * `min-width` above cannot reach on its own. `.__config-control__.__vector__ .__number__` (and
@@ -542,7 +538,7 @@ colorselector .__hex-row__ textfield {
     background: var(--node-field);
     color: var(--node-text-bright);
     border-radius: 2px;
-    font-size: 6;
+    font-size: 6px;
 }
 
 /* Unity outlines every channel track and its thumb. It is not decoration: a track is a gradient that

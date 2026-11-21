@@ -60,8 +60,10 @@ public final class LayoutMinimum {
         Box box = element.box();
         if (box == null || element instanceof MinimumSize) return stated;
         ComputedStyle style = element.computedStyle();
-        Overflow overflow = style.get(StylePropertyRegistry.OVERFLOW);
-        if (overflow != null && overflow != Overflow.VISIBLE) return stated;
+        // A non-visible overflow on this axis zeroes the automatic minimum, as CSS's flexbox does.
+        if (style.get(vertical ? StylePropertyRegistry.OVERFLOW_Y : StylePropertyRegistry.OVERFLOW_X) != Overflow.VISIBLE) {
+            return stated;
+        }
         if (element instanceof Measurable measured && box.children().isEmpty()) {
             return vertical ? stated : Math.max(stated, textWidth(measured, style));
         }

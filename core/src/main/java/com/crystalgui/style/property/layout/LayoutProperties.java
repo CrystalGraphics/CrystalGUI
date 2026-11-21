@@ -63,7 +63,6 @@ public class LayoutProperties {
             .setInterpolator(DISPLAY_ALLOW_DISCRETE);
     public static final StyleProperty<TaffyDirection> DIRECTION = StylePropertyRegistry.create("direction", TaffyDirection.class, TaffyDirection.INHERIT);
     public static final StyleProperty<TaffyDimension> FLEX_BASIS = create("flex-basis", TaffyDimension.auto());
-    public static final StyleProperty<Float> FLEX = StylePropertyRegistry.create(new AutoFloatProperty("flex", Float.NaN));
     public static final StyleProperty<Float> FLEX_GROW = StylePropertyRegistry.create("flex-grow", 0f);
     public static final StyleProperty<Float> FLEX_SHRINK = StylePropertyRegistry.create("flex-shrink", 0f);
     public static final StyleProperty<FlexDirection> FLEX_DIRECTION = StylePropertyRegistry.create("flex-direction", FlexDirection.class, FlexDirection.COLUMN);
@@ -79,10 +78,8 @@ public class LayoutProperties {
     public static final StyleProperty<LengthPercentageAuto> RIGHT = create("right", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> BOTTOM = create("bottom", LengthPercentageAuto.AUTO);
 
-    // margin/padding/border-width are 4 real longhand properties each — the composite name and its
-    // -all/-horizontal/-vertical aliases are pure parse-time shorthand syntax (see
-    // BoxEdgeShorthands), expanded into these longhands before the cascade ever runs; they are not
-    // separately-registered StyleProperty instances.
+    // margin/padding/border-width are four longhands each; `margin`, `margin-inline` and the rest are
+    // shorthands over them (Shorthands), expanded before the cascade runs.
     public static final StyleProperty<LengthPercentageAuto> MARGIN_LEFT = create("margin-left", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> MARGIN_TOP = create("margin-top", LengthPercentageAuto.AUTO);
     public static final StyleProperty<LengthPercentageAuto> MARGIN_RIGHT = create("margin-right", LengthPercentageAuto.AUTO);
@@ -191,7 +188,6 @@ public class LayoutProperties {
         createSetter(LayoutProperties.DISPLAY, TaffyBridge::setDisplay);
         createSetter(LayoutProperties.DIRECTION, TaffyBridge::setDirection);
         createSetter(LayoutProperties.FLEX_BASIS, TaffyBridge::setFlexBasis);
-        createSetter(LayoutProperties.FLEX, TaffyBridge::setFlex);
         createSetter(LayoutProperties.FLEX_GROW, TaffyBridge::setFlexGrow);
         createSetter(LayoutProperties.FLEX_SHRINK, TaffyBridge::setFlexShrink);
         createSetter(LayoutProperties.FLEX_DIRECTION, TaffyBridge::setFlexDirection);

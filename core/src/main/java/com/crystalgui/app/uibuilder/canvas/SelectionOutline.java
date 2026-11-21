@@ -69,7 +69,7 @@ public final class SelectionOutline extends UIElement {
         if (selected.isEmpty()) return;
 
         int accent = getStyle().computed().get(StylePropertyRegistry.COLOR);
-        int parentStroke = getStyle().computed().get(StylePropertyRegistry.BORDER_COLOR);
+        int parentStroke = getStyle().computed().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
 
         // THE PARENT FIRST, so the selection's own stroke wins where they touch -- a child flush against
         // its parent's padding box shares an edge, and the one you are moving is the one to see.

@@ -266,7 +266,8 @@ public final class CornerBox extends ValueControl<double[]> {
             else LiveEdits.clearInline(this, width);
             LiveEdits.setInline(this, StyleFields.propertyOf(offsets.longhands().get(i)), scaled(edge.offsets()[i]));
         }
-        paintColor(StylePropertyRegistry.BORDER_COLOR, bordered, edge.borderColor());
+        paintColor(StylePropertyRegistry.BORDER_LEFT_COLOR, bordered, edge.borderColor());
+        paintColor(StylePropertyRegistry.BORDER_RIGHT_COLOR, bordered, edge.borderColor());
         paintColor(StylePropertyRegistry.BORDER_TOP_COLOR, bordered, edge.topColor());
         paintColor(StylePropertyRegistry.BORDER_BOTTOM_COLOR, bordered, edge.bottomColor());
         LiveEdits.setInline(this, StylePropertyRegistry.OUTLINE_WIDTH, scaled(edge.outlineWidth()));
@@ -275,7 +276,7 @@ public final class CornerBox extends ValueControl<double[]> {
         placeWhenLaidOut();
     }
 
-    private void paintColor(StyleProperty<Integer> property, boolean shown, int argb) {
+    private void paintColor(StyleProperty<?> property, boolean shown, int argb) {
         if (shown) LiveEdits.setInline(this, property, CssValues.color(argb));
         else LiveEdits.clearInline(this, property);
     }

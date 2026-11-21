@@ -139,14 +139,14 @@ tooltip::part(heading) {
 }
 
 tooltip::part(shortcut) {
-    font-size: 8;
+    font-size: 8px;
     color: var(--fg-secondary, #9DA0A8);
     white-space: nowrap;
     flex-shrink: 0;
 }
 
 tooltip::part(description) {
-    font-size: 8;
+    font-size: 8px;
     color: var(--fg-secondary, #9DA0A8);
     max-width: 170px;
     margin-top: 2px;
@@ -185,7 +185,7 @@ tooltip .__label__,
 tooltip::part(label) {
     /* UNDER THE SHELL'S 10, as IntelliJ's tooltips sit under its UI font -- a tooltip is read in
      * passing, beside the text it explains, and at the same size it reads as more of that text. */
-    font-size: 8;
+    font-size: 8px;
     color: var(--tooltip-fg, #FFFFFF);
     max-width: 170px;
     /* SET EXPLICITLY, because `white-space` INHERITS and a tooltip lives as an internal child of the thing
@@ -502,7 +502,7 @@ menu::part(separator) {
 menuitem text,
 menuitem::part(label),
 menuitem::part(post-icon) {
-    font-size: 7;
+    font-size: 7px;
 }
 
 menuitem {
@@ -898,7 +898,7 @@ dialog > .__content__ {
      * caption carries a z-index so it paints after this element (see `.__title-bar__`), and the top
      * edge is pushed up onto the caption's last row for it to cover.
      *
-     * `outline-offset-top: 0` IS THAT PUSH, and it is one pixel. Outlines here are drawn INSIDE the
+     * The top offset at 0 IS THAT PUSH, and it is one pixel. Outlines here are drawn INSIDE the
      * border box -- ua/core.css sets `outline-offset: -1px` on `*` so a focus ring survives an
      * ancestor's `overflow: hidden` -- so at the inherited -1px this edge sits on the body's FIRST ROW,
      * below the caption and impossible to cover. At 0 the stroke lands in the band just outside the
@@ -911,7 +911,7 @@ dialog > .__content__ {
      * pushes the scissor inside paintChildren and pops it before paintOutline, so a box's own
      * decorations are never clipped by its own overflow. */
     outline: 1px var(--dialog-edge, #26282B);
-    outline-offset-top: 0px;
+    outline-offset: 0 -1px -1px -1px;
     /* A dialog contains its content: it is user-movable and user-resizable, and an unclipped panel
      * spills the moment either shrinks it below the content. Same lesson as the resize page. */
     overflow: hidden;
@@ -1237,28 +1237,28 @@ dialog.__paste-attributes__ .__paste-groups__ {
  * the labels of Checkbox and Button, which live in shadow trees an ordinary selector cannot enter. */
 dialog.__paste-attributes__,
 dialog.__paste-attributes__ * {
-    font-size: 9;
+    font-size: 9px;
 }
 
 dialog.__paste-attributes__ checkbox::part(label),
 dialog.__paste-attributes__ button::part(label) {
-    font-size: 9;
+    font-size: 9px;
 }
 
 /* FROM and TO, each a dimmed key beside the name it is about. The key column is fixed so the two names
  * line up: ragged, the pair reads as two unrelated sentences rather than as one before-and-after. */
 .__paste-header__ {
     width: 100%;
-    gap: 2;
+    gap: 2px;
 }
 
 .__paste-line__ {
     align-items: center;
-    gap: 6;
+    gap: 6px;
 }
 
 .__paste-key__ {
-    width: 34;
+    width: 34px;
     color: var(--tree-dimmed-fg, #9DA0A8);
 }
 
@@ -1270,7 +1270,7 @@ dialog.__paste-attributes__ button::part(label) {
 /* The rule under the header: above it is WHAT is being pasted, below it is HOW MUCH of it. */
 .__paste-rule__ {
     width: 100%;
-    height: 1;
+    height: 1px;
     margin-top: 8px;
     /* SHORTER BELOW THAN ABOVE, because what follows brings its own: the first group's heading has an
      * 8px margin of its own, so an even 8 here put 16px between the rule and the first word under it
@@ -1389,13 +1389,13 @@ dialog.__paste-attributes__ button::part(label) {
 }
 
 .__paste-buttons__ {
-    gap: 6;
+    gap: 6px;
 }
 
 /* WIDER THAN THEIR WORDS. A dialog's two ways out are aimed at rather than read, and Cancel being the
  * longer word should not make it the larger target. */
 .__paste-buttons__ > button {
-    min-width: 76;
+    min-width: 76px;
     justify-content: center;
 }
 
@@ -1434,13 +1434,13 @@ framestats {
  * it. Either alone is merely untidy; the pair is invisible. The rows are cut to a character budget in
  * FrameStats instead, which is the one place that knows what it is about to write. */
 framestats .__row__ {
-    font-size: 7;
+    font-size: 7px;
 }
 
 /* The headline row - the rate, read at a glance. After the row rule, since the two carry equal
  * specificity and this is the one that must win. */
 framestats .__head__ {
-    font-size: 8;
+    font-size: 8px;
     color: var(--framestats-head-fg, #F0F4F8);
 }
 

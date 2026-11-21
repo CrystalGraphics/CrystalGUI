@@ -68,7 +68,7 @@ top-layer {
  * These are inheritable, so setting them on the widgets reaches their labels. */
 
 * {
-    font-size: 10;
+    font-size: 10px;
     outline-offset: -1px;
     /*border-radius: 2px;*/
 }

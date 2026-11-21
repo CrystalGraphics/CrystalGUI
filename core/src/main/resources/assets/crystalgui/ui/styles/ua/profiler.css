@@ -26,7 +26,7 @@ frameprofiler {
     background-color: var(--profiler-timeline-bg);
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
-    font-size: 11;
+    font-size: 11px;
 }
 
 frameprofiler .__spacer__ {
@@ -44,7 +44,7 @@ frameprofiler .__toolbar__ {
     min-width: 0px;
     height: 26px;
     flex-shrink: 0;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* FLAT, like every other toolbar in the shell: no face at rest, a quiet fill on hover. Four filled
@@ -57,7 +57,7 @@ frameprofiler .__toolbar__ button {
     border-radius: var(--radius-control, 4px);
     background: none;
     color: var(--profiler-heading-fg);
-    font-size: 11;
+    font-size: 11px;
 }
 
 frameprofiler .__toolbar__ button:hover {
@@ -110,7 +110,7 @@ frameprofiler .__stats__ {
     white-space: nowrap;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 /* ── frame strip ─────────────────────────────────────────────────────────── */
@@ -128,7 +128,7 @@ framestrip {
     color: var(--profiler-bar-good);
     border-color: var(--profiler-playhead);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9;
+    font-size: 9px;
 }
 
 /* THE WAY ALONG THE RING. Tucked under the strip, on the same well: `color` is the thumb, `border-color`
@@ -156,7 +156,7 @@ frameprofiler .__frame-header__ {
     flex-shrink: 0;
     padding-left: 4px;
     padding-right: 4px;
-    font-size: 11;
+    font-size: 11px;
     /* CLIPPED, not scrolled: a narrow window cuts the least important figures off the end, where an
      * overflowing header put a horizontal scrollbar on the whole window. */
     overflow: hidden;
@@ -167,13 +167,13 @@ frameprofiler .__frame-header__ {
 frameprofiler .__caption__ {
     margin-left: 8px;
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 frameprofiler .__figure__ {
     color: var(--profiler-heading-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11;
+    font-size: 11px;
 }
 
 frameprofiler .__headline__ {
@@ -181,7 +181,7 @@ frameprofiler .__headline__ {
     margin-right: 6px;
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 18;
+    font-size: 18px;
 }
 
 frameprofiler .__figure__.__mostly__ {
@@ -193,7 +193,7 @@ frameprofiler .__figure__.__mostly__ {
 frameprofiler .__absent__ {
     color: var(--profiler-pending);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11;
+    font-size: 11px;
     font-style: italic;
 }
 
@@ -206,7 +206,7 @@ frameprofiler .__badge__ {
     background-color: var(--profiler-badge-bg);
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9;
+    font-size: 9px;
 }
 
 frameprofiler .__badge__.__following__ {
@@ -240,7 +240,7 @@ flamechart .__detail__ {
     padding-left: 64px;
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -248,7 +248,7 @@ flamechart .__detail__ {
 flamechart .__detail__.__hint__ {
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 flamechart .__thread-row__ {
@@ -268,7 +268,7 @@ flamechart .__thread-label__ {
     padding-top: 3px;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -278,7 +278,7 @@ timelineruler {
     flex-grow: 1;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9;
+    font-size: 9px;
 }
 
 /* `color` is the text on a zone; `border-color` the ring on the selected one. */
@@ -288,13 +288,13 @@ spantrack {
     color: var(--profiler-zone-text);
     border-color: var(--profiler-zone-ring);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 flamechart .__empty__ {
     color: var(--profiler-pending);
     padding: 12px;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── the split between chart and tabs ────────────────────────────────────── */
@@ -330,7 +330,7 @@ frameprofiler tabview {
     min-height: 56px;
     background-color: var(--profiler-tabs-bg);
     border-radius: var(--radius-panel, 8px);
-    font-size: 11;
+    font-size: 11px;
 }
 
 zonestab,
@@ -344,7 +344,7 @@ bufferstab {
     flex-direction: column;
     width: 100%;
     height: 100%;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── frame images: the Screen tab and the strip's hover preview ────────────── */
@@ -357,7 +357,7 @@ screentab {
 screentab .__screen-caption__ {
     flex-shrink: 0;
     color: var(--profiler-caption-fg);
-    font-size: 11;
+    font-size: 11px;
 }
 
 screentab frameimage {
@@ -390,7 +390,7 @@ frameprofiler .__frame-preview__ .__caption__ {
     flex-shrink: 0;
     margin-left: 0px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 /* SIDE BY SIDE, in a split: callees on the left, callers on the right. Stacked, the two trees halved a
@@ -460,7 +460,7 @@ bufferstab .__buffers-status__ {
     flex-shrink: 0;
     padding: 4px 6px;
     color: var(--profiler-caption-fg);
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* THE SELECTED ROW, scoped to this panel as every list here must be: `ListView` marks the row and
@@ -485,13 +485,13 @@ calltreetab treeview .__row__.__selected__:hover {
 zonestab tableview .__cell__,
 bufferstab tableview .__cell__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 zonestab tableview .__header-cell__,
 bufferstab tableview .__header-cell__ {
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 /* A heading row whose two cost heads sit exactly over the rows' cost columns: same widths, same
@@ -509,12 +509,12 @@ calltreetab .__call-heading__ {
     padding-top: 6px;
     padding-bottom: 2px;
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 calltreetab .__call-heading__ text {
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 calltreetab .__call-title__ {
@@ -538,7 +538,7 @@ calltreetab .__call-row__ {
     padding-right: 4px;
     gap: 8px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 calltreetab .__call-cost__ {
@@ -547,7 +547,7 @@ calltreetab .__call-cost__ {
     color: var(--profiler-caption-fg);
     flex-shrink: 0;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 /* ── counters ────────────────────────────────────────────────────────────── */
@@ -578,7 +578,7 @@ countertrack {
     color: var(--profiler-bar-good);
     border-color: var(--profiler-playhead);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9;
+    font-size: 9px;
 }
 
 /* A counter nothing has written lately — its channel is off. Below the live ones, and quiet. */
@@ -589,7 +589,7 @@ counterstab countertrack.__stale__ {
 counterstab .__empty__ {
     color: var(--profiler-pending);
     padding: 12px;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── channels ────────────────────────────────────────────────────────────── */
@@ -610,7 +610,7 @@ channelscontrol maskcontrol .__toggle__ {
     border-radius: var(--radius-control, 4px);
     background: none;
     color: var(--profiler-heading-fg);
-    font-size: 11;
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -636,7 +636,7 @@ profilersettings {
     height: 0px;
     flex-grow: 1;
     gap: 8px;
-    font-size: 11;
+    font-size: 11px;
 }
 
 profilersettings .__settings-header__ {
@@ -660,13 +660,13 @@ profilersettings .__settings-titles__ {
 
 profilersettings .__settings-title__ {
     color: var(--profiler-metric-fg);
-    font-size: 15;
+    font-size: 15px;
 }
 
 profilersettings .__settings-summary__ {
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -707,7 +707,7 @@ profilersettings .__configurator__ > .__inline__ > .__config-control__.__note__ 
 
 profilersettings .__config-control__.__note__ .__value__ {
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 /* ── hints ───────────────────────────────────────────────────────────────── */
@@ -740,18 +740,18 @@ hintstab .__hint-head__ {
 hintstab .__hint-code__ {
     color: var(--profiler-hint-code-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11;
+    font-size: 11px;
 }
 
 hintstab .__hint-meta__ {
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 hintstab .__hint-text__ {
     width: 100%;
     color: var(--profiler-metric-fg);
-    font-size: 11;
+    font-size: 11px;
     white-space: normal;
 }
 
@@ -768,7 +768,7 @@ hintstab .__hint-link__ {
     padding-right: 6px;
     background: none;
     color: var(--profiler-playhead);
-    font-size: 10;
+    font-size: 10px;
 }
 
 hintstab .__hint-link__:hover {
@@ -779,13 +779,13 @@ hintstab .__hint-link__:hover {
 hintstab .__hint-ref__ {
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 hintstab .__empty__ {
     padding: 12px;
     color: var(--profiler-caption-fg);
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── compare ─────────────────────────────────────────────────────────────── */
@@ -806,13 +806,13 @@ comparetab .__compare-bar__ {
 comparetab .__compare-bar__ button {
     height: 22px;
     min-height: 0px;
-    font-size: 10;
+    font-size: 10px;
 }
 
 comparetab .__compare-side__ {
     color: var(--profiler-metric-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
     margin-right: 8px;
 }
 
@@ -821,7 +821,7 @@ comparetab .__compare-summary__ {
     padding-left: 4px;
     color: var(--profiler-heading-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 11;
+    font-size: 11px;
 }
 
 comparetab tableview {
@@ -836,12 +836,12 @@ comparetab tableview .__row__:hover {
 
 comparetab tableview .__cell__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 comparetab tableview .__header-cell__ {
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 comparetab tableview .__cell__.__worse__ {
@@ -878,7 +878,7 @@ frameprofiler .__footer__ .__caption__ {
     min-width: 0px;
     margin-left: 0px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9;
+    font-size: 9px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -890,7 +890,7 @@ frameprofiler .__footer__ button {
     padding-right: 8px;
     background: none;
     color: var(--profiler-playhead);
-    font-size: 10;
+    font-size: 10px;
 }
 
 frameprofiler .__footer__ button:hover {
@@ -917,12 +917,12 @@ chainstab .__chain-heading__ {
     padding-top: 6px;
     padding-bottom: 2px;
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 chainstab .__chain-heading__ text {
     color: var(--profiler-caption-fg);
-    font-size: 10;
+    font-size: 10px;
 }
 
 chainstab .__chain-row__ {
@@ -932,7 +932,7 @@ chainstab .__chain-row__ {
     padding-right: 4px;
     gap: 8px;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 chainstab .__chain-name__ {
@@ -949,7 +949,7 @@ chainstab .__chain-figure__ {
     flex-shrink: 0;
     color: var(--profiler-caption-fg);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 10;
+    font-size: 10px;
 }
 
 /* A WAIT is time nothing in the chain was doing: dim, so the steps read first. */
@@ -987,5 +987,5 @@ chainstab .__leaf__ > .__twisty__ { overlay: none; }
 chainstab .__empty__ {
     padding: 12px;
     color: var(--profiler-caption-fg);
-    font-size: 11;
+    font-size: 11px;
 }

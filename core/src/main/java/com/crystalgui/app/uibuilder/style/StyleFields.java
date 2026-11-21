@@ -161,7 +161,7 @@ public final class StyleFields implements Declarations {
                         yield out;
                     }
                     for (String term : CssValues.terms(css)) {
-                        if (ColorValue.parseCssColor(term) != null) out[1] = term;
+                        if (ColorValue.isColor(term)) out[1] = term;
                         else out[0] = term;
                     }
                     yield out;

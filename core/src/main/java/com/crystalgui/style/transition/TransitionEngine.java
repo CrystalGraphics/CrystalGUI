@@ -1,10 +1,8 @@
 package com.crystalgui.style.transition;
 
+import com.crystalgui.style.property.Shorthands;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
-import com.crystalgui.style.property.layout.BoxEdgeShorthands;
-import com.crystalgui.style.property.visual.OutlineShorthand;
-import com.crystalgui.style.property.visual.text.TextStrokeShorthand;
 import com.crystalgui.style.Styleable;
 
 import java.util.HashMap;
@@ -86,18 +84,8 @@ public final class TransitionEngine {
         TransitionSpec fallbackAll = null;
         for (var spec : specs) {
             if (spec.propertyNameOrAll().equals(property.name)) return spec;
-            // `transition: margin ...` must animate all four margin longhands together, matching
-            // real CSS's shorthand transition-property behavior — margin/padding/border-width
-            // themselves aren't registered StyleProperty instances (see BoxEdgeShorthands), so this
-            // can't be caught by the exact-name check above.
-            if (BoxEdgeShorthands.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
-            if (com.crystalgui.style.property.visual.border.BorderRadiusShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
-            if (com.crystalgui.style.property.visual.OutlineOffsetShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
-            if (com.crystalgui.style.property.visual.transform.TransformOriginShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
-            if (TextStrokeShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
-            // OutlineShorthand has had this method since it was written and was never consulted
-            // here, so `transition: outline` animated nothing.
-            if (OutlineShorthand.transitionNameMatches(spec.propertyNameOrAll(), property)) return spec;
+            // `transition: margin` animates the four margin longhands, as CSS does for a shorthand.
+            if (Shorthands.covers(spec.propertyNameOrAll(), property)) return spec;
             if (spec.propertyNameOrAll().equals(TransitionSpec.ALL)) fallbackAll = spec;
         }
         return fallbackAll;

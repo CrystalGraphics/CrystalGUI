@@ -282,7 +282,7 @@ public class BuilderEditingTest extends UiDocumentTestBase {
         frame();
         var computed = field.getStyle().computed();
         assertEquals("the focus ring still covers the conflict's edge in another colour",
-                computed.get(StylePropertyRegistry.BORDER_COLOR), computed.get(StylePropertyRegistry.OUTLINE_COLOR));
+                computed.argb(StylePropertyRegistry.BORDER_TOP_COLOR), computed.argb(StylePropertyRegistry.OUTLINE_COLOR));
         field.onSubmit.emit(field.getText());
         assertEquals("title", title.id());
         buttonLabelled("No").onPressed.emit();

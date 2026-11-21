@@ -883,8 +883,10 @@ public final class Box {
 
     /** Whether the box clips what it hosts to its own border box. */
     public boolean clips() {
-        Overflow overflow = node.computedStyle().get(StylePropertyRegistry.OVERFLOW);
-        return overflow != null && overflow != Overflow.VISIBLE;
+        // Either axis clips both: CSS computes the other `visible` to `auto`.
+        ComputedStyle style = node.computedStyle();
+        return style.get(StylePropertyRegistry.OVERFLOW_X) != Overflow.VISIBLE
+                || style.get(StylePropertyRegistry.OVERFLOW_Y) != Overflow.VISIBLE;
     }
 
     /** How far up the tree a reveal may scroll — the web's {@code scrollIntoView({container})}. */

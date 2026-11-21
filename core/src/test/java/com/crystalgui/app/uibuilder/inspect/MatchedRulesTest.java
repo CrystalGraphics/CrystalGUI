@@ -41,7 +41,7 @@ public class MatchedRulesTest extends UiDocumentTestBase {
         label.addClass("label");
         document.append(label);
         document.styleEngine().addStylesheet(StyleSheet.DEFAULT);
-        document.styleEngine().addStylesheet(StyleSheet.parse(".label { font-size: 20 }"));
+        document.styleEngine().addStylesheet(StyleSheet.parse(".label { font-size: 20px }"));
         document.update(W, H);
         return label;
     }

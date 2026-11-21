@@ -40,6 +40,40 @@ public final class CssParsingUtil {
     }
 
     /**
+     * Splits {@code raw} on whitespace outside parentheses and quotes, at any nesting depth.
+     *
+     * <pre>
+     *   "1px solid rgb(0, 0, 0)"                     -> ["1px", "solid", "rgb(0, 0, 0)"]
+     *   "asset(\"crystalgui:ore\", \"button\") #222"  -> ["asset(\"crystalgui:ore\", \"button\")", "#222"]
+     * </pre>
+     */
+    public static List<String> splitTopLevelSpaces(String raw) {
+        List<String> tokens = new ArrayList<>();
+        int depth = 0;
+        char quote = 0;
+        int start = -1;
+        for (int i = 0; i < raw.length(); i++) {
+            char c = raw.charAt(i);
+            if (quote != 0) {
+                if (c == quote) quote = 0;
+            } else if (c == '"' || c == '\'') {
+                quote = c;
+            } else if (c == '(') {
+                depth++;
+            } else if (c == ')') {
+                depth = Math.max(0, depth - 1);
+            } else if (depth == 0 && Character.isWhitespace(c)) {
+                if (start >= 0) tokens.add(raw.substring(start, i));
+                start = -1;
+                continue;
+            }
+            if (start < 0) start = i;
+        }
+        if (start >= 0) tokens.add(raw.substring(start));
+        return tokens;
+    }
+
+    /**
      * Splits {@code raw} on top-level commas only — commas nested inside {@code func(...)} calls
      * (e.g. {@code cubic-bezier(a,b,c,d)}, {@code sprite(path, 1 2 3 4, ...)}) don't split entries.
      */

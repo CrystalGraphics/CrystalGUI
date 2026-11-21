@@ -59,7 +59,7 @@ there's no local candidate and the property `isInheritable()`. Not push-invalida
 changing does **not** fire the inheriting element's own `StyleChangeListener`s or make it
 transition-eligible, only a genuine local candidate change does that. Inheritable today: `color`,
 `font-size`, `font-family`, `line-height`, `caret-width`, `selection-color`, `text-shadow`,
-`text-offset-x`/`-y`.
+`text-offset`, the stroke and fill colours.
 
 `moveInlineAsDefault()` bulk-reclassifies every `INLINE`-origin candidate on an element down to
 `DEFAULT` in one atomic pass — meant for widget authors: write baseline styling with ordinary
@@ -182,24 +182,28 @@ every dirty pass.
 (`SHEET_ORDER_STRIDE`). So re-adding a previously removed sheet puts it back at the **highest** priority,
 not its original position. Anything that toggles sheets at runtime must re-add in the order it wants.
 
-**Box-model shorthands (`margin`/`padding`/`border-width`) expand into their real longhands at parse
-time**, not at cascade time. `margin`/`padding`/`border-width` themselves, and their `-all`/
-`-horizontal`/`-vertical` aliases, are **not** registered `StyleProperty` instances — only the four
-per-edge longhands (`margin-left`/`-top`/`-right`/`-bottom`, same for padding/border-width) are. This
-matches how a real browser's cascade actually works internally (`getComputedStyle` only ever exposes
-resolved longhands — a shorthand is sugar over them, never a separately-cascading concept). Recognized
-and expanded in `StyleSheet.parseDeclarations` via the shared table in `BoxEdgeShorthands`, which is
-also consulted by `TransitionEngine.findApplicableSpec` so `transition: margin ...` still animates all
-four edges together. Declarations within one rule get a fine-grained index folded into their
-`sourceOrder` (`StyleEngine.DECLARATION_ORDER_MULTIPLIER`) specifically so a later `margin-left:` in
-the same rule correctly outranks an earlier `margin:` shorthand's expansion, instead of tying.
+**Shorthands expand into their longhands at parse time**, never at cascade time, as a browser's do.
+Every shorthand is a `Shorthand` listed in `Shorthands`: `margin`, `padding`, `border-width`,
+`border-style`, `border-color` (1–4 values, clockwise from the top), `margin-inline`/`-block` and
+`padding-inline`/`-block` (1–2 values), `border` and `border-<side>`, `border-radius` and the four
+`border-<corner>-radius`, `outline`, `outline-offset`, `background`, `overflow`, `flex`,
+`transform-origin`, `text-offset` and `text-stroke`. Only the longhands are registered properties.
+`DeclarationParser` asks `Shorthands.byName` before the registry, and `TransitionEngine` asks
+`Shorthands.covers`, so `transition: margin ...` animates all four edges.
 
-This replaced an earlier design where `margin`/`padding`/`-all`/`-horizontal`/`-vertical` *were*
-independently-cascading properties, reconciled by a hand-rolled, **non-CSS-accurate** resolver
-(`TaffyBridge`'s old `LPARectData`/`LPRectData`) that gave `margin-left` **permanent, sticky**
-priority over `margin` the moment it was ever set — regardless of actual cascade order. That
-resolver duplication also hid a real bug (`gap`'s height read `this.horizontal` instead of
-`this.vertical`, copy-pasted from the width line above it) — fixed as part of the same cleanup.
+A shorthand sets **every** longhand it names, an omitted part at its initial value: `outline: 2px`
+resets the colour to `currentcolor`, `background: none` clears the colour as well as the image. The
+longhands share the declaration's origin, specificity and order, and a fine-grained index folded into
+`sourceOrder` (`StyleEngine.DECLARATION_ORDER_MULTIPLIER`) lets a later `margin-left:` in the same rule
+outrank an earlier `margin:`.
+
+A longhand CSS does not have (`text-offset-x`, `transform-origin-y`, `border-top-left-radius-x`,
+`outline-offset-top`) is marked `setAuthoredThrough(name)`: it cascades, inherits and serialises under its
+own name, but a sheet may only write the shorthand.
+
+**Lengths carry a unit** (`px`, `%`, `em`); only `0` may be bare, as in CSS. Every length parser reads
+through `CssLength`, so `gap: 6` and `font-size: 10` are dropped with a warning. `ShippedSheetsParseTest`
+fails on any shipped declaration the parser does not take.
 
 ---
 
@@ -297,19 +301,19 @@ copied whole.
 
 | Channel | Set via | Meaning |
 |---|---|---|
-| **Tint** | the painter's `color` (`background-color`, or `color` for a mark or a `currentColor` icon) | Multiplies the image's own colours: the canvas box's `tint`, an icon brush's `color` |
+| **Tint** | the painter's `color` (`background-tint`, `overlay-tint`, or `color` for a mark or a `currentColor` icon) | Multiplies the image's own colours: the canvas box's `tint`, an icon brush's `color` |
 | **Layer opacity** | `canvas.save().opacity(a)` or `canvas.layer(...).opacity(a)` | Whole-draw compositing weight, a flat multiply for a lone draw and a group layer over overlapping ones |
 
 They're separate because conflating them was an earlier bug: a cross-fade that scaled the tint's alpha to blend its
 two sides corrupted the tint itself. A cross-fade draws each side under its own opacity.
 
-**`background` vs `background-color` vs `color`** — three separate, independently-cascading properties:
-- `background` (`ImageProperty`) — the image.
-- `background-color` (`ColorProperty`, default `0xFFFFFFFF` — opaque white, i.e. a no-op tint) — tints the
-  `background` image. With no image it paints as a flat fill — gated on **candidate existence**
-  (`ElementStyle.containsCandidate`), not on the resolved value, since that defaults to opaque white either way.
-  (CSS paints `background-color` under the image instead; UI15 decides the move.)
-- `color` — inheritable, the text's colour and a mark's; never tints `background`.
+**`background` is CSS's shorthand** over three properties:
+- `background-image` (`ImageProperty`): the image.
+- `background-color` (`ColorProperty`, initially transparent): a fill painted **under** the image, as in CSS.
+- `background-tint` (`ColorProperty`, initially white): ours, as `overlay-tint` is. It multiplies the image's
+  own colours; Ore's pressed buttons are their sprite under `background-tint: #DDDDDD`.
+
+`color` is inheritable, the text's colour and a mark's, and the value `currentcolor` resolves to.
 
 ### 9-slice tiling
 
@@ -381,10 +385,8 @@ decorative visual because its style system lacks background geometry controls):
   decoration (e.g. `checkbox:checked .__mark__ { overlay: <check glyph> }`) instead of being fought
   over for focus rings.
 
-  **`outline-offset` is per-edge here, unlike CSS's single scalar.** The real cascading properties
-  are `outline-offset-top`/`-right`/`-bottom`/`-left`; `outline-offset` is 1–4 value shorthand over
-  them, clockwise from the top exactly like `margin` (see `OutlineOffsetShorthand`, which mirrors
-  `BoxEdgeShorthands`). The reason is 9-slice rings: a sprite's transparent padding need not be
+  **`outline-offset` takes 1–4 values here**, clockwise from the top like `margin`; CSS's single value is
+  the one-value form. The four edges are longhands only the shorthand writes. The reason is 9-slice rings: a sprite's transparent padding need not be
   symmetric, and a single scalar can only trade a gap on one edge for a gap on the other three. Ore's
   selected tab is the live case — `tab-on` keeps two transparent texel rows along its top edge to make
   a selected tab sit raised, so `tab:checked:focus-visible { outline-offset: -2px 0 0 0; }` tightens
@@ -493,7 +495,7 @@ Three traps worth knowing before writing one:
 
 - **`border-width` is not just paint.** It feeds Taffy *and* flips the element onto the SDF rounded-rect
   path, where the border **replaces** the outer pixels of a 9-slice sprite rather than sitting on it —
-  and where `background-color` tints only the fill and the sprite's own tint is dropped entirely. A
+  and where the sprite's own tint is dropped entirely. A
   stray UA `border-width` over a themed sprite is a different render path, not a stray outline.
 - **Reset element-specific, not `*`.** A universal reset also squashes values a *consumer* set on its
   own elements. Name only what the theme actually paints.
@@ -509,8 +511,8 @@ set on its own elements.
 
 `border-radius` is elliptical per corner (independent rx/ry, not a single scalar) — real CSS syntax,
 `border-radius: <h-list> [ / <v-list> ]`, each list a 1/2/3/4-value TL/TR/BR/BL corner shorthand,
-expanded at parse time into 8 real longhands (`BorderRadiusProperties`) by `BorderRadiusShorthand`,
-mirroring `BoxEdgeShorthands`'s architecture. Percentages resolve against the element's own width (rx)
+expanded at parse time into 8 longhands (`BorderRadiusProperties`) by `BorderRadiusShorthand`; one
+corner is `border-top-left-radius: h [v]`. Percentages resolve against the element's own width (rx)
 / height (ry) at paint/hit-test time — not via Taffy, since corner radius isn't a layout quantity.
 `border-width` is the real per-edge `border-width-*` longhand (already existed, already grows Taffy's
 box under `CONTENT_BOX`) — sourced from `getTaffyLayout().border()`'s already-resolved pixels, not
@@ -643,9 +645,8 @@ lands at 20. A translate-field-plus-scale-field value type cannot represent that
 `Transform` therefore stores `List<Op>` and `applyTo` walks it in order; each JOML call
 post-multiplies, so declaration order *is* the composition order with no reversal.
 
-**`transform-origin` is two real longhands** (`transform-origin-x`/`-y`, both `LengthPercent`), with
-`transform-origin` as 1–2 value shorthand syntax over them — the same architecture as `outline-offset`.
-Keywords (`left`/`center`/`right`/`top`/`bottom`) resolve to percentages, and the reversed keyword pair
+**`transform-origin` is a 1–2 value shorthand** over two longhands (`transform-origin-x`/`-y`, both
+`LengthPercent`, not written by name); the omitted axis is the centre, as CSS has it. Keywords (`left`/`center`/`right`/`top`/`bottom`) resolve to percentages, and the reversed keyword pair
 (`top left`) is accepted as CSS allows.
 
 **Hit-testing follows automatically and this is the load-bearing invariant.** `Box.localToWorld`
@@ -897,7 +898,7 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
   specificity — including the `:focus-visible` ring it now draws by default (§2).
 - **Partial text styling** — `color`, `font-size`, `font-family`, `line-height`, `caret-width` and
   `selection-color` are wired and inheritable. `UIText` consumes the first three plus
-  `text-offset-x`/`-y` (also inheritable — Ore sets `text-offset-y` once on `*` and relies on it
+  `text-offset` (also inheritable — Ore sets `text-offset: 0 1px` once on `*` and relies on it
   reaching every widget's internal label, which no author selector can name); `TextField` consumes all
   six, with `line-height` driving its selection rect and vertical centring — its caret is sized from
   font metrics instead, see §8c. `text-shadow` is CSS Text Decoration 4's list — offset, blur,
@@ -930,7 +931,7 @@ browser. It is still clipped by every box it rose out of, rounded corners includ
 | Shipped stylesheets | `core/src/main/resources/assets/crystalgui/ui/styles/default.css` (user-agent), `ore.css` (theme, with the anti-bleed block at its top) |
 | Transitions / easing | `core/src/main/java/com/crystalgui/style/transition/`, `.../style/easing/` |
 | Property registry | `core/src/main/java/com/crystalgui/style/property/StylePropertyRegistry.java` |
-| Box-model shorthand expansion | `core/src/main/java/com/crystalgui/style/property/layout/BoxEdgeShorthands.java` |
+| Shorthand expansion | `core/src/main/java/com/crystalgui/style/property/Shorthands.java` (every shorthand, one line each) |
 | Border-radius shorthand expansion + value type | `core/src/main/java/com/crystalgui/style/property/visual/border/` (`BorderRadiusShorthand`, `BorderRadiusProperties`, `LengthPercent`) |
 | `line-height` value + property | `core/src/main/java/com/crystalgui/style/property/visual/text/` (`LineHeightValue`, `LineHeightProperty`) |
 | `transform` value type | `core/src/main/java/com/crystalgui/ui/Transform.java` (ordered `Op` list + `applyTo`) |

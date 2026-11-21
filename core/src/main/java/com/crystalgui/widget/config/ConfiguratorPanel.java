@@ -143,7 +143,7 @@ public class ConfiguratorPanel extends ScrollerView {
             }
             widest = Math.max(widest, x + box.width());
             // A NESTED SCROLLER keeps its overflow to itself: only its own box is this panel's business.
-            if (child.getStyle().computed().get(StylePropertyRegistry.OVERFLOW) == Overflow.VISIBLE) {
+            if (child.getStyle().computed().get(StylePropertyRegistry.OVERFLOW_X) == Overflow.VISIBLE) {
                 widest = Math.max(widest, widestContent(child, x));
             }
         }

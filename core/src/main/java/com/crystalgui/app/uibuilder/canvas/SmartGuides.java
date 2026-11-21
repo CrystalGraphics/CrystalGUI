@@ -150,7 +150,7 @@ public final class SmartGuides extends UIElement {
         if (area == null) return;
         int colour = getStyle().computed().get(StylePropertyRegistry.COLOR);
         // The owners' outlines take the layer's border colour, which the sheet sets fainter.
-        int ownerColour = getStyle().computed().get(StylePropertyRegistry.BORDER_COLOR);
+        int ownerColour = getStyle().computed().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
         // Half the stroke, so the coordinate stays the line's centre and it lies on the selection
         // outline rather than beside it.
         SnapIndicators.paint(paint, indicators, area[0], area[1], scaleOf(area), colour, ownerColour,

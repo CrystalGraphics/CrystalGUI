@@ -1,8 +1,9 @@
 package com.crystalgui.style.property.visual.text;
 
+import com.crystalgui.style.property.Shorthands;
 import com.crystalgui.style.property.StylePropertyRegistry;
 import com.crystalgui.style.property.visual.border.LengthPercent;
-import com.crystalgui.style.property.visual.color.ColorValue;
+import com.crystalgui.style.property.visual.color.StyleColor;
 import com.crystalgui.style.sheet.DeclarationParser;
 import com.crystalgui.style.sheet.StyleRule;
 import org.junit.Test;
@@ -30,7 +31,7 @@ public class TextStrokeStyleTest {
         assertEquals(2, out.size());
         assertSame(StylePropertyRegistry.TEXT_STROKE_WIDTH, out.get(0).property());
         assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(1).property());
-        assertEquals((Integer) 0xFF0B5D8F, out.get(1).value().compute());
+        assertEquals(StyleColor.of(0xFF0B5D8F), out.get(1).value().compute());
     }
 
     @Test
@@ -43,22 +44,22 @@ public class TextStrokeStyleTest {
         assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(1).property());
     }
 
+    /** As every CSS shorthand: what it omits goes back to its initial, so the colour follows the text again. */
     @Test
-    public void shorthandTakesEitherHalfAlone() {
+    public void anOmittedHalfIsReset() {
         List<StyleRule.Declaration> widthOnly = DeclarationParser.parseBlock("text-stroke: 1px;");
-        assertEquals(1, widthOnly.size());
-        assertSame(StylePropertyRegistry.TEXT_STROKE_WIDTH, widthOnly.get(0).property());
+        assertEquals(2, widthOnly.size());
+        assertEquals(StyleColor.CURRENT, widthOnly.get(1).value().compute());
 
         List<StyleRule.Declaration> colourOnly = DeclarationParser.parseBlock("text-stroke: #FF0000;");
-        assertEquals(1, colourOnly.size());
-        assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, colourOnly.get(0).property());
+        assertEquals(LengthPercent.ZERO, colourOnly.get(0).value().compute());
+        assertEquals(StyleColor.of(0xFFFF0000), colourOnly.get(1).value().compute());
     }
 
     @Test
-    public void shorthandNoneZeroesTheWidthAndLeavesTheColourAlone() {
+    public void shorthandNoneZeroesTheWidth() {
         List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke: none;");
 
-        assertEquals(1, out.size());
         assertSame(StylePropertyRegistry.TEXT_STROKE_WIDTH, out.get(0).property());
         assertEquals(LengthPercent.ZERO, out.get(0).value().compute());
     }
@@ -74,44 +75,24 @@ public class TextStrokeStyleTest {
 
         assertEquals(2, out.size());
         assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(1).property());
-        assertEquals((Integer) 0xFF0B5D8F, out.get(1).value().compute());
+        assertEquals(StyleColor.of(0xFF0B5D8F), out.get(1).value().compute());
     }
 
-    /**
-     * {@code text-stroke} is the only spelling a sheet may write. The two halves still exist, still
-     * cascade and still serialise under their own names — they are simply not authorable, so an
-     * author has one thing to learn and the engine keeps the two values a partial override needs.
-     */
+    /** The halves are writable by name, as the web's {@code -webkit-text-stroke-width} and {@code -color} are. */
     @Test
-    public void theLonghandsAreNotWritableBytheirOwnNames() {
+    public void theLonghandsAreWritableByTheirOwnNames() {
         List<StyleRule.Declaration> out =
                 DeclarationParser.parseBlock("text-stroke-width: 3px; text-stroke-color: #FF0000;");
-        assertTrue("both longhands must be refused by name", out.isEmpty());
-
-        assertEquals("text-stroke", StylePropertyRegistry.TEXT_STROKE_WIDTH.getAuthoredThrough());
-        assertEquals("text-stroke", StylePropertyRegistry.TEXT_STROKE_COLOR.getAuthoredThrough());
-        // Still resolvable by name, which is what the wire codec and the cascade both need.
-        assertSame(StylePropertyRegistry.TEXT_STROKE_WIDTH,
-                StylePropertyRegistry.byName("text-stroke-width"));
-        assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR,
-                StylePropertyRegistry.byName("text-stroke-color"));
-    }
-
-    /** A partial override is the whole reason the two halves survive under the shorthand. */
-    @Test
-    public void aColourOnlyDeclarationLeavesTheWidthAlone() {
-        List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke: #FF0000;");
-
-        assertEquals(1, out.size());
-        assertSame("stating only a colour must not emit a width, or a hover rule would zero it",
-                StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(0).property());
+        assertEquals(2, out.size());
+        assertSame(StylePropertyRegistry.TEXT_STROKE_WIDTH, out.get(0).property());
+        assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(1).property());
     }
 
     @Test
     public void transitionOnTheShorthandNameReachesBothLonghands() {
-        assertTrue(TextStrokeShorthand.transitionNameMatches(
+        assertTrue(Shorthands.covers(
                 "text-stroke", StylePropertyRegistry.TEXT_STROKE_WIDTH));
-        assertTrue(TextStrokeShorthand.transitionNameMatches(
+        assertTrue(Shorthands.covers(
                 "text-stroke", StylePropertyRegistry.TEXT_STROKE_COLOR));
         assertTrue("both longhands allow transition, or the shorthand animates nothing",
                 StylePropertyRegistry.TEXT_STROKE_WIDTH.isAllowTransition()
@@ -137,7 +118,6 @@ public class TextStrokeStyleTest {
     @Test
     public void pxIsAbsoluteAndNotTheSameAsEm() {
         assertEquals(LengthPercent.px(2f), width("2px"));
-        assertEquals("a bare number is px, as everywhere else", LengthPercent.px(2f), width("2"));
         // 2px only equals 0.028em at font-size 72 -- the point is that the two are different KINDS.
         assertNotEquals(width("2px"), width("2em"));
     }
@@ -150,46 +130,22 @@ public class TextStrokeStyleTest {
     }
 
     private static LengthPercent width(String value) {
-        List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke: " + value + ";");
+        List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke-width: " + value + ";");
         assertEquals("expected one width declaration for " + value, 1, out.size());
         assertSame(StylePropertyRegistry.TEXT_STROKE_WIDTH, out.get(0).property());
         return (LengthPercent) out.get(0).value().compute();
     }
 
-    // ── the collision that has already cost a session ────────────────────────────────────────
+    // ── colours ──────────────────────────────────────────────────────────────────────────────
 
-    /**
-     * <b>A fully transparent stroke colour is indistinguishable from an unset one BY VALUE.</b>
-     *
-     * <p>{@code text-stroke-color} takes {@code 0} as its initial,
-     * and {@code #00000000} parses to exactly {@code 0} — so "did the author write this?" cannot be
-     * answered by comparing against the initial, and {@code UIText} asks
-     * {@code ComputedStyle.isSet} instead. What makes that work is the declaration surviving the
-     * cascade as a candidate even though its value equals the initial, which is what this pins: kill
-     * it and a transparent outline silently becomes an inherited-colour one.</p>
-     */
+    /** {@code transparent} is a colour, not "unset": the initial is {@code currentcolor}, a different value. */
     @Test
-    public void aTransparentStrokeColourIsStillADeclaration() {
-        Integer transparent = ColorValue.parseColor("#00000000");
-        assertEquals("the premise: the parsed value IS the initial", transparent,
-                StylePropertyRegistry.TEXT_STROKE_COLOR.initialValue);
-        assertEquals((Integer) 0, transparent);
-
-        List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke: #00000000;");
-        assertEquals(1, out.size());
-        assertEquals("a value equal to the initial is still a real value, not a parse failure",
-                (Integer) 0, out.get(0).value().compute());
-        assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(0).property());
-    }
-
-    /** {@code transparent} is the same colour by another spelling, and must behave the same way. */
-    @Test
-    public void theTransparentKeywordIsTheSameColour() {
-        assertEquals((Integer) 0, ColorValue.parseColor("transparent"));
-
-        List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke: transparent;");
-        assertEquals(1, out.size());
-        assertSame(StylePropertyRegistry.TEXT_STROKE_COLOR, out.get(0).property());
+    public void aTransparentStrokeIsNotTheInitial() {
+        assertEquals(StyleColor.CURRENT, StylePropertyRegistry.TEXT_STROKE_COLOR.initialValue);
+        List<StyleRule.Declaration> out = DeclarationParser.parseBlock("text-stroke-color: transparent;");
+        assertEquals(StyleColor.TRANSPARENT, out.get(0).value().compute());
+        List<StyleRule.Declaration> current = DeclarationParser.parseBlock("text-stroke-color: currentcolor;");
+        assertEquals(StyleColor.CURRENT, current.get(0).value().compute());
     }
 
     // ── keywords ─────────────────────────────────────────────────────────────────────────────

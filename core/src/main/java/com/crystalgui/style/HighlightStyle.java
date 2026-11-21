@@ -1,5 +1,6 @@
 package com.crystalgui.style;
 
+import com.crystalgui.style.property.visual.color.StyleColor;
 import com.crystalgui.style.property.visual.shadow.ShadowList;
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
@@ -174,13 +175,16 @@ public final class HighlightStyle {
     }
 
     /**
-     * The colour of this range's underline or strikethrough, or {@code 0} for the text's own colour.
-     *
-     * <p>{@code 0} is both CSS's {@code text-decoration-color: currentColor} default and the backend's
-     * sentinel for "inherit the draw colour", so the two agree without a translation.</p>
+     * The colour of this range's underline or strikethrough, or {@code 0} for {@code currentcolor}, which
+     * is the backend's "the draw colour".
      */
     public int decorationColor() {
-        return get(StylePropertyRegistry.TEXT_DECORATION_COLOR, 0);
+        return decorationArgb(get(StylePropertyRegistry.TEXT_DECORATION_COLOR, StyleColor.CURRENT));
+    }
+
+    /** {@code text-decoration-color} as the backend takes it: {@code 0} for {@code currentcolor}. */
+    public static int decorationArgb(StyleColor color) {
+        return color.isCurrentColor() ? 0 : color.literalArgb();
     }
 
     /**

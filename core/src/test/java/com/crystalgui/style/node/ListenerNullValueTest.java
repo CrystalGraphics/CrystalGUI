@@ -50,12 +50,12 @@ public class ListenerNullValueTest extends UiDocumentTestBase {
     @Test
     public void droppingTheOnlyRuleThatSetOverflowDoesNotThrow() {
         assertNull("precondition: nothing has written overflow yet",
-                element.getStyle().getComputed(StylePropertyRegistry.OVERFLOW));
+                element.getStyle().getComputed(StylePropertyRegistry.OVERFLOW_X));
 
         element.addClass(CLIPPED);
         settle();
         assertEquals("precondition: the sheet is the property's only source",
-                Overflow.CLIP, element.getStyle().getComputed(StylePropertyRegistry.OVERFLOW));
+                Overflow.CLIP, element.getStyle().getComputed(StylePropertyRegistry.OVERFLOW_X));
 
         // The rematch withdraws that candidate and leaves the property with none at any origin. The
         // listener is then handed null, and before the fix it went straight into a switch.
@@ -63,7 +63,7 @@ public class ListenerNullValueTest extends UiDocumentTestBase {
         settle();
 
         assertNull("back to no candidate, which is what the listener has to tolerate",
-                element.getStyle().getComputed(StylePropertyRegistry.OVERFLOW));
+                element.getStyle().getComputed(StylePropertyRegistry.OVERFLOW_X));
         assertNotNull("the element survived the rematch", element.document());
     }
 }

@@ -2,6 +2,7 @@ package com.crystalgui.style;
 
 import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.color.StyleColor;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -114,6 +115,14 @@ public final class ComputedStyle {
     public <T> T get(StyleProperty<T> property) {
         Object value = values.get(property);
         return value != null ? (T) value : property.initialValue;
+    }
+
+    /**
+     * A colour that may be {@code currentcolor}, as the ARGB to paint: resolved against this element's
+     * {@code color}. {@code int ring = style.argb(BORDER_TOP_COLOR);}
+     */
+    public int argb(StyleProperty<StyleColor> property) {
+        return get(property).resolve(get(StylePropertyRegistry.COLOR));
     }
 
     /** Whether something (a rule, an inline write, inheritance) decided this, as opposed to the initial. */

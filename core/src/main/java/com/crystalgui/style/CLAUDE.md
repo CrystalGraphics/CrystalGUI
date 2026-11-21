@@ -69,19 +69,27 @@ Properties also carry change listeners — this is how `LayoutProperties.init()`
 property straight through to `TaffyBridge`.
 
 **Registered CSS properties** (`StylePropertyRegistry`) — the full set, alphabetically, so a missing
-entry is visible rather than merely absent: `backdrop-filter`, `background`, `background-color`, `border-bottom-color`,
-`border-color`, `border-top-color`, `caret-color`, `caret-width`, `clip-path`, `color`, `cursor`, `font-family`, `font-size`,
-`font-style`, `font-weight`, `isolation`, `line-height`, `mask`, `mask-size`,
-`mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`,
-`outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow`, `overlay`, `overlay-size`,
+entry is visible rather than merely absent: `backdrop-filter`, `background-color`, `background-image`, `background-tint`,
+`border-{top,right,bottom,left}-color`, `border-{top,right,bottom,left}-style`, `caret-color`, `caret-width`, `clip-path`, `color`,
+`cursor`, `font-family`, `font-size`, `font-style`, `font-weight`, `isolation`, `line-height`, `mask`, `mask-size`,
+`mask-offset`, `mask-origin`, `mask-position`, `opacity`, `outline`, `outline-color`, `outline-style`,
+`outline-offset-{top,right,bottom,left}`, `outline-width`, `overflow-x`, `overflow-y`, `overlay`, `overlay-size`,
 `overlay-origin`, `overlay-position`, `overlay-tint`, `overscroll-behavior`, `paint-order`, `resize`, `scroll-behavior`, `scroll-duration`,
-`selection-color`, `stroke-align`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-offset-x`, `text-offset-y`,
-`text-overflow`, `text-shadow`, `text-stroke-color`, `text-stroke-width`, `tooltip-delay`, `transform`, `transform-origin-x`, `transform-origin-y`,
-`transition`, `white-space`, `will-change`, `z-index` — plus the whole layout set from `LayoutProperties`.
+`selection-color`, `stroke-align`, `text-align`, `text-decoration-color`, `text-decoration-line`, `text-fill-color`,
+`text-offset-x`, `text-offset-y`, `text-overflow`, `text-shadow`, `text-stroke-color`, `text-stroke-width`, `tooltip-delay`,
+`transform`, `transform-origin-x`, `transform-origin-y`, `transition`, `white-space`, `will-change`, `z-index` — plus the
+whole layout set from `LayoutProperties`.
 
-> **Shorthands are NOT in that list and never will be**, because they are not registered: `DeclarationParser` intercepts each one by name before the registry lookup and emits real longhands, so `StylePropertyRegistry.byName` answers null for them. Today they are `margin`/`padding`/`border-width` (`BoxEdgeShorthands`), `border-radius`, `outline-offset`, `transform-origin`, `outline` (polymorphic — a drawable slot OR width+colour) and `text-stroke` (width+colour). Each must be matched with `equals` rather than a prefix test, since every one of those names is a prefix of its own longhands, and each needs a `transitionNameMatches` entry in `TransitionEngine` or `transition: <shorthand>` animates nothing — `outline` had that method for months and was never wired in.
+> **Shorthands are NOT in that list**, because they are not registered: each is a `Shorthand` in `Shorthands`, which
+> `DeclarationParser` asks before the registry and `TransitionEngine` asks for `transition: <shorthand>`. A new one is
+> a line in `Shorthands.ALL`; it sets every longhand it names, an omitted part at its initial value, as CSS does.
 >
-> **One pair goes the other way: `text-stroke-width` and `text-stroke-color` ARE in the list above, and a sheet still may not write them.** `DeclarationParser` refuses any property whose `StyleProperty.getAuthoredThrough()` is set, so `text-stroke` is the only spelling — while `byName` keeps resolving both, which `InlineStyleCodec` requires, since it throws on a name it cannot resolve and would otherwise fail on every serialised tree carrying an outline. They remain two properties because a declaration stating only a colour has to leave the width alone, and a single combined value cannot express a partial override.
+> **Some longhands are not written by name**: `text-offset-x`/`-y`, `transform-origin-x`/`-y`, the eight
+> `border-*-radius-x`/`-y` and `outline-offset-<edge>` are this engine's, not CSS's, so `setAuthoredThrough` sends a
+> sheet to the shorthand while `byName` keeps resolving them, which `InlineStyleCodec` requires.
+>
+> **A colour whose CSS initial is `currentcolor`** (border sides, outline, caret, text decoration, stroke, fill) is a
+> `StyleColorProperty` holding a `StyleColor`; read the ARGB to paint with `ComputedStyle.argb(property)`.
 
 > **Renaming one is a DATA migration, not a rename.** `InlineStyleCodec` refuses a document naming a
 > property it does not know — `CgCodecException: Unknown style property 'gap-all'` — rather than skipping
@@ -137,7 +145,7 @@ Prefer an existing **specialized subclass** — it presets those flags correctly
 ```java
 public static final StyleProperty<Float> OPACITY   = create("opacity", 1f).setRange(0f, 1f);
 public static final StyleProperty<Integer> COLOR   = create(new ColorProperty("color", -1)).setInheritable(true);
-public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE);
+public static final StyleProperty<Overflow> OVERFLOW_X = create("overflow-x", Overflow.class, Overflow.VISIBLE);
 ```
 
 The string here **is** the CSS property name — registering it is what makes it parseable in a
@@ -245,7 +253,7 @@ and a field-per-function decomposition cannot represent the difference at all.
 - `isIdentity()` is the fast path every caller checks first, so an untransformed tree pays nothing.
 - **Layout-free by construction** — Taffy never sees it, so transforming an element cannot reflow its
   siblings. That's what makes a zoomable canvas possible (scale one container, not the window).
-- Origin is **not** stored here — `transform-origin-x`/`-y` are separate cascading properties, so they
+- Origin is **not** stored here — `transform-origin`'s two axes are separate cascading properties, so they
   theme and transition independently. `applyTo(...)` takes the origin already resolved to pixels.
 - `applyTo` is the **single definition** used by both the hit-test transform chain and the render
   `PoseStack`. They must produce an identical matrix or clicks land somewhere other than what the user

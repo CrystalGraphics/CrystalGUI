@@ -76,8 +76,8 @@ public class EmUnitTest extends UiDocumentTestBase {
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.parse(
                 ".boxed { padding-left: 2em; }"
-                        + ".small { font-size: 5; }"
-                        + ".large { font-size: 40; }"));
+                        + ".small { font-size: 5px; }"
+                        + ".large { font-size: 40px; }"));
 
         UIElement small = new UIElement();
         small.addClass("boxed");
@@ -106,7 +106,7 @@ public class EmUnitTest extends UiDocumentTestBase {
         UIElement root = new UIElement();
         document.append(root);
         document.styleEngine().addStylesheet(StyleSheet.parse(
-                ".boxed { padding-left: 2em; font-size: 10; }"));
+                ".boxed { padding-left: 2em; font-size: 10px; }"));
 
         UIElement box = new UIElement();
         box.addClass("boxed");

@@ -288,7 +288,7 @@ public class StyleEditingTest {
         assertEquals(StyleFamilies.Family.LAYOUT, StyleFamilies.of("grid-template-columns"));
 
         assertTrue("an alias people type finds the property",
-                names(StyleFamilies.search("bg")).contains("background"));
+                names(StyleFamilies.search("bg")).contains("background-image"));
         assertTrue("and so does a plain substring",
                 names(StyleFamilies.search("radius")).contains("border-top-left-radius-x"));
     }
@@ -313,7 +313,7 @@ public class StyleEditingTest {
         assertEquals("a bounded number is a slider", ConfigDescriptor.Kind.NUMBER,
                 DeclarationEditors.of(StylePropertyRegistry.OPACITY, "o", "opacity", Property.of("")).descriptor().kind());
 
-        ConfigDescriptor overflow = DeclarationEditors.of(StylePropertyRegistry.OVERFLOW, "of", "overflow",
+        ConfigDescriptor overflow = DeclarationEditors.of(StylePropertyRegistry.OVERFLOW_X, "of", "overflow",
                 Property.of("")).descriptor();
         assertEquals("an enum is a dropdown", ConfigDescriptor.Kind.SELECT, overflow.kind());
         assertTrue("of the CSS keywords, not the Java constants", overflow.options().contains("visible"));

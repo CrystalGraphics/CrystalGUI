@@ -304,8 +304,8 @@ public final class TransformLab {
         @Override
         public void paintContent(CgUiPaintContext paint, Box box) {
             PivotMark.paint(paint, box.width() / 2f, box.height() / 2f,
-                    getStyle().computed().get(StylePropertyRegistry.OUTLINE_COLOR),
-                    getStyle().computed().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));
+                    getStyle().computed().argb(StylePropertyRegistry.OUTLINE_COLOR),
+                    getStyle().computed().argb(StylePropertyRegistry.TEXT_DECORATION_COLOR));
         }
     }
 

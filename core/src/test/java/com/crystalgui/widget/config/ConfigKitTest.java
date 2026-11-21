@@ -362,7 +362,7 @@ public class ConfigKitTest extends UiDocumentTestBase {
         // escaping past it, not a wrapped line.
         assertTrue("must actually clip, not just resolve an ellipsis value nothing enforces",
                 arrayTitle.getStyle().getComputed(
-                        com.crystalgui.style.property.StylePropertyRegistry.OVERFLOW).clips());
+                        com.crystalgui.style.property.StylePropertyRegistry.OVERFLOW_X).clips());
     }
 
     /**
@@ -589,11 +589,11 @@ public class ConfigKitTest extends UiDocumentTestBase {
                 0xFFFF0000, backgroundOf(maskControl.toggle()));
     }
 
-    /** The resolved {@code background} of an element, as ARGB, when it is a flat fill. */
+    /** The resolved {@code background-color} of an element, as ARGB, under no image. */
     private static int backgroundOf(UIElement e) {
         var drawable = e.getStyle().getGeneralGroup().background();
-        assertTrue("expected a flat fill, got " + drawable, drawable instanceof CgUiImage.Color);
-        return ((CgUiImage.Color) drawable).argb();
+        assertEquals("expected a flat fill, got " + drawable, CgUiImage.NONE, drawable);
+        return e.getStyle().getGeneralGroup().backgroundColor();
     }
 
     /** The checkbox's own size — the kit's one deliberate exception, so it needs its own assertion. */

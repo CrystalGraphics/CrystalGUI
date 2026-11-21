@@ -3,6 +3,8 @@ package com.crystalgui.ui.box;
 import com.crystalgui.style.ComputedStyle;
 import com.crystalgui.style.TaffyBridge;
 import com.crystalgui.style.property.StylePropertyRegistry;
+import com.crystalgui.style.property.visual.border.BorderStyle;
+import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.layout.length.LPSize;
 import dev.vfyjxf.taffy.style.AlignContent;
@@ -82,9 +84,17 @@ public final class BoxStyle {
      * @param mirrorRoot whether this box is the root of a MIRROR, which is laid out at its host's
      *                   origin rather than at the insets its source node carries
      */
+    /** A side's used width: 0 when unset or when its style is {@code none} or {@code hidden}, as CSS computes it. */
+    private static LengthPercentageAuto borderWidth(ComputedStyle c, StyleProperty<LengthPercentageAuto> width,
+                                                    StyleProperty<BorderStyle> style) {
+        if (!c.isSet(width) || !c.get(style).draws()) return LengthPercentageAuto.ZERO;
+        return c.get(width);
+    }
+
     public static void apply(TaffyBridge bridge, ComputedStyle c, boolean hosted, boolean mirrorRoot) {
         bridge.setDisplay(c.get(LayoutProperties.DISPLAY));
-        bridge.setOverflow(StylePropertyRegistry.toTaffyOverflow(c.get(StylePropertyRegistry.OVERFLOW)));
+        bridge.setOverflow(StylePropertyRegistry.toTaffyOverflow(c.get(StylePropertyRegistry.OVERFLOW_X)),
+                StylePropertyRegistry.toTaffyOverflow(c.get(StylePropertyRegistry.OVERFLOW_Y)));
         bridge.setDirection(c.get(LayoutProperties.DIRECTION));
         bridge.setPosition(hosted ? TaffyPosition.ABSOLUTE : c.get(LayoutProperties.POSITION));
         bridge.setBoxSizing(c.get(LayoutProperties.BOX_SIZING));
@@ -95,7 +105,6 @@ public final class BoxStyle {
         bridge.setFlexWrap(c.get(LayoutProperties.FLEX_WRAP));
         bridge.setFlexBasis(c.get(LayoutProperties.FLEX_BASIS));
         bridge.setFlexGrow(c.get(LayoutProperties.FLEX_GROW));
-        bridge.setFlex(c.isSet(LayoutProperties.FLEX) ? c.get(LayoutProperties.FLEX) : Float.NaN);
 
         // Alignment -- align-content back to CSS's `normal`.
         bridge.setAlignItems(c.get(LayoutProperties.ALIGN_ITEMS));
@@ -149,10 +158,10 @@ public final class BoxStyle {
         bridge.setPaddingTop(c.isSet(LayoutProperties.PADDING_TOP) ? c.get(LayoutProperties.PADDING_TOP) : LengthPercentageAuto.ZERO);
         bridge.setPaddingRight(c.isSet(LayoutProperties.PADDING_RIGHT) ? c.get(LayoutProperties.PADDING_RIGHT) : LengthPercentageAuto.ZERO);
         bridge.setPaddingBottom(c.isSet(LayoutProperties.PADDING_BOTTOM) ? c.get(LayoutProperties.PADDING_BOTTOM) : LengthPercentageAuto.ZERO);
-        bridge.setBorderLeft(c.isSet(LayoutProperties.BORDER_LEFT) ? c.get(LayoutProperties.BORDER_LEFT) : LengthPercentageAuto.ZERO);
-        bridge.setBorderTop(c.isSet(LayoutProperties.BORDER_TOP) ? c.get(LayoutProperties.BORDER_TOP) : LengthPercentageAuto.ZERO);
-        bridge.setBorderRight(c.isSet(LayoutProperties.BORDER_RIGHT) ? c.get(LayoutProperties.BORDER_RIGHT) : LengthPercentageAuto.ZERO);
-        bridge.setBorderBottom(c.isSet(LayoutProperties.BORDER_BOTTOM) ? c.get(LayoutProperties.BORDER_BOTTOM) : LengthPercentageAuto.ZERO);
+        bridge.setBorderLeft(borderWidth(c, LayoutProperties.BORDER_LEFT, StylePropertyRegistry.BORDER_LEFT_STYLE));
+        bridge.setBorderTop(borderWidth(c, LayoutProperties.BORDER_TOP, StylePropertyRegistry.BORDER_TOP_STYLE));
+        bridge.setBorderRight(borderWidth(c, LayoutProperties.BORDER_RIGHT, StylePropertyRegistry.BORDER_RIGHT_STYLE));
+        bridge.setBorderBottom(borderWidth(c, LayoutProperties.BORDER_BOTTOM, StylePropertyRegistry.BORDER_BOTTOM_STYLE));
 
         // Gaps: shorthand first, longhands over it, and a reset first so a withdrawn gap is withdrawn.
         //

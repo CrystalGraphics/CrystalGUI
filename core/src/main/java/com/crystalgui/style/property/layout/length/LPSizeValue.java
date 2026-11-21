@@ -1,5 +1,6 @@
 package com.crystalgui.style.property.layout.length;
 
+import com.crystalgui.style.CssLength;
 import com.crystalgui.style.property.StyleValue;
 import dev.vfyjxf.taffy.geometry.TaffySize;
 import dev.vfyjxf.taffy.style.LengthPercentage;
@@ -67,34 +68,11 @@ public class LPSizeValue extends StyleValue<LPSize> {
     }
 
     private static LengthPercentage parseLengthPercentage(String value) {
-        if (value == null || value.trim().isEmpty()) {
-            return LengthPercentage.ZERO;
-        }
-
-        String trimmed = value.trim().toLowerCase();
-
-        try {
-            // Check for percentage
-            if (trimmed.endsWith("%")) {
-                String numberPart = trimmed.substring(0, trimmed.length() - 1).trim();
-                float percentage = Float.parseFloat(numberPart);
-                // CSS percentages are 0-100, but Taffy uses 0.0-1.0
-                return LengthPercentage.percent(percentage / 100f);
-            }
-
-            // Check for length with "px" unit
-            if (trimmed.endsWith("px")) {
-                String numberPart = trimmed.substring(0, trimmed.length() - 2).trim();
-                float length = Float.parseFloat(numberPart);
-                return LengthPercentage.length(length);
-            }
-
-            // Try parsing as plain number (assume pixels)
-            float length = Float.parseFloat(trimmed);
-            return LengthPercentage.length(length);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        if (value == null || value.trim().isEmpty()) return LengthPercentage.ZERO;
+        CssLength length = CssLength.parse(value);
+        if (length == null || length.unit() == CssLength.Unit.EM) return null;
+        return length.unit() == CssLength.Unit.PERCENT ? LengthPercentage.percent(length.fraction())
+                : LengthPercentage.length(length.value());
     }
 
     // ==================== Serialization to CSS String ====================

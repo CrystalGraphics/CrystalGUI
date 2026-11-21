@@ -12,7 +12,7 @@
       "justify-content": "center",
       "width": "640.0px",
       "height": "480.0px",
-      "background": "radial-gradient(260px 150px at 50% 88%, #FF7A2E59, #FF7A2E00), linear-gradient(to bottom, #262626, #121212)"
+      "background-image": "radial-gradient(260px 150px at 50% 88%, #FF7A2E59, #FF7A2E00), linear-gradient(to bottom, #262626, #121212)"
     },
     "children": [
       {

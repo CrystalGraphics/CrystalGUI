@@ -510,7 +510,7 @@ public abstract class FrameSeriesTrack extends TimelineTrack {
     @Override
     protected final void paintTrack(CgUiPaintContext ctx, Box box) {
         if (frameCount() == 0) return;
-        int accent = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
+        int accent = computedStyle().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
         float height = box.height();
 
         // THE BANDS FIRST, BEHIND the series: a mark drawn over a bar hides the bar it marks.

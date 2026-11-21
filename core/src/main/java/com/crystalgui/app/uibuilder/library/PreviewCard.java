@@ -148,7 +148,7 @@ public final class PreviewCard extends UIElement implements DataProvider {
             // ON THE FRAME TOO: a rule about the card cannot reach inside its shadow root.
             built.addClass(PICTURE_CLASS);
             JsonObject style = new JsonObject();
-            style.add("background", new JsonPrimitive(picture.background()));
+            style.add("background-image", new JsonPrimitive(picture.background()));
             InlineStyleCodec.replace(CgJsonOps.INSTANCE, style, built);
             pending = false;
             showPlaceholder(false);

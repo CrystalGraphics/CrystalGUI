@@ -539,16 +539,6 @@ public class LayoutGroup extends StyleGroup<LayoutGroup> {
     }
 
     /* Flex properties */
-    public LayoutGroup flex(float flex) {
-        set(LayoutProperties.FLEX, flex);
-        return this;
-    }
-
-    public LayoutGroup flexAuto() {
-        set(LayoutProperties.FLEX, Float.NaN);
-        return this;
-    }
-
 
     public LayoutGroup flexBasisAuto() {
         set(LayoutProperties.FLEX_BASIS, TaffyDimension.auto());

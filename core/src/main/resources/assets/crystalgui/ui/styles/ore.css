@@ -39,8 +39,8 @@
  * (physical, at uiScale 2) from the bottom. Swap the font and this number changes with it. */
 * {
     font-family: "crystalgui:ui/fonts/MinecraftRegular.otf";
-    font-size: 10;
-    text-offset-y: 1px;
+    font-size: 10px;
+    text-offset: 0 1px;
 }
 
 /* ══════════════════════════════════════════════════════════════════════════════════════════════════
@@ -199,7 +199,7 @@ button:active {
     background: asset("crystalgui:ore", "button-pressed");
     /* 6-digit = opaque. NOTE: 8-digit hex here is #RRGGBBAA (alpha LAST, CSS-standard), so
      * "#FFDDDDDD" would be light RED at 87% alpha, not a gray tint. */
-    background-color: #DDDDDD;
+    background-tint: #DDDDDD;
 }
 button:disabled, dropdown:disabled {
     background: asset("crystalgui:ore", "button-disabled");
@@ -210,6 +210,62 @@ button:disabled, dropdown:disabled {
 button:focus-visible, dropdown:focus-visible {
     outline: asset("crystalgui:ore", "focus-ring");
 }
+
+/* ── Bare controls ── The user-agent sheet draws these buttons as an icon alone (a close X, a toolbar
+ * action, a taskbar entry). A sheet beats the user-agent sheet at any specificity, so Ore's `button`
+ * sprite reaches them, and only this sheet can take it off: the image alone, so the user-agent's hover
+ * fills still show. Generated from the user-agent rules that set a transparent `background-color`;
+ * keep it in step when one is added. */
+taskbar .__start-button__,
+taskbar .__show-desktop__,
+launcher .__app-row__,
+taskbar .__entry__,
+taskbar .__entry__.__attention__.__flash-off__,
+.__menu-bar__.__caption-adopted__,
+.__window__ .__title-bar__ .__caption-action__,
+.__window__ .__title-bar__ .__pin__,
+.__window__ .__title-bar__ .__minimize__,
+.__window__ .__title-bar__ .__maximize__,
+.__window__ .__title-bar__ .__close__,
+.__header__.__caption-adopted__,
+.__window__.__tool-window__ .__title-bar__ .__dock__,
+.__window-preview__ .__preview-close__,
+.__switcher-entry__,
+.__switcher-entry__.__selected__,
+.__switcher-entry__ .__switcher-close__,
+dialog .__title-bar__ .__close__,
+runpanel .__run-action__:disabled,
+runpanel .__run-action__:disabled:hover,
+.__find-bar__ .__find-close__,
+.__find-bar__ .__find-mode__,
+.__find-bar__ .__find-prev__,
+.__find-bar__ .__find-next__,
+.__find-bar__ .__find-prev__.__off__,
+.__find-bar__ .__find-next__.__off__,
+.__search-option__,
+.__find-bar__ .__find-chevron__,
+.__transform-link__ .__config-control__ button,
+.__linked-chain__,
+.__length-unit__,
+.__corner-link__,
+tab .__close__,
+tab::part(close),
+dockgroup > tabview > .__strip__ > .__strip-actions__ .__action-button__,
+.__panel-header__ .__hide__,
+.__panel-header__ .__action-button__,
+.__title-trailing__.__caption-adopted__ .__action-button__,
+.__panel-header__ .__action-button__:disabled,
+.__inspection-previous__,
+.__inspection-next__,
+.__inspection-previous__:disabled,
+.__inspection-next__:disabled,
+problemspanel .__view-options__,
+problemspanel .__view-options__:hover,
+problemspanel .__view-options__:active,
+navigatorview .__nav-search__ {
+    background-image: none;
+}
+
 
 /* Root carries NO background — the box texture belongs to __mark__ alone.
  *
@@ -385,7 +441,7 @@ slider:hover::part(thumb) {
 slider:active .__thumb__,
 slider:active::part(thumb) {
     background: asset("crystalgui:ore", "button-pressed");
-    background-color: #DDDDDD;
+    background-tint: #DDDDDD;
 }
 slider:focus-visible .__thumb__,
 slider:focus-visible::part(thumb) {
@@ -453,7 +509,7 @@ splitview > .__divider__:hover {
 splitview > .__divider__:active {
     background: asset("crystalgui:ore", "divider-hover");
     /* 6-digit = opaque; see the note on button:active about 8-digit hex being #RRGGBBAA. */
-    background-color: #DDDDDD;
+    background-tint: #DDDDDD;
 }
 /* The divider IS focusable (SplitView gives it FocusPolicy.FOCUSABLE so the arrow keys can move the
  * split), so Tab-traversal lands on it and needs to say so.
@@ -464,7 +520,7 @@ splitview > .__divider__:active {
  * for the tab strip's hairline scrollbar below. */
 splitview > .__divider__:focus-visible {
     background: asset("crystalgui:ore", "divider-hover");
-    background-color: #AACCFF;
+    background-tint: #AACCFF;
 }
 /* SplitView adds `__vertical__` to itself when the orientation flips, purely so this rule can match. */
 splitview.__vertical__ > .__divider__ {
@@ -633,7 +689,7 @@ scroller::part(thumb):hover {
 scroller .__thumb__:active,
 scroller::part(thumb):active {
     background: asset("crystalgui:ore", "scroller-thumb-pressed");
-    background-color: #DDDDDD;
+    background-tint: #DDDDDD;
 }
 
 /* Bar thickness and pinning. 8px — which is also what LDLib2's ore.lss uses for the scrollers
@@ -794,8 +850,8 @@ colorselector .__side__ dropdown {
  * size it drops the glyphs onto the box's lower edge. */
 colorselector text,
 colorselector textfield {
-    font-size: 6;
-    text-offset-y: 0px;
+    font-size: 6px;
+    text-offset: 0 0px;
 }
 
 /* Ore's focus ring is nine-slice ART, and its border rows are ~3px of a sprite drawn AT the border box.

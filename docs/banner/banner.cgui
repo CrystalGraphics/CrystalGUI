@@ -28,7 +28,7 @@
             "kind": "element",
             "id": "glow-teal",
             "style": {
-              "background": "linear-gradient(to bottom right, #7CF5D0CC, #0F8F82CC)",
+              "background-image": "linear-gradient(to bottom right, #7CF5D0CC, #0F8F82CC)",
               "border-bottom-left-radius-x": "70.0px",
               "border-bottom-left-radius-y": "70.0px",
               "border-bottom-right-radius-x": "70.0px",
@@ -48,7 +48,7 @@
             "kind": "element",
             "id": "glow-rose",
             "style": {
-              "background": "linear-gradient(to bottom right, #5B2A86CC, #F472B6CC)",
+              "background-image": "linear-gradient(to bottom right, #5B2A86CC, #F472B6CC)",
               "border-bottom-left-radius-x": "70.0px",
               "border-bottom-left-radius-y": "70.0px",
               "border-bottom-right-radius-x": "70.0px",
@@ -68,7 +68,7 @@
             "kind": "element",
             "id": "glow-violet",
             "style": {
-              "background": "linear-gradient(to bottom right, #0F8F82, #CE3CD5)",
+              "background-image": "linear-gradient(to bottom right, #0F8F82, #CE3CD5)",
               "border-bottom-left-radius-x": "24.0px",
               "border-bottom-left-radius-y": "24.0px",
               "border-bottom-right-radius-x": "24.0px",
@@ -128,7 +128,7 @@
                     "kind": "element",
                     "id": "art",
                     "style": {
-                      "background": "radial-gradient(circle 38.4px at 90% 95%, #FF6FB566, #FF6FB500), radial-gradient(circle 51.2px at 25% 15%, #B8FFE847, #B8FFE800), linear-gradient(to bottom right, #7CF5D0FF, #0F8F82FF 38%, #5B2A86FF 75%, #F472B6FF)",
+                      "background-image": "radial-gradient(circle 38.4px at 90% 95%, #FF6FB566, #FF6FB500), radial-gradient(circle 51.2px at 25% 15%, #B8FFE847, #B8FFE800), linear-gradient(to bottom right, #7CF5D0FF, #0F8F82FF 38%, #5B2A86FF 75%, #F472B6FF)",
                       "border-bottom-left-radius-x": "14.0px",
                       "border-bottom-left-radius-y": "14.0px",
                       "border-bottom-right-radius-x": "14.0px",
@@ -154,7 +154,7 @@
                         "id": "title",
                         "style": {
                           "color": "#FFFFFF",
-                          "font-size": "19.0",
+                          "font-size": "19px",
                           "font-weight": "bold",
                           "text-shadow": "/* #000000FF 0px 0px 2.8px 0.6px, */ 0px 0px 14px 2.6px #72F4DA99"
                         },
@@ -167,10 +167,10 @@
                         "id": "artist",
                         "style": {
                           "color": "#C9B8F0",
-                          "font-size": "12.0"
+                          "font-size": "12px"
                         },
                         "state": {
-                          "text": "Crystal Lights · Aurora EP"
+                          "text": "Crystal Lights \u00b7 Aurora EP"
                         }
                       }
                     ]
@@ -211,7 +211,7 @@
                         "kind": "text",
                         "style": {
                           "color": "#9C8FC4",
-                          "font-size": "10.0"
+                          "font-size": "10px"
                         },
                         "state": {
                           "text": "1:42"
@@ -221,7 +221,7 @@
                         "kind": "text",
                         "style": {
                           "color": "#9C8FC4",
-                          "font-size": "10.0"
+                          "font-size": "10px"
                         },
                         "state": {
                           "text": "4:05"
@@ -244,7 +244,7 @@
                     "kind": "text",
                     "style": {
                       "color": "#E7EEF8",
-                      "font-size": "13.0"
+                      "font-size": "13px"
                     },
                     "state": {
                       "text": "Shuffle"
@@ -275,7 +275,7 @@
                     "kind": "text",
                     "style": {
                       "color": "#E7EEF8",
-                      "font-size": "13.0"
+                      "font-size": "13px"
                     },
                     "state": {
                       "text": "Volume"
@@ -306,7 +306,7 @@
                   "focus-policy": "CLICK"
                 },
                 "style": {
-                  "background": "linear-gradient(90deg, #7CF5D0, #0F8F82 38%, #5B2A86 75%, #F472B6)",
+                  "background-image": "linear-gradient(90deg, #7CF5D0, #0F8F82 38%, #5B2A86 75%, #F472B6)",
                   "border-bottom-left-radius-x": "12.0px",
                   "border-bottom-left-radius-y": "12.0px",
                   "border-bottom-right-radius-x": "12.0px",
@@ -320,7 +320,7 @@
                   "border-top-right-radius-y": "12.0px",
                   "border-top-width": "0.0px",
                   "color": "#FFFFFF",
-                  "font-size": "14.0",
+                  "font-size": "14px",
                   "font-weight": "bold",
                   "height": "38.0px",
                   "text-shadow": "#00000055 0px 1px 2px",

@@ -147,7 +147,7 @@
  * has constrained it (see UIText.recompute's selfSizesWidth). */
 
 
-.desc          { width: 300px; color: #A8B0B8; font-size: 8; }
+.desc          { width: 300px; color: #A8B0B8; font-size: 8px; }
 
 
 .slot          { width: 86px; }
@@ -218,10 +218,10 @@
  * adds only the dropdown's width, a fact about this demo rather than about graphs. */
 
 
-.graph-dropdown { width: 62px; height: 12px; font-size: 7; }
+.graph-dropdown { width: 62px; height: 12px; font-size: 7px; }
 
 
-.canvas-status { color: #A8B0B8; font-size: 8; width: 300px; }
+.canvas-status { color: #A8B0B8; font-size: 8px; width: 300px; }
 
 
 .canvas-btn    { width: 62px; }
@@ -248,7 +248,7 @@
    its 10 and settles it without reordering rules that have nothing to do with each other. */
 
 
-.shader-split .shader-source { width: 100%; height: 300px; font-size: 7; }
+.shader-split .shader-source { width: 100%; height: 300px; font-size: 7px; }
 
 
 /* The split takes the pane's slack; SplitView owns the divider, its drag and its cursor. */
@@ -350,7 +350,7 @@
 .cfg-log       { flex-direction: column; gap: 1px; }
 
 
-.cfg-log-line  { color: #9AD08A; font-size: 8; }
+.cfg-log-line  { color: #9AD08A; font-size: 8px; }
 
 
 .shader-split  { width: 100%; height: 0; flex-grow: 1; }
@@ -766,7 +766,7 @@
 .tx-stroke-2 .label,
 .tx-stroke-current .label,
 .tx-stroke-huge .label,
-.tx-stroke-inherit .label { font-size: 72; }
+.tx-stroke-inherit .label { font-size: 72px; }
 
 /* `text-stroke` is the only spelling a sheet may write: text-stroke-width and -color still cascade,
  * inherit and serialise, but DeclarationParser refuses them by name so there is one thing to learn.
@@ -783,7 +783,7 @@
  * equivalent; `outset` never touches the letterform. Widen inset here and the g and h pinch shut. */
 .tx-align-outset { stroke-align: outset; }
 .tx-align-center { stroke-align: center; }
-.tx-align-inset  { stroke-align: inset; text-stroke: 1px; }
+.tx-align-inset  { stroke-align: inset; text-stroke-width: 1px; }
 
 /* Stroke under the fill. Only legible against `center`, where there is an inner half to hide. */
 .tx-paint-stroke { paint-order: stroke; }
@@ -800,7 +800,7 @@
 
 .tx-stroke-current {
     width: 460px;
-    text-stroke: 2px;
+    text-stroke-width: 2px;
     color: #E0A33C;
     background: #171C22;
     padding-left: 10px;
@@ -818,7 +818,7 @@
 
 /* Small enough to rasterise as bitmap coverage, which carries no distance to threshold. AFTER the
  * label rules above: same specificity, so source order is what makes this one win. */
-.tx-small .label { font-size: 10; }
+.tx-small .label { font-size: 10px; }
 
 
 .tx-shadow-row ::highlight(red)   { color: #CC0000; }
@@ -920,9 +920,9 @@
 .tx-sh-em .label { text-shadow: 0.08em 0.08em 0.2em #000000; }
 .tx-sh-rotated   { text-shadow: 3px 3px 3px #000000; transform: rotate(-8deg); }
 /* font-size does not inherit here (`* { font-size: 10 }`), so the size goes on the label. */
-.tx-sh-hard .label, .tx-sh-soft .label, .tx-sh-glow .label, .tx-sh-neon .label, .tx-sh-order .label, .tx-sh-current .label, .tx-sh-spread .label, .tx-sh-underline .label, .tx-sh-rotated .label { font-size: 18; }
-.tx-sh-inset .label, .tx-sh-stroked .label { font-size: 22; }
-.tx-sh-em .label { font-size: 26; }
+.tx-sh-hard .label, .tx-sh-soft .label, .tx-sh-glow .label, .tx-sh-neon .label, .tx-sh-order .label, .tx-sh-current .label, .tx-sh-spread .label, .tx-sh-underline .label, .tx-sh-rotated .label { font-size: 18px; }
+.tx-sh-inset .label, .tx-sh-stroked .label { font-size: 22px; }
+.tx-sh-em .label { font-size: 26px; }
 
 
 .tx-inherit    { white-space: nowrap; overflow: hidden; text-align: right; }
@@ -961,7 +961,7 @@
 .km-panel      { width: 62px; height: 30px; background: #2E3540; padding: 4px;
 
 
-                 outline: 1px solid #46505E; font-size: 7; }
+                 outline: 1px solid #46505E; font-size: 7px; }
 
 
 .km-panel:focus{ outline: 2px solid #61AFEF; }
@@ -970,16 +970,16 @@
 .km-log        { width: 140px; height: 18px; background: #1B1F25; padding: 3px;
 
 
-                 color: #98C379; font-size: 7; }
+                 color: #98C379; font-size: 7px; }
 
 
-.km-pending    { width: 140px; height: 18px; padding: 3px; color: #E5C07B; font-size: 7; }
+.km-pending    { width: 140px; height: 18px; padding: 3px; color: #E5C07B; font-size: 7px; }
 
 
 .km-field      { width: 140px; }
 
 
-.km-hint       { color: #7F848E; font-size: 7; }
+.km-hint       { color: #7F848E; font-size: 7px; }
 
 
 
@@ -997,7 +997,7 @@
 .lv            { width: 200px; height: 130px; background: #23282F; outline: 1px solid #46505E; }
 
 
-.lv-row        { padding-left: 4px; font-size: 7; }
+.lv-row        { padding-left: 4px; font-size: 7px; }
 
 
 .lv-row:hover  { background: #2E3540; }
@@ -1009,7 +1009,7 @@
 .lv-row.__selected__ { background: #2C5A8C; }
 
 
-.lv-stat       { color: #98C379; font-size: 7; }
+.lv-stat       { color: #98C379; font-size: 7px; }
 
 
 
@@ -1036,7 +1036,7 @@
 .tv            { width: 300px; height: 280px; background: #23282F; outline: 1px solid #46505E; }
 
 
-.tv-row        { flex-direction: row; align-items: center; gap: 3px; font-size: 7; }
+.tv-row        { flex-direction: row; align-items: center; gap: 3px; font-size: 7px; }
 
 
 .tv-row:hover  { background: #2E3540; }
@@ -1072,7 +1072,7 @@
 .tv-row.__leaf__ > .tv-twisty { overlay: none; }
 
 
-.tv-status     { color: #E5C07B; font-size: 7; }
+.tv-status     { color: #E5C07B; font-size: 7px; }
 
 
 
@@ -1099,7 +1099,7 @@
 .ed            { width: 560px; height: 340px; background: #1E2228; outline: 1px solid #46505E;
 
 
-                 font-size: 11; line-height: 1.5; color: #D7DAE0;
+                 font-size: 11px; line-height: 1.5; color: #D7DAE0;
 
 
                  /* CSS UI 4 resize, implemented by UIResizer -- drag the bottom-right
@@ -1153,7 +1153,7 @@
 .ed text::highlight(bracket)  { color: #4EC9A0; }
 
 
-.ed-status     { color: #7F8C99; font-size: 7; }
+.ed-status     { color: #7F8C99; font-size: 7px; }
 
 
 /* Content-sized, not a fixed 54px. These labels report their own state -- "Whitespace:
@@ -1168,7 +1168,7 @@
 .ed-lang       { padding-left: 6px; padding-right: 6px; }
 
 
-.ed-lang-on    { background-color: #3E5A7A; }
+.ed-lang-on    { background-color: #3E5A7A; background-tint: #3E5A7A; }  /* tint: Ore draws buttons as an image */
 
 
 .ed-find       { width: 110px; }

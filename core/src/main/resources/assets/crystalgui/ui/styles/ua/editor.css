@@ -802,7 +802,7 @@ texteditor .__zoom-indicator__.__shown__ {
  * value these would take the editor's — which zoom rewrites at IMPORTANT — and the indicator would shrink
  * to unreadable at 4px and balloon at 40. It describes the text; it is not part of it. */
 texteditor .__zoom-label__ {
-    font-size: 10;
+    font-size: 10px;
     color: var(--editor-zoom-fg, #C8CDD4);
     white-space: nowrap;
 }
@@ -821,7 +821,7 @@ texteditor .__zoom-label__ {
  * this is trying not to look like. text-decoration-line is inheritable, so it reaches the Button's own
  * UIText without a descendant selector. */
 texteditor .__zoom-reset__ {
-    font-size: 10;
+    font-size: 10px;
     background: #00000000;
     color: var(--editor-zoom-link, #4A9EFF);
     white-space: nowrap;
@@ -1599,7 +1599,7 @@ documentationpopup .__doc-problem__.__no-message__ {
 }
 
 documentationpopup .__doc-problem-message__ {
-    font-size: 8;
+    font-size: 8px;
     padding-bottom: -3px;
     color: var(--editor-fg, #BCBEC4);
     white-space: normal;
@@ -1635,7 +1635,7 @@ documentationpopup .__doc-problem-actions__ {
 /* THE LINK COLOUR, because these behave like links -- one click, no state, and the accelerator beside
  * them is the keyboard equivalent rather than a second control. */
 documentationpopup .__doc-problem-action__ {
-    font-size: 8;
+    font-size: 8px;
     color: var(--link, #548AF7);
     flex-shrink: 0;
     cursor: pointer;
@@ -1656,7 +1656,7 @@ documentationpopup .__doc-problem-action__:hover {
 /* The accelerator is a caption, not a control: dimmer, never the link colour, and it must not look
  * pressable or it becomes the thing people click instead of the action it names. */
 documentationpopup .__doc-problem-shortcut__ {
-    font-size: 8;
+    font-size: 8px;
     color: var(--editor-line-number, #6B6B6B);
     flex-shrink: 0;
 }
@@ -1724,7 +1724,7 @@ documentationpopup .__doc-owner-icon__ {
 }
 
 documentationpopup .__doc-owner-text__ {
-    font-size: 8;
+    font-size: 8px;
     color: var(--doc-owner-fg, #7A7A7A);
 }
 
@@ -1790,7 +1790,7 @@ documentationpopup .__doc-definition-box__ {
  * It also beat the `.__syntax__` rule above on specificity (0,10,1 against 0,10,0), so setting the ink there
  * -- the right place, since it covers every code surface -- changed nothing here until this line agreed. */
 documentationpopup .__doc-definition__ {
-    font-size: 8;
+    font-size: 8px;
     color: var(--editor-fg, #DFE1E5);
     white-space: nowrap;
 }
@@ -1935,7 +1935,7 @@ documentationpopup .__doc-body__ {
 documentationpopup .__markup-paragraph__,
 documentationpopup .__markup-bullet__,
 documentationpopup .__markup-code__ > text {
-    font-size: 9;
+    font-size: 9px;
     line-height: 1.45;
 }
 
@@ -1964,7 +1964,7 @@ documentationpopup .__doc-footer-icon__ {
 }
 
 documentationpopup .__doc-footer-text__ {
-    font-size: 8;
+    font-size: 8px;
     color: var(--doc-footer-fg, #7A7E85);
     white-space: nowrap;
     text-overflow: ellipsis;

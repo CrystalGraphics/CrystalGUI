@@ -1,5 +1,6 @@
 package com.crystalgui.style.property;
 
+import com.crystalgui.style.CssLength;
 /**
  * A parsed value that is a multiple of <b>the element's own font size</b> — CSS's {@code em}.
  *
@@ -54,14 +55,8 @@ public interface FontRelative<T> {
      * a second name for a constant rather than a second unit.</p>
      */
     static float multipleIn(String raw) {
-        if (raw == null) return Float.NaN;
-        String trimmed = raw.trim().toLowerCase();
-        if (!trimmed.endsWith("em") || trimmed.length() <= 2) return Float.NaN;
-        try {
-            return Float.parseFloat(trimmed.substring(0, trimmed.length() - 2).trim());
-        } catch (NumberFormatException e) {
-            return Float.NaN;
-        }
+        CssLength length = CssLength.parse(raw);
+        return length != null && length.unit() == CssLength.Unit.EM ? length.value() : Float.NaN;
     }
 
     /** Whether this value was authored in {@code em}. False for every ordinary length. */

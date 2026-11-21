@@ -105,7 +105,7 @@ public class ShippedStyleRoundTripTest {
     /** The user-agent parts, the themes, and the app sheets — everything shipped. */
     private static List<String> sheets() {
         List<String> paths = new ArrayList<>(StyleSheetRegistry.DEFAULT_SHEET_PARTS.stream()
-                .map(part -> part + ".css").toList());
+                .map(part -> part.replace("crystalgui:", "crystalgui:ui/styles/") + ".css").toList());
         paths.add("crystalgui:ui/themes/base.css");
         paths.add("crystalgui:ui/themes/crystal-dark.css");
         paths.add("crystalgui:ui/styles/ore.css");

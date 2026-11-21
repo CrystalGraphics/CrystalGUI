@@ -1237,14 +1237,16 @@ public class UIElement extends UINode implements EventTarget, Styleable {
      * that is hidden and therefore has no box at all. {@code Box} delegates here.</p>
      */
     public final boolean isScrollContainer() {
-        Overflow overflow = computedStyle().get(StylePropertyRegistry.OVERFLOW);
-        return overflow != null && overflow.isScrollContainer();
+        ComputedStyle style = computedStyle();
+        return style.get(StylePropertyRegistry.OVERFLOW_X).isScrollContainer()
+                || style.get(StylePropertyRegistry.OVERFLOW_Y).isScrollContainer();
     }
 
     /** Whether the USER may scroll it. {@code hidden} is a container that only code moves. */
     public final boolean allowsUserScrolling() {
-        Overflow overflow = computedStyle().get(StylePropertyRegistry.OVERFLOW);
-        return overflow != null && overflow.allowsUserScrolling();
+        ComputedStyle style = computedStyle();
+        return style.get(StylePropertyRegistry.OVERFLOW_X).allowsUserScrolling()
+                || style.get(StylePropertyRegistry.OVERFLOW_Y).allowsUserScrolling();
     }
 
     public final float scrollLeft() {

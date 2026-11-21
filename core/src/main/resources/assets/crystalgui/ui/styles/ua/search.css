@@ -21,7 +21,7 @@ projectfiletree .__row-editor__ {
     padding-left: 2px;
     padding-right: 2px;
     margin-left: 0px;
-    font-size: 10;
+    font-size: 10px;
     background-color: var(--tree-editor-bg, #1E1F22);
     border-width: 1px;
     border-color: var(--tree-editor-border, #4A88C7);
@@ -76,7 +76,7 @@ projectfiletree .__project-row__.__editing__ .__badge__ {
 }
 
 .__find-bar__ text {
-    font-size: 10;
+    font-size: 10px;
     color: var(--findbar-fg, #D0D2D6);
     white-space: nowrap;
 }
@@ -331,7 +331,7 @@ problemspanel > .__find-bar__ {
     height: 14px;
     background: none;
     outline-width: 0px;
-    font-size: 10;
+    font-size: 10px;
     color: var(--searchfield-fg, #D0D2D6);
 }
 
@@ -537,7 +537,7 @@ problemspanel > .__find-bar__ {
  * only applies where there is no candidate at any origin — so a size written on the button computes
  * correctly on the button and the label inside it still renders at 10. */
 .__find-bar__ .__find-action__ text {
-    font-size: 9;
+    font-size: 9px;
     color: var(--findbar-action-fg, #C8C8C8);
 }
 

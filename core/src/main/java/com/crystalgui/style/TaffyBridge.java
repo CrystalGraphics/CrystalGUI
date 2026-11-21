@@ -66,10 +66,10 @@ public class TaffyBridge {
      * an element with {@code overflow: hidden} still shoves its full min-content size up the
      * ancestor chain, and every caller has to write {@code min-width: 0} by hand to compensate.</p>
      */
-    public void setOverflow(dev.vfyjxf.taffy.style.Overflow overflow) {
-        if (style.overflow.x != overflow || style.overflow.y != overflow) {
-            style.overflow.x = overflow;
-            style.overflow.y = overflow;
+    public void setOverflow(dev.vfyjxf.taffy.style.Overflow x, dev.vfyjxf.taffy.style.Overflow y) {
+        if (style.overflow.x != x || style.overflow.y != y) {
+            style.overflow.x = x;
+            style.overflow.y = y;
             styleList.markTaffyStyleDirty();
         }
     }
@@ -84,14 +84,6 @@ public class TaffyBridge {
     public void setFlexBasis(TaffyDimension flexBasis) {
         if (!style.flexBasis.equals(flexBasis)) {
             style.flexBasis = flexBasis;
-            styleList.markTaffyStyleDirty();
-        }
-    }
-
-    public void setFlex(float flex) {
-        if (Float.isNaN(flex) && Float.isNaN(style.flex)) return;
-        if (style.flex != flex) {
-            style.flex = flex;
             styleList.markTaffyStyleDirty();
         }
     }
@@ -352,7 +344,7 @@ public class TaffyBridge {
     // Each of these four properties per group (-left/-top/-right/-bottom) is the ONLY real,
     // independently-cascading StyleProperty for that edge — margin/padding/border-width themselves,
     // and their -all/-horizontal/-vertical aliases, are pure parse-time shorthand syntax
-    // (see BoxEdgeShorthands) that expands into these same four longhands before the cascade ever
+    // (see Shorthands) that expands into these same four longhands before the cascade ever
     // runs. So there is no "which of 8 candidates wins" precedence to resolve here at all — just a
     // direct field patch per edge, exactly like setLeft/setTop/setRight/setBottom above.
 

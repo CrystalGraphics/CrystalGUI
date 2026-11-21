@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.style.property.visual.color.StyleColorProperty;
 import com.crystalgui.style.property.visual.image.ImageProperty;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
@@ -269,7 +270,7 @@ public final class PropertyPalette extends CreateMenu<PropertyPalette.Row, Strin
             case "tooltip-delay", "scroll-duration": return "time";
             default: break;
         }
-        if (property instanceof ColorProperty) return "color";
+        if (property instanceof ColorProperty || property instanceof StyleColorProperty) return "color";
         Class<?> type = property.type;
         if (type == Boolean.class) return "on/off";
         if (type.isEnum()) return "keyword";

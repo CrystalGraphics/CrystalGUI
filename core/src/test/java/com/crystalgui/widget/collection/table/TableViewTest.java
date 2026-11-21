@@ -247,7 +247,7 @@ public class TableViewTest extends UiDocumentTestBase {
 
         assertEquals("a cell clips its content",
                 com.crystalgui.style.property.visual.Overflow.HIDDEN,
-                nameCell.getStyle().getGeneralGroup().overflow());
+                nameCell.getStyle().getGeneralGroup().overflowY());
         assertTrue("and the two cells do not overlap",
                 sizeCell.box().x()
                         >= nameCell.box().x() + nameCell.box().width() - 0.5f);

@@ -23,11 +23,11 @@ public class CssEditsTest {
             "/* The panel's own chrome. Do not restyle from a theme. */\n"
             + ".panel {\n"
             + "    color: #FFFFFF;\n"
-            + "    padding: 4;\n"
+            + "    padding: 4px;\n"
             + "}\n"
             + "\n"
             + ".panel .title {\n"
-            + "    font-size: 12;\n"
+            + "    font-size: 12px;\n"
             + "}\n";
 
     private static String applied(String source, ChangeSet edit) {
@@ -127,9 +127,9 @@ public class CssEditsTest {
 
         String after = applied(SHEET, CssEdits.deleteRule(model, ruleWith(model, ".panel")));
 
-        assertFalse("the rule is gone", after.contains("padding: 4;"));
+        assertFalse("the rule is gone", after.contains("padding: 4px;"));
         assertTrue("the comment is not", after.contains("Do not restyle from a theme"));
-        assertTrue("and the sibling rule survives", after.contains("font-size: 12;"));
+        assertTrue("and the sibling rule survives", after.contains("font-size: 12px;"));
     }
 
     /** Every edit leaves text the cascade can still read. */

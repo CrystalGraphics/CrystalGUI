@@ -335,7 +335,7 @@ launcher {
     /* The desktop's glass (above), ringed with the bar's edge. */
     outline: 1px var(--taskbar-border, #393B40);
     border-radius: var(--radius-panel, 8px);
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* Its height is the rows it shows, set by Launcher: a virtualised list has no content height. */
@@ -383,7 +383,7 @@ launcher .__app-name__ {
     width: 0px;
     flex-grow: 1;
     color: var(--fg);
-    font-size: 11;
+    font-size: 11px;
     text-overflow: ellipsis;
     white-space: nowrap;
 }
@@ -393,13 +393,13 @@ launcher .__app-name__ {
 launcher .__app-running__ {
     flex-shrink: 0;
     color: var(--fg-hint);
-    font-size: 9;
+    font-size: 9px;
 }
 
 launcher .__app-none__ {
     color: var(--fg-hint);
     padding: 8px;
-    font-size: 11;
+    font-size: 11px;
 }
 
 taskbar .__entries__ {
@@ -599,7 +599,7 @@ taskbar .__entry__::part(pre-icon) {
  * DEFAULT-origin write loses to it. The universal rule is why `font-size` does not effectively
  * inherit here at all. */
 ::part(monogram) {
-    font-size: 9;
+    font-size: 9px;
     /* Raised off the tile: two device pixels down at the default uiScale of 2. */
     text-shadow: 0 1px 1.5px var(--window-icon-monogram-shadow, #000000C0);
 }
@@ -656,7 +656,7 @@ taskbar .__entry__.__flash-ending__ {
 /* An unsaved count, an error count — the badge/colour split FileDecoration already draws. The window
  * says WHAT; a theme says how it looks. */
 taskbar .__entry__ .__badge__ {
-    font-size: 8;
+    font-size: 8px;
     flex-shrink: 0;
     padding-left: 4px;
     padding-right: 4px;
@@ -1073,11 +1073,11 @@ taskbar .__entry__::part(pre-icon).__tile-6__ { background: linear-gradient(135d
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    font-size: 8;
+    font-size: 8px;
 }
 
 .__dock-window__ > .__title-bar__ > .__title__ {
-    font-size: 8;
+    font-size: 8px;
 }
 
 /* ── The window controls ────────────────────────────────────────────────────────────────────────
@@ -1723,7 +1723,7 @@ menu.__jump-list__ menuitem {
     /* One under the 10 the switcher's title and the rest of the shell run at, and ONLY here: the header
      * is never wider than the picture, so a point of size is a character or two of title before it
      * elides. The taskbar's own labels stay at 11. */
-    font-size: 9;
+    font-size: 9px;
     color: var(--preview-fg, #DFE1E5);
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1804,7 +1804,7 @@ menu.__jump-list__ menuitem {
  * 9px letter meant for a 14px one. Reachable because the placeholder is a light child of the
  * thumbnail; the small tiles above are not, and say so. */
 .__window-preview__ > .__thumbnail__ .__placeholder__::part(monogram) {
-    font-size: 15;
+    font-size: 15px;
 }
 
 
@@ -1963,7 +1963,7 @@ menu.__jump-list__ menuitem {
     /* May shrink -- @see .__preview-title__. */
     flex-shrink: 1;
     min-width: 0;
-    font-size: 10;
+    font-size: 10px;
     color: var(--switcher-fg, #DFE1E5);
     white-space: nowrap;
     text-overflow: ellipsis;
@@ -1992,7 +1992,7 @@ menu.__jump-list__ menuitem {
 
 /* The same correction as the preview's placeholder, and the same reason. */
 .__switcher-entry__ > .__thumbnail__ .__placeholder__::part(monogram) {
-    font-size: 22;
+    font-size: 22px;
 }
 
 /* -- taskbar designer -------------------------------------------------------------------------
@@ -2238,7 +2238,7 @@ window.__failure__ .__title-bar__ .__pin__ {
 
 .__screen-fault-title__ {
     color: var(--window-title-active-fg, #DFE1E5);
-    font-size: 14;
+    font-size: 14px;
 }
 
 .__screen-fault-detail__ {

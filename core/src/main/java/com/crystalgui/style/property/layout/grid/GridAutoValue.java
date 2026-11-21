@@ -1,5 +1,6 @@
 package com.crystalgui.style.property.layout.grid;
 
+import com.crystalgui.style.CssLength;
 import com.crystalgui.style.property.StyleValue;
 import dev.vfyjxf.taffy.style.LengthPercentage;
 import dev.vfyjxf.taffy.style.TrackSizingFunction;
@@ -212,31 +213,11 @@ public class GridAutoValue extends StyleValue<GridAuto> {
     }
 
     private static LengthPercentage parseLength(String value) {
-        if (value == null || value.isEmpty()) return null;
-
-        value = value.trim();
-
-        try {
-            // Check for percentage
-            if (value.endsWith("%")) {
-                String numStr = value.substring(0, value.length() - 1).trim();
-                float percent = Float.parseFloat(numStr) / 100f;
-                return LengthPercentage.percent(percent);
-            }
-
-            // Check for px
-            if (value.endsWith("px")) {
-                String numStr = value.substring(0, value.length() - 2).trim();
-                float length = Float.parseFloat(numStr);
-                return LengthPercentage.length(length);
-            }
-
-            // Try as plain number (treated as px)
-            float length = Float.parseFloat(value);
-            return LengthPercentage.length(length);
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        if (value == null || value.trim().isEmpty()) return null;
+        CssLength length = CssLength.parse(value);
+        if (length == null || length.unit() == CssLength.Unit.EM) return null;
+        return length.unit() == CssLength.Unit.PERCENT ? LengthPercentage.percent(length.fraction())
+                : LengthPercentage.length(length.value());
     }
 
     // ==================== Serialization to CSS String ====================

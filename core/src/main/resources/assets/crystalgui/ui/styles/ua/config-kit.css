@@ -75,7 +75,7 @@
      * and becomes a clip. */
     --graph-ctrl-h: 18px;
     --graph-row-h: 25px;       /* the control row's floor: ctrl-h + the vertical padding pair */
-    --graph-font: 9;   /* matches the title's own size — Unity does not shrink port/control text below it */
+    --graph-font: 9px;   /* matches the title's own size — Unity does not shrink port/control text below it */
     --graph-pad: 4px;          /* vertical rhythm — section padding, top and bottom */
     --graph-pad-x: 6px;        /* a control row's horizontal inset */
     --graph-gap: 4px;          /* label to widget */
@@ -129,7 +129,7 @@
      * fields were doing much of the "spread out" impression on their own. */
     --cfg-pad-y: 1px;
     --cfg-indent: 8px;         /* one foldout level. Unity steps ~8px; ours stepped 12 and read as a staircase */
-    --cfg-font: 10;
+    --cfg-font: 10px;
 
     /* The palette, sampled from the same reference. A theme may override every one of these; they are
      * here because the engine ships no inspector theme and a kit with no colours at all is unreviewable.
@@ -481,7 +481,7 @@ graphnode .__control-row__ button {
 /* Stated here too, matching graph.css's OWN size (9) rather than a different number, so a theme-less
  * node's title is never at the mercy of which of the two same-specificity rules happens to load last. */
 graphnode .__title__ {
-    font-size: 9;
+    font-size: 9px;
 }
 
 /* The preview slot has a height even while empty, because 6.2.7 fills it with a render and a node
@@ -960,7 +960,7 @@ colorselector {
  * reasons; this is the case where no theme is loaded at all. */
 colorselector text,
 colorselector textfield {
-    font-size: 6;
+    font-size: 6px;
 }
 /* Restated at `.__channel-row__`/`.__hex-row__` specificity (12) for the same reason `.__side__
  * dropdown`/`.__channel-row__ textfield`'s `flex-grow: 0` is restated below: `ColorControl` opens this
@@ -974,7 +974,7 @@ colorselector .__channel-row__ text,
 colorselector .__channel-row__ textfield,
 colorselector .__hex-row__ text,
 colorselector .__hex-row__ textfield {
-    font-size: 6;
+    font-size: 6px;
 }
 
 /* Swatch pair on top, wheel filling what is left. */
@@ -1106,7 +1106,7 @@ colorselector .__side__ dropdown {
  * so the text is what gives. */
 colorselector .__side__ dropdown text,
 colorselector .__side__ dropdown::part(label) {
-    font-size: 6;
+    font-size: 6px;
     text-align: center;
 }
 
@@ -1302,7 +1302,7 @@ colorselector .__side__ dropdown .__menu__ menuitem {
  * every element a specified size, so setting it on an ancestor changes nothing. */
 colorselector .__side__ dropdown .__menu__ menuitem text,
 colorselector .__side__ dropdown .__menu__ menuitem::part(label) {
-    font-size: 6;
+    font-size: 6px;
 }
 
 /* ── The graph, so it is LEGIBLE without a theme ──────────────────────────────────────────────────

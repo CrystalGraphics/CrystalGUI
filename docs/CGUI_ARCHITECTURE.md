@@ -253,15 +253,16 @@ com.crystalgui.style           ElementStyle, StyleGroup, GeneralGroup, LayoutGro
   .selector                    Selector, CompoundSelector, SelectorType
   .transition                  TransitionEngine, TransitionSpec, ActiveTransition, TransitionValue
   .property                    StyleProperty<T>, StylePropertyRegistry, StyleSlot, StyleValue,
-                               IValueInterpolator
+                               IValueInterpolator, Shorthand, Shorthands (every shorthand),
+                               EdgeShorthand, PairShorthand
     .general.{bools,enums,floats,ints,strings}   scalar StyleValue/StyleProperty flavors
-    .layout                    LayoutProperties, BoxEdgeShorthands
+    .layout                    LayoutProperties, FlexShorthand
     .layout.{dimension,grid,length}              Taffy-shaped value types (LPA*, LPSize, Grid*)
     .visual                    Overflow, OverflowClip, ScrollBehavior, BoxOrigin, DrawableAlign,
-                               DrawableFit, OutlineShorthand, OutlineOffsetShorthand (per-edge,
-                               unlike CSS)
-    .visual.border             BorderRadiusProperties, BorderRadiusShorthand, LengthPercent(+Property/Value)
-    .visual.color              ColorProperty, ColorValue
+                               DrawableFit, OutlineShorthand, OutlineStyle, BackgroundShorthand
+    .visual.border             BorderRadiusProperties, BorderRadiusShorthand, BorderShorthand, BorderStyle,
+                               LengthPercent(+Property/Value)
+    .visual.color              ColorProperty, ColorValue, StyleColor, StyleColorProperty (currentcolor)
     .visual.text               FontFamilyValue
     .visual.image              ImageProperty, ImageValue, ImageKinds (the CSS image functions, extensible)
     .visual.transform          Transform (the ORDERED LIST of ops -- not translate/scale/rotate

@@ -340,10 +340,16 @@ public final class BoxPainter {
         return true;
     }
 
+    /** The stroked outline's width: zero under {@code outline-style: none}. */
+    private static float outlineStroke(ComputedStyle style, float width) {
+        if (!style.get(StylePropertyRegistry.OUTLINE_STYLE).draws()) return 0f;
+        LengthPercent lp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
+        return lp == null ? 0f : lp.resolve(width);
+    }
+
     /** How far past its edge a box's stroked outline reaches, offsets included; zero with none. */
     private static float outlineReach(Box box, ComputedStyle style) {
-        LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
-        float stroke = strokeLp == null ? 0f : strokeLp.resolve(box.width());
+        float stroke = outlineStroke(style, box.width());
         if (stroke <= 0f) return 0f;
         float w = box.width(), h = box.height();
         return stroke + Math.max(Math.max(resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_TOP), h),
@@ -493,16 +499,17 @@ public final class BoxPainter {
         if (style.get(StylePropertyRegistry.BACKDROP_FILTER) != CgBackdropFilter.NONE) return false;
 
         int primitives = 0;
-        CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND);
+        CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND_IMAGE);
         CgUiImage overlay = style.get(StylePropertyRegistry.OVERLAY);
         // An image that covers a pixel twice is already two primitives on its own: a stack, a cross-fade, a vector
         // whose paths cross. @see CgUiImage#onePrimitive
         if (!background.onePrimitive() || !overlay.onePrimitive()) return false;
-        if (background != CgUiImage.NONE || style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) primitives++;
+        if (background != CgUiImage.NONE) primitives++;
+        if ((style.get(StylePropertyRegistry.BACKGROUND_COLOR) >>> 24) != 0) primitives++;
         if (overlay != CgUiImage.NONE) primitives++;
-        LengthPercent stroke = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
-        if (style.get(StylePropertyRegistry.OUTLINE) != CgUiImage.NONE
-                || stroke != null && stroke.resolve(box.width()) > 0f) primitives++;
+        if (style.get(StylePropertyRegistry.OUTLINE) != CgUiImage.NONE || outlineStroke(style, box.width()) > 0f) {
+            primitives++;
+        }
         return primitives <= 1;
     }
 
@@ -763,37 +770,36 @@ public final class BoxPainter {
             pane.draw();
         }
 
-        CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND);
-        // background-color tints the image; with none, and set, it is the fill. Its default is white (a no-op tint),
-        // so whether one was authored is read off the snapshot.
+        // CSS's order: the colour, then the image over it, then the border. The tint multiplies the image alone.
+        CgUiImage background = style.get(StylePropertyRegistry.BACKGROUND_IMAGE);
         int backgroundColor = style.get(StylePropertyRegistry.BACKGROUND_COLOR);
+        boolean filled = (backgroundColor >>> 24) != 0;
         CgUiImagePainter.Border edge = border(box, style);
         if (background == CgUiImage.NONE) {
-            if (style.isSet(StylePropertyRegistry.BACKGROUND_COLOR)) {
-                images.fill(ctx, backgroundColor, 0f, 0f, width, height, corners, edge);
-            } else {
-                images.paint(ctx, CgUiImage.NONE, 0f, 0f, width, height, WHITE, WHITE, corners, edge);
-            }
+            if (filled) images.fill(ctx, backgroundColor, 0f, 0f, width, height, corners, edge);
+            else images.paint(ctx, CgUiImage.NONE, 0f, 0f, width, height, WHITE, WHITE, corners, edge);
             return;
         }
-        images.paint(ctx, background, 0f, 0f, width, height, backgroundColor, WHITE, corners, edge);
+        if (filled) images.fill(ctx, backgroundColor, 0f, 0f, width, height, corners, null);
+        images.paint(ctx, background, 0f, 0f, width, height, style.get(StylePropertyRegistry.BACKGROUND_TINT), WHITE,
+                corners, edge);
     }
 
     /** The box's border as the image painter takes it, or null with none: each side at its own width and colour. */
     @Nullable
     private CgUiImagePainter.Border border(Box box, ComputedStyle style) {
         if (borderSides(box) <= 0f) return null;
-        int color = style.get(StylePropertyRegistry.BORDER_COLOR);
+        int current = style.get(StylePropertyRegistry.COLOR);
         CgUiImagePainter.Border e = edge;
         e.left = sides[0];
         e.top = sides[1];
         e.right = sides[2];
         e.bottom = sides[3];
-        e.color = color;
-        e.topColor = edgeColor(style.get(StylePropertyRegistry.BORDER_TOP_COLOR), color);
-        e.bottomColor = edgeColor(style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR), color);
-        e.leftColor = edgeColor(style.get(StylePropertyRegistry.BORDER_LEFT_COLOR), color);
-        e.rightColor = edgeColor(style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR), color);
+        e.topColor = style.get(StylePropertyRegistry.BORDER_TOP_COLOR).resolve(current);
+        e.bottomColor = style.get(StylePropertyRegistry.BORDER_BOTTOM_COLOR).resolve(current);
+        e.leftColor = style.get(StylePropertyRegistry.BORDER_LEFT_COLOR).resolve(current);
+        e.rightColor = style.get(StylePropertyRegistry.BORDER_RIGHT_COLOR).resolve(current);
+        e.color = e.topColor;
         return e;
     }
 
@@ -825,9 +831,6 @@ public final class BoxPainter {
     /** {@link #borderSides}' answer, L,T,R,B. Read immediately: a tree paints one box at a time. */
     private final float[] sides = new float[4];
 
-    private static int edgeColor(int edge, int fallback) {
-        return (edge >>> 24) == 0 ? fallback : edge;
-    }
 
     // ── Mask ─────────────────────────────────────────────────────────────────
 
@@ -859,8 +862,7 @@ public final class BoxPainter {
     private void paintOutline(Box box, ComputedStyle style, CgUiPaintContext ctx) {
         float width = box.width(), height = box.height();
         CgUiImage outline = style.get(StylePropertyRegistry.OUTLINE);
-        LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
-        float stroke = strokeLp == null ? 0f : strokeLp.resolve(width);
+        float stroke = outlineStroke(style, width);
         boolean hasDrawable = outline != CgUiImage.NONE;
         if (!hasDrawable && stroke <= 0f) return;
         float top = resolve(style.get(StylePropertyRegistry.OUTLINE_OFFSET_TOP), height);
@@ -893,7 +895,7 @@ public final class BoxPainter {
             ring = radiiOf(style, width, height)
                     .expand((insetLeft + insetRight) * 0.5f, (insetTop + insetBottom) * 0.5f);
         }
-        int color = style.get(StylePropertyRegistry.OUTLINE_COLOR);
+        int color = style.argb(StylePropertyRegistry.OUTLINE_COLOR);
         CgCanvasBox rim = ctx.canvas().box(x - insetLeft, y - insetTop, width + insetLeft + insetRight,
                 height + insetTop + insetBottom).fill(color & 0x00FFFFFF).border(stroke, color);
         if (!ring.isZero()) rim.radii(ringRadii = keep(ringRadii, ring));
@@ -921,8 +923,7 @@ public final class BoxPainter {
         float left = 0f, top = 0f, right = width, bottom = height;
 
         CgUiImage outline = style.get(StylePropertyRegistry.OUTLINE);
-        LengthPercent strokeLp = style.get(StylePropertyRegistry.OUTLINE_WIDTH);
-        float stroke = strokeLp == null ? 0f : strokeLp.resolve(width);
+        float stroke = outlineStroke(style, width);
         boolean hasDrawable = outline != CgUiImage.NONE;
         if (hasDrawable || stroke > 0f) {
             // A drawable outline fills the offset rect; a stroked one grows outward from it by its own width. Offsets

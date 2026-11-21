@@ -29,6 +29,11 @@ import com.crystalgui.style.property.visual.text.StrokeAlign;
 import com.crystalgui.style.property.visual.border.LengthPercentProperty;
 import com.crystalgui.style.property.layout.LayoutProperties;
 import com.crystalgui.style.property.visual.color.ColorProperty;
+import com.crystalgui.style.property.visual.color.StyleColor;
+import com.crystalgui.style.property.visual.color.StyleColorProperty;
+import com.crystalgui.style.property.visual.OutlineStyle;
+import com.crystalgui.style.property.visual.border.BorderStyle;
+import com.crystalgui.style.property.visual.text.FontSizeValue;
 import com.crystalgui.style.property.visual.text.FontFamilyValue;
 import com.crystalgui.style.property.visual.text.FontRelativeLengthValue;
 import com.crystalgui.style.property.visual.shadow.ShadowGrammar;
@@ -41,7 +46,6 @@ import com.crystalgui.style.property.visual.text.TextAlign;
 import com.crystalgui.style.property.visual.text.TextDecorationLine;
 import com.crystalgui.style.property.visual.text.TextDecorationLineValue;
 import com.crystalgui.style.property.visual.text.TextOverflow;
-import com.crystalgui.style.property.visual.text.TextStrokeShorthand;
 import com.crystalgui.style.property.visual.text.WhiteSpace;
 import com.crystalgui.style.property.visual.text.LineHeightProperty;
 import com.crystalgui.style.property.visual.text.LineHeightValue;
@@ -77,7 +81,8 @@ public class StylePropertyRegistry {
 
     // ── Properties ───────────────────────────────────────────────────────────
 
-    public static final StyleProperty<CgUiImage> BACKGROUND = image("background");
+    /** CSS {@code background-image}, drawn over {@link #BACKGROUND_COLOR}. A sheet usually writes the {@code background} shorthand. */
+    public static final StyleProperty<CgUiImage> BACKGROUND_IMAGE = image("background-image");
     /**
      * {@code backdrop-filter} — CSS's own name for what is done to whatever shows through an element.
      *
@@ -104,14 +109,21 @@ public class StylePropertyRegistry {
     public static final StyleProperty<DrawableFit> OVERLAY_SIZE =
             create("overlay-size", DrawableFit.class, DrawableFit.FILL);
     public static final StyleProperty<DrawableAlign> OVERLAY_POSITION =
-            create("overlay-position", DrawableAlign.class, DrawableAlign.CENTER);
+            create("overlay-position", DrawableAlign.class, DrawableAlign.CENTER, DrawableAlign.Value::new)
+                    .setWriter(DrawableAlign::write);
     // Multiplies an overlay picture's own colours; white leaves it as authored. Transitions as a colour.
     public static final StyleProperty<Integer> OVERLAY_TINT = create(new ColorProperty("overlay-tint", 0xFFFFFFFF));
-    // Distinct from BACKGROUND (a drawable) and COLOR (inherited, meant for text) — matches real CSS,
-    // where `background-color` is its own independent fill layer. Not inherited.
-    // Unset = white, a multiplicative identity for the tint model in UIElement.paintSelf — "no
-    // background-color set" must mean "no visible change", not fade-toward-transparent-black.
-    public static final StyleProperty<Integer> BACKGROUND_COLOR = create(new ColorProperty("background-color", 0xFFFFFFFF));
+    /** CSS {@code background-color}: a fill under the background image, initially transparent. */
+    public static final StyleProperty<Integer> BACKGROUND_COLOR = create(new ColorProperty("background-color", 0));
+    /**
+     * Multiplies the background image's own colours, white leaving it as drawn. Ours, as {@link #OVERLAY_TINT}
+     * is: CSS has no tint, and a pressed 9-slice button is drawn darker than its sprite this way.
+     *
+     * <pre>
+     *   button:active { background: asset("crystalgui:ore", "button-pressed"); background-tint: #DDDDDD; }
+     * </pre>
+     */
+    public static final StyleProperty<Integer> BACKGROUND_TINT = create(new ColorProperty("background-tint", 0xFFFFFFFF));
     public static final StyleProperty<Float> OPACITY = create("opacity", 1f).setRange(0f, 1f);
     // Matches real CSS: `color` inherits by default. Layout/box-model properties below (z-index,
     // clip, and everything in LayoutProperties) do not — none of them are inherited in real CSS either.
@@ -132,7 +144,8 @@ public class StylePropertyRegistry {
      * nearly all of them: {@code invalidateFontRelativeStyles} checks a flag the engine sets during the
      * match and returns.</p>
      */
-    public static final StyleProperty<Float> FONT_SIZE = create("font-size", 16f).setInheritable(true);
+    public static final StyleProperty<Float> FONT_SIZE = create("font-size", Float.class, 16f, FontSizeValue::new)
+            .setInheritable(true).setWriter(size -> plainNumber(size) + "px");
 
     /**
      * The UI's default face — <b>proportional</b>, and monospace is applied to code surfaces instead.
@@ -200,34 +213,24 @@ public class StylePropertyRegistry {
                     // parses, and an editor adding the property at its initial value wrote exactly that.
                     .setWriter(value -> LineHeightValue.isNormal((Float) value) ? "normal"
                             : StylePropertyRegistry.plainNumber((Float) value));
-    // Not standard CSS — browsers derive caret width and expose only `caret-color`. Needed here
-    // because nothing else can express it, and inheritable to match how `caret-color` behaves.
-    //
-    // There is deliberately no `caret-color`: the caret already paints with `color`, which is a real
-    // inheritable property, so it is styleable today. A separate one would need to mean "same as
-    // `color` unless set", and with no `currentColor` mechanism that could only be a sentinel value.
     /** {@code 1.5} rather than {@code 1.5f}'s {@code 1.5}, and {@code 2} rather than {@code 2.0}. */
     static String plainNumber(float value) {
         return value == Math.rint(value) ? String.valueOf((long) value) : String.valueOf(value);
     }
 
+    /** The caret's width. Ours: browsers derive it and expose only {@code caret-color}. Inherited. */
     public static final StyleProperty<Float> CARET_WIDTH = create("caret-width", 1f).setInheritable(true);
+    /**
+     * CSS {@code caret-color}, initially {@code currentcolor}. It matters where the TEXT is recoloured to say
+     * something about itself: a search box reds its query when nothing matches, and a red caret would say
+     * the caret is wrong.
+     */
+    public static final StyleProperty<StyleColor> CARET_COLOR =
+             create(new StyleColorProperty("caret-color", StyleColor.CURRENT)).setInheritable(true);
+
     // CSS spells this `::selection { background-color }`; there are no pseudo-elements here, so it is
     // a plain inheritable property instead. Fill only — text inside a selection keeps its `color`.
     //
-    // Must be `create(new ColorProperty(...))`: the create(String, int) overload would bind this int
-    // literal to IntProperty and silently give a non-interpolating, non-colour-parsing property.
-    /**
-     * The caret's own colour — CSS's {@code caret-color}.
-     *
-     * <p>Zero means <b>unset</b>, and the caret then follows {@code color}, which is the web's {@code auto}
-     * and was the only behaviour before this existed. It matters wherever the TEXT is recoloured to say
-     * something about itself rather than about the caret: a search box reds its query when nothing matches,
-     * and a red caret says the caret is wrong.</p>
-     */
-    public static final StyleProperty<Integer> CARET_COLOR =
-            create(new ColorProperty("caret-color", 0)).setInheritable(true);
-
     // Must be `create(new ColorProperty(...))`: the create(String, int) overload would bind this int
     // literal to IntProperty and silently give a non-interpolating, non-colour-parsing property.
     public static final StyleProperty<Integer> SELECTION_COLOR =
@@ -246,10 +249,14 @@ public class StylePropertyRegistry {
     // Layout-free by design, exactly like `outline`: it moves pixels, never geometry, so a nudge can
     // never reflow a widget or change what a click hits. Inheritable, so a theme writes it once on
     // `*` (or on a widget root, reaching that widget's internal label) rather than per label.
+    //
+    // Written as `text-offset: x [y]`; the two axes are not written by name.
     public static final StyleProperty<LengthPercent> TEXT_OFFSET_X =
-            create(new LengthPercentProperty("text-offset-x", LengthPercent.ZERO)).setInheritable(true);
+            create(new LengthPercentProperty("text-offset-x", LengthPercent.ZERO)).setInheritable(true)
+                    .setAuthoredThrough("text-offset");
     public static final StyleProperty<LengthPercent> TEXT_OFFSET_Y =
-            create(new LengthPercentProperty("text-offset-y", LengthPercent.ZERO)).setInheritable(true);
+            create(new LengthPercentProperty("text-offset-y", LengthPercent.ZERO)).setInheritable(true)
+                    .setAuthoredThrough("text-offset");
     /** {@code auto} or a number; a number makes the box a stacking context. @see ZIndex */
     public static final StyleProperty<ZIndex> Z_INDEX = create(new ZIndexProperty("z-index"));
     /** {@code isolate} makes the box a stacking context and does nothing else. */
@@ -271,7 +278,7 @@ public class StylePropertyRegistry {
                         }
                         return out.toString();
                     });
-    // Whether clipping happens at all. The clip *mechanism* (scissor vs mask) is auto-detected from
+    // CSS `overflow-x`: whether clipping happens at all. The clip *mechanism* (scissor vs mask) is auto-detected from
     // the element's resolved shape — see UIElement#resolveOverflowClip(). Replaces the old
     // `clip: none|scissor|mask` property, which let authors pick the mechanism directly.
     //
@@ -279,7 +286,9 @@ public class StylePropertyRegistry {
     // zeroes an item's automatic minimum size, which is what allows a flex item to shrink below its
     // own content. Without this listener `overflow: hidden` was purely cosmetic and oversized content
     // still forced every ancestor wider, leaving callers to write `min-width: 0` by hand.
-    public static final StyleProperty<Overflow> OVERFLOW = create("overflow", Overflow.class, Overflow.VISIBLE);
+    public static final StyleProperty<Overflow> OVERFLOW_X = create("overflow-x", Overflow.class, Overflow.VISIBLE);
+    /** CSS {@code overflow-y}; a sheet writes both axes as {@code overflow: x [y]}. @see #OVERFLOW_X */
+    public static final StyleProperty<Overflow> OVERFLOW_Y = create("overflow-y", Overflow.class, Overflow.VISIBLE);
             // NULL IS A LEGAL RESOLVED VALUE and means "no candidate at any origin" -- notifyListeners
             // declares newVal @Nullable, LayoutProperties.createSetter falls back to initialValue for
             // exactly this, and this listener was the one place in the engine that did not. It is reached
@@ -363,7 +372,7 @@ public class StylePropertyRegistry {
     public static final StyleProperty<WhiteSpace> WHITE_SPACE =
             create("white-space", WhiteSpace.class, WhiteSpace.NORMAL).setInheritable(true);
     /**
-     * How wide a {@code text-stroke} is. Inherited, initially zero, which makes the whole feature
+     * How wide a {@code text-stroke} is, the web's {@code -webkit-text-stroke-width}. Inherited, initially zero, which makes the whole feature
      * inert until a sheet asks for it.
      *
      * <p><b>Resolved against the font size, not against a box.</b> Every other
@@ -380,25 +389,19 @@ public class StylePropertyRegistry {
     public static final StyleProperty<LengthPercent> TEXT_STROKE_WIDTH =
             create(new LengthPercentProperty("text-stroke-width", LengthPercent.ZERO,
                     FontRelativeLengthValue::new))
-                    .setInheritable(true).setAuthoredThrough(TextStrokeShorthand.NAME);
+                    .setInheritable(true);
     /**
-     * The stroke's colour. Inherited, initially {@code 0} — fully transparent, which stands for
-     * {@code currentcolor} and is resolved against {@code color} by whoever draws.
-     *
-     * <p>Transparent rather than black because a stroke with no colour and a stroke with no width
-     * must both draw nothing, and an initial of black would make {@code text-stroke-width: 1px}
-     * alone silently outline every label in the application the first time anyone set it.</p>
-     *
-     * <p><b>The initial is not a sentinel, and must not be read as one.</b> A reader asks
-     * {@code ComputedStyle.isSet} whether anything authored this, because {@code #00000000} is the
-     * same integer as the initial — transparent black IS zero. @see UIText#strokeFor</p>
-     *
-     * <p><b>Not writable by this name.</b> A sheet says {@code text-stroke}; this half exists so a
-     * declaration that states only a colour leaves the width alone. @see TextStrokeShorthand</p>
+     * The stroke's colour, the web's {@code -webkit-text-stroke-color}: inherited, initially
+     * {@code currentcolor}, which whoever draws resolves against {@code color}. @see TextStrokeShorthand
      */
-    public static final StyleProperty<Integer> TEXT_STROKE_COLOR =
-            create(new ColorProperty("text-stroke-color", 0))
-                    .setInheritable(true).setAuthoredThrough(TextStrokeShorthand.NAME);
+    public static final StyleProperty<StyleColor> TEXT_STROKE_COLOR =
+             create(new StyleColorProperty("text-stroke-color", StyleColor.CURRENT)).setInheritable(true);
+    /**
+     * The glyphs' own fill, the web's {@code -webkit-text-fill-color}: inherited, initially
+     * {@code currentcolor}. {@code transparent} with a {@code text-stroke} is hollow text.
+     */
+    public static final StyleProperty<StyleColor> TEXT_FILL_COLOR =
+             create(new StyleColorProperty("text-fill-color", StyleColor.CURRENT)).setInheritable(true);
     /**
      * CSS {@code paint-order}, the single-keyword forms. Inherited. @see PaintOrder
      *
@@ -447,11 +450,7 @@ public class StylePropertyRegistry {
                     });
 
     /**
-     * CSS {@code text-decoration-color}, with CSS's own {@code currentColor} default.
-     *
-     * <p>{@code 0} means "the text's colour", which is what the backend already spelled: a
-     * {@code CgTextDecorationRect} has always carried its own ARGB and had no way to be told one, so an
-     * underline was the glyphs' colour by construction rather than by choice.</p>
+     * CSS {@code text-decoration-color}, initially {@code currentcolor}.
      *
      * <p>The case that wanted it is a file the compiler has rejected. Recolouring the <b>name</b> is what
      * both references use for version control, so a red filename in a project tree reads as "untracked",
@@ -461,8 +460,8 @@ public class StylePropertyRegistry {
      * row reaches the label inside it — which is the only reason this is usable from a decoration class
      * that lands on the row rather than on its text.</p>
      */
-    public static final StyleProperty<Integer> TEXT_DECORATION_COLOR =
-            create(new ColorProperty("text-decoration-color", 0)).setInheritable(true);
+    public static final StyleProperty<StyleColor> TEXT_DECORATION_COLOR =
+             create(new StyleColorProperty("text-decoration-color", StyleColor.CURRENT)).setInheritable(true);
 
     // CSS `scroll-behavior`. Purely a paint/animation concern, so no Taffy listener.
     public static final StyleProperty<ScrollBehavior> SCROLL_BEHAVIOR =
@@ -497,34 +496,38 @@ public class StylePropertyRegistry {
     // interpolate.
     public static final StyleProperty<BoxOrigin> MASK_ORIGIN =
             create("mask-origin", BoxOrigin.class, BoxOrigin.BORDER_BOX);
+    /** CSS {@code mask-size}: {@code auto}, {@code contain}, {@code cover}, or {@code 100% 100%} to stretch (the initial). */
     public static final StyleProperty<DrawableFit> MASK_SIZE =
-            create("mask-size", DrawableFit.class, DrawableFit.FILL);
+            create("mask-size", DrawableFit.class, DrawableFit.FILL, DrawableFit.MaskSize::new)
+                    .setWriter(DrawableFit::writeMaskSize);
     public static final StyleProperty<DrawableAlign> MASK_POSITION =
-            create("mask-position", DrawableAlign.class, DrawableAlign.CENTER);
+            create("mask-position", DrawableAlign.class, DrawableAlign.CENTER, DrawableAlign.Value::new)
+                    .setWriter(DrawableAlign::write);
     // Grows (or, when negative, shrinks) the resolved mask box on all four sides — same shape and
     // LengthPercent model as `outline-offset`. Unlike the enum longhands above this IS transitionable,
     // since a length interpolates: animating it opens/closes the reveal region smoothly.
     public static final StyleProperty<LengthPercent> MASK_OFFSET =
             create(new LengthPercentProperty("mask-offset", LengthPercent.ZERO));
-    // border-radius itself is pure parse-time shorthand syntax expanding to the 8 real longhands in
-    // BorderRadiusProperties (see BorderRadiusShorthand) — not a registered property here, matching
-    // how margin/padding/border-width work (BoxEdgeShorthands).
-    public static final StyleProperty<Integer> BORDER_COLOR = create(new ColorProperty("border-color", 0xFF000000));
-    // A per-edge OVERRIDE, not an independent colour — the initial value is fully transparent, which
-    // this pair reads as "unset" rather than as a real colour: the painter falls back to
-    // border-color's own resolved value whenever an edge's alpha is 0, so a widget that only ever sets
-    // border-color keeps painting exactly as it always has. Unity's inset text-field bevel (a darker
-    // top edge, a lighter bottom edge) is what this exists for, and a bevelled slot's dark top and left
-    // against light bottom and right is what the left/right pair adds. The shader splits the corners on
-    // the diagonal.
-    public static final StyleProperty<Integer> BORDER_TOP_COLOR =
-            create(new ColorProperty("border-top-color", 0x00000000));
-    public static final StyleProperty<Integer> BORDER_BOTTOM_COLOR =
-            create(new ColorProperty("border-bottom-color", 0x00000000));
-    public static final StyleProperty<Integer> BORDER_LEFT_COLOR =
-            create(new ColorProperty("border-left-color", 0x00000000));
-    public static final StyleProperty<Integer> BORDER_RIGHT_COLOR =
-            create(new ColorProperty("border-right-color", 0x00000000));
+    // Each side's colour, initially currentcolor; `border-color: <1-4 values>` sets them clockwise from the top.
+    // Unity's inset text-field bevel (a darker top and left edge) is a side colour. The shader splits the
+    // corners on the diagonal.
+    public static final StyleProperty<StyleColor> BORDER_TOP_COLOR =
+             create(new StyleColorProperty("border-top-color", StyleColor.CURRENT));
+    public static final StyleProperty<StyleColor> BORDER_RIGHT_COLOR =
+             create(new StyleColorProperty("border-right-color", StyleColor.CURRENT));
+    public static final StyleProperty<StyleColor> BORDER_BOTTOM_COLOR =
+             create(new StyleColorProperty("border-bottom-color", StyleColor.CURRENT));
+    public static final StyleProperty<StyleColor> BORDER_LEFT_COLOR =
+             create(new StyleColorProperty("border-left-color", StyleColor.CURRENT));
+    // Each side's style; `none` and `hidden` make the side's width 0. Initially solid here. @see BorderStyle
+    public static final StyleProperty<BorderStyle> BORDER_TOP_STYLE =
+            create("border-top-style", BorderStyle.class, BorderStyle.SOLID);
+    public static final StyleProperty<BorderStyle> BORDER_RIGHT_STYLE =
+            create("border-right-style", BorderStyle.class, BorderStyle.SOLID);
+    public static final StyleProperty<BorderStyle> BORDER_BOTTOM_STYLE =
+            create("border-bottom-style", BorderStyle.class, BorderStyle.SOLID);
+    public static final StyleProperty<BorderStyle> BORDER_LEFT_STYLE =
+            create("border-left-style", BorderStyle.class, BorderStyle.SOLID);
     // A third drawable layer, drawn last (above `overlay`) and — unlike `border-width`, which feeds
     // Taffy — completely layout-free. That's exactly why CSS has `outline`: it's the standard way to
     // mark focus without resizing the element. Also frees `overlay` to stay a widget's own
@@ -536,30 +539,35 @@ public class StylePropertyRegistry {
     // GL_SCISSOR_TEST and survives into nested layer FBOs). LengthPercent, not a bare float, so
     // `2px` parses and so it can transition.
     //
-    // PER-EDGE, unlike real CSS, where `outline-offset` is a single scalar. The four edges are the
-    // real cascading properties and `outline-offset` is 1-4 value shorthand syntax over them (see
-    // OutlineOffsetShorthand), exactly as margin/padding work. Needed because a 9-slice focus ring
+    // PER-EDGE, unlike CSS, where `outline-offset` is one value. A sheet writes `outline-offset` with 1-4
+    // values over these four, which are not written by name; CSS's one value is the 1-value form. Needed
+    // because a 9-slice focus ring
     // has to hug a sprite whose own transparent padding is asymmetric — Ore's selected `tab-on` keeps
     // two empty texel rows at the top to make the tab sit raised, so a symmetric ring floats in that
     // band along one edge while hugging the other three.
     public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_TOP =
-            create(new LengthPercentProperty("outline-offset-top", LengthPercent.ZERO));
+            create(new LengthPercentProperty("outline-offset-top", LengthPercent.ZERO))
+                    .setAuthoredThrough("outline-offset");
     public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_RIGHT =
-            create(new LengthPercentProperty("outline-offset-right", LengthPercent.ZERO));
+            create(new LengthPercentProperty("outline-offset-right", LengthPercent.ZERO))
+                    .setAuthoredThrough("outline-offset");
     public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_BOTTOM =
-            create(new LengthPercentProperty("outline-offset-bottom", LengthPercent.ZERO));
+            create(new LengthPercentProperty("outline-offset-bottom", LengthPercent.ZERO))
+                    .setAuthoredThrough("outline-offset");
     public static final StyleProperty<LengthPercent> OUTLINE_OFFSET_LEFT =
-            create(new LengthPercentProperty("outline-offset-left", LengthPercent.ZERO));
+            create(new LengthPercentProperty("outline-offset-left", LengthPercent.ZERO))
+                    .setAuthoredThrough("outline-offset");
     // Stroke form of the outline, drawn as an SDF ring that follows border-radius. Used only when
     // OUTLINE (the drawable) is EMPTY — same precedence CSS gives border-image over border.
     // LengthPercent, not Taffy's LengthPercentageAuto: like border-radius, this is a paint-time
     // quantity Taffy must never see (an outline is layout-free by definition).
     public static final StyleProperty<LengthPercent> OUTLINE_WIDTH =
             create(new LengthPercentProperty("outline-width", LengthPercent.ZERO));
-    // CSS's real default is `currentColor`; there's no currentColor mechanism here, so opaque white
-    // stands in. Rarely observable — outline-width defaults to 0, so nothing draws until both are set.
-    public static final StyleProperty<Integer> OUTLINE_COLOR =
-            create(new ColorProperty("outline-color", 0xFFFFFFFF));
+    public static final StyleProperty<StyleColor> OUTLINE_COLOR =
+             create(new StyleColorProperty("outline-color", StyleColor.CURRENT));
+    /** CSS {@code outline-style}; {@code none} draws no stroke ring. Initially solid here. @see OutlineStyle */
+    public static final StyleProperty<OutlineStyle> OUTLINE_STYLE =
+            create("outline-style", OutlineStyle.class, OutlineStyle.SOLID);
     public static final StyleProperty<List<TransitionSpec>> TRANSITION =
             create("transition", List.of(), TransitionValue::new)
                     .setWriter(TransitionSpec::write);
@@ -582,13 +590,13 @@ public class StylePropertyRegistry {
     // inheriting element's listeners, which is exactly the invalidation this depends on.
     public static final StyleProperty<Transform> TRANSFORM =
             create(new TransformProperty("transform", Transform.IDENTITY));
-    // transform-origin is 1-2 value shorthand syntax over these two (see TransformOriginShorthand),
-    // the same way margin/padding/outline-offset work. Both default to 50% — the element's own centre,
-    // so an unqualified scale or rotation stays put, as in CSS.
+    // The two axes of `transform-origin`, which is how a sheet writes them; both start at the centre.
     public static final StyleProperty<LengthPercent> TRANSFORM_ORIGIN_X =
-            create(new LengthPercentProperty("transform-origin-x", TransformOriginShorthand.CENTER));
+            create(new LengthPercentProperty("transform-origin-x", TransformOriginShorthand.CENTER))
+                    .setAuthoredThrough("transform-origin");
     public static final StyleProperty<LengthPercent> TRANSFORM_ORIGIN_Y =
-            create(new LengthPercentProperty("transform-origin-y", TransformOriginShorthand.CENTER));
+            create(new LengthPercentProperty("transform-origin-y", TransformOriginShorthand.CENTER))
+                    .setAuthoredThrough("transform-origin");
 
     // ── Registry infrastructure ──────────────────────────────────────────────
 

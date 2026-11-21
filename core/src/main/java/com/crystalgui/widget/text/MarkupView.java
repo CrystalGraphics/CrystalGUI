@@ -715,7 +715,7 @@ public class MarkupView extends UIElement {
             // in the sheet. ONE colour for every line: an interior rule and the outer edge are the same
             // object seen from different sides, and drawing the head's darker made the table read as two
             // tables stacked.
-            int colour = getStyle().getGeneralGroup().borderColor();
+            int colour = getStyle().getGeneralGroup().borderTopColor();
 
             UIElement widest = rows.get(0);
             for (UIElement row : rows) {

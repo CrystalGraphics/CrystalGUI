@@ -16,7 +16,7 @@ import com.crystalgui.widget.config.Configurator;
  * radial shape, and the stops as a list.
  *
  * <pre>{@code
- * GradientLab.open(chip, StylePropertyRegistry.BACKGROUND, css);
+ * GradientLab.open(chip, StylePropertyRegistry.BACKGROUND_IMAGE, css);
  * }</pre>
  *
  * <p>A gradient is edited on the thing it makes: the bar is the ramp laid left to right, a stop is a swatch under it,

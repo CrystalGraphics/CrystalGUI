@@ -690,7 +690,7 @@ dockgroup.__empty__ .__strip__ {
  * the rows it opens it competed with the panel titles beside it. Both references set the bar below
  * their menu body for the same reason. The rows stay at 10 -- nothing about this rule reaches them. */
 .__menu-bar__ .__menu-title__ text {
-    font-size: 8;
+    font-size: 8px;
 }
 
 /* NOT THE EMPTY ONES. A hover fill is a promise that pressing does something, and `menutitle:disabled`
@@ -2182,12 +2182,12 @@ workbench .__activity-item__.__panel-focused__:hover {
 }
 
 .__binary-file-name__ {
-    font-size: 13;
+    font-size: 13px;
     color: var(--fg, #CCCCCC);
 }
 
 .__binary-file-detail__ {
-    font-size: 10;
+    font-size: 10px;
     color: var(--fg-secondary, #888888);
 }
 
@@ -2850,7 +2850,7 @@ dialog.__conflict__ .__conflict-actions__ {
     width: 100%;
     /* Explicit, so the divider's margin-top can match it. @see .__diff-pane-title__ */
     height: 16px;
-    font-size: 10;
+    font-size: 10px;
     color: var(--fg-secondary, #9A9A9A);
     padding-left: 4px;
     padding-bottom: 2px;
@@ -3116,17 +3116,13 @@ treeview .__row__.__selected__ {
 }
 
 treeview .__row__.__selected__.__run-top__ {
-    border-top-left-radius-x: var(--radius-control, 4px);
-    border-top-left-radius-y: var(--radius-control, 4px);
-    border-top-right-radius-x: var(--radius-control, 4px);
-    border-top-right-radius-y: var(--radius-control, 4px);
+    border-top-left-radius: var(--radius-control, 4px);
+    border-top-right-radius: var(--radius-control, 4px);
 }
 
 treeview .__row__.__selected__.__run-bottom__ {
-    border-bottom-left-radius-x: var(--radius-control, 4px);
-    border-bottom-left-radius-y: var(--radius-control, 4px);
-    border-bottom-right-radius-x: var(--radius-control, 4px);
-    border-bottom-right-radius-y: var(--radius-control, 4px);
+    border-bottom-left-radius: var(--radius-control, 4px);
+    border-bottom-right-radius: var(--radius-control, 4px);
 }
 
 /* A TREE KEEPS A TIGHTER GUTTER THAN THE SHARED ONE. The shared 7px is right for the inspector, whose
@@ -3270,7 +3266,7 @@ dockgroup > tabview > .__strip__ > .__strip-bar__ {
     width: 100%;
     /* Explicit, so the divider's margin-top above can match it. */
     height: 16px;
-    font-size: 10;
+    font-size: 10px;
     color: var(--fg-secondary, #9A9A9A);
     padding-left: 4px;
     padding-bottom: 2px;

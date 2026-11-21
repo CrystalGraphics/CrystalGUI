@@ -1,5 +1,6 @@
 package com.crystalgui.style.property.visual.border;
 
+import com.crystalgui.style.CssLength;
 import javax.annotation.Nullable;
 
 /**
@@ -33,24 +34,11 @@ public final class LengthPercent {
         return percent ? value * axisSize : value;
     }
 
-    /** Same {@code %}/{@code px}/bare-number suffix convention as {@code LPAValue}, minus the
-     * layout-only keywords (auto/min-content/etc.) that don't apply to a corner radius. */
+    /** {@code 12px}, {@code 50%} or a bare {@code 0}; null for anything else. */
     public static @Nullable LengthPercent parse(String rawValue) {
-        if (rawValue == null) return null;
-        String trimmed = rawValue.trim().toLowerCase();
-        if (trimmed.isEmpty()) return null;
-        try {
-            if (trimmed.endsWith("%")) {
-                float fraction = Float.parseFloat(trimmed.substring(0, trimmed.length() - 1).trim()) / 100f;
-                return percent(fraction);
-            }
-            if (trimmed.endsWith("px")) {
-                return px(Float.parseFloat(trimmed.substring(0, trimmed.length() - 2).trim()));
-            }
-            return px(Float.parseFloat(trimmed));
-        } catch (NumberFormatException e) {
-            return null;
-        }
+        CssLength length = CssLength.parse(rawValue);
+        if (length == null || length.unit() == CssLength.Unit.EM) return null;
+        return length.unit() == CssLength.Unit.PERCENT ? percent(length.fraction()) : px(length.value());
     }
 
     /**

@@ -2000,7 +2000,7 @@ is the opposite of `ContextMenu`'s rule and for the opposite reason: a right-cli
 menu bar does not.
 
 > **Styling a title's text**: the size must go on the `text` element, not on `.__menu-title__`.
-> `* { font-size: 10 }` in `default.css` gives every element a candidate, so font-size does not inherit
+> `* { font-size: 10px }` in `default.css` gives every element a candidate, so font-size does not inherit
 > anywhere in this engine. See the invariant table in `AGENTS.md`.
 
 ---

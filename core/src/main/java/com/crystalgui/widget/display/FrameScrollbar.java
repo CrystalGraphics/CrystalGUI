@@ -180,7 +180,7 @@ public class FrameScrollbar extends UIElement implements Measurable {
     public void paintContent(CgUiPaintContext ctx, Box box) {
         if (target.frames() == 0) return;
         int thumbColor = computedStyle().get(StylePropertyRegistry.COLOR);
-        int accent = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
+        int accent = computedStyle().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
         float[] thumb = thumb();
         float height = box.height();
         boolean active = grab != Grab.NONE || hover != Grab.NONE;

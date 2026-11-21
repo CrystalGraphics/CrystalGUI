@@ -1,5 +1,6 @@
 package com.crystalgui.app.uibuilder.style;
 
+import com.crystalgui.style.property.visual.color.StyleColorProperty;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.EnumMap;
@@ -203,7 +204,7 @@ final class DeclarationList extends UIElement {
         // A COLOR STARTS AT THE ELEMENT'S OWN: most color properties' initial is transparent, and declaring
         // `caret-color: #00000000` hides the caret and `selection-color` a selection.
         StyleProperty<?> property = StyleFields.propertyOf(name);
-        if (property instanceof ColorProperty && node != null) {
+        if ((property instanceof ColorProperty || property instanceof StyleColorProperty) && node != null) {
             Integer color = node.getStyle().computed().get(StylePropertyRegistry.COLOR);
             if (color != null) {
                 fields.add(name, CssValues.color(color));

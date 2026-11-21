@@ -5,7 +5,7 @@ vfxlab {
     flex-direction: column;
     width: 100%;
     height: 100%;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── toolbar: the transport as icons, then the values it plays with ──────── */
@@ -21,7 +21,7 @@ vfxlab .lab-toolbar {
     flex-shrink: 0;
     padding-left: 6px;
     padding-right: 6px;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* A textless button: its icon fills the content box and takes `color`. */
@@ -94,14 +94,14 @@ vfxlab .lab-speed {
     height: 26px;
     flex-shrink: 0;
     margin-right: 10px;
-    font-size: 11;
+    font-size: 11px;
 }
 
 vfxlab .lab-speed .__label__ {
     margin-right: 6px;
     color: var(--fg-secondary, #9DA0A8);
     white-space: nowrap;
-    font-size: 11;
+    font-size: 11px;
 }
 
 vfxlab .lab-speed numbercontrol {
@@ -156,13 +156,13 @@ vfxlab .lab-effects searchfield {
     border-radius: var(--radius-control, 4px);
     background-color: var(--surface-base, #1E1F22);
     outline: 1px var(--button-border, #FFFFFF24);
-    font-size: 11;
+    font-size: 11px;
 }
 
 vfxlab .lab-effects searchfield .__field__,
 vfxlab .lab-effects searchfield::part(field) {
     background: none;
-    font-size: 11;
+    font-size: 11px;
 }
 
 vfxlab .lab-tree {
@@ -178,7 +178,7 @@ vfxlab .lab-tree-row {
     gap: 2px;
     border-radius: var(--radius-control, 4px);
     color: var(--tree-fg, #DFE1E5);
-    font-size: 11;
+    font-size: 11px;
 }
 
 vfxlab .lab-tree-row.lab-category {
@@ -226,7 +226,7 @@ vfxlab .lab-tree-label {
     min-width: 0px;
     white-space: nowrap;
     text-overflow: ellipsis;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── viewport ──────────────────────────────────────────────────────────── */
@@ -243,7 +243,7 @@ vfxlab .lab-hint {
     bottom: 6px;
     color: var(--fg-secondary, #FFFFFF99);
     white-space: nowrap;
-    font-size: 10;
+    font-size: 10px;
 }
 
 vfxlab .lab-stats {
@@ -252,7 +252,7 @@ vfxlab .lab-stats {
     top: 6px;
     color: var(--fg, #FFFFFF);
     white-space: nowrap;
-    font-size: 11;
+    font-size: 11px;
 }
 
 /* ── inspector ─────────────────────────────────────────────────────────── */
@@ -292,12 +292,12 @@ vfxlab .lab-reset-all {
 
 vfxlab .lab-title {
     color: var(--fg, #FFFFFF);
-    font-size: 13;
+    font-size: 13px;
 }
 
 vfxlab .lab-id {
     color: var(--fg-hint, #7A7E85);
-    font-size: 10;
+    font-size: 10px;
 }
 
 vfxlab .lab-params {
@@ -341,7 +341,7 @@ vfxlab .lab-status {
     background-color: var(--statusbar-bg, #2B2B2B);
     color: var(--statusbar-item-fg, #C9CCD1);
     white-space: nowrap;
-    font-size: 11;
+    font-size: 11px;
 }
 
 vfxlab .lab-state-dot {

@@ -4,10 +4,9 @@ import com.crystalgui.style.property.StyleProperty;
 import com.crystalgui.style.property.StylePropertyRegistry;
 
 /**
- * The 8 real longhand corner-radius properties (rx/ry per corner, CSS {@code border-radius}
- * TL/TR/BR/BL order) — the composite {@code border-radius} name is pure parse-time shorthand
- * syntax (see {@link BorderRadiusShorthand}), never itself a registered {@link StyleProperty},
- * exactly mirroring how {@code margin}/{@code padding}/{@code border-width} work.
+ * The eight corner radii, a horizontal and a vertical one per corner. A sheet writes them through
+ * {@code border-radius} or CSS's per-corner {@code border-top-left-radius: h [v]}; the {@code -x} and
+ * {@code -y} names are this engine's, not CSS's, and are not written directly.
  */
 public final class BorderRadiusProperties {
 
@@ -24,6 +23,9 @@ public final class BorderRadiusProperties {
     }
 
     private static StyleProperty<LengthPercent> create(String name) {
-        return StylePropertyRegistry.create(new LengthPercentProperty(name, LengthPercent.ZERO));
+        // Written through the corner's CSS name: "border-top-left-radius-x" as "border-top-left-radius".
+        StyleProperty<LengthPercent> p = StylePropertyRegistry.create(new LengthPercentProperty(name, LengthPercent.ZERO));
+        p.setAuthoredThrough(name.substring(0, name.length() - 2));
+        return p;
     }
 }

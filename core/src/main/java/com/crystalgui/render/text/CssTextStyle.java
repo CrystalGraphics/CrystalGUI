@@ -92,9 +92,10 @@ public final class CssTextStyle {
         float fontSize = general.fontSize();
         int px = Math.max(1, Math.round(fontSize));
         float strokePx = strokePx(family, general, fontSize);
-        // Unset means `currentcolor`, so a width on its own outlines in the text's own colour.
-        int strokeColor = computed.isSet(StylePropertyRegistry.TEXT_STROKE_COLOR) ? general.textStrokeColor() : color;
+        // Both start as `currentcolor`: a width on its own outlines in the text's colour.
+        int strokeColor = computed.get(StylePropertyRegistry.TEXT_STROKE_COLOR).resolve(color);
         if ((strokeColor >>> 24) == 0) strokePx = 0f;
+        color = computed.get(StylePropertyRegistry.TEXT_FILL_COLOR).resolve(color);
         ShadowList shadows = general.textShadow() == null ? ShadowList.NONE : general.textShadow();
 
         if (px != builtPx || color != builtColor || strokePx != builtStrokePx

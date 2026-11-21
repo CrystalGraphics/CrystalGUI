@@ -507,18 +507,19 @@ public class ScrollerView extends UIElement {
     public void refreshScrollers() {
         syncing = true;
         try {
-            Overflow overflow = getStyle().getGeneralGroup().overflow();
+            Overflow overflowX = getStyle().getGeneralGroup().overflowX();
+            Overflow overflowY = getStyle().getGeneralGroup().overflowY();
 
             float maxTop = maxScrollTop();
             float maxLeft = maxScrollLeft();
 
-            boolean showsVertical = scrollbarsVisible && overflow.showsScrollbar(maxTop > 0f);
+            boolean showsVertical = scrollbarsVisible && overflowY.showsScrollbar(maxTop > 0f);
             toggleClass(V_GUTTER_CLASS, showsVertical);
-            updateBar(verticalScroller, overflow, maxTop > 0f,
+            updateBar(verticalScroller, overflowY, maxTop > 0f,
                     clientHeight(), scrollHeight(), maxTop > 0f ? scrollTop() / maxTop : 0f);
-            updateBar(horizontalScroller, overflow, maxLeft > 0f,
+            updateBar(horizontalScroller, overflowX, maxLeft > 0f,
                     clientWidth(), scrollWidth(), maxLeft > 0f ? scrollLeft() / maxLeft : 0f);
-            reserveCorner(overflow, maxTop > 0f, maxLeft > 0f);
+            reserveCorner(overflowX, overflowY, maxTop > 0f, maxLeft > 0f);
         } finally {
             syncing = false;
         }
@@ -534,9 +535,9 @@ public class ScrollerView extends UIElement {
      * edge at INLINE origin, since whether a corner is needed is runtime state, not something a
      * stylesheet can know.</p>
      */
-    private void reserveCorner(Overflow overflow, boolean vOverflowing, boolean hOverflowing) {
+    private void reserveCorner(Overflow overflowX, Overflow overflowY, boolean vOverflowing, boolean hOverflowing) {
         boolean both = scrollbarsVisible
-                && overflow.showsScrollbar(vOverflowing) && overflow.showsScrollbar(hOverflowing);
+                && overflowY.showsScrollbar(vOverflowing) && overflowX.showsScrollbar(hOverflowing);
         // NULL-CHECKED, and zero is the right answer here specifically: a bar that is not shown is
         // `display: none`, so it HAS no box, and a bar that is not there reserves no corner. Written
         // out rather than hidden behind an accessor that answers 0 for everything, because "not laid

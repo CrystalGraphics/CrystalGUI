@@ -55,7 +55,7 @@ public final class StyleLabs {
         if (registered) return;
         registered = true;
 
-        for (StyleProperty<?> drawable : List.of(StylePropertyRegistry.BACKGROUND, StylePropertyRegistry.OVERLAY)) {
+        for (StyleProperty<?> drawable : List.of(StylePropertyRegistry.BACKGROUND_IMAGE, StylePropertyRegistry.OVERLAY)) {
             DeclarationEditors.register(drawable, context -> chip(context,
                     anchor -> GradientLab.open(anchor, context.property(), context.css())));
         }

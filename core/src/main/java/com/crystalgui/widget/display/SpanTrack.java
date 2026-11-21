@@ -206,7 +206,7 @@ public class SpanTrack extends TimelineTrack {
         TimelineAxis axis = axis();
         CgFontFamily font = labelFont();
         int textColor = computedStyle().get(StylePropertyRegistry.COLOR);
-        int ring = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
+        int ring = computedStyle().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
         float trackWidth = box.width();
         Arrays.fill(lastSliverPixel, Integer.MIN_VALUE);
 

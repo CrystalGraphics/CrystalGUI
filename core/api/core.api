@@ -9214,6 +9214,7 @@ com/crystalgui/serialization/style/TransformParts
 com/crystalgui/style/ComputedStyle
   access public,final
   extends java/lang/Object
+  method public argb (Lcom/crystalgui/style/property/StyleProperty;)I
   method public get (Lcom/crystalgui/style/property/StyleProperty;)Ljava/lang/Object;
   method public isSet (Lcom/crystalgui/style/property/StyleProperty;)Z
   method public setProperties ()Ljava/util/Set;
@@ -9229,11 +9230,32 @@ com/crystalgui/style/CssComments
   extends java/lang/Object
   method public,static has (Ljava/lang/String;)Z
   method public,static strip (Ljava/lang/String;)Ljava/lang/String;
+com/crystalgui/style/CssLength
+  access public,final,record
+  extends java/lang/Record
+  field public,static,final ZERO Lcom/crystalgui/style/CssLength;
+  method public <init> (FLcom/crystalgui/style/CssLength$Unit;)V
+  method public fraction ()F
+  method public toString ()Ljava/lang/String;
+  method public unit ()Lcom/crystalgui/style/CssLength$Unit;
+  method public value ()F
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/style/CssLength;
+com/crystalgui/style/CssLength$Unit
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final EM Lcom/crystalgui/style/CssLength$Unit;
+  field public,static,final PERCENT Lcom/crystalgui/style/CssLength$Unit;
+  field public,static,final PX Lcom/crystalgui/style/CssLength$Unit;
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/CssLength$Unit;
+  method public,static values ()[Lcom/crystalgui/style/CssLength$Unit;
 com/crystalgui/style/CssParsingUtil
   access public,final
   extends java/lang/Object
   method public,static splitFunctionList (Ljava/lang/String;)Ljava/util/List;
   method public,static splitTopLevelCommas (Ljava/lang/String;)Ljava/util/List;
+  method public,static splitTopLevelSpaces (Ljava/lang/String;)Ljava/util/List;
 com/crystalgui/style/ElementStyle
   access public,final
   extends java/lang/Object
@@ -9284,7 +9306,6 @@ com/crystalgui/style/GeneralGroup
   method public backgroundColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public borderBottomColor ()I
   method public borderBottomColor (I)Lcom/crystalgui/style/GeneralGroup;
-  method public borderColor ()I
   method public borderColor (I)Lcom/crystalgui/style/GeneralGroup;
   method public borderLeftColor ()I
   method public borderLeftColor (I)Lcom/crystalgui/style/GeneralGroup;
@@ -9339,8 +9360,9 @@ com/crystalgui/style/GeneralGroup
   method public outlineOffsetTop ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
   method public outlineWidth ()Lcom/crystalgui/style/property/visual/border/LengthPercent;
   method public outlineWidth (Lcom/crystalgui/style/property/visual/border/LengthPercent;)Lcom/crystalgui/style/GeneralGroup;
-  method public overflow ()Lcom/crystalgui/style/property/visual/Overflow;
   method public overflow (Lcom/crystalgui/style/property/visual/Overflow;)Lcom/crystalgui/style/GeneralGroup;
+  method public overflowX ()Lcom/crystalgui/style/property/visual/Overflow;
+  method public overflowY ()Lcom/crystalgui/style/property/visual/Overflow;
   method public overlay ()Lcom/crystalgui/render/image/CgUiImage;
   method public overlay (Lcom/crystalgui/render/image/CgUiImage;)Lcom/crystalgui/style/GeneralGroup;
   method public overlayOrigin ()Lcom/crystalgui/style/property/visual/BoxOrigin;
@@ -9414,6 +9436,7 @@ com/crystalgui/style/HighlightStyle
   method public isItalic (Z)Z
   method public textShadow ()Lcom/crystalgui/style/property/visual/shadow/ShadowList;
   method public toString ()Ljava/lang/String;
+  method public,static decorationArgb (Lcom/crystalgui/style/property/visual/color/StyleColor;)I
 com/crystalgui/style/LayoutGroup
   access public
   extends com/crystalgui/style/StyleGroup
@@ -9435,8 +9458,6 @@ com/crystalgui/style/LayoutGroup
   method public bottomPercent (F)Lcom/crystalgui/style/LayoutGroup;
   method public direction (Ldev/vfyjxf/taffy/style/TaffyDirection;)Lcom/crystalgui/style/LayoutGroup;
   method public display (Ldev/vfyjxf/taffy/style/TaffyDisplay;)Lcom/crystalgui/style/LayoutGroup;
-  method public flex (F)Lcom/crystalgui/style/LayoutGroup;
-  method public flexAuto ()Lcom/crystalgui/style/LayoutGroup;
   method public flexBasis (F)Lcom/crystalgui/style/LayoutGroup;
   method public flexBasisAuto ()Lcom/crystalgui/style/LayoutGroup;
   method public flexBasisFitContent ()Lcom/crystalgui/style/LayoutGroup;
@@ -9745,7 +9766,6 @@ com/crystalgui/style/TaffyBridge
   method public setBoxSizing (Ldev/vfyjxf/taffy/style/BoxSizing;)V
   method public setDirection (Ldev/vfyjxf/taffy/style/TaffyDirection;)V
   method public setDisplay (Ldev/vfyjxf/taffy/style/TaffyDisplay;)V
-  method public setFlex (F)V
   method public setFlexBasis (Ldev/vfyjxf/taffy/style/TaffyDimension;)V
   method public setFlexDirection (Ldev/vfyjxf/taffy/style/FlexDirection;)V
   method public setFlexGrow (F)V
@@ -9772,7 +9792,7 @@ com/crystalgui/style/TaffyBridge
   method public setMaxWidth (Ldev/vfyjxf/taffy/style/TaffyDimension;)V
   method public setMinHeight (Ldev/vfyjxf/taffy/style/TaffyDimension;)V
   method public setMinWidth (Ldev/vfyjxf/taffy/style/TaffyDimension;)V
-  method public setOverflow (Ldev/vfyjxf/taffy/style/Overflow;)V
+  method public setOverflow (Ldev/vfyjxf/taffy/style/Overflow;Ldev/vfyjxf/taffy/style/Overflow;)V
   method public setPaddingBottom (Ldev/vfyjxf/taffy/style/LengthPercentageAuto;)V
   method public setPaddingLeft (Ldev/vfyjxf/taffy/style/LengthPercentageAuto;)V
   method public setPaddingRight (Ldev/vfyjxf/taffy/style/LengthPercentageAuto;)V
@@ -9791,6 +9811,21 @@ com/crystalgui/style/TaffyBridge$LPSizeData
   method public setSize (Lcom/crystalgui/style/property/layout/length/LPSize;)V
   method public setVertical (Ldev/vfyjxf/taffy/style/LengthPercentageAuto;)V
   method public,static toLP (Ldev/vfyjxf/taffy/style/LengthPercentageAuto;)Ldev/vfyjxf/taffy/style/LengthPercentage;
+com/crystalgui/style/property/EdgeShorthand
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;)V
+  method public bottom ()Lcom/crystalgui/style/property/StyleProperty;
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public left ()Lcom/crystalgui/style/property/StyleProperty;
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
+  method public right ()Lcom/crystalgui/style/property/StyleProperty;
+  method public top ()Lcom/crystalgui/style/property/StyleProperty;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
 com/crystalgui/style/property/FontRelative
   access public,abstract,interface
   extends java/lang/Object
@@ -9809,6 +9844,35 @@ com/crystalgui/style/property/IValueInterpolator
   method public,static binary ()Lcom/crystalgui/style/property/IValueInterpolator;
   method public,static neverInterpolate ()Lcom/crystalgui/style/property/IValueInterpolator;
   method public,static snapToEnd ()Lcom/crystalgui/style/property/IValueInterpolator;
+com/crystalgui/style/property/PairShorthand
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;)V
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;Ljava/lang/String;)V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public first ()Lcom/crystalgui/style/property/StyleProperty;
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
+  method public oneValue ()Ljava/lang/String;
+  method public second ()Lcom/crystalgui/style/property/StyleProperty;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/style/property/Shorthand
+  access public,abstract,interface
+  extends java/lang/Object
+  method public,abstract expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public,abstract longhands ()Ljava/util/List;
+  method public,abstract name ()Ljava/lang/String;
+  method public,static declaration (Lcom/crystalgui/style/property/StyleProperty;Ljava/lang/String;Z)Lcom/crystalgui/style/sheet/StyleRule$Declaration;
+  method public,static initial (Lcom/crystalgui/style/property/StyleProperty;Z)Lcom/crystalgui/style/sheet/StyleRule$Declaration;
+com/crystalgui/style/property/Shorthands
+  access public,final
+  extends java/lang/Object
+  method public,static all ()Ljava/util/List;
+  method public,static byName (Ljava/lang/String;)Lcom/crystalgui/style/property/Shorthand;
+  method public,static covers (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
 com/crystalgui/style/property/StyleProperty
   access public
   extends java/lang/Object
@@ -9845,13 +9909,17 @@ com/crystalgui/style/property/StylePropertyRegistry
   access public
   extends java/lang/Object
   field public,static,final BACKDROP_FILTER Lcom/crystalgui/style/property/StyleProperty;
-  field public,static,final BACKGROUND Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BACKGROUND_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BACKGROUND_IMAGE Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BACKGROUND_TINT Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_BOTTOM_COLOR Lcom/crystalgui/style/property/StyleProperty;
-  field public,static,final BORDER_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BORDER_BOTTOM_STYLE Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_LEFT_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BORDER_LEFT_STYLE Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_RIGHT_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BORDER_RIGHT_STYLE Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final BORDER_TOP_COLOR Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final BORDER_TOP_STYLE Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CARET_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CARET_WIDTH Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final CLIP_PATH Lcom/crystalgui/style/property/StyleProperty;
@@ -9875,8 +9943,10 @@ com/crystalgui/style/property/StylePropertyRegistry
   field public,static,final OUTLINE_OFFSET_LEFT Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OUTLINE_OFFSET_RIGHT Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OUTLINE_OFFSET_TOP Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final OUTLINE_STYLE Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OUTLINE_WIDTH Lcom/crystalgui/style/property/StyleProperty;
-  field public,static,final OVERFLOW Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final OVERFLOW_X Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final OVERFLOW_Y Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY_ORIGIN Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final OVERLAY_POSITION Lcom/crystalgui/style/property/StyleProperty;
@@ -9892,6 +9962,7 @@ com/crystalgui/style/property/StylePropertyRegistry
   field public,static,final TEXT_ALIGN Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final TEXT_DECORATION_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final TEXT_DECORATION_LINE Lcom/crystalgui/style/property/StyleProperty;
+  field public,static,final TEXT_FILL_COLOR Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final TEXT_OFFSET_X Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final TEXT_OFFSET_Y Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final TEXT_OVERFLOW Lcom/crystalgui/style/property/StyleProperty;
@@ -9952,6 +10023,7 @@ com/crystalgui/style/property/StyleValue
   method public compute ()Ljava/lang/Object;
   method public equals (Ljava/lang/Object;)Z
   method public hashCode ()I
+  method public,static of (Ljava/lang/String;Ljava/lang/Object;)Lcom/crystalgui/style/property/StyleValue;
 com/crystalgui/style/property/general/bools/BoolValue
   access public
   extends com/crystalgui/style/property/StyleValue
@@ -10014,41 +10086,14 @@ com/crystalgui/style/property/general/strings/StringValue
   extends com/crystalgui/style/property/StyleValue
   method protected doCompute (Ljava/lang/String;)Ljava/lang/String;
   method public <init> (Ljava/lang/String;)V
-com/crystalgui/style/property/layout/BoxEdgeShorthands
+com/crystalgui/style/property/layout/FlexShorthand
   access public,final
   extends java/lang/Object
-  field public,static,final GROUPS Ljava/util/List;
-  method public,static lookup (Ljava/lang/String;)Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Match;
-  method public,static transitionNameMatches (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
-com/crystalgui/style/property/layout/BoxEdgeShorthands$Group
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;Lcom/crystalgui/style/property/StyleProperty;)V
-  method public bottom ()Lcom/crystalgui/style/property/StyleProperty;
-  method public left ()Lcom/crystalgui/style/property/StyleProperty;
-  method public prefix ()Ljava/lang/String;
-  method public right ()Lcom/crystalgui/style/property/StyleProperty;
-  method public top ()Lcom/crystalgui/style/property/StyleProperty;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
-com/crystalgui/style/property/layout/BoxEdgeShorthands$Kind
-  access public,final,enum
-  extends java/lang/Enum
-  field public,static,final COMPOSITE Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;
-  field public,static,final HORIZONTAL Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;
-  field public,static,final VERTICAL Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;
-  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;
-  method public,static values ()[Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;
-com/crystalgui/style/property/layout/BoxEdgeShorthands$Match
-  access public,final,record
-  extends java/lang/Record
-  method public <init> (Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Group;Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;)V
-  method public group ()Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Group;
-  method public kind ()Lcom/crystalgui/style/property/layout/BoxEdgeShorthands$Kind;
-  method public,final equals (Ljava/lang/Object;)Z
-  method public,final hashCode ()I
-  method public,final toString ()Ljava/lang/String;
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> ()V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
 com/crystalgui/style/property/layout/LayoutProperties
   access public
   extends java/lang/Object
@@ -10067,7 +10112,6 @@ com/crystalgui/style/property/layout/LayoutProperties
   field public,static,final DIRECTION Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final DISPLAY Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final DISPLAY_ALLOW_DISCRETE Lcom/crystalgui/style/property/IValueInterpolator;
-  field public,static,final FLEX Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final FLEX_BASIS Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final FLEX_DIRECTION Lcom/crystalgui/style/property/StyleProperty;
   field public,static,final FLEX_GROW Lcom/crystalgui/style/property/StyleProperty;
@@ -10265,6 +10309,14 @@ com/crystalgui/style/property/layout/length/LPSizeValue
   method public <init> (Ljava/lang/String;)V
   method public,static parse (Ljava/lang/String;)Lcom/crystalgui/style/property/layout/length/LPSize;
   method public,static toString (Lcom/crystalgui/style/property/layout/length/LPSize;)Ljava/lang/String;
+com/crystalgui/style/property/visual/BackgroundShorthand
+  access public,final
+  extends java/lang/Object
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> ()V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
 com/crystalgui/style/property/visual/BoxOrigin
   access public,final,enum
   extends java/lang/Enum
@@ -10310,6 +10362,11 @@ com/crystalgui/style/property/visual/DrawableAlign
   method public yFactor ()F
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/DrawableAlign;
   method public,static values ()[Lcom/crystalgui/style/property/visual/DrawableAlign;
+  method public,static write (Lcom/crystalgui/style/property/visual/DrawableAlign;)Ljava/lang/String;
+com/crystalgui/style/property/visual/DrawableAlign$Value
+  access public,final
+  extends com/crystalgui/style/property/StyleValue
+  method public <init> (Ljava/lang/String;)V
 com/crystalgui/style/property/visual/DrawableFit
   access public,final,enum
   extends java/lang/Enum
@@ -10319,21 +10376,35 @@ com/crystalgui/style/property/visual/DrawableFit
   field public,static,final NONE Lcom/crystalgui/style/property/visual/DrawableFit;
   method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/DrawableFit;
   method public,static values ()[Lcom/crystalgui/style/property/visual/DrawableFit;
-com/crystalgui/style/property/visual/OutlineOffsetShorthand
+  method public,static writeMaskSize (Lcom/crystalgui/style/property/visual/DrawableFit;)Ljava/lang/String;
+com/crystalgui/style/property/visual/DrawableFit$MaskSize
   access public,final
-  extends java/lang/Object
-  field public,static,final NAME Ljava/lang/String;
-  method public,static expand (Ljava/util/List;Ljava/lang/String;Z)V
-  method public,static isOutlineOffset (Ljava/lang/String;)Z
-  method public,static transitionNameMatches (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
+  extends com/crystalgui/style/property/StyleValue
+  method public <init> (Ljava/lang/String;)V
 com/crystalgui/style/property/visual/OutlineShorthand
   access public,final
   extends java/lang/Object
-  field public,static,final NAME Ljava/lang/String;
-  method public,static expand (Ljava/util/List;Ljava/lang/String;Z)V
-  method public,static isOutline (Ljava/lang/String;)Z
-  method public,static longhands ()Ljava/util/List;
-  method public,static transitionNameMatches (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> ()V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
+com/crystalgui/style/property/visual/OutlineStyle
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final AUTO Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final DASHED Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final DOTTED Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final DOUBLE Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final GROOVE Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final INSET Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final NONE Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final OUTSET Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final RIDGE Lcom/crystalgui/style/property/visual/OutlineStyle;
+  field public,static,final SOLID Lcom/crystalgui/style/property/visual/OutlineStyle;
+  method public draws ()Z
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/OutlineStyle;
+  method public,static values ()[Lcom/crystalgui/style/property/visual/OutlineStyle;
 com/crystalgui/style/property/visual/Overflow
   access public,final,enum
   extends java/lang/Enum
@@ -10407,10 +10478,53 @@ com/crystalgui/style/property/visual/border/BorderRadiusProperties
 com/crystalgui/style/property/visual/border/BorderRadiusShorthand
   access public,final
   extends java/lang/Object
-  field public,static,final NAME Ljava/lang/String;
-  method public,static expand (Ljava/util/List;Ljava/lang/String;Z)V
-  method public,static isBorderRadius (Ljava/lang/String;)Z
-  method public,static transitionNameMatches (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> ()V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
+com/crystalgui/style/property/visual/border/BorderShorthand
+  access public,final,record
+  extends java/lang/Record
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> (Ljava/lang/String;Ljava/util/List;Ljava/util/List;Ljava/util/List;)V
+  method public colors ()Ljava/util/List;
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
+  method public styles ()Ljava/util/List;
+  method public widths ()Ljava/util/List;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+com/crystalgui/style/property/visual/border/BorderShorthand$Line
+  access public,final,record
+  extends java/lang/Record
+  method public <init> (Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V
+  method public color ()Ljava/lang/String;
+  method public style ()Ljava/lang/String;
+  method public width ()Ljava/lang/String;
+  method public,final equals (Ljava/lang/Object;)Z
+  method public,final hashCode ()I
+  method public,final toString ()Ljava/lang/String;
+  method public,static parse (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/border/BorderShorthand$Line;
+  method public,static parse (Ljava/lang/String;Ljava/lang/Class;)Lcom/crystalgui/style/property/visual/border/BorderShorthand$Line;
+com/crystalgui/style/property/visual/border/BorderStyle
+  access public,final,enum
+  extends java/lang/Enum
+  field public,static,final DASHED Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final DOTTED Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final DOUBLE Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final GROOVE Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final HIDDEN Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final INSET Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final NONE Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final OUTSET Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final RIDGE Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  field public,static,final SOLID Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  method public draws ()Z
+  method public,static valueOf (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/border/BorderStyle;
+  method public,static values ()[Lcom/crystalgui/style/property/visual/border/BorderStyle;
 com/crystalgui/style/property/visual/border/LengthPercent
   access public,final
   extends java/lang/Object
@@ -10444,6 +10558,7 @@ com/crystalgui/style/property/visual/color/ColorValue
   extends com/crystalgui/style/property/StyleValue
   method protected doCompute (Ljava/lang/String;)Ljava/lang/Integer;
   method public <init> (Ljava/lang/String;)V
+  method public,static isColor (Ljava/lang/String;)Z
   method public,static parseColor (Ljava/lang/String;)Ljava/lang/Integer;
   method public,static parseCssColor (Ljava/lang/String;)Ljava/lang/Integer;
 com/crystalgui/style/property/visual/color/NamedColors
@@ -10469,6 +10584,15 @@ com/crystalgui/style/property/visual/color/StyleColor
   method public,final toString ()Ljava/lang/String;
   method public,static lerp (Lcom/crystalgui/style/property/visual/color/StyleColor;Lcom/crystalgui/style/property/visual/color/StyleColor;F)Lcom/crystalgui/style/property/visual/color/StyleColor;
   method public,static of (I)Lcom/crystalgui/style/property/visual/color/StyleColor;
+com/crystalgui/style/property/visual/color/StyleColorProperty
+  access public
+  extends com/crystalgui/style/property/StyleProperty
+  method public <init> (Ljava/lang/String;Lcom/crystalgui/style/property/visual/color/StyleColor;)V
+  method public write (Lcom/crystalgui/style/property/visual/color/StyleColor;)Ljava/lang/String;
+com/crystalgui/style/property/visual/color/StyleColorProperty$Value
+  access public,final
+  extends com/crystalgui/style/property/StyleValue
+  method public <init> (Ljava/lang/String;)V
 com/crystalgui/style/property/visual/image/ImageKinds
   access public,final
   extends java/lang/Object
@@ -10601,6 +10725,10 @@ com/crystalgui/style/property/visual/text/FontRelativeLengthValue
   extends com/crystalgui/style/property/StyleValue
   method protected doCompute (Ljava/lang/String;)Lcom/crystalgui/style/property/visual/border/LengthPercent;
   method public <init> (Ljava/lang/String;)V
+com/crystalgui/style/property/visual/text/FontSizeValue
+  access public,final
+  extends com/crystalgui/style/property/StyleValue
+  method public <init> (Ljava/lang/String;)V
 com/crystalgui/style/property/visual/text/FontStyle
   access public,final,enum
   extends java/lang/Enum
@@ -10681,11 +10809,11 @@ com/crystalgui/style/property/visual/text/TextOverflow
 com/crystalgui/style/property/visual/text/TextStrokeShorthand
   access public,final
   extends java/lang/Object
-  field public,static,final NAME Ljava/lang/String;
-  method public,static expand (Ljava/util/List;Ljava/lang/String;Z)V
-  method public,static isTextStroke (Ljava/lang/String;)Z
-  method public,static longhands ()Ljava/util/List;
-  method public,static transitionNameMatches (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> ()V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
 com/crystalgui/style/property/visual/text/WhiteSpace
   access public,final,enum
   extends java/lang/Enum
@@ -10743,10 +10871,11 @@ com/crystalgui/style/property/visual/transform/TransformOriginShorthand
   access public,final
   extends java/lang/Object
   field public,static,final CENTER Lcom/crystalgui/style/property/visual/border/LengthPercent;
-  field public,static,final NAME Ljava/lang/String;
-  method public,static expand (Ljava/util/List;Ljava/lang/String;Z)V
-  method public,static isTransformOrigin (Ljava/lang/String;)Z
-  method public,static transitionNameMatches (Ljava/lang/String;Lcom/crystalgui/style/property/StyleProperty;)Z
+  implements com/crystalgui/style/property/Shorthand
+  method public <init> ()V
+  method public expand (Ljava/util/List;Ljava/lang/String;Z)Z
+  method public longhands ()Ljava/util/List;
+  method public name ()Ljava/lang/String;
 com/crystalgui/style/property/visual/transform/TransformProperty
   access public
   extends com/crystalgui/style/property/StyleProperty

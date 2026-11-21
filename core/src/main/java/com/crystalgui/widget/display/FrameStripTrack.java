@@ -121,7 +121,7 @@ public class FrameStripTrack extends FrameSeriesTrack {
         long ceiling = budgetNanos * 2L;
 
         int quiet = computedStyle().get(StylePropertyRegistry.COLOR);
-        int accent = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
+        int accent = computedStyle().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
 
         // THE BUDGET LINES FIRST, under the bars: a frame reaching the line should be seen touching
         // it, not hidden by it.

@@ -1497,13 +1497,9 @@ public class TextField extends UIElement implements Measurable {
             // puts the baseline at originY + ascender, so [originY, originY + ascender + descender] is
             // exactly [baseline - ascender, baseline + descender] — the caret starts and ends where the
             // glyphs do, for any `line-height`.
-            // ITS OWN COLOUR IF IT HAS ONE. Zero means unset and the caret follows the text, which is the
-            // web's `caret-color: auto` and was the only behaviour before. The distinction earns its keep
-            // wherever the text is recoloured to say something about ITSELF -- a search box reds its query
-            // when nothing matches, and a red caret reads as the caret being wrong.
-            int caretColor = styleGen.caretColor();
-            ctx.canvas().fill(x, originY, styleGen.caretWidth(), inkHeight,
-                    caretColor == 0 ? styleGen.color() : caretColor);
+            // `caret-color`, `currentcolor` unless set: a search box reds its query when nothing matches, and a
+            // red caret would read as the caret being wrong.
+            ctx.canvas().fill(x, originY, styleGen.caretWidth(), inkHeight, styleGen.caretColor());
         }
 
         ctx.canvas().restore();

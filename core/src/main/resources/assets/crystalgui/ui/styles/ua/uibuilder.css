@@ -76,8 +76,8 @@ dropindicator {
 /* The tag naming what a click would select: kind, #id, size. Positioned by the widget through a
  * compositor override, so nothing here places it -- only what it looks like. */
 hoverhighlight::part(tag) {
-    padding: 1 3 1 3;
-    font-size: 9;
+    padding: 1px 3px 1px 3px;
+    font-size: 9px;
     color: var(--builder-tag-fg, #FFFFFF);
     background-color: var(--builder-hover, #6E9BF5);
     position: absolute;
@@ -121,7 +121,7 @@ builderpane > contexttoolbar {
 /* Every page the row shows spaces its controls alike: between two drawn EDGES, now the controls wear
  * outlines. */
 builderpane > contexttoolbar > .__context-page__ {
-    gap: 4;
+    gap: 4px;
 }
 
 /* THE ROW'S DENSE FONT IS THE WIDGET'S, not this consumer's -- `contexttoolbar` in ua/widgets.css, so a
@@ -285,12 +285,12 @@ hierarchypanel {
     align-items: center;
     height: 20px;
     padding-right: 4px;
-    gap: 3;
+    gap: 3px;
 }
 
 .__hierarchy-content__ {
-    padding-left: 4;
-    padding-right: 4;
+    padding-left: 4px;
+    padding-right: 4px;
 }
 
 /* Two shapes rather than one rotated, matching the project tree exactly -- the twisty is chrome, and a
@@ -381,12 +381,12 @@ insertmenu .__keycap__ {
     background: var(--insertmenu-key-bg, #2B2B2B);
     outline-width: 1px;
     outline-color: var(--insertmenu-key-border, #5A5D63);
-    font-size: 8;
+    font-size: 8px;
     color: var(--insertmenu-key-fg, #9DA0A8);
 }
 insertmenu .__insert-cycle__ {
     flex-shrink: 0;
-    font-size: 8;
+    font-size: 8px;
     color: var(--insertmenu-count-fg, #7A7A7A);
 }
 
@@ -410,7 +410,7 @@ insertmenu .__insert-cycle__ {
     white-space: nowrap;
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
                  "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
-    font-size: 8;
+    font-size: 8px;
     color: var(--fg-hint, #7A7A7A);
 }
 
@@ -450,7 +450,7 @@ hierarchypanel .__hierarchy-row__ .__rename__ {
     height: 16px;
     padding-left: 2px;
     padding-right: 2px;
-    font-size: 10;
+    font-size: 10px;
     background-color: var(--tree-editor-bg, #1E1F22);
     border-width: 1px;
     border-color: var(--tree-editor-border, #4A88C7);
@@ -522,7 +522,7 @@ librarypanel {
 }
 
 .__library-content__ {
-    padding: 4 4 0 4;
+    padding: 4px 4px 0 4px;
 }
 
 librarypanel .__search__ {
@@ -537,7 +537,7 @@ librarypanel .__search__ {
     flex-direction: row;
     align-items: center;
     padding-right: 4px;
-    gap: 3;
+    gap: 3px;
 }
 
 librarypanel .__twisty__ {
@@ -663,7 +663,7 @@ librarydetail > scrollerview {
 .__detail-tag__ {
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf",
                  "crystalgui:ui/fonts/IBMPlexSans-Regular.ttf";
-    font-size: 8;
+    font-size: 8px;
     color: var(--fg-hint, #7A7A7A);
 }
 
@@ -729,7 +729,7 @@ previewcard.__selected__:hover .__stage__ {
 
 previewcard .__label__ {
     width: 100%;
-    font-size: 9;
+    font-size: 9px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
@@ -755,8 +755,8 @@ previewcard .__label__ {
 /* The live size readout during a resize. Sits below the box's bottom-left, placed by the widget, so
  * nothing here positions it -- only what it looks like. */
 .__resize-badge__ {
-    padding: 1 3 1 3;
-    font-size: 9;
+    padding: 1px 3px 1px 3px;
+    font-size: 9px;
     color: var(--builder-tag-fg, #FFFFFF);
     background-color: var(--builder-selected, #3574F0);
 }
@@ -784,8 +784,8 @@ smartguides {
 
 /* A matched gap's length, beside its bar. Placed by the widget, so nothing here positions it. */
 .__snap-gap-label__ {
-    padding: 1 3 1 3;
-    font-size: 9;
+    padding: 1px 3px 1px 3px;
+    font-size: 9px;
     border-radius: 3px;
     color: var(--builder-tag-fg, #FFFFFF);
     background-color: var(--builder-guide, #F5555D);
@@ -853,7 +853,7 @@ smartguides {
     left: 0;
     top: 0;
 }
-.__boxmodel__ .__bm-label__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
+.__boxmodel__ .__bm-label__ { color: var(--fg-hint, #7A7A7A); font-size: 8px; }
 .__boxmodel__ .__bm-value__ {
     min-width: 14px;
     text-align: center;
@@ -917,7 +917,7 @@ smartguides {
 }
 /* Readable, and plainly not writable: the engine's own sheet and anything inside a jar. */
 .__style-target__.__read-only__ { opacity: 0.75; }
-.__style-target-sheet__ { color: var(--fg-hint, #7A7A7A); font-size: 8; }
+.__style-target-sheet__ { color: var(--fg-hint, #7A7A7A); font-size: 8px; }
 
 /* A GLYPH IN A BOX, CENTRED, and nothing else. These are plain elements rather than Buttons: a Button
  * brings the theme's own box with it -- a background, a radius, and 1px of padding at the top against 2px
@@ -1105,7 +1105,7 @@ smartguides {
 /* The sample inside it is a specimen, not the value's own size -- and big enough to cast a shadow the
  * swatch can show, which a 9px glyph is not. */
 /* NOT BOLD: the sample is set in the element's own weight, which is what a weight chip is there to show. */
-.__style-chip-swatch__ text { font-size: 12; }
+.__style-chip-swatch__ text { font-size: 12px; }
 /* A LINE A LAYER, AND NO NARROWER THAN THE LONGEST: the column is the floor, and a panel narrower than it scrolls
  * sideways rather than breaking a shadow inside its hex. 2.5px above and below centres a 13px line in the 18px control. */
 .__style-chip-value__ {
@@ -1225,7 +1225,7 @@ smartguides {
     position: absolute;
     right: 8px;
     bottom: 6px;
-    font-size: 9;
+    font-size: 9px;
     color: var(--fg-hint, #7A7A7A);
 }
 
@@ -1255,7 +1255,7 @@ smartguides {
 /* NEVER WRAPPED. The specimen is a node on an unbounded plane, so a line too long for the view runs off
  * the side to be panned to -- which is the whole reason it is a canvas. Wrapping instead broke
  * "Handgloves" across two lines and clipped the second. */
-.__lab-sample__ { font-size: 28; font-weight: bold; white-space: nowrap; }
+.__lab-sample__ { font-size: 28px; font-weight: bold; white-space: nowrap; }
 
 /* Something worth filtering behind the glass lab's specimen: the gallery's glass stage, scaled to the lab. The
  * shapes are larger than the card, so it always has an edge of colour to cross, and drift as one. */
@@ -1273,7 +1273,7 @@ smartguides {
     position: absolute;
     left: -60px;
     top: 22px;
-    font-size: 22;
+    font-size: 22px;
     font-weight: bold;
     white-space: nowrap;
     color: var(--lab-ground-light, #FFFFFF);
@@ -1282,7 +1282,7 @@ smartguides {
     position: absolute;
     left: -58px;
     top: 50px;
-    font-size: 8;
+    font-size: 8px;
     white-space: nowrap;
     color: var(--lab-ground-light, #FFFFFF);
 }
@@ -1403,7 +1403,7 @@ smartguides {
  * a statement about the lab rather than another control in it. */
 .__lab-caption__ {
     color: var(--fg-hint, #7A7A7A);
-    font-size: 9;
+    font-size: 9px;
     white-space: normal;
     padding-top: 5px;
     outline: linear-gradient(to bottom, var(--configkit-field-border, #4A4D52) 0%, transparent 1%);
@@ -1412,7 +1412,7 @@ smartguides {
 .__lab-css__ {
     color: var(--fg-secondary, #9DA0A8);
     font-family: "crystalgui:ui/fonts/JetBrainsMono-Regular.ttf";
-    font-size: 9;
+    font-size: 9px;
     white-space: normal;
 }
 
@@ -1487,7 +1487,7 @@ smartguides {
     width: 2px;
     height: 14px;
     background: var(--accent, #3574F0);
-    transform-origin-y: 100%;
+    transform-origin: center bottom;
 }
 /* The eight directions around an empty middle, each an arrow turned to the way it points. */
 /* As tall as the dial beside it, so the row is no taller than a field. */
@@ -1700,8 +1700,8 @@ smartguides {
     height: 18px;
     padding-left: 4px;
 }
-.__layer-stack__ .__layer-title__ { font-size: 9; color: var(--fg-secondary, #9DA0A8); }
-.__layer-stack__ .__layer-count__ { font-size: 9; color: var(--fg-hint, #7A7A7A); flex-grow: 1; }
+.__layer-stack__ .__layer-title__ { font-size: 9px; color: var(--fg-secondary, #9DA0A8); }
+.__layer-stack__ .__layer-count__ { font-size: 9px; color: var(--fg-hint, #7A7A7A); flex-grow: 1; }
 /* GHOST, as a header's actions are: a filled button above the rows read as one more row. */
 .__layer-add__ {
     height: 16px;
@@ -1713,7 +1713,7 @@ smartguides {
     color: var(--fg-secondary, #9DA0A8);
 }
 .__layer-add__:hover { background: var(--list-hover-bg, #393B40); color: var(--fg, #DFE1E5); }
-.__layer-stack__ .__layer-add__ text { font-size: 9; }
+.__layer-stack__ .__layer-add__ text { font-size: 9px; }
 /* THREE ROWS, THEN IT SCROLLS: a row is 24px. The right padding keeps the bar off the rows' remove buttons. */
 .__layer-list__ {
     width: 100%;
@@ -1760,8 +1760,8 @@ smartguides {
 /* Bigger than a row label, because a shadow is cast BY the mark: a 9px glyph casts a 9px-wide one.
  * UNDER THE STACK, which is a config control: the kit's `.__config-control__ text` (specificity 11) reaches
  * its rows and would otherwise set these at the form's size. */
-.__layer-stack__ .__layer-sample-text__ { font-size: 12; font-weight: bold; color: var(--fg, #DFE1E5); }
-.__layer-stack__ .__layer-text__ { font-size: 9; }
+.__layer-stack__ .__layer-sample-text__ { font-size: 12px; font-weight: bold; color: var(--fg, #DFE1E5); }
+.__layer-stack__ .__layer-text__ { font-size: 9px; }
 .__layer-text__ {
     width: 0px;
     flex-grow: 1;

@@ -500,8 +500,7 @@ public final class UIText extends UIElement implements Measurable {
     }
 
     private int ownDecorationColor() {
-        Integer color = computedStyle().get(StylePropertyRegistry.TEXT_DECORATION_COLOR);
-        return color == null ? 0 : color;
+        return HighlightStyle.decorationArgb(computedStyle().get(StylePropertyRegistry.TEXT_DECORATION_COLOR));
     }
 
     /**

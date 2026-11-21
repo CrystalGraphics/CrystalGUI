@@ -18,12 +18,17 @@ import java.util.Locale;
  *
  * <p>Easy to get wrong: a grammar where a bare number means something else, such as a shadow's lengths,
  * must use {@link #parseCssColor}, or its {@code 0} reads as a transparent colour. And {@code currentcolor}
- * is not a colour here; a property that means it keeps it unresolved itself, as {@link StyleColor} does.</p>
+ * is not an ARGB colour; a property that takes it holds a {@link StyleColor} ({@link StyleColorProperty}).</p>
  */
 public class ColorValue extends StyleValue<Integer> {
 
     public ColorValue(String rawValue) {
         super(rawValue);
+    }
+
+    /** Whether {@code token} is a CSS {@code <color>}, {@code currentcolor} included. For shorthands sorting their parts. */
+    public static boolean isColor(String token) {
+        return token.trim().equalsIgnoreCase("currentcolor") || parseCssColor(token) != null;
     }
 
     @Override

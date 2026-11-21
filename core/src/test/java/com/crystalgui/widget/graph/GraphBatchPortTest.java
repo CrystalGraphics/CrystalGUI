@@ -281,7 +281,7 @@ public class GraphBatchPortTest extends UiDocumentTestBase {
                         + "invisible too, since NodePort.typeColor() reads exactly this",
                 (bare >>> 24) > 0);
         assertTrue("the node has no edge without a theme",
-                (node.getStyle().getGeneralGroup().borderColor() >>> 24) > 0);
+                (node.getStyle().getGeneralGroup().borderTopColor() >>> 24) > 0);
 
         // AND A THEME STILL WINS -- by REDECLARING THE PROPERTY, which is the only mechanism that
         // works across sheets. `var()` substitutes at parse time, so a token set in a later sheet

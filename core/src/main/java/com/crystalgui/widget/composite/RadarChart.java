@@ -636,7 +636,7 @@ public class RadarChart extends UIElement {
         // own. border-width also feeds Taffy, which is harmless here: box-sizing is border-box
         // engine-wide, so it eats into the content rather than growing the chart, and the element
         // paints no background so no border box is ever drawn over the plot.
-        int webColor = computedStyle().get(StylePropertyRegistry.BORDER_COLOR);
+        int webColor = computedStyle().argb(StylePropertyRegistry.BORDER_TOP_COLOR);
         float line = lineWidth();
 
         // WEB FIRST. It is the reference the values are read against, so it belongs BEHIND them --
